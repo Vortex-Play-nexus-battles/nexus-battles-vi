@@ -21,7 +21,8 @@
  * - preguntas rápidas, temas frecuentes y autocompletado mientras se escribe
  *   (`sugerencias-chatbot.js`), sacados de lo que el asistente sabe responder;
  * - «Soporte»: abrir una solicitud de soporte humano y ver las propias
- *   (`soporte-chatbot.js`); el visitante recibe la invitación a iniciar sesión;
+ *   (`soporte-chatbot.js`); el visitante recibe cómo conseguirlo: entrar
+ *   (volviendo a esta página) o crear una cuenta;
  * - «Preferencias» (7.4.5): el idioma de las respuestas y el nivel de detalle,
  *   guardados en el servidor (`preferencias-chatbot.js`);
  * - UXC-9 (§7.4, RNF-DIS-002): minimizarla a su barra de título sin perder la
@@ -30,6 +31,20 @@
  *
  * Si el servicio no responde, lo dice y ofrece el chat general: CA-03 de
  * HU-CHA-001.
+ *
+ * #506 — la ventana del chatbot, revisada:
+ *
+ * - al abrir, el foco va a la caja de texto (antes caía en «×»);
+ * - la pregunta se pinta en cuanto se envía, con «escribiendo…» debajo; si el
+ *   envío falla, sale de la conversación y su texto vuelve a la caja;
+ * - cada rechazo se explica por su motivo (lista negra, inyección de código,
+ *   demasiados mensajes, moderación caída) y el texto se queda para
+ *   corregirlo; tras un 429, «Enviar» espera lo que dijo `Retry-After`;
+ * - el lector de pantalla oye quién habla («Tú:», «Asistente:») y la
+ *   conversación es una región `role="log"`;
+ * - las acciones de la cabecera se parten en dos filas si no caben;
+ * - un visitante que pide soporte humano recibe cómo conseguirlo (entrar con
+ *   vuelta a esta página, o crear una cuenta), no un callejón sin salida.
  *
  * 7.4.9 — con un `canal` (`../canal-chatbot.js`, lo pasa `asistente.js`), las
  * preguntas van por el canal en tiempo real mientras está abierto y por HTTP
@@ -41,9 +56,9 @@
  * @module comun/ui/ventana-chatbot
  */
 
-import { urlDeVista } from '../acceso.js';
+import { destinoVisible, urlDeVista } from '../acceso.js';
 import { crearClienteChatbot } from '../cliente-chatbot.js';
-import { leerSesion } from '../sesion.js';
+import { leerSesion, rutaSegura, urlDeLogin } from '../sesion.js';
 import { conCarga } from './boton.js';
 import { campo } from './campo.js';
 import { confirmar } from './dialogo.js';
@@ -58,6 +73,16 @@ import { conectarAutocompletado, crearPreguntasRapidas } from './sugerencias-cha
 
 /** Destino del chat general de jugadores, relativo a `src/comun/ui/`. */
 const CHAT_GENERAL = '../../plataforma/salas-partidas/chat.html';
+
+/**
+ * #506 — los segundos que «Enviar» queda desactivado tras un 429 que no dice
+ * cuánto esperar. El servicio y el borde mandan `Retry-After`; esto es por si
+ * algo intermedio lo quita.
+ */
+export const ESPERA_POR_OMISION_S = 10;
+
+/** Máximo que admite `setTimeout` sin desbordarse (unos 24,8 días). */
+const MAXIMO_TEMPORIZADOR_MS = 2_147_483_647;
 
 /** Límites del contrato (`EnviarMensaje`, `CalificarRespuesta`). */
 export const LIMITES = Object.freeze({ mensaje: 4000, comentario: 1000 });
@@ -116,6 +141,25 @@ export const TEXTOS = Object.freeze({
   errorAlCargar: 'No se pudo cargar la conversación. Inténtalo de nuevo.',
   errorAlEnviar: 'No se pudo enviar tu mensaje. Inténtalo de nuevo.',
   mensajeInvalido: 'Tu mensaje no se pudo enviar: revisa que no esté vacío ni sea demasiado largo.',
+  // #506 — un mensaje rechazado se explica por su `motivo` (contrato 1.2.0 y
+  // 1.4.0); el 429, por el estado, con los segundos de `Retry-After`.
+  contenidoBloqueado:
+    'Tu mensaje no se envió porque tiene palabras que no están permitidas. Escríbelo de otra forma.',
+  inyeccionDetectada:
+    'Tu mensaje no se envió porque parece contener código o instrucciones del sistema. Escribe tu pregunta con palabras.',
+  demasiadosMensajes: (segundos) =>
+    segundos > 0
+      ? `Escribiste muchos mensajes seguidos. Espera ${segundos} s y vuelve a intentarlo.`
+      : 'Escribiste muchos mensajes seguidos. Espera un momento y vuelve a intentarlo.',
+  moderacionNoDisponible:
+    'No pude revisar tu mensaje en este momento. Inténtalo de nuevo en unos minutos.',
+  // Lo mismo para el comentario de una calificación (contrato 1.4.0).
+  comentarioBloqueado:
+    'Tu comentario no se envió porque tiene palabras que no están permitidas. Escríbelo de otra forma.',
+  comentarioConCodigo:
+    'Tu comentario no se envió porque parece contener código o instrucciones del sistema. Escríbelo con palabras.',
+  comentarioSinRevisar:
+    'No pude revisar tu comentario en este momento. Inténtalo de nuevo en unos minutos.',
   errorAlBorrar: 'No se pudo borrar la conversación. Inténtalo de nuevo.',
   escribiendo: 'El asistente está escribiendo…',
   placeholder: 'Escribe tu pregunta…',
@@ -148,7 +192,46 @@ export const TEXTOS = Object.freeze({
   yaCalificada: 'Ya habías calificado esta respuesta.',
   errorAlCalificar: 'No se pudo guardar tu calificación. Inténtalo de nuevo.',
   registro: 'Conversación con el asistente',
+  // #506 — quién habla, solo para el lector de pantalla (no se ve).
+  prefijoUsuario: 'Tú:',
+  prefijoAsistente: 'Asistente:',
 });
+
+/**
+ * Lo que dice un rechazo según su `motivo`: al enviar un mensaje y al enviar
+ * el comentario de una calificación. Un `Map` y no un objeto: un `motivo`
+ * como «constructor» no puede sacar nada del prototipo.
+ */
+const POR_MOTIVO = Object.freeze({
+  mensaje: new Map([
+    ['CONTENIDO_BLOQUEADO', TEXTOS.contenidoBloqueado],
+    ['INYECCION_DETECTADA', TEXTOS.inyeccionDetectada],
+    ['MODERACION_NO_DISPONIBLE', TEXTOS.moderacionNoDisponible],
+  ]),
+  comentario: new Map([
+    ['CONTENIDO_BLOQUEADO', TEXTOS.comentarioBloqueado],
+    ['INYECCION_DETECTADA', TEXTOS.comentarioConCodigo],
+    ['MODERACION_NO_DISPONIBLE', TEXTOS.comentarioSinRevisar],
+  ]),
+});
+
+/**
+ * #506 — la página donde está la ventana, como vuelta segura tras entrar
+ * (`rutaSegura`: solo del mismo origen y nunca otra pantalla de entrada), o
+ * `null`.
+ *
+ * @param {{pathname?: string, search?: string, hash?: string, origin?: string}|null} [ubicacion]
+ * @returns {string|null}
+ */
+export function rutaDeEstaPagina(ubicacion = globalThis.location) {
+  if (!ubicacion?.pathname) {
+    return null;
+  }
+  return rutaSegura(
+    `${ubicacion.pathname}${ubicacion.search ?? ''}${ubicacion.hash ?? ''}`,
+    ubicacion.origin,
+  );
+}
 
 let contador = 0;
 
@@ -156,12 +239,17 @@ let contador = 0;
  * Crea la ventana (oculta) y la cuelga de `raiz`.
  *
  * @param {{cliente?: ReturnType<typeof crearClienteChatbot>,
- *          sesion?: () => {autenticado: boolean, apodo: string},
- *          raiz?: HTMLElement, chatGeneral?: string, login?: string|null,
+ *          sesion?: () => {autenticado: boolean, apodo: string, rol?: string|null},
+ *          raiz?: HTMLElement, chatGeneral?: string,
+ *          login?: string|(() => string|null)|null,
+ *          registro?: string|(() => string|null)|null,
  *          esperaAutocompletar?: number, vista?: () => string|null,
  *          confirmarBorrado?: (opciones: object) => Promise<boolean>,
+ *          reloj?: {setTimeout: Function, clearTimeout: Function},
  *          canal?: ReturnType<typeof import('../canal-chatbot.js').crearCanalChatbot>|null}} [opciones]
- *   `canal`: 7.4.9, el canal en tiempo real; sin él, todo va por HTTP
+ *          `login`: por omisión, la entrada con vuelta a esta página (#506).
+ *          `reloj`: el de la espera tras un 429, inyectable en pruebas.
+ *          `canal`: 7.4.9, el canal en tiempo real; sin él, todo va por HTTP.
  * @returns {{elemento: HTMLElement, abrir: (desde?: HTMLElement|null) => void,
  *            cerrar: () => void, alternar: (desde?: HTMLElement|null) => void,
  *            abierta: () => boolean}}
@@ -170,12 +258,15 @@ export function crearVentanaChatbot({
   cliente = crearClienteChatbot(),
   sesion = () => leerSesion(),
   raiz = document.body,
-  chatGeneral = new URL(CHAT_GENERAL, import.meta.url).href,
-  login = urlDeVista('login'),
+  // SA-7 — la dirección del chat general es la limpia (`/chat`) detrás del borde.
+  chatGeneral = urlDeVista('chat') ?? new URL(CHAT_GENERAL, import.meta.url).href,
+  login = () => urlDeLogin({ volver: rutaDeEstaPagina() }),
+  registro: destinoRegistro = urlDeVista('registro'),
   confirmarBorrado = confirmar,
   esperaAutocompletar = 250,
   vista = () => vistaDelChat(),
   canal = null,
+  reloj = globalThis,
 } = {}) {
   contador += 1;
   const idTitulo = `chatbot-ventana-titulo-${contador}`;
@@ -183,6 +274,10 @@ export function crearVentanaChatbot({
   let cargada = false;
   let enviando = false;
   let devolverFocoA = null;
+
+  // #506 — tras un 429, «Enviar» espera lo que dijo el servidor.
+  let enEspera = false;
+  let temporizadorDeEspera = null;
 
   // Historial por páginas: el mensaje más antiguo que ya se ve (cursor para
   // pedir los anteriores), si puede haber más, y los ya pintados (así un
@@ -248,13 +343,22 @@ export function crearVentanaChatbot({
     datos: { accion: 'tamano-asistente' },
   });
 
+  // #506 — las tres acciones de texto van en su propia fila, que se parte si
+  // no cabe; la del título se queda con el título, minimizar y cerrar. Antes
+  // las cinco compartían fila con el título: a 1366 px lo dejaban sin sitio y
+  // a 320–375 px «Preferencias» salía cortado. El orden del DOM (y con él el
+  // del tabulador) es el de siempre: la rejilla del CSS las coloca.
   const cabecera = h('header', {
     clase: 'chatbot-ventana__cabecera',
     hijos: [
       titulo,
       h('div', {
         clase: 'chatbot-ventana__acciones',
-        hijos: [botonPreferencias, botonSoporte, botonBorrar, botonMinimizar, botonCerrar],
+        hijos: [botonPreferencias, botonSoporte, botonBorrar],
+      }),
+      h('div', {
+        clase: 'chatbot-ventana__controles',
+        hijos: [botonMinimizar, botonCerrar],
       }),
       estado,
       pildoraDelCanal
@@ -263,12 +367,17 @@ export function crearVentanaChatbot({
     ],
   });
 
-  // UXC-9 — lista con región viva, sin `role="log"`: ese rol le quitaba al
-  // <ol> su semántica de lista y cada mensaje (<li>) quedaba huérfano (axe,
-  // «listitem», grave). `aria-live` sigue anunciando lo que llega.
-  const registro = h('ol', {
-    clase: 'chatbot-ventana__registro',
-    atributos: { 'aria-live': 'polite', 'aria-label': TEXTOS.registro },
+  // #506 — la conversación es una región `role="log"`, y la lista va dentro
+  // tal cual. UXC-9 le había quitado el rol a la <ol> porque en ella le
+  // borraba su semántica de lista y cada mensaje (<li>) quedaba huérfano (axe,
+  // «listitem», grave); en un envoltorio no toca la lista. La región viva es
+  // el envoltorio, así que la lista ya no lleva `aria-live` propio (dos
+  // regiones anidadas leerían cada mensaje dos veces).
+  const registro = h('ol', { clase: 'chatbot-ventana__registro' });
+  const conversacion = h('div', {
+    clase: 'chatbot-ventana__conversacion',
+    atributos: { role: 'log', 'aria-live': 'polite', 'aria-label': TEXTOS.registro },
+    hijos: [registro],
   });
   const zonaAviso = h('div', { clase: 'chatbot-ventana__aviso', atributos: { hidden: true } });
 
@@ -334,7 +443,7 @@ export function crearVentanaChatbot({
       hidden: true,
     },
     datos: { chatbotVentana: '' },
-    hijos: [asa, cabecera, registro, zonaAviso, formulario],
+    hijos: [asa, cabecera, conversacion, zonaAviso, formulario],
   });
   // «Soporte» ocupa el sitio de la conversación mientras está abierto; la
   // conversación no se pierde, solo se oculta.
@@ -342,7 +451,7 @@ export function crearVentanaChatbot({
     cliente,
     sesion,
     login,
-    chatGeneral,
+    registro: destinoRegistro,
     alVolver: () => mostrarSoporte(false),
   });
   ventana.append(panelSoporte.elemento);
@@ -376,7 +485,10 @@ export function crearVentanaChatbot({
       h('li', {
         clase: 'chatbot-ventana__mensaje chatbot-ventana__mensaje--bot',
         datos: { bienvenida: '' },
-        hijos: [h('p', { clase: 'chatbot-ventana__texto', texto: TEXTOS.bienvenida })],
+        hijos: [
+          quienHabla(true),
+          h('p', { clase: 'chatbot-ventana__texto', texto: TEXTOS.bienvenida }),
+        ],
       }),
     );
   }
@@ -412,11 +524,13 @@ export function crearVentanaChatbot({
     const burbuja = h('li', {
       clase: `chatbot-ventana__mensaje chatbot-ventana__mensaje--${esBot ? 'bot' : 'usuario'}`,
       datos: mensaje.id ? { mensajeId: mensaje.id } : {},
-      hijos: [texto ? h('p', { clase: 'chatbot-ventana__texto', texto }) : null],
+      hijos: [quienHabla(esBot), texto ? h('p', { clase: 'chatbot-ventana__texto', texto }) : null],
     });
     const parteEnriquecida = pintarEnriquecido(enriquecido, {
       alPreguntar: enviarSugerencia,
       alPedirSoporte: () => mostrarSoporte(true),
+      // #506 — un enlace a una vista que esta sesión no puede ver no se pinta.
+      visible: (destino) => destinoVisible(destino, sesion() ?? null),
     });
     if (parteEnriquecida) {
       burbuja.append(parteEnriquecida);
@@ -513,9 +627,8 @@ export function crearVentanaChatbot({
           return;
         }
         conCarga(disparador, false);
-        nota.textContent = error?.noDisponible
-          ? TEXTOS.noDisponibleTitulo
-          : TEXTOS.errorAlCalificar;
+        // #506 — el comentario rechazado se explica y se queda en su caja.
+        nota.textContent = textoDeErrorAlCalificar(error);
       }
     }
 
@@ -539,58 +652,60 @@ export function crearVentanaChatbot({
 
   // --------------------------------------------------------------- avisos
 
+  /** @returns {HTMLElement} el aviso pintado */
   function mostrarAviso(error, { alReintentar = null } = {}) {
     vaciar(zonaAviso);
     zonaAviso.hidden = false;
 
     if (error?.noDisponible) {
-      zonaAviso.append(
-        h('div', {
-          clase: 'aviso aviso--advertencia',
-          atributos: { role: 'alert' },
-          hijos: [
-            h('div', {
-              clase: 'aviso__cuerpo',
-              hijos: [
-                h('p', { clase: 'aviso__titulo', texto: TEXTOS.noDisponibleTitulo }),
-                h('p', { clase: 'aviso__detalle', texto: TEXTOS.noDisponibleDetalle }),
-                h('div', {
-                  clase: 'acciones',
-                  hijos: [
-                    h('a', {
-                      clase: 'boton boton--primario boton--pequeno',
-                      texto: TEXTOS.irAlChatGeneral,
-                      atributos: { href: chatGeneral },
-                      datos: { accion: 'ir-al-chat' },
-                    }),
-                    alReintentar ? botonReintentar(alReintentar) : null,
-                  ],
-                }),
-              ],
-            }),
-          ],
-        }),
-      );
-      return;
-    }
-
-    zonaAviso.append(
-      h('div', {
-        clase: 'aviso aviso--error',
+      const aviso = h('div', {
+        clase: 'aviso aviso--advertencia',
         atributos: { role: 'alert' },
         hijos: [
           h('div', {
             clase: 'aviso__cuerpo',
             hijos: [
-              h('p', { clase: 'aviso__detalle', texto: textoDeError(error, alReintentar) }),
-              alReintentar
-                ? h('div', { clase: 'acciones', hijos: [botonReintentar(alReintentar)] })
-                : null,
+              h('p', { clase: 'aviso__titulo', texto: TEXTOS.noDisponibleTitulo }),
+              h('p', { clase: 'aviso__detalle', texto: TEXTOS.noDisponibleDetalle }),
+              h('div', {
+                clase: 'acciones',
+                hijos: [
+                  h('a', {
+                    clase: 'boton boton--primario boton--pequeno',
+                    texto: TEXTOS.irAlChatGeneral,
+                    atributos: { href: chatGeneral },
+                    datos: { accion: 'ir-al-chat' },
+                  }),
+                  alReintentar ? botonReintentar(alReintentar) : null,
+                ],
+              }),
             ],
           }),
         ],
-      }),
-    );
+      });
+      zonaAviso.append(aviso);
+      return aviso;
+    }
+
+    // #506 — lo que el jugador puede corregir (lista negra, inyección, un 400,
+    // demasiados mensajes) es una advertencia; lo demás, un error.
+    const aviso = h('div', {
+      clase: `aviso aviso--${tonoDeError(error)}`,
+      atributos: { role: 'alert' },
+      hijos: [
+        h('div', {
+          clase: 'aviso__cuerpo',
+          hijos: [
+            h('p', { clase: 'aviso__detalle', texto: textoDeError(error, alReintentar) }),
+            alReintentar
+              ? h('div', { clase: 'acciones', hijos: [botonReintentar(alReintentar)] })
+              : null,
+          ],
+        }),
+      ],
+    });
+    zonaAviso.append(aviso);
+    return aviso;
   }
 
   function botonReintentar(alReintentar) {
@@ -611,9 +726,56 @@ export function crearVentanaChatbot({
 
   function habilitarFormulario(activo) {
     entrada.disabled = !activo;
-    botonEnviar.disabled = !activo;
     botonBorrar.disabled = !activo;
-    rapidas.habilitar(activo);
+    refrescarEnvio();
+  }
+
+  /**
+   * ¿Se puede enviar ya? Con la conversación cargada, la caja activa, sin otro
+   * envío en vuelo y fuera de la espera de un 429 (#506).
+   */
+  function puedeEnviar() {
+    return cargada && !entrada.disabled && !enviando && !enEspera;
+  }
+
+  // «Enviar» y las preguntas rápidas siguen a `puedeEnviar`. Mientras hay un
+  // envío en vuelo, del botón se ocupa `conCarga` («Enviando…»).
+  function refrescarEnvio() {
+    if (enviando) {
+      return;
+    }
+    const libre = puedeEnviar();
+    botonEnviar.disabled = !libre;
+    rapidas.habilitar(libre);
+  }
+
+  /**
+   * #506 — tras un 429, «Enviar» y las preguntas rápidas quedan desactivados
+   * los segundos de `Retry-After` y se reactivan solos. La caja de texto sigue
+   * activa, para corregir lo escrito mientras tanto.
+   *
+   * @param {number|null} segundos
+   * @param {HTMLElement} aviso el que dice cuánto esperar; se quita al acabar
+   */
+  function iniciarEspera(segundos, aviso) {
+    const espera = Number.isFinite(segundos) && segundos >= 0 ? segundos : ESPERA_POR_OMISION_S;
+    enEspera = true;
+    reloj.clearTimeout(temporizadorDeEspera);
+    temporizadorDeEspera = reloj.setTimeout(
+      () => terminarEspera(aviso),
+      Math.min(espera * 1000, MAXIMO_TEMPORIZADOR_MS),
+    );
+    refrescarEnvio();
+  }
+
+  function terminarEspera(aviso) {
+    enEspera = false;
+    temporizadorDeEspera = null;
+    refrescarEnvio();
+    // «Espera N s» ya no es verdad: se quita, si sigue siendo ese el aviso.
+    if (aviso?.isConnected) {
+      limpiarAviso();
+    }
   }
 
   // ------------------------------------------------------------- historial
@@ -624,7 +786,13 @@ export function crearVentanaChatbot({
     vaciar(registro);
     const cargando = estadoDeCarga({ filas: 2, etiqueta: 'Cargando la conversación…' });
     registro.append(h('li', { clase: 'chatbot-ventana__cargando', hijos: [cargando] }));
-    habilitarFormulario(false);
+    // #506 — mientras carga, la caja de texto sigue activa para que el foco
+    // llegue a ella al abrir (antes estaba desactivada y el foco caía en «×»);
+    // lo que no se puede es enviar ni borrar hasta que cargue.
+    entrada.disabled = false;
+    botonBorrar.disabled = true;
+    refrescarEnvio();
+    recuperarFoco();
 
     try {
       const historial = await cliente.obtenerHistorial({ limite: PAGINA_DEL_HISTORIAL });
@@ -639,11 +807,23 @@ export function crearVentanaChatbot({
       cargada = true;
       habilitarFormulario(true);
       rapidas.cargar();
+      recuperarFoco();
       // 7.4.9 — el canal se abre cuando el asistente ya respondió por HTTP.
       canal?.abrir();
     } catch (error) {
       vaciar(registro);
+      habilitarFormulario(false);
       mostrarAviso(error, { alReintentar: cargarHistorial });
+      enfocarDentro();
+    }
+  }
+
+  // Tras «Reintentar», el botón que tenía el foco ya no existe y el foco cae
+  // al cuerpo de la página: vuelve a la ventana. Si la persona lo llevó a
+  // otra parte mientras cargaba, se respeta.
+  function recuperarFoco() {
+    const activo = document.activeElement;
+    if (!activo || activo === document.body) {
       enfocarDentro();
     }
   }
@@ -686,7 +866,10 @@ export function crearVentanaChatbot({
     cargandoAnteriores = true;
     limpiarAviso();
     conCarga(botonAnteriores, true, TEXTOS.cargandoAnteriores);
+    // Ocupada mientras entran los anteriores: la región viva no lee de golpe
+    // una página entera de mensajes viejos.
     registro.setAttribute('aria-busy', 'true');
+    conversacion.setAttribute('aria-busy', 'true');
     try {
       const pagina = await cliente.obtenerHistorial({
         antesDe: masAntiguoId,
@@ -725,13 +908,16 @@ export function crearVentanaChatbot({
     cargandoAnteriores = false;
     conCarga(botonAnteriores, false);
     registro.removeAttribute('aria-busy');
+    conversacion.removeAttribute('aria-busy');
   }
 
   // ----------------------------------------------------------------- envío
 
   // Una pregunta rápida o una sugerencia se envía como si se hubiera escrito.
+  // Si todavía no se puede enviar (cargando, en la espera de un 429), no se
+  // toca lo que haya en la caja.
   function enviarSugerencia(pregunta) {
-    if (entrada.disabled || enviando) {
+    if (!puedeEnviar()) {
       return;
     }
     entrada.value = pregunta;
@@ -747,11 +933,27 @@ export function crearVentanaChatbot({
       entrada.focus();
       return;
     }
+    // Cargando la conversación o esperando tras un 429: lo escrito se queda
+    // en la caja y Enter no envía (el botón ya está desactivado).
+    if (!puedeEnviar()) {
+      return;
+    }
 
     enviando = true;
     autocompletado.cerrar();
     limpiarAviso();
     conCarga(botonEnviar, true, TEXTOS.enviando);
+    rapidas.habilitar(false);
+    // #506 — la pregunta se pinta ya, antes de que llegue la respuesta, con
+    // «escribiendo…» debajo; la caja queda libre para la siguiente.
+    quitarBienvenida();
+    const pregunta = crearBurbuja({
+      remitente: 'USUARIO',
+      contenido,
+      fechaEnvio: new Date().toISOString(),
+    });
+    registro.append(pregunta);
+    entrada.value = '';
     const escribiendo = h('li', {
       clase: 'chatbot-ventana__escribiendo',
       texto: TEXTOS.escribiendo,
@@ -766,18 +968,9 @@ export function crearVentanaChatbot({
       const respuesta = await preguntar(contenido, donde, () => {
         escribiendo.hidden = false;
       });
-      escribiendo.remove();
-      quitarBienvenida();
-      pintarMensaje({
-        remitente: 'USUARIO',
-        contenido,
-        fechaEnvio: new Date().toISOString(),
-      });
-      pintarMensaje(respuesta);
-      vaciarFormulario();
+      alResponder(escribiendo, respuesta);
     } catch (error) {
-      escribiendo.remove();
-      mostrarAviso(error);
+      alFallarElEnvio({ escribiendo, pregunta, contenido, error });
     } finally {
       terminarEnvio();
     }
@@ -795,15 +988,40 @@ export function crearVentanaChatbot({
 
   // Fuera de enviarMensaje a propósito: lo que se toca después de un `await`
   // vive en funciones aparte (regla require-atomic-updates de ESLint).
-  function vaciarFormulario() {
-    entrada.value = '';
+  function alResponder(escribiendo, respuesta) {
+    escribiendo.remove();
+    pintarMensaje(respuesta);
     autocompletado.cerrar();
+  }
+
+  /**
+   * #506 — el envío falló (rechazado o sin respuesta): la pregunta sale de la
+   * conversación, porque no se guardó, y su texto vuelve a la caja para
+   * corregirlo y reenviarlo. Si mientras tanto se empezó a escribir otra
+   * cosa, se conserva debajo: no se pierde nada.
+   */
+  function alFallarElEnvio({ escribiendo, pregunta, contenido, error }) {
+    escribiendo.remove();
+    pregunta.remove();
+    if (!registro.querySelector('.chatbot-ventana__mensaje')) {
+      pintarBienvenida();
+    }
+    entrada.value = entrada.value.trim() ? `${contenido}\n${entrada.value}` : contenido;
+    const aviso = mostrarAviso(error);
+    if (error?.estado === 429) {
+      iniciarEspera(error.reintentarEn ?? null, aviso);
+    }
   }
 
   function terminarEnvio() {
     enviando = false;
     conCarga(botonEnviar, false);
+    refrescarEnvio();
     entrada.focus();
+    // #506 — si ya tenía el foco, `focus()` no la trae a la vista: en una
+    // pantalla baja, con un aviso abierto, la ventana se desplaza (CSS) y la
+    // caja con el texto devuelto quedaba por debajo del borde.
+    entrada.scrollIntoView?.({ block: 'nearest' });
   }
 
   async function borrarConversacion() {
@@ -855,12 +1073,19 @@ export function crearVentanaChatbot({
     return !panelSoporte.elemento.hidden;
   }
 
+  // «Soporte» y «Preferencias» ocupan el sitio de la conversación: se oculta
+  // la región entera (el envoltorio con la lista) y el formulario.
+  function ocultarConversacion(si) {
+    conversacion.hidden = si;
+    registro.hidden = si;
+    formulario.hidden = si;
+  }
+
   function mostrarSoporte(si) {
     if (si) {
       ocultarPreferencias();
     }
-    registro.hidden = si;
-    formulario.hidden = si;
+    ocultarConversacion(si);
     if (si) {
       limpiarAviso();
       panelSoporte.abrir({ conConversacion: hayPreguntaSinResolver(), vista: vista() });
@@ -900,8 +1125,7 @@ export function crearVentanaChatbot({
       panelSoporte.elemento.hidden = true;
       botonSoporte.setAttribute('aria-expanded', 'false');
     }
-    registro.hidden = si;
-    formulario.hidden = si;
+    ocultarConversacion(si);
     if (si) {
       limpiarAviso();
       panelPreferencias.abrir();
@@ -1062,8 +1286,9 @@ export function crearVentanaChatbot({
   }
 
   // El foco tiene que quedar DENTRO de la ventana (si no, Escape no la
-  // cierra): en la caja de texto si se puede escribir; si el asistente no
-  // está, en la primera acción del aviso; y si no, en «Cerrar».
+  // cierra): en la caja de texto si se puede escribir —también al abrir,
+  // mientras carga la conversación (#506)—; si el asistente no está, en la
+  // primera acción del aviso; y si no, en «Cerrar».
   function enfocarDentro() {
     if (ventana.hidden) {
       return;
@@ -1109,10 +1334,31 @@ export function crearVentanaChatbot({
 }
 
 /**
- * Texto de un error que no es "no disponible". Se decide por el estado, nunca
- * por el texto del servidor (MAPEO-ERRORES §2).
+ * «Tú:» o «Asistente:» delante de cada mensaje, solo para el lector de
+ * pantalla (#506): sin esto, una conversación leída en voz alta no dice quién
+ * habla. Fuera del párrafo del texto, que sigue siendo solo el mensaje.
  *
- * @param {string|{estado?: number}|null} error una cadena ya es el texto final
+ * @param {boolean} esBot
+ * @returns {HTMLElement}
+ */
+function quienHabla(esBot) {
+  return h('span', {
+    clase: 'solo-lectores',
+    texto: `${esBot ? TEXTOS.prefijoAsistente : TEXTOS.prefijoUsuario} `,
+  });
+}
+
+/** El `motivo` del problem details, venga ya leído o dentro del problema. */
+function motivoDe(error) {
+  return error?.motivo ?? error?.problema?.motivo ?? null;
+}
+
+/**
+ * Texto de un error que no es "no disponible". Se decide por el `motivo` y el
+ * estado, nunca por el texto del servidor (MAPEO-ERRORES §2).
+ *
+ * @param {string|{estado?: number, motivo?: string|null, reintentarEn?: number|null}|null} error
+ *   una cadena ya es el texto final
  * @param {Function|null} alReintentar presente cuando falló la carga
  * @returns {string}
  */
@@ -1120,10 +1366,51 @@ function textoDeError(error, alReintentar) {
   if (typeof error === 'string') {
     return error;
   }
+  const porMotivo = POR_MOTIVO.mensaje.get(motivoDe(error));
+  if (porMotivo) {
+    return porMotivo;
+  }
+  if (error?.estado === 429) {
+    return TEXTOS.demasiadosMensajes(error.reintentarEn ?? null);
+  }
   if (error?.estado === 400) {
     return TEXTOS.mensajeInvalido;
   }
   return alReintentar ? TEXTOS.errorAlCargar : TEXTOS.errorAlEnviar;
+}
+
+/**
+ * #506 — lo que el jugador puede corregir es una advertencia; lo demás, un
+ * error.
+ *
+ * @param {string|{estado?: number}|null} error
+ * @returns {'advertencia'|'error'}
+ */
+function tonoDeError(error) {
+  const estado = typeof error === 'string' ? null : error?.estado;
+  return estado === 400 || estado === 422 || estado === 429 ? 'advertencia' : 'error';
+}
+
+/**
+ * #506 — por qué no se guardó una calificación: su comentario pasa por la
+ * lista negra y por la revisión de código (contrato 1.4.0).
+ *
+ * @param {{estado?: number, noDisponible?: boolean, motivo?: string|null,
+ *          reintentarEn?: number|null}|null} error
+ * @returns {string}
+ */
+function textoDeErrorAlCalificar(error) {
+  if (error?.noDisponible) {
+    return TEXTOS.noDisponibleTitulo;
+  }
+  const porMotivo = POR_MOTIVO.comentario.get(motivoDe(error));
+  if (porMotivo) {
+    return porMotivo;
+  }
+  if (error?.estado === 429) {
+    return TEXTOS.demasiadosMensajes(error.reintentarEn ?? null);
+  }
+  return TEXTOS.errorAlCalificar;
 }
 
 /**

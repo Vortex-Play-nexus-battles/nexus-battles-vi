@@ -39,20 +39,52 @@ class TableroDeModeracionTest {
                 false, HASTA);
     }
 
+    private static final TableroDeModeracion.Lectura<FuenteDeUsuarios.Indicadores> SIN_CUENTAS =
+            TableroDeModeracion.Lectura.fallida(CausaDeIndisponibilidad.NO_RESPONDE, "no consultado");
+
+    private static FuenteDeReportes.Frecuencia frecuencia(long... porDia) {
+        List<FuenteDeReportes.PorDia> dias = new java.util.ArrayList<>();
+        long total = 0;
+        for (int i = 0; i < porDia.length; i++) {
+            dias.add(new FuenteDeReportes.PorDia("2026-09-2" + i, porDia[i]));
+            total += porDia[i];
+        }
+        Map<String, Long> categorias = new java.util.LinkedHashMap<>();
+        FuenteDeReportes.CATEGORIAS_DEL_CONTRATO.forEach(c -> categorias.put(c, 0L));
+        categorias.put("SPAM", total);
+        return new FuenteDeReportes.Frecuencia(HASTA.minusDays(30), HASTA, total, dias, categorias, total, total);
+    }
+
+    private static TableroDeModeracion.Lectura<FuenteDeReportes.Frecuencia> reportes(long... porDia) {
+        return TableroDeModeracion.Lectura.de(frecuencia(porDia));
+    }
+
+    private static UmbralesDeModeracion.Umbrales umbrales(Integer sanciones, Integer reportes) {
+        return new UmbralesDeModeracion.Umbrales(sanciones, reportes);
+    }
+
     @Test
     @DisplayName("sin umbral del PO no hay alertas ni se inventa uno (D-25); con umbral, se evalua por dia")
     void umbral() {
-        TableroDeModeracion sinUmbral = TableroDeModeracion.de(agregados(1, 9), null, null, "no consultado");
+        TableroDeModeracion sinUmbral = TableroDeModeracion.de(agregados(1, 9), umbrales(null, null), SIN_CUENTAS,
+                reportes(50));
         assertThat(sinUmbral.alertasConfiguradas()).isFalse();
         assertThat(sinUmbral.umbralSancionesPorDia()).isNull();
+        assertThat(sinUmbral.umbralReportesPorDia()).isNull();
         assertThat(sinUmbral.alertas()).isEmpty();
-        assertThat(sinUmbral.pendientes()).hasSize(2);
+        assertThat(sinUmbral.avisos()).isEmpty();
 
-        TableroDeModeracion conUmbral = TableroDeModeracion.de(agregados(1, 9), 5, null, "no consultado");
+        TableroDeModeracion conUmbral = TableroDeModeracion.de(agregados(1, 9), umbrales(5, null), SIN_CUENTAS,
+                reportes(50));
         assertThat(conUmbral.alertasConfiguradas()).isTrue();
         assertThat(conUmbral.alertas()).hasSize(1);
         assertThat(conUmbral.alertas().get(0)).contains("2026-09-21", "9");
-        assertThat(TableroDeModeracion.de(agregados(1, 9), 0, null, "no consultado").alertasConfiguradas()).isFalse();
+        assertThat(conUmbral.avisos()).containsExactly(
+                new TableroDeModeracion.Aviso(TableroDeModeracion.TipoDeAviso.SANCIONES, "2026-09-21", 9, 5));
+        assertThat(TableroDeModeracion.de(agregados(1, 9), umbrales(0, null), SIN_CUENTAS, reportes())
+                .alertasConfiguradas()).isFalse();
+        assertThat(TableroDeModeracion.de(agregados(1, 9), null, SIN_CUENTAS, reportes())
+                .alertasConfiguradas()).isFalse();
         assertThat(agregados(1, 9).maximoEnUnDia()).isEqualTo(9);
     }
 
@@ -60,41 +92,79 @@ class TableroDeModeracionTest {
     @DisplayName("D-25: el umbral del PO es «a partir de»: un dia con EXACTAMENTE el umbral ya es alta frecuencia")
     void elUmbralEsAPartirDe() {
         // dias 2026-09-20, -21, -22, -23: 2, 3, 4 y 1 sanciones; umbral 3 (D-25, decidido por el PO el 2026-10-05)
-        TableroDeModeracion tablero = TableroDeModeracion.de(agregados(2, 3, 4, 1), 3, null, "no consultado");
+        TableroDeModeracion tablero = TableroDeModeracion.de(agregados(2, 3, 4, 1), umbrales(3, null), SIN_CUENTAS,
+                reportes());
 
         assertThat(tablero.alertasConfiguradas()).isTrue();
         assertThat(tablero.umbralSancionesPorDia()).isEqualTo(3);
         assertThat(tablero.alertas()).hasSize(2);
-        assertThat(tablero.alertas().get(0)).contains("2026-09-21", "3");
+        assertThat(tablero.alertas().get(0)).isEqualTo("Alta frecuencia de sanciones el 2026-09-21: 3 (umbral: 3 o más por día)");
         assertThat(tablero.alertas().get(1)).contains("2026-09-22", "4");
         assertThat(tablero.alertas()).noneMatch(a -> a.contains("2026-09-20") || a.contains("2026-09-23"));
     }
 
     @Test
-    @DisplayName("con los indicadores de cuentas de ms-identidad se publican y 'nuevos usuarios' deja de ser pendiente")
+    @DisplayName("§7.3.8: la frecuencia de reportes se publica siempre y alerta, «a partir de», solo con su umbral")
+    void alertaDeReportes() {
+        // dias 2026-09-20, -21, -22: 4, 20 y 25 reportes
+        TableroDeModeracion sinCifra = TableroDeModeracion.de(agregados(1), umbrales(3, null), SIN_CUENTAS,
+                reportes(4, 20, 25));
+        assertThat(sinCifra.reportes().total()).isEqualTo(49);
+        assertThat(sinCifra.umbralReportesPorDia()).as("D-25: la cifra de reportes sigue sin decision").isNull();
+        assertThat(sinCifra.avisos()).isEmpty();
+
+        TableroDeModeracion conCifra = TableroDeModeracion.de(agregados(1), umbrales(3, 20), SIN_CUENTAS,
+                reportes(4, 20, 25));
+        assertThat(conCifra.alertasConfiguradas()).isTrue();
+        assertThat(conCifra.umbralReportesPorDia()).isEqualTo(20);
+        assertThat(conCifra.avisos()).containsExactly(
+                new TableroDeModeracion.Aviso(TableroDeModeracion.TipoDeAviso.REPORTES, "2026-09-21", 20, 20),
+                new TableroDeModeracion.Aviso(TableroDeModeracion.TipoDeAviso.REPORTES, "2026-09-22", 25, 20));
+        assertThat(conCifra.alertas()).containsExactly(
+                "Alta frecuencia de reportes el 2026-09-21: 20 (umbral: 20 o más por día)",
+                "Alta frecuencia de reportes el 2026-09-22: 25 (umbral: 20 o más por día)");
+
+        TableroDeModeracion soloReportes = TableroDeModeracion.de(agregados(1), umbrales(null, 20), SIN_CUENTAS,
+                reportes(4));
+        assertThat(soloReportes.alertasConfiguradas()).as("hay al menos un umbral").isTrue();
+        assertThat(soloReportes.avisos()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("con los indicadores de cuentas y los reportes, no queda nada pendiente")
     void conIndicadoresDeCuentas() {
-        TableroDeModeracion tablero = TableroDeModeracion.de(agregados(1), null, indicadores(), null);
+        TableroDeModeracion tablero = TableroDeModeracion.de(agregados(1), umbrales(null, null),
+                TableroDeModeracion.Lectura.de(indicadores()), reportes(2));
 
         assertThat(tablero.registroDeUsuarios()).isNotNull();
         assertThat(tablero.registroDeUsuarios().total()).isEqualTo(12);
         assertThat(tablero.registroDeUsuarios().porEstado()).containsEntry("SUSPENDIDO", 2L);
         assertThat(tablero.registroDeUsuarios().registros().total()).isEqualTo(3);
-        assertThat(tablero.pendientes())
-                .hasSize(1)
-                .allMatch(p -> p.startsWith("frecuencia de reportes"));
+        assertThat(tablero.pendientes()).isEmpty();
+        assertThat(tablero.noDisponibles()).isEmpty();
     }
 
     @Test
-    @DisplayName("sin los indicadores, 'nuevos usuarios' queda pendiente con el MOTIVO real, sin tumbar lo demas (CA-03)")
+    @DisplayName("sin cuentas o sin reportes, cada uno queda pendiente con su CAUSA y su motivo, sin tumbar lo demas (CA-03)")
     void sinIndicadoresDiceElMotivo() {
-        TableroDeModeracion tablero = TableroDeModeracion.de(agregados(1), null, null,
-                "ms-identidad no responde: connection refused");
+        TableroDeModeracion tablero = TableroDeModeracion.de(agregados(1), umbrales(3, 20),
+                TableroDeModeracion.Lectura.fallida(CausaDeIndisponibilidad.NO_RESPONDE,
+                        "ms-identidad no responde: connection refused"),
+                TableroDeModeracion.Lectura.fallida(CausaDeIndisponibilidad.SIN_PERMISO,
+                        "comentarios nego el permiso"));
 
         assertThat(tablero.registroDeUsuarios()).isNull();
+        assertThat(tablero.reportes()).isNull();
         assertThat(tablero.sanciones()).isNotNull();
-        assertThat(tablero.pendientes())
-                .anyMatch(p -> p.startsWith("registro de nuevos usuarios") && p.contains("connection refused"))
-                .anyMatch(p -> p.startsWith("frecuencia de reportes"));
+        assertThat(tablero.pendientes()).containsExactly(
+                "registro de nuevos usuarios: ms-identidad no responde: connection refused",
+                "frecuencia de reportes: comentarios nego el permiso");
+        assertThat(tablero.noDisponibles()).containsExactly(
+                new TableroDeModeracion.IndicadorNoDisponible(TableroDeModeracion.Indicador.REGISTRO_DE_USUARIOS,
+                        CausaDeIndisponibilidad.NO_RESPONDE),
+                new TableroDeModeracion.IndicadorNoDisponible(TableroDeModeracion.Indicador.FRECUENCIA_DE_REPORTES,
+                        CausaDeIndisponibilidad.SIN_PERMISO));
+        assertThat(tablero.avisos()).as("sin la frecuencia no se evalua su umbral").isEmpty();
     }
 
     @Test

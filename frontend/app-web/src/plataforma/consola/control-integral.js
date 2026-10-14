@@ -34,9 +34,19 @@
 import { consultar, descargar, filasDe, totalDe, RESULTADO } from './cliente-consola.js';
 import { indicador, panel, pintarDesenlace } from './panel.js';
 import {
+  celdaDeSobre,
+  momentoDe,
+  quienDe,
+  recortado,
+  sobreDe,
+  uidsDe,
+} from './entradas-de-auditoria.js';
+import { directorioDeTitulares } from './titulares.js';
+import {
   ESTADOS_DE_CUENTA,
   exportarDirectorio,
   guardarArchivo,
+  HISTORIAL_DE_SANCIONES,
   panelDeUsuarios,
   recursoDelDirectorio,
 } from './panel-usuarios.js';
@@ -45,7 +55,6 @@ import { encabezadoDePagina } from '../../comun/ui/pagina.js';
 import { NOMBRE_DE_ROL } from '../../comun/shell.js';
 import { RUTAS, resolver } from '../../comun/sesion.js';
 import { urlDeVista } from '../../comun/acceso.js';
-import { distintivo } from '../../comun/ui/distintivo.js';
 import { nombreDeModalidad } from '../../comun/ui/juego/partida.js';
 import { construirPaginacion } from '../../comun/paginacion.js';
 import { creditos, numero } from '../../comun/ui/formato.js';
@@ -57,15 +66,19 @@ import {
   ESTADOS_DE_SALA,
   ESTADOS_DE_SERVICIO,
   ESTADOS_DE_TORNEO,
-  distintivoDeEstado,
   estadoSegun,
   humanizar,
 } from '../../comun/ui/admin/estado.js';
 import { rejillaDeIndicadores, tarjetaDeIndicador } from '../../comun/ui/admin/indicador.js';
 import { nombreDeAccion } from '../../comun/ui/admin/nombres.js';
+import { pintarAlertasDeModeracion } from '../../comun/ui/admin/alertas-de-moderacion.js';
 import { fichaDeParametro, valorLegible } from '../../comun/ui/admin/parametros.js';
 import { SITUACION_DEL_SERVICIO, nombreDelServicio } from '../../comun/ui/admin/servicios.js';
 import { tablaDeDatos } from '../../comun/ui/admin/tabla-de-datos.js';
+
+// SA-4: las alertas viven en el kit (las usa también el tablero de moderación);
+// se reexportan para quien ya las importaba de aquí.
+export { pintarAlertasDeModeracion };
 
 /**
  * Cuentas por página del directorio: las dieciséis de los listados del
@@ -378,6 +391,7 @@ function seccionJugadores(
     estadoCuenta: '',
     desde: '',
     hasta: '',
+    historialSanciones: '',
   };
 
   const exportar = h('button', {
@@ -398,7 +412,8 @@ function seccionJugadores(
     busqueda: {
       nombre: 'buscar',
       etiqueta: 'Buscar',
-      placeholder: 'Apodo, correo o nombre',
+      // ms-identidad-admin 1.5.0: también por el ID de la cuenta o su uid.
+      placeholder: 'Apodo, correo, nombre o ID',
     },
     filtros: [
       { nombre: 'rol', etiqueta: 'Rol', opciones: Object.entries(NOMBRE_DE_ROL) },
@@ -409,6 +424,13 @@ function seccionJugadores(
       },
       { nombre: 'desde', etiqueta: 'Registrada desde', tipo: 'fecha' },
       { nombre: 'hasta', etiqueta: 'Registrada hasta', tipo: 'fecha' },
+      // SA-3 — §7.3.4 «filtros por historial de sanciones».
+      {
+        nombre: 'historialSanciones',
+        etiqueta: 'Sanciones',
+        todos: 'Todas las cuentas',
+        opciones: HISTORIAL_DE_SANCIONES,
+      },
       {
         nombre: 'cuentas',
         etiqueta: 'Cuentas de prueba',
@@ -428,6 +450,7 @@ function seccionJugadores(
         estadoCuenta: valores.estadoCuenta,
         desde: valores.desde,
         hasta: valores.hasta,
+        historialSanciones: valores.historialSanciones,
         ocultarPruebas: valores.cuentas === SIN_CUENTAS_DE_PRUEBA,
         pagina: 0,
       });
@@ -510,6 +533,14 @@ export function pintarDirectorio(datos, estado, recargar) {
         titulo: 'Última entrada',
         tipo: 'fecha',
         valor: (j) => (j.ultimoAcceso ? formatearFecha(j.ultimoAcceso) : 'Nunca ha entrado'),
+      },
+      // SA-3 — cuántas sanciones se le han emitido (ms-identidad-admin 1.7.0);
+      // un servicio anterior que no la publica deja «Sin dato», no un cero.
+      {
+        clave: 'sancionesRegistradas',
+        titulo: 'Sanciones',
+        tipo: 'numero',
+        valor: (j) => (Number.isInteger(j.sancionesRegistradas) ? j.sancionesRegistradas : null),
       },
       {
         clave: 'acciones',
@@ -623,9 +654,12 @@ function seccionPartidas(consultarApi) {
     // modalidad, y una columna que nunca tendría dato no se pinta.
     pintar: (datos) => {
       const filas = filasDe(datos);
+      // SA-7 — el total de la página (`totalElementos`), no las filas de la
+      // primera: con más de 16 salas el resumen se quedaba en 16.
+      const total = totalDe(datos) ?? filas.length;
       return tablaDeDatos({
         titulo: 'Salas y partidas',
-        resumen: `${numero(filas.length)} ${filas.length === 1 ? 'sala' : 'salas'}`,
+        resumen: `${numero(total)} ${total === 1 ? 'sala' : 'salas'}`,
         columnas: [
           { clave: 'sala', titulo: 'Sala', principal: true, valor: descripcionDeSala },
           {
@@ -674,7 +708,7 @@ function seccionEconomia(consultarApi) {
     titulo: 'Catálogo de productos',
     recurso: '/productos',
     consultarApi,
-    acciones: [enlaceA('productos', 'Gestionar el catálogo')].filter(Boolean),
+    acciones: [enlaceA('panel-catalogo', 'Gestionar el catálogo')].filter(Boolean),
     pintar: (datos) => indicador({ etiqueta: 'productos publicados', valor: totalDe(datos) }),
   });
 
@@ -795,36 +829,10 @@ function seccionTorneos(consultarApi) {
    ------------------------------------------------------------------------- */
 
 function seccionModeracion(consultarApi) {
-  const auditoria = panelDeRecurso({
-    id: 'auditoria',
-    ancho: 'completo',
-    titulo: 'Bitácora de acciones administrativas',
-    acciones: [enlaceA('auditoria', 'Ver toda la auditoría')].filter(Boolean),
-    // La ruta de LECTURA es /admin/auditoria (la de escritura, /eventos, a un
-    // GET responde 405). Fecha descendente y el `id` como desempate.
-    recurso: '/admin/auditoria?page=0&size=15&sort=fechaHora,desc&sort=id,desc',
-    consultarApi,
-    vacio: { titulo: 'Todavía no hay acciones registradas' },
-    pintar: (datos) =>
-      tablaDeDatos({
-        titulo: 'Bitácora de acciones administrativas',
-        resumen: 'Las quince acciones más recientes',
-        columnas: [
-          {
-            clave: 'fechaHora',
-            titulo: 'Fecha',
-            tipo: 'fecha',
-            principal: true,
-            valor: (e) => fechaOVacio(e.fechaHora),
-          },
-          { clave: 'administrador', titulo: 'Quién' },
-          { clave: 'tipoAccion', titulo: 'Acción', valor: (e) => nombreDeAccion(e.tipoAccion) },
-          { clave: 'afectado', titulo: 'Sobre' },
-          { clave: 'motivo', titulo: 'Motivo' },
-        ],
-        filas: filasDe(datos),
-      }),
-  });
+  // §7.3.5 (SA-5): las quince acciones más recientes de la bitácora central,
+  // con nombres en vez de identificadores; «Ver toda la auditoría» lleva al
+  // registro completo, con sus filtros y su exportación.
+  const auditoria = panelDeBitacora(consultarApi);
 
   // No hay listado global de sanciones en esta sección: el servicio publica
   // el recuento de la ventana de treinta días, y eso es lo que se enseña.
@@ -848,18 +856,221 @@ function seccionModeracion(consultarApi) {
     pintar: (datos) => indicador({ etiqueta: 'por revisar', valor: totalDe(datos) }),
   });
 
-  // §7.3.4 «alertas»: las de alta frecuencia de sanciones que evalúa el
-  // servicio de métricas contra su umbral.
+  // §7.3.4 «alertas» y §7.3.8 «alertas de actividad sospechosa o alta
+  // frecuencia de reportes»: los días con alta frecuencia de sanciones o de
+  // reportes que evalúa el servicio de métricas contra los umbrales de
+  // Parámetros (SA-4, metricas-plataforma 1.11.0).
   const alertas = panelDeRecurso({
     id: 'alertas-moderacion',
     titulo: 'Alertas de moderación',
+    descripcion: 'Días con alta frecuencia de sanciones o de reportes en los últimos 30 días.',
+    acciones: [enlaceA('tablero-tecnico', 'Ver el tablero de moderación')].filter(Boolean),
     recurso: '/moderacion',
     consultarApi,
     pintar: (datos) => pintarAlertasDeModeracion(datos),
   });
 
-  // Las dos cifras juntas arriba; la bitácora y el recuento, cada uno en su fila.
-  return [alertas, comentarios, auditoria, sanciones];
+  // HU-USR-008 (D-45) — «comportamiento sospechoso», una de las dos señales que
+  // fijó el PO: quien acumula varias sanciones sin revertir (#909, integrado en
+  // SA-4). Sin `minimo` el servicio usa el del PO (3); el panel lo lee de la
+  // respuesta, no lo repite.
+  const reincidentes = panelDeReincidentes(consultarApi);
+
+  // Las dos cifras juntas arriba; la lista, la bitácora y el recuento, cada
+  // uno en su fila.
+  return [alertas, comentarios, reincidentes, auditoria, sanciones];
+}
+
+/**
+ * El panel de la bitácora central (§7.3.5, SA-5): las quince acciones más
+ * recientes, con el apodo de quien actuó y de la cuenta afectada.
+ *
+ * @param {typeof consultar} consultarApi
+ */
+function panelDeBitacora(consultarApi) {
+  const partes = panel({
+    id: 'auditoria',
+    titulo: 'Bitácora de acciones administrativas',
+    acciones: [enlaceA('auditoria', 'Ver toda la auditoría')].filter(Boolean),
+    ancho: 'completo',
+  });
+  const titulares = directorioDeTitulares({ consultarApi });
+  const cargar = async () => {
+    // La ruta de LECTURA es /admin/auditoria (la de escritura, /eventos, a un
+    // GET responde 405). Fecha descendente y el `id` como desempate.
+    const desenlace = await consultarApi(
+      '/admin/auditoria?page=0&size=15&sort=fechaHora,desc&sort=id,desc',
+    );
+    if (desenlace.resultado === RESULTADO.DATOS) {
+      await titulares.nombrar(uidsDe(filasDe(desenlace.datos)));
+    }
+    pintarDesenlace(partes, desenlace, (datos) => pintarBitacora(datos, titulares), {
+      alReintentar: cargar,
+      vacio: { titulo: 'Todavía no hay acciones registradas' },
+    });
+    return desenlace;
+  };
+  return { ...partes, cargar, id: 'auditoria' };
+}
+
+/**
+ * Las acciones recientes de la bitácora: cuándo, quién, qué, sobre qué y por
+ * qué, con los textos largos recortados (el registro completo los tiene
+ * enteros) para que la tabla no se desborde.
+ *
+ * @param {{content?: object[]}} datos `PaginaDeAuditoria`
+ * @param {{de: (uid: string) => ({apodo?: string}|null)}} titulares
+ * @returns {HTMLElement}
+ */
+export function pintarBitacora(datos, titulares) {
+  const filas = filasDe(datos);
+  return tablaDeDatos({
+    titulo: 'Bitácora de acciones administrativas',
+    // Lo que hay, no lo que se pidió: con tres acciones no son «las quince».
+    resumen:
+      filas.length === 1
+        ? 'La acción más reciente'
+        : `Las ${numero(filas.length)} acciones más recientes`,
+    claveDeFila: (e) => e.id,
+    columnas: [
+      {
+        clave: 'fechaHora',
+        titulo: 'Fecha',
+        tipo: 'fecha',
+        principal: true,
+        valor: (e) => fechaOVacio(momentoDe(e)),
+      },
+      {
+        clave: 'administrador',
+        titulo: 'Quién',
+        valor: (e) => {
+          const quien = quienDe(e.administrador, titulares);
+          return quien.identificado
+            ? quien.texto
+            : h('span', { clase: 'tabla-admin__sin-dato', texto: quien.texto });
+        },
+      },
+      { clave: 'tipoAccion', titulo: 'Acción', valor: (e) => nombreDeAccion(e.tipoAccion) },
+      {
+        clave: 'afectado',
+        titulo: 'Sobre',
+        valor: (e) => celdaDeSobre(sobreDe(e.afectado, titulares)),
+      },
+      { clave: 'motivo', titulo: 'Motivo', valor: (e) => recortado(e.motivo, 70) },
+    ],
+    filas,
+  });
+}
+
+/**
+ * El panel de quienes acumulan sanciones sin revertir, con el apodo de cada
+ * cuenta (ms-identidad-admin 1.9.0, `GET /admin/titulares`): un identificador
+ * en pantalla no le dice nada a quien opera.
+ *
+ * @param {typeof consultar} consultarApi
+ */
+function panelDeReincidentes(consultarApi) {
+  const partes = panel({
+    id: 'reincidentes',
+    titulo: 'Usuarios con varias sanciones',
+    descripcion:
+      'Cuentas que acumulan sanciones sin revertir: una de las alertas de comportamiento ' +
+      'sospechoso.',
+    ancho: 'completo',
+  });
+  const cargar = async () => {
+    const desenlace = await consultarApi('/sanciones/reincidentes');
+    const apodos = new Map();
+    const uids = (Array.isArray(desenlace.datos?.usuarios) ? desenlace.datos.usuarios : [])
+      .map((u) => u?.usuarioId)
+      .filter(Boolean);
+    if (desenlace.resultado === RESULTADO.DATOS && uids.length > 0) {
+      const nombres = await consultarApi(`/admin/titulares?uids=${uids.join(',')}`);
+      if (nombres.resultado === RESULTADO.DATOS && Array.isArray(nombres.datos)) {
+        nombres.datos.forEach((t) => apodos.set(String(t.uid).toLowerCase(), t.apodo));
+      }
+    }
+    pintarDesenlace(partes, desenlace, (datos) => pintarReincidentes(datos, apodos), {
+      alReintentar: cargar,
+    });
+    return desenlace;
+  };
+  return { ...partes, cargar, id: 'reincidentes' };
+}
+
+/**
+ * La lista de reincidentes tal como la publica moderacion-sanciones
+ * (`GET /sanciones/reincidentes`, 1.5.0). Un cuerpo que no tenga esa forma se
+ * trata como «sin datos»: no se inventa a nadie.
+ *
+ * @param {{minimo?: number, total?: number,
+ *          usuarios?: {usuarioId?: string, sanciones?: number, ultimaEn?: string}[]}} datos
+ * @param {Map<string, string>} [apodos] uid → apodo
+ * @returns {HTMLElement[]}
+ */
+export function pintarReincidentes(datos, apodos = new Map()) {
+  const usuarios = (Array.isArray(datos?.usuarios) ? datos.usuarios : []).filter(
+    (u) => u?.usuarioId,
+  );
+  const minimo = Number.isInteger(datos?.minimo) ? datos.minimo : null;
+  const criterio = minimo === null ? 'varias' : `${minimo} o más`;
+  if (usuarios.length === 0) {
+    return [
+      h('p', {
+        clase: 't-meta',
+        datos: { zona: 'sin-reincidentes' },
+        texto: `Nadie tiene ${criterio} sanciones sin revertir.`,
+      }),
+    ];
+  }
+
+  const total =
+    Number.isInteger(datos?.total) && datos.total >= usuarios.length
+      ? datos.total
+      : usuarios.length;
+  const cortada =
+    total > usuarios.length ? ` Se muestran los ${usuarios.length} con más sanciones.` : '';
+  const filas = usuarios.map((u) => ({
+    ...u,
+    apodo: apodos.get(String(u.usuarioId).toLowerCase()) ?? null,
+  }));
+  return [
+    h('p', {
+      clase: 't-meta',
+      datos: { zona: 'resumen-reincidentes' },
+      texto: `${total} ${total === 1 ? 'usuario' : 'usuarios'} con ${criterio} sanciones sin revertir.${cortada}`,
+    }),
+    tablaDeDatos({
+      titulo: 'Usuarios con varias sanciones sin revertir',
+      claveDeFila: (u) => u.usuarioId,
+      columnas: [
+        {
+          clave: 'apodo',
+          titulo: 'Cuenta',
+          principal: true,
+          valor: (u) =>
+            u.apodo ?? h('span', { clase: 'tabla-admin__sin-dato', texto: 'Sin apodo' }),
+        },
+        { clave: 'sanciones', titulo: 'Sanciones sin revertir', tipo: 'numero' },
+        {
+          clave: 'ultimaEn',
+          titulo: 'Última sanción',
+          tipo: 'fecha',
+          valor: (u) => formatearFecha(u.ultimaEn),
+        },
+        {
+          clave: 'acciones',
+          titulo: 'Acciones',
+          tipo: 'accion',
+          valor: (u) => [
+            enlaceAFicha({ uid: u.usuarioId, apodo: u.apodo ?? undefined }),
+            enlaceASanciones({ uid: u.usuarioId, apodo: u.apodo ?? undefined }),
+          ],
+        },
+      ],
+      filas,
+    }),
+  ];
 }
 
 /** El tipo de sanción en plural, para el rótulo de su cifra. */
@@ -916,53 +1127,6 @@ const NOMBRE_DE_APELACION = Object.freeze({
   ACEPTADA: 'Apelaciones aceptadas',
   RECHAZADA: 'Apelaciones rechazadas',
 });
-
-/**
- * Las alertas de moderación tal como las publica el servicio de métricas.
- *
- * @param {{alertasConfiguradas?: boolean, umbralSancionesPorDia?: number|null,
- *          alertas?: string[]}} datos
- * @returns {HTMLElement[]}
- */
-export function pintarAlertasDeModeracion(datos) {
-  const lista = (Array.isArray(datos?.alertas) ? datos.alertas : []).filter(
-    (alerta) => typeof alerta === 'string' && alerta.trim(),
-  );
-  if (!datos?.alertasConfiguradas) {
-    return [
-      distintivoDeEstado({ texto: 'Desactivadas', tono: 'neutro' }),
-      h('p', {
-        clase: 'panel-admin__explicacion',
-        datos: { zona: 'sin-umbral' },
-        texto:
-          'Las alertas están desactivadas: falta fijar el umbral de sanciones por día en Parámetros.',
-      }),
-    ];
-  }
-  if (lista.length === 0) {
-    // D-25: el umbral es «a partir de», así que se dice «llegó a».
-    const texto = Number.isInteger(datos?.umbralSancionesPorDia)
-      ? `Ningún día llegó a ${datos.umbralSancionesPorDia} sanciones.`
-      : 'Ningún día llegó al umbral.';
-    return [
-      distintivoDeEstado({ texto: 'Sin alertas', tono: 'exito' }),
-      h('p', { clase: 'panel-admin__explicacion', datos: { zona: 'sin-alertas' }, texto }),
-    ];
-  }
-  return [
-    distintivoDeEstado({
-      texto: `${numero(lista.length)} ${lista.length === 1 ? 'alerta' : 'alertas'}`,
-      tono: 'error',
-    }),
-    h('ul', {
-      clase: 'pila pila--ajustada',
-      datos: { zona: 'alertas' },
-      hijos: lista.map((alerta) =>
-        h('li', { hijos: [distintivo('Alerta', 'reportado'), ` ${alerta}`] }),
-      ),
-    }),
-  ];
-}
 
 /* -------------------------------------------------------------------------
    8. Sistema
@@ -1085,7 +1249,30 @@ function fechaOVacio(valor) {
   return valor ? formatearFecha(valor) : null;
 }
 
-/** Fecha corta y local. Nulo se pinta como guion, no como «hoy». */
+const DIA_COMPACTO = new Intl.DateTimeFormat('es-CO', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+});
+
+const HORA_COMPACTA = new Intl.DateTimeFormat('es-CO', { hour: 'numeric', minute: '2-digit' });
+
+/**
+ * El día de una fecha, compacto: «05 oct 2026». `es-CO` lo escribe «05 de oct
+ * de 2026»; en una tabla de la consola esos «de» son un tercio del ancho de la
+ * columna, y a 1366 px (la resolución mínima, RNF-USA-001) el directorio no
+ * cabía entero (SA-3, al ganar la columna «Sanciones»).
+ *
+ * @param {Date} fecha válida
+ */
+function diaCompacto(fecha) {
+  return DIA_COMPACTO.formatToParts(fecha)
+    .filter((parte) => parte.type !== 'literal')
+    .map((parte) => (parte.type === 'month' ? parte.value.replace('.', '') : parte.value))
+    .join(' ');
+}
+
+/** Fecha y hora de un instante, compactas: «05 oct 2026, 6:30 p. m.». Nulo es un guion. */
 export function formatearFecha(valor) {
   if (!valor) {
     return '—';
@@ -1094,13 +1281,7 @@ export function formatearFecha(valor) {
   if (Number.isNaN(fecha.getTime())) {
     return String(valor);
   }
-  return fecha.toLocaleString('es-CO', {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return `${diaCompacto(fecha)}, ${HORA_COMPACTA.format(fecha)}`;
 }
 
 /** El día de un instante, sin la hora: «05 oct 2026». Nulo se pinta como guion. */
@@ -1112,7 +1293,7 @@ export function formatearDia(valor) {
   if (Number.isNaN(fecha.getTime())) {
     return String(valor);
   }
-  return fecha.toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: '2-digit' });
+  return diaCompacto(fecha);
 }
 
 /** Hora de un instante, sin fecha. */

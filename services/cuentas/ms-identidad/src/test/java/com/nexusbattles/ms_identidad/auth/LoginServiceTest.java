@@ -224,6 +224,56 @@ class LoginServiceTest {
     }
 
     @Test
+    void sa4LaCuentaBaneadaRecibeElCodigoParaApelarSinSesion() {
+        // SA-4 (§7.3.2): con la contrasena correcta, el 403 lleva el codigo con
+        // el que la cuenta ve su baneo y lo apela sin sesion.
+        Usuario usuario = usuarioActivo();
+        usuario.setEstado("BANEADO");
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+        DesafioEmitido codigo = new DesafioEmitido("codigo-opaco", java.time.Instant.now().plusSeconds(1800),
+            Proposito.APELAR);
+        when(desafios.paraApelar(usuario)).thenReturn(Optional.of(codigo));
+
+        CuentaBaneadaException exception = assertThrows(CuentaBaneadaException.class,
+            () -> loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente"));
+
+        assertSame(codigo, exception.getApelacion());
+    }
+
+    @Test
+    void sa4LaCuentaSuspendidaRecibeElCodigoYSiNoSePuedeEmitirElRechazoSaleIgual() {
+        Usuario usuario = usuarioActivo();
+        usuario.setEstado("SUSPENDIDA");
+        usuario.setSuspendidoHasta(LocalDateTime.now().plusHours(3));
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+        when(desafios.paraApelar(usuario)).thenThrow(new IllegalStateException("base caida"));
+
+        CuentaSuspendidaException exception = assertThrows(CuentaSuspendidaException.class,
+            () -> loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente"));
+
+        assertNull(exception.getApelacion());
+        assertNotNull(exception.getHasta());
+    }
+
+    @Test
+    void sa4SinUidNoHayCodigoDeApelacionYConContrasenaIncorrectaTampoco() {
+        Usuario sinUid = usuarioActivo();
+        sinUid.setPublicId(null);
+        sinUid.setEstado("BANEADO");
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(sinUid));
+
+        CuentaBaneadaException exception = assertThrows(CuentaBaneadaException.class,
+            () -> loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente"));
+        assertNull(exception.getApelacion());
+
+        LoginRequest mala = datosValidos();
+        mala.setPassword("Otra-Clave-1!");
+        assertThrows(CredencialesInvalidasException.class,
+            () -> loginService.iniciarSesion(mala, "127.0.0.1", "agente"));
+        verify(desafios, never()).paraApelar(any());
+    }
+
+    @Test
     void debeRechazarCuentaInactiva() {
 
         Usuario usuario = usuarioActivo();

@@ -343,7 +343,10 @@ describe('preguntar por el canal', () => {
     expect(cliente.enviarMensaje).not.toHaveBeenCalled();
   });
 
-  test('un 503 sin moderación se ve como «no disponible», igual que por HTTP', async () => {
+  // #506: por HTTP, un 503 MODERACION_NO_DISPONIBLE ya no es «no disponible»
+  // (el asistente respondió; lo que falló es la revisión del texto) y la
+  // ventana lo explica por su motivo. Por el canal, igual.
+  test('un 503 sin moderación se ve igual que por HTTP: por su motivo, no como «no disponible»', async () => {
     const { canal, red } = await abierto();
     const pregunta = canal.enviarMensaje('hola');
     red.ultima.entregar(DESTINOS_DEL_CHATBOT.errores, {
@@ -354,7 +357,8 @@ describe('preguntar por el canal', () => {
     });
     const error = await pregunta.catch((e) => e);
     expect(error.estado).toBe(503);
-    expect(error.noDisponible).toBe(true);
+    expect(error.motivo).toBe('MODERACION_NO_DISPONIBLE');
+    expect(error.noDisponible).toBe(false);
   });
 });
 

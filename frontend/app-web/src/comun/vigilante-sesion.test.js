@@ -9,7 +9,7 @@
 
 import { jest } from '@jest/globals';
 
-import { CLAVES, guardarSesion } from './sesion.js';
+import { CLAVES, CLAVE_SESION_ANONIMA, guardarSesion } from './sesion.js';
 import {
   EVENTO_RECHAZO,
   VALIDEZ_DE_COMPROBACION_MS,
@@ -191,6 +191,31 @@ describe('crearVigilante', () => {
     expect(url.searchParams.get('volver')).toBeNull();
     expect(sessionStorage.getItem(CLAVES.token)).toBeNull();
     expect(canal.soltado).toBe(true);
+  });
+
+  // #506 — privacidad: lo que olvida la sesión olvida también el visitante
+  // del asistente, por cualquiera de los dos caminos del vigilante.
+  test('cerrar en otra pestaña olvida también el visitante del asistente', () => {
+    const reloj = crearReloj();
+    conSesion(reloj);
+    sessionStorage.setItem(CLAVE_SESION_ANONIMA, 'visitante-de-antes');
+    const { canal } = montar(reloj);
+
+    canal.alCerrarse();
+
+    expect(sessionStorage.getItem(CLAVE_SESION_ANONIMA)).toBeNull();
+  });
+
+  test('la caducidad del token olvida también el visitante del asistente', () => {
+    const reloj = crearReloj();
+    conSesion(reloj, 60);
+    sessionStorage.setItem(CLAVE_SESION_ANONIMA, 'visitante-de-antes');
+    const { navegar } = montar(reloj);
+
+    reloj.avanzar(60_000);
+
+    expect(navegar).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem(CLAVE_SESION_ANONIMA)).toBeNull();
   });
 
   test('comparte la sesión con otra pestaña solo mientras vale', () => {

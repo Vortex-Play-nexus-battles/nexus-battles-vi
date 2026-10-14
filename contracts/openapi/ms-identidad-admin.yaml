@@ -19,8 +19,32 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Administracion de cuentas (ms-identidad)
-  version: 1.7.0
+  version: 1.9.0
   description: |
+    ### Cambios en 1.9.0 (§7.3.2 y Tabla 24, titulares para la consola de moderacion — SA-4, implementado, aditivo)
+
+    - **`GET /api/v1/admin/titulares`.** Quien es cada cuenta, con lo
+      minimo para reconocerla (`uid`, apodo, estado y rol; sin correo ni
+      nombre): por `uids` (hasta 100, para nombrar de una vez las filas de
+      una pagina de sanciones o apelaciones de `moderacion-sanciones`) o por
+      `buscar` (parte del apodo o un `uid` completo; las 10 primeras). La
+      leen los tres roles de moderacion (`EMITIR_ADVERTENCIAS`): el
+      Moderador emite advertencias y suspensiones temporales y no gestiona
+      cuentas, asi que el directorio no le sirve para encontrar a quien
+      sanciona.
+
+    ### Cambios en 1.8.0 (§7.3.2 y §7.3.7, causal de la sancion — SA-4, implementado, aditivo)
+
+    - **Causal y politica al suspender y al banear.** `PUT
+      .../suspender` y el cuerpo opcional de `PUT .../banear` admiten
+      `causal` (una de las ocho causales de §7.3.2, el enumerado `Causal` de
+      `moderacion-sanciones-admin.yaml` 1.4.0) y `politica` (la politica
+      violada, §7.3.7). Las dos son opcionales y viajan tal cual a `POST
+      /api/v1/sanciones`; moderacion las guarda con la sancion y las lleva al
+      aviso y al correo del sancionado. Una causal que no es de las ocho es
+      `400` aqui, sin llegar a moderacion. `motivo` sigue siendo el hecho
+      concreto.
+
     ### Cambios en 1.7.0 (§7.3.4, ficha y directorio — SA-3, implementado, aditivo)
 
     - **Filtro por historial de sanciones (7.3.4, RF-USR-009).** `GET
@@ -403,6 +427,62 @@ paths:
         '403':
           $ref: '#/components/responses/Prohibido'
 
+  /api/v1/admin/titulares:
+    get:
+      tags: [administracion]
+      operationId: consultarTitularesDeCuentas
+      summary: Quien es cada cuenta, para la consola de moderacion
+      description: |
+        1.9.0 (SA-4). Lo minimo para reconocer a la persona en la consola de
+        sanciones y de moderacion: `uid`, apodo, estado y rol. Sin correo, sin
+        nombre y sin fechas, que son de la ficha (`GESTIONAR_CUENTAS`). Una
+        sola de las dos formas por consulta:
+
+        - `uids`: hasta 100 `uid` separados por comas; solo las cuentas que
+          existan, ordenadas por apodo. Para nombrar de una vez a los titulares
+          de una pagina de otro servicio.
+        - `buscar`: parte del apodo (sin distinguir mayusculas; `%` y `_` se
+          buscan tal cual) o un `uid` completo; las 10 primeras por apodo.
+
+        Permiso `EMITIR_ADVERTENCIAS`: Moderador, Administrador y Super
+        Administrador (Tabla 24). Sin cache.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - name: uids
+          in: query
+          required: false
+          description: Hasta 100 `uid` separados por comas. Un `uid` mal escrito o mas de 100, `400`.
+          schema:
+            type: string
+          example: 11111111-2222-3333-4444-555555555555,66666666-7777-8888-9999-000000000000
+        - name: buscar
+          in: query
+          required: false
+          description: Al menos 2 caracteres del apodo, o un `uid` completo.
+          schema:
+            type: string
+            minLength: 2
+      responses:
+        '200':
+          description: Las cuentas encontradas (lista vacia si ninguna coincide).
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: no-store
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 100
+                items:
+                  $ref: '#/components/schemas/TitularDeCuenta'
+        '400':
+          $ref: '#/components/responses/ConsultaInvalida'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+
   /api/v1/admin/usuarios/{usuarioId}:
     get:
       tags: [administracion]
@@ -569,7 +649,14 @@ paths:
                   description: Fin de la suspension; debe ser futuro.
                 motivo:
                   type: string
-                  description: Causal documentada (7.3.2 «Causales de sancion»). Opcional por compatibilidad.
+                  maxLength: 1000
+                  description: El hecho concreto que motiva la sancion. Opcional por compatibilidad.
+                causal:
+                  $ref: '#/components/schemas/CausalDeSancion'
+                politica:
+                  type: string
+                  maxLength: 200
+                  description: 1.8.0 — la politica violada (§7.3.7). Opcional.
       responses:
         '204':
           description: Cuenta suspendida.
@@ -608,7 +695,13 @@ paths:
                 motivo:
                   type: string
                   maxLength: 1000
-                  description: Causal documentada (7.3.2 «Causales de sancion»).
+                  description: El hecho concreto que motiva el baneo.
+                causal:
+                  $ref: '#/components/schemas/CausalDeSancion'
+                politica:
+                  type: string
+                  maxLength: 200
+                  description: 1.8.0 — la politica violada (§7.3.7). Opcional.
       responses:
         '204':
           description: Cuenta baneada.
@@ -1212,6 +1305,21 @@ components:
             $ref: '#/components/schemas/ProblemDetail'
 
   schemas:
+    CausalDeSancion:
+      type: string
+      description: >-
+        1.8.0 — una de las ocho causales de §7.3.2, como las nombra
+        `moderacion-sanciones-admin.yaml` 1.4.0 (`Causal`). Opcional.
+      enum:
+        - LENGUAJE_OFENSIVO
+        - ACOSO
+        - FRAUDE
+        - SOFTWARE_NO_AUTORIZADO
+        - SUPLANTACION_DE_IDENTIDAD
+        - VIOLACION_DE_PRIVACIDAD
+        - INCUMPLIMIENTO_DE_TERMINOS
+        - TERMINACION_DE_RELACION_LEGAL
+
     PaginaDeDirectorio:
       type: object
       required: [contenido, pagina, tamano, total, totalPaginas]
@@ -1230,6 +1338,25 @@ components:
         totalPaginas:
           type: integer
 
+    TitularDeCuenta:
+      type: object
+      description: |
+        1.9.0 — a quien pertenece una sancion, una apelacion o un reporte. Lo
+        que ve cualquier jugador (el apodo) mas el estado y el rol; nada de
+        datos personales.
+      required: [uid, apodo, estado]
+      properties:
+        uid:
+          type: string
+          format: uuid
+        apodo:
+          type: string
+        estado:
+          type: string
+          description: ACTIVO, PENDIENTE_VERIFICACION, INACTIVO, SUSPENDIDO o BANEADO.
+        rol:
+          type: [string, 'null']
+          description: JUGADOR, MODERADOR, ADMINISTRADOR o SUPER_ADMINISTRADOR.
     EntradaDeDirectorio:
       type: object
       required: [id, apodo, email, estado, bloqueada]

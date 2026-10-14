@@ -1,10 +1,14 @@
 package nexus.aplicacion;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import nexus.api.SolicitudCrearProducto;
 import nexus.dominio.Producto;
+import nexus.dominio.RespaldoProducto;
+import nexus.dominio.TipoCambioProducto;
 import nexus.persistencia.ProductoRepository;
+import nexus.persistencia.RespaldoProductoRepository;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -12,12 +16,15 @@ public class CrearProductoServicio {
 
         private final ProductoRepository repositorio;
         private final ProductoMapper mapper;
+        private final RespaldoProductoRepository respaldos;
 
         public CrearProductoServicio(
                         ProductoRepository repositorio,
-                        ProductoMapper mapper) {
+                        ProductoMapper mapper,
+                        RespaldoProductoRepository respaldos) {
                 this.repositorio = repositorio;
                 this.mapper = mapper;
+                this.respaldos = respaldos;
         }
 
         /**
@@ -27,10 +34,28 @@ public class CrearProductoServicio {
          * no existe. {@code insert} ademas nunca pisa un identificador ocupado.
          */
         public Producto crear(SolicitudCrearProducto solicitud) {
+                return crear(solicitud, "sistema");
+        }
+
+        public Producto crear(SolicitudCrearProducto solicitud, String autor) {
                 Instant ahora = Instant.now();
 
                 Producto producto = mapper.aProducto(solicitud, ahora);
-
-                return repositorio.insert(producto);
+                RespaldoProducto auditoria = new RespaldoProducto(
+                                UUID.randomUUID().toString(),
+                                producto.id(),
+                                null,
+                                producto,
+                                ahora,
+                                autor,
+                                TipoCambioProducto.CREACION,
+                                null);
+                respaldos.save(auditoria);
+                try {
+                        return repositorio.insert(producto);
+                } catch (RuntimeException fallo) {
+                        respaldos.deleteById(auditoria.id());
+                        throw fallo;
+                }
         }
 }

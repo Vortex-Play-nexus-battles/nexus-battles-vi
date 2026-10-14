@@ -195,7 +195,7 @@ services:
       # B9: misiones bloquea y libera al heroe en inventario, pide la IA de cada
       # turno a heroes, los golpes al motor y los creditos a ms-finanzas.
       # HU-NOT-001: notificaciones lee los cambios del catalogo en productos.
-      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios;ms-ecommerce=e2e-secreto-de-ecommerce;misiones=e2e-secreto-de-misiones;ms-finanzas=e2e-secreto-de-finanzas;notificaciones=e2e-secreto-de-notificaciones
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios;admin-parametros=e2e-secreto-de-admin-parametros;ms-ecommerce=e2e-secreto-de-ecommerce;misiones=e2e-secreto-de-misiones;ms-finanzas=e2e-secreto-de-finanzas;notificaciones=e2e-secreto-de-notificaciones
       # HU-AUT-007 — clave AES-256 con la que se cifra el secreto TOTP de cada
       # cuenta. Es la del BANCO DE PRUEBAS, no la de ningun entorno: base64 de
       # "e2e-clave-2fa-banco-de-pruebas!!" (32 bytes). Sin clave, enrolar
@@ -761,10 +761,16 @@ services:
       # afectar a la sancion ni al aviso en la bandeja.
       IDENTIDAD_URL: http://srv-ms-identidad:8089
       CORREO_URL: http://srv-correo:8082
+      # SA-5 (§7.3.5): emitir, levantar, resolver apelaciones y cambiar la
+      # lista negra desde la consola (por el borde) llegan a la bitacora
+      # central con la credencial de arriba.
+      AUDITORIA_URL: http://srv-ms-cumplimiento:8091/api/v1/admin/auditoria/eventos
+      AUDITORIA_REINTENTO_MS: "2000"
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       e2e-plataforma-cache: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
+      srv-ms-cumplimiento: { condition: service_healthy }
       srv-notificaciones: { condition: service_healthy }
       srv-admin-parametros: { condition: service_healthy }
     healthcheck:
@@ -836,11 +842,14 @@ services:
       DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
       DIRECTORIO_ACTIVO_CLIENT_ID: comentarios
       DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-comentarios
-      # AUDITORIA_URL se deja sin poner a proposito: ms-cumplimiento no esta
-      # en este banco. El asiento queda igual en comentario_moderacion, que es
-      # el rastro que exige la ficha, y el E2E lo comprueba por el historial.
+      # SA-5 (§7.3.5): cada decision de moderacion llega a la bitacora central
+      # desde su asiento, con la credencial de arriba. Entrega cada 2 s en el
+      # banco (10 s en DEV) para que el E2E no espere.
+      AUDITORIA_URL: http://srv-ms-cumplimiento:8091/api/v1/admin/auditoria/eventos
+      AUDITORIA_REINTENTO_MS: "2000"
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
+      srv-ms-cumplimiento: { condition: service_healthy }
       srv-moderacion-sanciones: { condition: service_healthy }
       srv-notificaciones: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
@@ -905,9 +914,18 @@ services:
       DB_USER: plataforma
       DB_PASS: plataforma
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # SA-5 (§7.3.5): cada cambio de parametro llega a la bitacora central con
+      # la credencial de servicio de admin-parametros (registrada arriba en
+      # AUTH_CLIENTES_SERVICIO): /admin/auditoria/eventos solo admite SERVICIO.
+      AUDITORIA_URL: http://srv-ms-cumplimiento:8091/api/v1/admin/auditoria/eventos
+      AUDITORIA_REINTENTO_MS: "2000"
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: admin-parametros
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-admin-parametros
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
+      srv-ms-cumplimiento: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8088/actuator/health || exit 1"]
       interval: 5s
@@ -945,6 +963,11 @@ services:
       SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
       # HU-MET-001: cuentas por estado y altas por dia, de ms-identidad.
       IDENTIDAD_URL: http://srv-ms-identidad:8089
+      # SA-4 (§7.3.8): frecuencia de reportes de comentarios y umbrales del
+      # catalogo (el de sanciones, 3 por la V6 de admin-parametros; el de
+      # reportes, sin cifra del PO).
+      COMENTARIOS_URL: http://srv-comentarios:8081
+      PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
       # HU-MET-001 (#527): la observabilidad es de administracion.
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
       # RFINAL-08 — pantalla «Sistema»: en el banco todos comparten esta red,

@@ -1,5 +1,5 @@
 {
-  "descripcion": "Base de conocimiento completa del chatbot tras la revisión final del 7.4 (V11 y V15): los 60 temas en el formato de importación del panel (bloque «temas», PUT /chatbot/admin/base-conocimiento/borrador/importacion, que REEMPLAZA la candidata entera) y sus casos de evaluación. Las migraciones V11 y V15 ya la aplican en producción; este archivo sirve para revisarla y para restaurarla en una candidata.",
+  "descripcion": "Base de conocimiento completa del chatbot tras la revisión final del 7.4 (V11, V15 y V16): los 60 temas en el formato de importación del panel (bloque «temas», PUT /chatbot/admin/base-conocimiento/borrador/importacion, que REEMPLAZA la candidata entera) y sus casos de evaluación. Las migraciones V11, V15 y V16 ya la aplican en producción; este archivo sirve para revisarla y para restaurarla en una candidata.",
   "temas": [
     {
       "clave": "heroes-disponibles",
@@ -615,7 +615,10 @@
         "quitar una sancion",
         "como apelo",
         "apelar una suspension",
-        "apelar un baneo"
+        "apelar un baneo",
+        "apelar sin iniciar sesion",
+        "me banearon como apelo",
+        "apelar esta sancion"
       ],
       "variantesEn": [
         "appeal",
@@ -624,10 +627,12 @@
         "appeal a ban",
         "dispute a suspension",
         "appeal deadline",
-        "appeal a suspension"
+        "appeal a suspension",
+        "appeal without signing in",
+        "i was banned how do i appeal"
       ],
-      "respuestaEs": "Para apelar necesitas iniciar sesión: una advertencia la puedes apelar, pero con una suspensión o un baneo vigentes no puedes entrar, así que por ahora esas no se pueden apelar desde el juego. Para apelar: 1) Abre el menú de tu apodo y entra a «Mis sanciones». 2) En la sanción que quieres apelar pulsa «Apelar»; solo aparece si todavía estás dentro del plazo que indica esa pantalla. 3) Escribe tus razones en «Tu argumento» y pulsa «Enviar apelación». No puede haber dos apelaciones abiertas de la misma sanción. 4) Un administrador la revisa y decide si la sanción se mantiene, se reduce o se revierte; te avisamos y lo ves en «Mis apelaciones».",
-      "respuestaEn": "Appeals need you to be signed in: you can appeal a warning, but with an active suspension or ban you can't sign in, so for now those can't be appealed from the game. To appeal: 1) Open your nickname menu and go to «Mis sanciones» (My sanctions). 2) On the sanction you want to appeal press «Apelar» (Appeal); it only shows up while you're within the deadline shown on that screen. 3) Write your reasons in «Tu argumento» (Your argument) and press «Enviar apelación» (Send appeal). There can't be two open appeals for the same sanction. 4) An administrator reviews it and decides whether the sanction is upheld, reduced or reverted; we notify you and you'll see it in «Mis apelaciones» (My appeals).",
+      "respuestaEs": "Toda sanción se puede apelar dentro del plazo que te indica la pantalla, y no puede haber dos apelaciones abiertas de la misma sanción. 1) Con una advertencia puedes entrar: abre el menú de tu apodo, entra a «Mis sanciones» y, en la sanción, pulsa «Apelar» (solo aparece dentro del plazo); escribe tus razones en «Tu argumento» y pulsa «Enviar apelación». 2) Con una suspensión o un baneo vigentes no puedes entrar, pero sí apelar: en la pantalla de entrada escribe tu «Correo electrónico» y tu «Contraseña» y, en el aviso de la sanción, pulsa «Apelar esta sanción». 3) Ahí ves la sanción y hasta cuándo puedes apelarla; escribe «Por qué crees que la sanción no corresponde» y pulsa «Enviar apelación». 4) Un panel de moderadores y administradores la revisa y responde en un plazo de 15 días hábiles: la sanción se mantiene, se reduce o se revierte. La decisión te llega al correo y, con sesión, también la ves en «Mis apelaciones».",
+      "respuestaEn": "Every sanction can be appealed within the deadline shown on screen, and there can't be two open appeals for the same sanction. 1) With a warning you can sign in: open your nickname menu, go to «Mis sanciones» (My sanctions) and, on the sanction, press «Apelar» (Appeal; it only shows up within the deadline); write your reasons in «Tu argumento» (Your argument) and press «Enviar apelación» (Send appeal). 2) With an active suspension or ban you can't sign in, but you can still appeal: on the sign-in screen enter your «Correo electrónico» (email) and «Contraseña» (password) and, in the sanction notice, press «Apelar esta sanción» (Appeal this sanction). 3) There you see the sanction and until when you can appeal it; fill in «Por qué crees que la sanción no corresponde» (Why you think the sanction is wrong) and press «Enviar apelación» (Send appeal). 4) A panel of moderators and administrators reviews it and replies within 15 business days: the sanction is upheld, reduced or reverted. The decision reaches your email and, when signed in, you also see it in «Mis apelaciones» (My appeals).",
       "prioridad": 0,
       "activo": true
     },
@@ -2487,6 +2492,18 @@
     {
       "pregunta": "How do you play this game?",
       "temaClaveEsperada": "reglas-del-juego"
+    },
+    {
+      "pregunta": "¿Puedo apelar si me banearon?",
+      "temaClaveEsperada": "apelar-sancion"
+    },
+    {
+      "pregunta": "estoy suspendido, ¿cómo apelo?",
+      "temaClaveEsperada": "apelar-sancion"
+    },
+    {
+      "pregunta": "Can I appeal a ban without signing in?",
+      "temaClaveEsperada": "apelar-sancion"
     }
   ]
 }

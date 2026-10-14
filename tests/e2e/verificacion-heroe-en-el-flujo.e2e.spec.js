@@ -157,9 +157,12 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
     await tarjeta.click();
 
     // Se va a la verificacion, no a la sala.
-    await page.waitForURL(new RegExp(`validacion-heroe\\.html\\?sala=${sala.id}`), {
-      timeout: 20_000,
-    });
+    await page.waitForURL(
+      new RegExp(`(?:validacion-heroe\\.html|/jugar/heroe)\\?sala=${sala.id}`),
+      {
+        timeout: 20_000,
+      },
+    );
 
     // Y la sala sigue con una sola persona dentro: no se reservo nada.
     const antes = await api.get(`/api/v1/salas/${sala.id}`, {
@@ -253,7 +256,7 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
     await expect(dialogo).toHaveAttribute('data-resultado', 'DISPONIBLE', { timeout: 20_000 });
     await dialogo.locator('[data-accion="confirmar"]').click();
 
-    await page.waitForURL(/sala-batalla\.html/, { timeout: 20_000 });
+    await page.waitForURL(/(?:\/jugar\/sala|sala-batalla\.html)\?sala=/, { timeout: 20_000 });
 
     const despues = await api.get(`/api/v1/salas/${sala.id}`, {
       headers: conToken(anfitriona.token),
@@ -287,9 +290,12 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
     await expect(tarjeta).toBeVisible();
     await tarjeta.click();
 
-    await page.waitForURL(new RegExp(`validacion-heroe\\.html\\?sala=${sala.id}`), {
-      timeout: 20_000,
-    });
+    await page.waitForURL(
+      new RegExp(`(?:validacion-heroe\\.html|/jugar/heroe)\\?sala=${sala.id}`),
+      {
+        timeout: 20_000,
+      },
+    );
 
     const dialogo = page.locator('#validacion-heroe');
     await expect(dialogo).toHaveAttribute('data-resultado', 'SIN_HEROE_EQUIPADO', {
@@ -305,7 +311,7 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
     await conSesion(page, invitado, INVITADO);
     await page.goto(LISTADO);
     await page.locator(`[data-sala="${sala.id}"]`).click();
-    await page.waitForURL(/validacion-heroe\.html/, { timeout: 20_000 });
+    await page.waitForURL(/(?:\/jugar\/heroe|validacion-heroe\.html)\?sala=/, { timeout: 20_000 });
 
     await page.locator('[data-accion="cancelar"]').click();
 

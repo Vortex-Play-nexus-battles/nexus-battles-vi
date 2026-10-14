@@ -10,6 +10,7 @@ import { jest } from '@jest/globals';
 
 import {
   CLAVES,
+  CLAVE_SESION_ANONIMA,
   DESFASE_DESPRECIABLE_MS,
   MOTIVOS,
   MOTIVOS_DE_VERIFICACION,
@@ -244,6 +245,48 @@ describe('cerrar y olvidar', () => {
   });
 });
 
+// #506 — privacidad: la conversación de visitante del asistente se guarda en
+// el servidor con este identificador. Si sobrevivía al cierre de sesión, la
+// siguiente persona en esa pestaña abría el asistente y la leía.
+describe('el identificador de visitante del asistente (#506)', () => {
+  const VISITANTE = 'visitante-de-antes';
+
+  test('olvidarSesion lo borra', () => {
+    conSesion();
+    sessionStorage.setItem(CLAVE_SESION_ANONIMA, VISITANTE);
+    olvidarSesion(sessionStorage);
+    expect(sessionStorage.getItem(CLAVE_SESION_ANONIMA)).toBeNull();
+  });
+
+  test('cerrarSesion lo borra antes de ir al login', () => {
+    conSesion();
+    sessionStorage.setItem(CLAVE_SESION_ANONIMA, VISITANTE);
+    const navegar = jest.fn(() => {
+      expect(sessionStorage.getItem(CLAVE_SESION_ANONIMA)).toBeNull();
+    });
+    cerrarSesion({
+      almacen: sessionStorage,
+      navegar,
+      base: BASE,
+      avisar: jest.fn(),
+      difundir: jest.fn(),
+    });
+    expect(navegar).toHaveBeenCalledTimes(1);
+  });
+
+  test('entrar también lo borra: un cierre posterior no resucita lo de antes de entrar', () => {
+    sessionStorage.setItem(CLAVE_SESION_ANONIMA, VISITANTE);
+    const token = tokenCon({ uid: UID, sub: 'Ana', exp: Math.floor(Date.now() / 1000) + 60 });
+    guardarSesion({ token, apodo: 'Ana', rol: 'JUGADOR', uid: UID }, sessionStorage);
+    expect(sessionStorage.getItem(CLAVE_SESION_ANONIMA)).toBeNull();
+    expect(leerSesion(sessionStorage).autenticado).toBe(true);
+  });
+
+  test('es la clave que usa el asistente', () => {
+    expect(CLAVE_SESION_ANONIMA).toBe('nexus.chatbot.sesionAnonima');
+  });
+});
+
 describe('guardarSesion (R17)', () => {
   test('escribe las cuatro claves que lee leerSesion', () => {
     const token = tokenCon({ uid: UID, sub: 'Ana', exp: Math.floor(Date.now() / 1000) + 60 });
@@ -420,9 +463,14 @@ describe('direcciones limpias (R17.3)', () => {
     }
   });
 
-  test('una vista sin dirección limpia sigue en su ruta, con marca o sin ella', () => {
+  test('SA-7 — las vistas de la sala y de la consola también tienen la suya; sin marca, la ruta', () => {
     const doc = documentoCon('limpias');
-    expect(resolver(RUTAS.crearSala, BASE, doc)).toBe(
+    expect(resolver(RUTAS.crearSala, BASE, doc)).toBe('http://localhost:8099/jugar/nueva-sala');
+    expect(resolver(RUTAS.gestionUsuarios, BASE, doc)).toBe(
+      'http://localhost:8099/consola/usuarios',
+    );
+    expect(resolver(RUTAS.auditoria, BASE, doc)).toBe('http://localhost:8099/consola/auditoria');
+    expect(resolver(RUTAS.crearSala, BASE, documentoCon(null))).toBe(
       'http://localhost:8099/frontend/app-web/src/plataforma/salas-partidas/crear-sala.html',
     );
     // Y lo que no es una vista (el sprite, el kit) no se toca.

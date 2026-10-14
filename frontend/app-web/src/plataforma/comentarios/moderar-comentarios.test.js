@@ -18,6 +18,7 @@ import { jest } from '@jest/globals';
 
 import {
   enlazadorDeFicha,
+  enlazadorDeSancion,
   montarModeracion,
   panelDeDetalle,
   tarjetaDeEntrada,
@@ -1950,5 +1951,132 @@ describe('HU-COM-005 (#519): decisión en lote', () => {
         expect(lote.compareDocumentPosition(cola) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       });
     });
+  });
+});
+
+describe('HU-COM-007 CA-01: la detección automática en la cola y el detalle', () => {
+  const porLaListaNegra = {
+    fecha: AHORA,
+    reglas: [7, 9],
+    categoria: 'OFENSIVO',
+    motivo: 'El texto contiene un termino no permitido',
+    servicioNoDisponible: false,
+  };
+  const sinServicio = {
+    fecha: AHORA,
+    reglas: [],
+    motivo: 'I/O error on POST request for "http://lista-negra"',
+    servicioNoDisponible: true,
+  };
+
+  /** La tarjeta de la cola y el panel de detalle, con la misma detección. */
+  const conDeteccion = (deteccion) => [
+    tarjetaDeEntrada(entrada({ reportes: 0, porCategoria: {}, deteccion }), () => {}),
+    panelDeDetalle(detalle({ reportes: [], deteccion }), () => {}),
+  ];
+
+  test('la tarjeta y el detalle dicen cuántos términos lo retuvieron, con su categoría y su motivo', () => {
+    for (const nodo of conDeteccion(porLaListaNegra)) {
+      const bloque = nodo.querySelector('[data-zona="deteccion"]');
+      expect(bloque).not.toBeNull();
+      expect(nodo.textContent).toContain('Detección automática');
+      expect(bloque.querySelector('[data-campo="deteccion-reglas"]').textContent).toBe(
+        'Coincidió con 2 términos de la lista negra',
+      );
+      expect(bloque.querySelector('[data-campo="deteccion-categoria"]').textContent).toBe(
+        'Ofensivo',
+      );
+      // SA-4 — sin identificadores ni constantes a la vista.
+      expect(bloque.textContent).not.toMatch(/\b7\b|\b9\b|OFENSIVO/);
+      expect(bloque.querySelector('[data-campo="deteccion-motivo"]').textContent).toBe(
+        'El texto contiene un termino no permitido',
+      );
+      expect(bloque.querySelector('[data-campo="deteccion-sin-servicio"]')).toBeNull();
+    }
+  });
+
+  test('un solo término se dice en singular, y si no vino ninguno se dice', () => {
+    const [tarjeta] = conDeteccion({ ...porLaListaNegra, reglas: [7] });
+    expect(tarjeta.querySelector('[data-campo="deteccion-reglas"]').textContent).toBe(
+      'Coincidió con un término de la lista negra',
+    );
+
+    const [, panel] = conDeteccion({ ...porLaListaNegra, reglas: [] });
+    expect(panel.querySelector('[data-campo="deteccion-reglas"]').textContent).toBe(
+      'La lista negra no indicó qué término coincidió',
+    );
+  });
+
+  test('si la lista negra no respondió lo dice, sin inventar reglas ni enseñar el error técnico', () => {
+    for (const nodo of conDeteccion(sinServicio)) {
+      const bloque = nodo.querySelector('[data-zona="deteccion"]');
+      expect(bloque.querySelector('[data-campo="deteccion-sin-servicio"]').textContent).toBe(
+        'La lista negra no respondió; retenido por precaución',
+      );
+      expect(bloque.querySelector('[data-campo="deteccion-reglas"]')).toBeNull();
+      expect(bloque.querySelector('[data-campo="deteccion-categoria"]')).toBeNull();
+      expect(bloque.textContent).not.toContain('I/O error');
+    }
+  });
+
+  test('sin detección (llegó por reportes) no hay bloque', () => {
+    expect(
+      tarjetaDeEntrada(entrada(), () => {}).querySelector('[data-zona="deteccion"]'),
+    ).toBeNull();
+    const panel = panelDeDetalle(detalle(), () => {});
+    expect(panel.querySelector('[data-zona="deteccion"]')).toBeNull();
+    expect(panel.textContent).not.toContain('Detección automática');
+  });
+
+  test('el motivo llega de otro servicio: se pinta como texto, nunca como marcado', () => {
+    const [tarjeta] = conDeteccion({ ...porLaListaNegra, motivo: '<img src=x onerror="robar()">' });
+    const motivo = tarjeta.querySelector('[data-campo="deteccion-motivo"]');
+    expect(motivo.textContent).toBe('<img src=x onerror="robar()">');
+    expect(motivo.querySelector('img')).toBeNull();
+  });
+});
+
+describe('SA-4 — del comentario a la sanción de su autor', () => {
+  test('los tres roles de moderación tienen el enlace; un jugador, no', () => {
+    for (const rol of ['MODERADOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR']) {
+      const enlazar = enlazadorDeSancion(rol);
+      expect(typeof enlazar).toBe('function');
+      const url = new URL(enlazar('aut-1', 'com-1'));
+      expect(url.pathname).toMatch(/moderacion-sanciones\/sanciones-admin\.html$/);
+      expect(url.searchParams.get('usuario')).toBe('aut-1');
+      expect(url.searchParams.get('comentario')).toBe('com-1');
+    }
+    expect(enlazadorDeSancion('JUGADOR')).toBeNull();
+    expect(enlazadorDeSancion(null)).toBeNull();
+  });
+
+  test('el detalle ofrece «Sancionar al autor» solo si se le pasa el enlace', () => {
+    const conEnlace = panelDeDetalle(detalle(), () => {}, {
+      hrefDeSancion: 'https://x/sanciones-admin.html?usuario=aut-1&comentario=com-1',
+    });
+    const enlace = conEnlace.querySelector('[data-accion="sancionar-autor"]');
+    expect(enlace.textContent).toBe('Sancionar al autor');
+    expect(enlace.getAttribute('href')).toContain('usuario=aut-1');
+    expect(
+      panelDeDetalle(detalle(), () => {}).querySelector('[data-accion="sancionar-autor"]'),
+    ).toBeNull();
+  });
+
+  test('los reportes del detalle dicen su categoría con el nombre de §7.3.3, no la constante', () => {
+    const panel = panelDeDetalle(
+      detalle({
+        reportes: [
+          { id: 'r-1', categoria: 'VIOLACION_DE_DERECHOS', descripcion: null, fecha: AHORA },
+          { id: 'r-2', categoria: 'CATEGORIA_NUEVA', descripcion: 'otra', fecha: AHORA },
+        ],
+      }),
+      () => {},
+    );
+    const lineas = [...panel.querySelectorAll('[data-zona="reportes"] li')].map(
+      (l) => l.textContent,
+    );
+    expect(lineas[0]).toMatch(/^Violación de derechos de autor · /);
+    expect(lineas[1]).toMatch(/^Categoria nueva · /);
+    expect(panel.textContent).not.toContain('VIOLACION_DE_DERECHOS');
   });
 });

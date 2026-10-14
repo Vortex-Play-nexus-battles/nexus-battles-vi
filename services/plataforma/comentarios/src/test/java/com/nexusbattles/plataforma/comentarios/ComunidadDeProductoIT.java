@@ -19,6 +19,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -76,7 +78,9 @@ import jakarta.persistence.EntityManagerFactory;
  *   <li>que el multipart real corta a los 2 MB con el problem detail del
  *       servicio, y que las cabeceras de una imagen salen como deben;</li>
  *   <li>que ocultar o eliminar un comentario ya no se lleva la calificacion de
- *       su autor, el defecto que encontro la auditoria.</li>
+ *       su autor, el defecto que encontro la auditoria;</li>
+ *   <li>que la deteccion de HU-COM-007 se guarda y se lee de PostgreSQL, con
+ *       sus reglas en una columna {@code bigint[]}.</li>
  * </ul>
  */
 @Testcontainers
@@ -660,6 +664,51 @@ class ComunidadDeProductoIT {
         }
 
         /**
+         * SA-4 (§7.3.8, contrato 1.15.0) contra PostgreSQL real: la consulta con
+         * constructor de {@code ReporteRepository.contablesEntre} y el corte del
+         * periodo [desde, hasta). Otros tests de la clase tambien reportan, asi
+         * que se comparan diferencias sobre un periodo que empieza ahora.
+         */
+        @Test
+        @DisplayName("1.15.0: la frecuencia cuenta los reportes del periodo por dia y categoria, sin identificadores")
+        void frecuenciaDeReportes() throws Exception {
+            java.time.Instant desde = java.time.Instant.now().minusSeconds(1);
+            String[] uno = comentarioPublicado();
+            String[] otro = comentarioPublicado();
+            UUID quien = UUID.randomUUID();
+            assertEquals(201, reportar(uno[0], uno[1], jugador(quien)).statusCode());
+            assertEquals(201, reportar(otro[0], otro[1], jugador(quien)).statusCode());
+            assertEquals(201, pedir("POST", "/api/v1/products/" + uno[0] + "/comments/" + uno[1] + "/reportes",
+                    jugador(UUID.randomUUID()), "{\"categoria\":\"ACOSO\"}").statusCode());
+            java.time.Instant hasta = java.time.Instant.now().plusSeconds(1);
+
+            HttpResponse<String> r = pedir("GET", "/api/v1/comentarios/moderacion/reportes/frecuencia?desde="
+                    + desde + "&hasta=" + hasta, moderadora(), null);
+            assertEquals(200, r.statusCode(), r.body());
+            int total = leer(r, "$.total");
+            int spam = leer(r, "$.porCategoria.SPAM");
+            int acoso = leer(r, "$.porCategoria.ACOSO");
+            assertTrue(total >= 3, r.body());
+            assertTrue(spam >= 2, r.body());
+            assertTrue(acoso >= 1, r.body());
+            assertTrue((Integer) leer(r, "$.comentariosReportados") >= 2, r.body());
+            assertTrue((Integer) leer(r, "$.reportantes") >= 2, r.body());
+            List<Integer> porDia = leer(r, "$.porDia[*].reportes");
+            assertEquals(total, porDia.stream().mapToInt(Integer::intValue).sum(), "los dias suman el total");
+            assertFalse(r.body().contains(uno[1]), "no sale el id del comentario");
+            assertFalse(r.body().contains(quien.toString()), "no sale quien reporto");
+
+            // El periodo es [desde, hasta): una hora que empieza en «hasta» no ve ninguno de estos.
+            HttpResponse<String> despues = pedir("GET", "/api/v1/comentarios/moderacion/reportes/frecuencia?desde="
+                    + hasta + "&hasta=" + hasta.plusSeconds(3600), moderadora(), null);
+            assertEquals(200, despues.statusCode(), despues.body());
+            assertEquals(0, (Integer) leer(despues, "$.total"), despues.body());
+
+            assertEquals(403, pedir("GET", "/api/v1/comentarios/moderacion/reportes/frecuencia",
+                    jugador(UUID.randomUUID()), null).statusCode(), "un jugador no lee la frecuencia");
+        }
+
+        /**
          * Sin esto, el 409 podria venir del pre-chequeo de cortesia (una peticion
          * termina antes de que la otra compruebe) y el test pasaria sin haber
          * tocado el indice. La barrera retiene a las dos dentro del
@@ -762,6 +811,49 @@ class ComunidadDeProductoIT {
                     "un reporte posterior a la decision lo vuelve a poner en la cola");
         }
 
+        /**
+         * SA-4 (§7.3.3, contrato 1.14.0) contra PostgreSQL real: el historico de
+         * toda la moderacion, con sus filtros escritos como consulta (accion,
+         * apodo del moderador sin distinguir mayusculas, periodo) y el
+         * comentario de cada asiento leido en una sola consulta.
+         */
+        @Test
+        @DisplayName("1.14.0: el historico lista las decisiones de todos, la mas reciente primero, con su comentario y sin la IP")
+        void historicoDeModeracion() throws Exception {
+            Instant antes = Instant.now().minusSeconds(1);
+            String producto = productoNuevo();
+            String id = leer(comentar(producto, jugador(UUID.randomUUID()), "un comentario a revisar", null), "$.id");
+            String decision = "/api/v1/comentarios/moderacion/" + id + "/decision";
+            assertEquals(200, pedir("POST", decision, moderadora(),
+                    "{\"accion\":\"OCULTAR\",\"motivo\":\"lenguaje inadecuado\"}",
+                    "X-Forwarded-For", "198.51.100.9").statusCode());
+            Thread.sleep(5);
+            assertEquals(200, pedir("POST", decision, moderadora(),
+                    "{\"accion\":\"RESTAURAR\",\"motivo\":\"era un malentendido\"}").statusCode());
+
+            String base = "/api/v1/comentarios/moderacion/historial?moderador=adalajus&desde=" + antes;
+            HttpResponse<String> todo = pedir("GET", base, moderadora(), null);
+            assertEquals(200, todo.statusCode(), todo.body());
+            List<String> deEste = leer(todo, "$.contenido[?(@.comentarioId == '" + id + "')].accion");
+            assertEquals(List.of("RESTAURAR", "OCULTAR"), deEste, "la mas reciente primero");
+            assertEquals(List.of("un comentario a revisar"),
+                    leer(todo, "$.contenido[?(@.comentarioId == '" + id + "' && @.accion == 'OCULTAR')].extracto"));
+            assertEquals(List.of(producto),
+                    leer(todo, "$.contenido[?(@.comentarioId == '" + id + "' && @.accion == 'OCULTAR')].productoId"));
+            assertFalse(todo.body().contains("198.51.100.9"), "la IP de origen no sale del servicio");
+
+            HttpResponse<String> soloOcultar = pedir("GET", base + "&accion=OCULTAR", moderadora(), null);
+            assertEquals(List.of("OCULTAR"), leer(soloOcultar, "$.contenido[?(@.comentarioId == '" + id + "')].accion"));
+
+            HttpResponse<String> otroModerador = pedir("GET",
+                    "/api/v1/comentarios/moderacion/historial?moderador=nadie-con-este-apodo&desde=" + antes,
+                    moderadora(), null);
+            assertEquals(0, (Integer) leer(otroModerador, "$.total"));
+
+            assertEquals(403, pedir("GET", "/api/v1/comentarios/moderacion/historial",
+                    jugador(UUID.randomUUID()), null).statusCode(), "un jugador no lee el historico");
+        }
+
         @Test
         @DisplayName("MARCAR lo pone en la lista de seguimiento aunque este publicado; DESMARCAR lo saca")
         void marcar() throws Exception {
@@ -785,6 +877,39 @@ class ComunidadDeProductoIT {
                     "{\"accion\":\"DESMARCAR\",\"motivo\":\"ya no hace falta\"}").statusCode());
             assertEquals(0, (Integer) leer(pedir("GET",
                     "/api/v1/comentarios/moderacion?marcado=true&productoId=" + producto, moderadora(), null), "$.total"));
+        }
+
+        /**
+         * HU-COM-007 CA-01 (contrato 1.10.0) contra PostgreSQL real: las reglas
+         * se guardan en una columna bigint[], y los dobles en memoria de
+         * FlujoDeModeracionTest no la leen de la base. La lista negra de
+         * VecinosDePrueba senala «prohibido» con las reglas 7 y 9, categoria
+         * OFENSIVO.
+         */
+        @Test
+        @DisplayName("HU-COM-007: la cola y el detalle devuelven la deteccion leida de PostgreSQL, sin las coincidencias")
+        void deteccionLeidaDePostgres() throws Exception {
+            String producto = productoNuevo();
+            HttpResponse<String> retenido = comentar(producto, jugador(UUID.randomUUID()), "esto esta prohibido", null);
+            assertEquals(202, retenido.statusCode(), retenido.body());
+            String id = leer(retenido, "$.id");
+
+            HttpResponse<String> cola = pedir("GET", "/api/v1/comentarios/moderacion?productoId=" + producto,
+                    moderadora(), null);
+            assertEquals(List.of(id), leer(cola, "$.entradas[*].comentario.id"), cola.body());
+            afirmarDeteccionDeLaListaNegra(leer(cola, "$.entradas[0].deteccion"));
+
+            HttpResponse<String> detalle = pedir("GET", "/api/v1/comentarios/moderacion/" + id, moderadora(), null);
+            assertEquals(200, detalle.statusCode(), detalle.body());
+            afirmarDeteccionDeLaListaNegra(leer(detalle, "$.deteccion"));
+        }
+
+        private void afirmarDeteccionDeLaListaNegra(Map<String, Object> deteccion) {
+            assertEquals(List.of(7, 9), deteccion.get("reglas"), "las reglas vuelven del bigint[]");
+            assertEquals("OFENSIVO", deteccion.get("categoria"));
+            assertEquals(false, deteccion.get("servicioNoDisponible"));
+            assertEquals(Set.of("fecha", "reglas", "categoria", "motivo", "servicioNoDisponible"), deteccion.keySet(),
+                    "los nombres del contrato y nada mas: ni las coincidencias ni el texto");
         }
     }
 
