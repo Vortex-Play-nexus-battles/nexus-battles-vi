@@ -24,7 +24,7 @@ import {
 import { fechaHora, numero } from '../comun/ui/formato.js';
 import { encabezadoDeSeccion } from '../comun/ui/pagina.js';
 import { CATEGORIAS, ESTADOS } from '../comun/ui/soporte-chatbot.js';
-import { textoDeErrorDelPanel } from './panel-chatbot-analiticas.js';
+import { fraseDeErrorDelPanel, textoDeErrorDelPanel } from './panel-chatbot-errores.js';
 
 /** Cuántas solicitudes por página. */
 export const POR_PAGINA = 20;
@@ -69,7 +69,7 @@ export function textoDeFalloAlAtender(error) {
   if (error?.estado === 400) {
     return 'Revisa la respuesta: admite hasta 2000 caracteres.';
   }
-  return textoDeErrorDelPanel(error).titulo;
+  return fraseDeErrorDelPanel(error, 'No se pudo guardar el cambio de la solicitud');
 }
 
 /**
@@ -115,7 +115,10 @@ export function atenderEnDialogo({ cliente, ticketId }) {
         guardar.disabled = formulario === null;
       })
       .catch((error) => {
-        pintarEstado(cuerpo, estadoDeError(textoDeErrorDelPanel(error)));
+        pintarEstado(
+          cuerpo,
+          estadoDeError(textoDeErrorDelPanel(error, 'No se pudo abrir la solicitud')),
+        );
       });
 
     guardar.addEventListener('click', async () => {
@@ -300,7 +303,10 @@ export function montarSoporte(raiz, { cliente, atender = atenderEnDialogo }) {
     } catch (error) {
       pintarEstado(
         zona,
-        estadoDeError({ ...textoDeErrorDelPanel(error), alReintentar: () => cargar() }),
+        estadoDeError({
+          ...textoDeErrorDelPanel(error, 'No se pudieron cargar las solicitudes de soporte'),
+          alReintentar: () => cargar(),
+        }),
       );
     }
   }

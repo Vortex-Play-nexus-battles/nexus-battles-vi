@@ -44,7 +44,7 @@ import {
   TEXTO_CAMBIO_CONCURRENTE,
   textoDeArchivo,
 } from './panel-chatbot-base.js';
-import { textoDeErrorDelPanel } from './panel-chatbot-analiticas.js';
+import { fraseDeErrorDelPanel, textoDeErrorDelPanel } from './panel-chatbot-errores.js';
 
 /** Texto del «tema esperado» cuando el caso pide escalar. */
 export const DEBE_ESCALAR = 'Debe escalar a soporte';
@@ -273,7 +273,7 @@ export function editarCasoEnDialogo({ titulo, caso = null, temas, guardar }) {
         mostrarAviso(
           error?.estado === 400
             ? 'El servicio no acepta ese caso: revisa la pregunta y el tema.'
-            : textoDeErrorDelPanel(error).titulo,
+            : fraseDeErrorDelPanel(error, 'No se pudo guardar el caso'),
         );
       }
     }
@@ -360,7 +360,13 @@ export function montarReentrenamiento(
     } catch (error) {
       pintarEstado(
         zonaDespliegue,
-        estadoDeError({ ...textoDeErrorDelPanel(error), alReintentar: () => cargar() }),
+        estadoDeError({
+          ...textoDeErrorDelPanel(
+            error,
+            'No se pudieron cargar las versiones ni los casos de evaluación',
+          ),
+          alReintentar: () => cargar(),
+        }),
       );
     }
   }
@@ -448,7 +454,7 @@ export function montarReentrenamiento(
           avisar('No se desplegó: la candidata rinde peor que producción.');
           return;
         }
-        avisar(textoDeFalloDeEvaluacion(error));
+        avisar(textoDeFalloDeEvaluacion(error, 'No se pudo desplegar la candidata'));
       }
     });
 
@@ -489,7 +495,7 @@ export function montarReentrenamiento(
           await cliente.cancelarProgramacion();
           mensaje = 'Se canceló la publicación programada.';
         } catch (error) {
-          mensaje = textoDeErrorDelPanel(error).titulo;
+          mensaje = fraseDeErrorDelPanel(error, 'No se pudo cancelar la publicación programada');
         }
         await recargarYAvisar(mensaje);
       });
@@ -549,7 +555,7 @@ export function montarReentrenamiento(
         mensaje =
           error?.estado === 400
             ? 'No se pudo programar: elige un momento entre un minuto y 90 días desde ahora.'
-            : textoDeErrorDelPanel(error).titulo;
+            : fraseDeErrorDelPanel(error, 'No se pudo programar la publicación');
       }
       await recargarYAvisar(mensaje);
     });
@@ -557,14 +563,14 @@ export function montarReentrenamiento(
     return bloque;
   }
 
-  function textoDeFalloDeEvaluacion(error) {
+  function textoDeFalloDeEvaluacion(error, queFallo = 'No se pudo evaluar la candidata') {
     if (esCambioConcurrente(error)) {
       return TEXTO_CAMBIO_CONCURRENTE;
     }
     if (error?.estado === 409) {
-      return 'No se pudo evaluar: se necesita una candidata y al menos un caso de evaluación activo.';
+      return `${queFallo}: se necesita una candidata y al menos un caso de evaluación activo.`;
     }
-    return textoDeErrorDelPanel(error).titulo;
+    return fraseDeErrorDelPanel(error, queFallo);
   }
 
   // ------------------------------------------------------------- revertir
@@ -597,7 +603,7 @@ export function montarReentrenamiento(
         } else if (error?.estado === 409) {
           mensaje = 'No hay una versión anterior a la cual revertir.';
         } else {
-          mensaje = textoDeErrorDelPanel(error).titulo;
+          mensaje = fraseDeErrorDelPanel(error, 'No se pudo revertir a la versión anterior');
         }
       }
       await recargarYAvisar(mensaje);
@@ -690,7 +696,7 @@ export function montarReentrenamiento(
         try {
           await cliente.eliminarCaso(caso.id);
         } catch (error) {
-          mensaje = textoDeErrorDelPanel(error).titulo;
+          mensaje = fraseDeErrorDelPanel(error, 'No se pudo eliminar el caso');
         }
         await recargarYAvisar(mensaje);
       });

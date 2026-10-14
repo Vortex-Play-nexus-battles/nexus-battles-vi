@@ -142,10 +142,12 @@ class EnriquecedorTest {
         RespuestaEnriquecida enriquecida = Enriquecedor.paraEscalamiento(List.of("Cómo publicar un producto en subasta",
             "Cómo pujar o comprar en una subasta", "Créditos y moneda del juego"), temas, null, true);
 
+        // 1.8.0: y al final el centro de ayuda (sin vista, sin categoria).
         assertThat(enriquecida.enlaces()).containsExactly(new EnlaceInterno("Go to Subasta", "subastas"),
-            new EnlaceInterno("Go to Historial de transacciones", "historial-transacciones"));
+            new EnlaceInterno("Go to Historial de transacciones", "historial-transacciones"),
+            new EnlaceInterno("Go to Centro de ayuda", "ayuda"));
         assertThat(Enriquecedor.paraEscalamiento(List.of("Un título que no es de ningún tema"), temas, null, false)
-            .enlaces()).isEmpty();
+            .enlaces()).containsExactly(new EnlaceInterno("Ver el centro de ayuda", "ayuda"));
     }
 
     @Test
@@ -155,12 +157,39 @@ class EnriquecedorTest {
         assertThat(enriquecida.ofrecerSoporteHumano()).isTrue();
         assertThat(enriquecida.respuestasRapidas()).containsExactly("Cómo pujar o comprar en una subasta",
             "Créditos y moneda del juego");
-        assertThat(enriquecida.enlaces()).extracting(EnlaceInterno::destino).containsExactly("subastas");
+        assertThat(enriquecida.enlaces()).containsExactly(new EnlaceInterno("Ir a Subasta", "subastas"),
+            new EnlaceInterno("Ver el centro de ayuda", "ayuda", "categoria-subasta-y-comercio"));
 
         RespuestaEnriquecida soloSoporte = Enriquecedor.soloSoporte();
         assertThat(soloSoporte.ofrecerSoporteHumano()).isTrue();
-        assertThat(soloSoporte.enlaces()).isEmpty();
+        assertThat(soloSoporte.enlaces()).containsExactly(new EnlaceInterno("Ver el centro de ayuda", "ayuda"));
         assertThat(soloSoporte.respuestasRapidas()).isEmpty();
+        assertThat(Enriquecedor.soloSoporte(true).enlaces())
+            .containsExactly(new EnlaceInterno("Go to Centro de ayuda", "ayuda"));
+    }
+
+    // 1.8.0 (7.4.3): al escalar, el centro de ayuda abierto en la categoria de
+    // la vista donde esta el jugador; sin categoria, al principio.
+    @Test
+    void alEscalarElCentroDeAyudaVaALaCategoriaDeLaVista() {
+        // Las secciones de los temas de la vista y, al final, la ayuda en su categoria.
+        assertThat(Enriquecedor.paraEscalamiento(List.of(), temas, VistaDelChat.SUBASTAS).enlaces())
+            .containsExactly(new EnlaceInterno("Ir a Subasta", "subastas"),
+                new EnlaceInterno("Ir a Historial de transacciones", "historial-transacciones"),
+                new EnlaceInterno("Ver el centro de ayuda", "ayuda", "categoria-subasta-y-comercio"));
+        assertThat(Enriquecedor.paraEscalamiento(List.of(), temas, VistaDelChat.INICIO).enlaces())
+            .containsExactly(new EnlaceInterno("Ver el centro de ayuda", "ayuda"));
+        assertThat(Enriquecedor.NOMBRE_DE_DESTINO).containsEntry("ayuda", "Centro de ayuda");
+    }
+
+    @Test
+    void elAnclaDeCadaCategoriaTieneLaFormaDelContrato() {
+        for (Categoria categoria : Categoria.values()) {
+            assertThat(Enriquecedor.anclaDe(categoria)).as(categoria.name()).matches("^categoria-[a-z0-9-]{1,49}$");
+        }
+        assertThat(Enriquecedor.anclaDe(Categoria.CUENTA_Y_REGISTRO)).isEqualTo("categoria-cuenta-y-registro");
+        assertThat(Enriquecedor.enlaceAlCentroDeAyuda(Categoria.FAQ_GENERAL, true))
+            .isEqualTo(new EnlaceInterno("Go to Centro de ayuda", "ayuda", "categoria-faq-general"));
     }
 
     // Cada tema de la base que se publica en V11 enlaza, si enlaza, a una vista

@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_chatbot.chat.motor;
 
 import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
+import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.EstadoVersion;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
@@ -40,6 +41,8 @@ class MotorRespuestasTest {
         assertThat(resultado.categoria()).isEqualTo(Categoria.CUENTA_Y_REGISTRO);
         assertThat(resultado.texto()).contains("Para crear tu cuenta");
         assertThat(resultado.temaClave()).isEqualTo("clave-registro");
+        // 1.7.0: lo respondio un tema de la base.
+        assertThat(resultado.resultado()).isEqualTo(ResultadoDeRespuesta.TEMA);
     }
 
     @Test
@@ -83,6 +86,7 @@ class MotorRespuestasTest {
         assertThat(resultado.requiereEscalamiento()).isTrue();
         assertThat(resultado.enriquecido().ofrecerSoporteHumano()).isTrue();
         assertThat(resultado.enriquecido().respuestasRapidas()).contains("Cómo publicar en subasta");
+        assertThat(resultado.resultado()).isEqualTo(ResultadoDeRespuesta.ESCALADO);
     }
 
     // Un saludo nunca sale como "pregunta relacionada" de un escalamiento.
@@ -347,12 +351,16 @@ class MotorRespuestasTest {
 
         assertThat(resultado.texto()).isEqualTo("Siento que no sirviera.");
         assertThat(resultado.requiereEscalamiento()).isTrue();
+        // 1.7.0: no es un escalamiento cualquiera: la respuesta no le sirvio.
+        assertThat(resultado.resultado()).isEqualTo(ResultadoDeRespuesta.NO_SIRVIO);
         assertThat(resultado.temaClave()).isNull();
         assertThat(resultado.temasSugeridos()).isEmpty();
         assertThat(resultado.categoria()).isEqualTo(Categoria.CUENTA_Y_REGISTRO);
         assertThat(resultado.enriquecido().ofrecerSoporteHumano()).isTrue();
         assertThat(resultado.enriquecido().respuestasRapidas()).containsExactly("Recuperar mi contraseña");
-        assertThat(resultado.enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("registro");
+        // 1.8.0: y el centro de ayuda, abierto en la categoria del tema.
+        assertThat(resultado.enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("registro", "ayuda");
+        assertThat(resultado.enriquecido().enlaces().get(1).ancla()).isEqualTo("categoria-cuenta-y-registro");
         assertThat(motorRespuestas.relacionadosCon("clave-retirada", "x", false)).isEmpty();
         assertThat(motorRespuestas.relacionadosCon(null, "x", true)).isEmpty();
     }

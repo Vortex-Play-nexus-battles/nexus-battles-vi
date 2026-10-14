@@ -46,6 +46,14 @@ const DIRECCIONES = [
   '/torneos',
   '/subastas',
   '/cuenta',
+  // SA-7 — ya no queda vista sin dirección limpia: también las de la sala, la
+  // tienda y la consola (sin sesión llevan al login, sin pasar por /frontend/).
+  '/tienda',
+  '/jugar/nueva-sala',
+  '/subastas/pujar',
+  '/consola',
+  '/consola/usuarios',
+  '/consola/auditoria',
 ];
 
 /**

@@ -11,6 +11,7 @@ import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoDetalleDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoResumenDto;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.Enriquecedor;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.TarjetaInformativa;
+import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.ResultadoMotor;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TipoRespuesta;
 import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
@@ -32,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 // HU-CHA-008: consultas y acciones asistidas para usuarios autenticados.
 // Este motor es INDEPENDIENTE de MotorRespuestas (HU-CHA-004): mientras ese
@@ -266,7 +268,8 @@ public class MotorConsultasAsistidas {
 
     private ResultadoMotor buscarEnInventario(String tokenBearer, String criterio, TextosDeConsultas t) {
         if (criterio.length() < LARGO_MINIMO_DE_BUSQUEDA) {
-            return ResultadoMotor.deTema(t.busquedaMuyCorta(), null, TipoRespuesta.DIRECTA).enIngles(t.ingles());
+            return ResultadoMotor.deTema(t.busquedaMuyCorta(), null, TipoRespuesta.DIRECTA).enIngles(t.ingles())
+                .conResultado(ResultadoDeRespuesta.PIDE_REFORMULAR);
         }
         try {
             PaginaInventarioDto pagina = inventarioClient.buscar(tokenBearer, criterio);
@@ -325,7 +328,8 @@ public class MotorConsultasAsistidas {
                 .toList();
             return ResultadoMotor.deTema(textoMisiones(misiones, t), null, TipoRespuesta.CONTEXTUAL)
                 .conEnriquecido(Enriquecedor.conTarjetas(tarjetas, "misiones", t.ingles()))
-                .enIngles(t.ingles());
+                .enIngles(t.ingles())
+                .conResultado(ResultadoDeRespuesta.CONSULTA_EN_VIVO);
         } catch (RestClientException excepcion) {
             return noDisponible(t.misionesNoDisponibles(), t);
         }
@@ -359,28 +363,39 @@ public class MotorConsultasAsistidas {
             Future<String> creditos = hilos.submit(() -> textoMovimientos(tokenBearer, uid, t));
             Future<String> misiones = hilos.submit(() -> textoMisiones(misionesClient.enCurso(tokenBearer), t));
             long limite = System.nanoTime() + PLAZO_DEL_INFORME.toNanos();
+            Optional<String> delInventario = esperar(inventario, limite);
+            Optional<String> deSubastas = esperar(subastas, limite);
+            Optional<String> deNotificaciones = esperar(notificaciones, limite);
+            Optional<String> deCreditos = esperar(creditos, limite);
+            Optional<String> deMisiones = esperar(misiones, limite);
             String texto = t.informe(
-                esperar(inventario, limite, t.inventarioNoDisponible()),
-                esperar(subastas, limite, t.subastasNoDisponibles()),
-                esperar(notificaciones, limite, t.notificacionesNoDisponibles()),
-                esperar(creditos, limite, t.movimientosNoDisponibles()),
-                esperar(misiones, limite, t.misionesNoDisponibles()));
-            return ResultadoMotor.deTema(texto, null, TipoRespuesta.CONTEXTUAL).enIngles(t.ingles());
+                delInventario.orElse(t.inventarioNoDisponible()),
+                deSubastas.orElse(t.subastasNoDisponibles()),
+                deNotificaciones.orElse(t.notificacionesNoDisponibles()),
+                deCreditos.orElse(t.movimientosNoDisponibles()),
+                deMisiones.orElse(t.misionesNoDisponibles()));
+            // 1.7.0: con una sola parte que llegue, el informe trajo datos; si
+            // no llego ninguna, el jugador no recibio nada de su cuenta.
+            boolean algunaLlego = Stream.of(delInventario, deSubastas, deNotificaciones, deCreditos, deMisiones)
+                .anyMatch(Optional::isPresent);
+            return ResultadoMotor.deTema(texto, null, TipoRespuesta.CONTEXTUAL).enIngles(t.ingles())
+                .conResultado(algunaLlego ? ResultadoDeRespuesta.CONSULTA_EN_VIVO : ResultadoDeRespuesta.NO_DISPONIBLE);
         } finally {
             hilos.shutdownNow();
         }
     }
 
-    private static String esperar(Future<String> parte, long limiteNanos, String siNoLlega) {
+    // La parte, o vacio si fallo o no llego a tiempo.
+    private static Optional<String> esperar(Future<String> parte, long limiteNanos) {
         try {
             long queda = Math.max(0, limiteNanos - System.nanoTime());
-            return parte.get(queda, TimeUnit.NANOSECONDS);
+            return Optional.ofNullable(parte.get(queda, TimeUnit.NANOSECONDS));
         } catch (InterruptedException interrumpido) {
             Thread.currentThread().interrupt();
-            return siNoLlega;
+            return Optional.empty();
         } catch (ExecutionException | TimeoutException fallo) {
             parte.cancel(true);
-            return siNoLlega;
+            return Optional.empty();
         }
     }
 
@@ -532,20 +547,25 @@ public class MotorConsultasAsistidas {
     // ---- Resultados --------------------------------------------------------------------
 
     // 1.3.4: la navegacion y las consultas llevan un enlace a su seccion.
+    // 1.7.0: cada una dice como termino (ResultadoDeRespuesta), para que la
+    // tasa de resolucion no cuente un «no disponible» como resuelto.
     private static ResultadoMotor navegar(String texto, String destino, TextosDeConsultas t) {
         return ResultadoMotor.deTema(texto, null, TipoRespuesta.DIRECTA)
             .conEnriquecido(Enriquecedor.conEnlace(destino, t.ingles()))
-            .enIngles(t.ingles());
+            .enIngles(t.ingles())
+            .conResultado(ResultadoDeRespuesta.NAVEGACION);
     }
 
     private static ResultadoMotor consultado(String texto, String destino, TextosDeConsultas t) {
         return ResultadoMotor.deTema(texto, null, TipoRespuesta.CONTEXTUAL)
             .conEnriquecido(Enriquecedor.conEnlace(destino, t.ingles()))
-            .enIngles(t.ingles());
+            .enIngles(t.ingles())
+            .conResultado(ResultadoDeRespuesta.CONSULTA_EN_VIVO);
     }
 
     private static ResultadoMotor noDisponible(String texto, TextosDeConsultas t) {
-        return ResultadoMotor.deTema(texto, null, TipoRespuesta.DIRECTA).enIngles(t.ingles());
+        return ResultadoMotor.deTema(texto, null, TipoRespuesta.DIRECTA).enIngles(t.ingles())
+            .conResultado(ResultadoDeRespuesta.NO_DISPONIBLE);
     }
 
     // ---- Frases con errores de tecleo ------------------------------------------------

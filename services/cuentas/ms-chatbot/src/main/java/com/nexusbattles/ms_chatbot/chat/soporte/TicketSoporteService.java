@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_chatbot.chat.soporte;
 
+import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
 import com.nexusbattles.ms_chatbot.chat.entrada.RevisionDeEntrada;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.limite.LimitadorDeFrecuencia;
@@ -9,6 +10,7 @@ import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.privacidad.RedaccionDeDatosSensibles;
 import com.nexusbattles.ms_chatbot.chat.repository.ConversacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
+import com.nexusbattles.ms_chatbot.chat.service.PreguntaParaSoporte;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -17,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Clock;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Supplier;
 
 // ms-chatbot.yaml 1.3.0 (7.4.3, RF-CHA-007): el jugador abre un ticket de
 // soporte humano y consulta los suyos. Mismo orden que ChatService:
@@ -36,6 +39,10 @@ import java.util.Set;
 //      error de la base es 409, los demas se relanzan (IndiceDeTicketAbierto).
 //   6. Se guarda lo redactado, con el contexto de la conversacion tambien
 //      redactado.
+//
+// 1.8.0: abrirDesdeConversacion arma el asunto y el mensaje con la pregunta
+// que el asistente no resolvio (PreguntaParaSoporte) y sigue por los mismos
+// pasos 3 a 6; sin ninguna pregunta en la conversacion, 409 SIN_CONVERSACION.
 //
 // No abre transaccion propia: la lista negra es HTTP y no debe retener una
 // conexion de la base; cada lectura y el guardado usan la suya.
@@ -70,6 +77,42 @@ public class TicketSoporteService {
     public TicketSoporte abrir(IdentidadDelChat identidad, Categoria categoria, String asunto, String mensaje) {
         exigirSesion(identidad);
         limitador.exigir(LimitadorDeFrecuencia.Regla.MENSAJES, identidad.claveDeLimite());
+        // La conversacion se lee al final, solo si el ticket se va a guardar.
+        return revisarYGuardar(identidad, categoria, asunto, mensaje, () -> mensajesDe(identidad));
+    }
+
+    // ms-chatbot.yaml 1.8.0 (7.4.3): la solicitud en un clic, armada con la
+    // pregunta que el asistente no resolvio. La conversacion es la de la
+    // identidad verificada (claveDeConversacion sale del uid del token): nada
+    // de lo que manda el cliente elige de quien es. Despues, exactamente las
+    // mismas reglas que abrir().
+    public TicketSoporte abrirDesdeConversacion(IdentidadDelChat identidad, VistaDelChat vista, String comentario) {
+        exigirSesion(identidad);
+        limitador.exigir(LimitadorDeFrecuencia.Regla.MENSAJES, identidad.claveDeLimite());
+        List<Mensaje> conversacion = mensajesDe(identidad);
+        PreguntaParaSoporte pregunta = PreguntaParaSoporte.de(conversacion)
+            .orElseThrow(SinConversacionException::new);
+        // El comentario se revisa antes de componer el mensaje: asi lo que se
+        // recorta, si no cabe, es la pregunta y nunca un dato a medio tapar.
+        String comentarioRevisado = comentario == null ? null : revision.textoRevisado(comentario);
+        return revisarYGuardar(identidad, categoriaDe(pregunta, vista), SolicitudDesdeConversacion.asunto(pregunta),
+            SolicitudDesdeConversacion.mensaje(pregunta, comentarioRevisado), () -> conversacion);
+    }
+
+    // La del tema de la respuesta; si no hubo tema, la de la vista; si
+    // tampoco, la general.
+    static Categoria categoriaDe(PreguntaParaSoporte pregunta, VistaDelChat vista) {
+        if (pregunta.categoria() != null) {
+            return pregunta.categoria();
+        }
+        if (vista != null && vista.categoria() != null) {
+            return vista.categoria();
+        }
+        return Categoria.FAQ_GENERAL;
+    }
+
+    private TicketSoporte revisarYGuardar(IdentidadDelChat identidad, Categoria categoria, String asunto,
+                                          String mensaje, Supplier<List<Mensaje>> conversacion) {
         // 1.4.0: la misma revision que una pregunta del chat (sin caracteres de
         // control, sin inyeccion de codigo, datos sensibles tapados).
         String asuntoRedactado = noVacio(revision.textoRevisado(asunto));
@@ -81,7 +124,7 @@ public class TicketSoporteService {
         }
 
         TicketSoporte ticket = TicketSoporte.abrir(identidad.uid(), categoria, asuntoRedactado, mensajeRedactado,
-            contextoDe(identidad), reloj.instant());
+            conversacion.get().stream().map(this::comoContexto).toList(), reloj.instant());
         try {
             return tickets.saveAndFlush(ticket);
         } catch (DataIntegrityViolationException error) {
@@ -112,15 +155,13 @@ public class TicketSoporteService {
         }
     }
 
-    // Los mensajes de la conversacion actual, redactados. El ticket se queda
-    // con los mas recientes (TicketSoporte.MAXIMO_DE_CONTEXTO).
-    private List<MensajeDeContexto> contextoDe(IdentidadDelChat identidad) {
+    // Los mensajes de la conversacion actual, del mas antiguo al mas reciente.
+    // Al ticket van redactados (comoContexto) y solo los mas recientes
+    // (TicketSoporte.MAXIMO_DE_CONTEXTO).
+    private List<Mensaje> mensajesDe(IdentidadDelChat identidad) {
         return conversaciones.findByIdentificadorSesion(identidad.claveDeConversacion())
             .map(c -> mensajes.findByConversacionIdOrderByFechaEnvioAsc(c.getId()))
-            .orElseGet(List::of)
-            .stream()
-            .map(this::comoContexto)
-            .toList();
+            .orElseGet(List::of);
     }
 
     private MensajeDeContexto comoContexto(Mensaje mensaje) {

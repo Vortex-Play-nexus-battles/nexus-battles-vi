@@ -253,7 +253,8 @@ test.describe('Ficha administrativa del usuario (HU-USR-010)', () => {
     const enlace = directorio.locator('tbody a[data-accion="ver-ficha"]').first();
     await expect(enlace).toHaveAttribute(
       'href',
-      new RegExp(`ficha-usuario\\.html\\?usuario=${ficha.id}$`),
+      // SA-7 — detrás del borde, la dirección limpia de la ficha.
+      new RegExp(`/consola/usuarios/ficha\\?usuario=${ficha.id}$`),
       {
         timeout: 20_000,
       },
@@ -283,7 +284,7 @@ test.describe('Ficha administrativa del usuario (HU-USR-010)', () => {
     await expect(page.locator('#usuario-id-mostrado')).toHaveText(String(ficha.id));
     await expect(page.locator('#enlace-ficha-usuario')).toHaveAttribute(
       'href',
-      new RegExp(`ficha-usuario\\.html\\?usuario=${ficha.id}$`),
+      new RegExp(`/consola/usuarios/ficha\\?usuario=${ficha.id}$`),
     );
   });
 });

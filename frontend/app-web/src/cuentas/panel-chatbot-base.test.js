@@ -174,7 +174,30 @@ describe('funciones puras', () => {
 
     expect(textoDeErrorDeLaBase(new ErrorDelChatbot({ detail: 'Mal.' }, 400))).toBe('Mal.');
     expect(textoDeErrorDeLaBase(new ErrorDelChatbot(null, 400), 'Rechazado.')).toBe('Rechazado.');
+    expect(
+      textoDeErrorDeLaBase(new ErrorDelChatbot(null, 400), { siRechazado: 'Rechazado.' }),
+    ).toBe('Rechazado.');
     expect(textoDeErrorDeLaBase(new ErrorDelChatbot(null, 0))).toContain('no responde');
+  });
+
+  // 1.7.0: cada acción dice lo que falló, no «No se pudieron cargar las analíticas».
+  test('textoDeErrorDeLaBase dice qué falló y, en un 409 sin motivo, la explicación propia', () => {
+    const caido = textoDeErrorDeLaBase(new ErrorDelChatbot(null, 503), {
+      queFallo: 'No se pudo crear la candidata',
+    });
+    expect(caido).toBe(
+      'No se pudo crear la candidata. El servicio del asistente no responde. Vuelve a intentarlo en unos minutos.',
+    );
+    expect(caido).not.toContain('analíticas');
+    expect(
+      textoDeErrorDeLaBase(new ErrorDelChatbot({ title: 'Conflict' }, 409), {
+        queFallo: 'No se pudo crear la candidata',
+        siConflicto: 'Ya hay una.',
+      }),
+    ).toBe('Ya hay una.');
+    expect(
+      textoDeErrorDeLaBase(new ErrorDelChatbot(null, 403), { queFallo: 'No se pudo X' }),
+    ).toContain('permiso');
   });
 });
 
@@ -290,7 +313,9 @@ describe('sin candidata', () => {
     await esperar();
 
     expect(vista.raiz.textContent).toContain('Versión candidata 2');
-    expect(vista.raiz.querySelector('.panel-chatbot__nota').textContent).not.toBe('');
+    expect(vista.raiz.querySelector('.panel-chatbot__nota').textContent).toContain(
+      'No se pudo crear la candidata',
+    );
   });
 });
 

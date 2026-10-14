@@ -420,9 +420,14 @@ describe('direcciones limpias (R17.3)', () => {
     }
   });
 
-  test('una vista sin dirección limpia sigue en su ruta, con marca o sin ella', () => {
+  test('SA-7 — las vistas de la sala y de la consola también tienen la suya; sin marca, la ruta', () => {
     const doc = documentoCon('limpias');
-    expect(resolver(RUTAS.crearSala, BASE, doc)).toBe(
+    expect(resolver(RUTAS.crearSala, BASE, doc)).toBe('http://localhost:8099/jugar/nueva-sala');
+    expect(resolver(RUTAS.gestionUsuarios, BASE, doc)).toBe(
+      'http://localhost:8099/consola/usuarios',
+    );
+    expect(resolver(RUTAS.auditoria, BASE, doc)).toBe('http://localhost:8099/consola/auditoria');
+    expect(resolver(RUTAS.crearSala, BASE, documentoCon(null))).toBe(
       'http://localhost:8099/frontend/app-web/src/plataforma/salas-partidas/crear-sala.html',
     );
     // Y lo que no es una vista (el sprite, el kit) no se toca.
