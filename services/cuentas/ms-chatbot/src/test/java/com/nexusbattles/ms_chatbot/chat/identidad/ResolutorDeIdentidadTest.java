@@ -64,4 +64,48 @@ class ResolutorDeIdentidadTest {
         assertThat(resolutor.resolver(token(Map.of("sub", "ana", "uid", "  ")), null)).isEmpty();
         assertThat(resolutor.resolver(token(Map.of("sub", "ana", "uid", 42)), null)).isEmpty();
     }
+
+    // ---- 7.4.9 (contracts/websocket/chatbot.yaml 1.0.0): quien abre el canal ----
+
+    @Test
+    @DisplayName("canal: un jugador entra con su uid como nombre, sin tocar las sesiones de visitante")
+    void enElCanalUnJugadorEsSuUid() {
+        UUID uid = UUID.randomUUID();
+
+        assertThat(resolutor.enElCanal(token(Map.of("sub", "ana", "uid", uid.toString())), "visitante-0123456789"))
+            .contains(new ResolutorDeIdentidad.EnElCanal(uid.toString(), true));
+        verifyNoInteractions(sesiones);
+    }
+
+    @Test
+    @DisplayName("canal: un visitante entra por la huella de su sesion, nunca por la sesion misma")
+    void enElCanalUnVisitanteEsLaHuellaDeSuSesion() {
+        String declarada = "visitante-0123456789abcdef";
+        String emitida = "anon_" + "a".repeat(43);
+        when(sesiones.validar(declarada)).thenReturn(Optional.empty());
+        when(sesiones.validar(emitida)).thenReturn(Optional.of(mock(SesionAnonima.class)));
+
+        // La declarada entra aunque no este registrada: se registra con su primer mensaje.
+        assertThat(resolutor.enElCanal(null, declarada))
+            .contains(new ResolutorDeIdentidad.EnElCanal("anonimo:" + SesionesAnonimas.huella(declarada), false));
+        assertThat(resolutor.enElCanal(null, emitida)).hasValueSatisfying(quien -> {
+            assertThat(quien.jugador()).isFalse();
+            assertThat(quien.nombre()).isEqualTo("anonimo:" + SesionesAnonimas.huella(emitida))
+                .doesNotContain(emitida);
+        });
+    }
+
+    @Test
+    @DisplayName("canal: sin token valido ni sesion vigente, o con un uid en la cabecera, no entra nadie")
+    void enElCanalSinIdentidadNoEntraNadie() {
+        UUID uid = UUID.randomUUID();
+        String vencida = "anon_" + "b".repeat(43);
+        when(sesiones.validar(vencida)).thenReturn(Optional.empty());
+        when(sesiones.validar(uid.toString())).thenReturn(Optional.empty());
+        when(sesiones.validar(null)).thenReturn(Optional.empty());
+
+        assertThat(resolutor.enElCanal(null, vencida)).isEmpty();
+        assertThat(resolutor.enElCanal(null, uid.toString())).isEmpty();
+        assertThat(resolutor.enElCanal(token(Map.of("sub", uid.toString())), null)).isEmpty();
+    }
 }

@@ -35,6 +35,9 @@ openapi: 3.1.0
 #               solicitud se arma con la pregunta que el asistente no
 #               resolvio (`POST /chat/tickets/desde-conversacion`) y lo que
 #               sabe responder se lee sin chatear (`GET /chat/ayuda`)
+#   7.4.9 (1.9.0) requisitos tecnicos: canal en tiempo real (STOMP sobre
+#               WebSocket, contracts/websocket/chatbot.yaml 1.0.0) y cache de
+#               las respuestas frecuentes de la base de conocimiento
 #   7.4 (1.3.0) lo que faltaba del modulo 7.4: tickets y soporte humano
 #               (RF-CHA-007, RF-ADM-004), sugerencias y autocompletado,
 #               respuestas enriquecidas sin imagenes, vista del jugador y
@@ -127,7 +130,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.8.0
+  version: 1.9.0
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -137,6 +140,44 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.9.0 — 7.4.9: tiempo real y respuestas frecuentes en cache
+
+    Todo compatible: ninguna operacion ni forma cambia. 7.4.9 («Requisitos
+    tecnicos») pide «WebSocket para comunicacion en tiempo real» y «sistema
+    de cache para respuestas frecuentes»; hasta aqui el chat era solo esta
+    API y no habia cache.
+
+    * **Canal en tiempo real** (`contracts/websocket/chatbot.yaml` 1.0.0):
+      STOMP sobre WebSocket en `/api/v1/ws-chatbot`, con la identidad de
+      siempre en el CONNECT (`Authorization` o `X-Id-Sesion-Anonima`, las
+      reglas de «IDENTIDAD EN EL CHAT»). Una pregunta enviada por el canal
+      recorre el mismo camino que `POST /chat/mensajes` (limites, revision de
+      la entrada, lista negra, motores, guardado) y su respuesta es el mismo
+      `Mensaje`: el historial es uno solo. El canal ademas avisa
+      «escribiendo» y le lleva al dueno de una solicitud de soporte cada
+      cambio que hace un administrador
+      (`PATCH /chatbot/admin/tickets/{ticketId}`), con la forma de
+      `GET /chat/tickets`. Esta API no cambia: es el camino cuando el canal
+      no abre o se cae. El handshake no exige token (la identidad va en el
+      CONNECT) y solo admite los origenes de `CORS_ORIGENES`. El broker es
+      en memoria de la instancia; en DEV hay una sola.
+    * **Respuestas frecuentes en cache.** La respuesta de la base de
+      conocimiento se guarda en memoria por version en produccion, pregunta
+      normalizada (sin tildes, mayusculas ni signos), idioma pedido, nivel de
+      detalle y `vista`: la misma pregunta se responde sin volver a puntuar
+      los temas. Como mucho 500 respuestas y 30 minutos cada una (D-CHA-08,
+      provisional). Nunca se guardan las consultas en vivo (inventario,
+      subastas, notificaciones, creditos, misiones, torneos), los
+      seguimientos («mas detalle», «no me sirvio») ni nada que dependa de
+      quien pregunta; tampoco el aviso de un dato tapado, que se anade
+      despues. Desplegar o revertir la base cambia la version en produccion:
+      lo guardado de la anterior deja de valer y se descarta. Los temas de
+      produccion tambien se leen de la base una vez por version, no en cada
+      mensaje. Una pregunta escalada que sale de la cache se sigue
+      registrando como brecha, y cuenta en las analiticas como cualquier
+      otra (con su tiempo de respuesta, menor). Cache por instancia; sus
+      metricas, en Actuator (`chatbot_cache_*`).
 
     ### 1.8.0 — 7.4.3: solicitud desde la conversacion y centro de ayuda
 

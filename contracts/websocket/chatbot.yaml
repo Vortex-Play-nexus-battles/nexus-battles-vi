@@ -1,0 +1,358 @@
+asyncapi: 3.0.0
+
+# =============================================================================
+# Nexus Battles VI — Chatbot en tiempo real (ms-chatbot) — 7.4.9
+#
+# §7.4.9 «Requisitos tecnicos» pide «WebSocket para comunicacion en tiempo
+# real». Hasta aqui el chat del asistente era solo REST (ms-chatbot.yaml) y
+# este canal no existia. No sustituye a la API: es LA MISMA conversacion por
+# otro transporte. Cada mensaje recorre exactamente el camino de
+# `POST /chat/mensajes` (ChatService: limites de frecuencia, revision de la
+# entrada, lista negra, motores, guardado) y la respuesta es el mismo
+# `Mensaje`. Si el canal no abre o se cae, la ventana sigue por HTTP
+# (degradacion controlada, riesgo #7 del Project Charter) sin perder nada.
+#
+# Contrato primero (regla 1): se publica junto con ms-chatbot.yaml 1.9.0.
+# =============================================================================
+
+info:
+  title: Nexus Battles VI — Chatbot en tiempo real (ms-chatbot)
+  version: 1.0.0
+  description: |
+    WebSocket nativo + STOMP 1.2 (sin SockJS) de ms-chatbot en
+    `/api/v1/ws-chatbot` (el servicio tiene `context-path` `/api/v1`). El
+    borde lo publica en la misma ruta (`location ^~ /api/v1/ws-chatbot` de
+    `borde-dev.conf`, con `Upgrade`/`Connection`, igual que
+    `/api/v1/ws-subastas`).
+
+    **Handshake.** No lleva identidad (el navegador no puede mandar cabeceras
+    en el handshake de un WebSocket). Solo se aceptan los origenes de la API
+    del servicio (`CORS_ORIGENES`): un `Origin` ajeno recibe 403. Un cliente
+    sin `Origin` (no es un navegador) entra.
+
+    **Identidad en el CONNECT, con las reglas de la API**
+    (`ms-chatbot.yaml`, «IDENTIDAD EN EL CHAT»):
+
+    - `Authorization: Bearer <JWT de ms-identidad>` valido, con claim `uid`
+      (UUID): un jugador. El `uid` sale solo del claim; el `sub` (el apodo)
+      nunca cuenta.
+    - Sin token, o con uno invalido, vencido, firmado por otro o sin `uid`:
+      un visitante, igual que en la API (un token roto degrada, no corta).
+      Necesita `X-Id-Sesion-Anonima`: una sesion emitida por el servidor
+      (`anon_...`, `POST /chat/sesiones`) registrada y vigente, o la que
+      declara el navegador (`visitante-...`), que se registra con su primer
+      mensaje, como en `POST /chat/mensajes`.
+    - Sin ninguna de las dos (o con una sesion emitida vencida): frame `ERROR`
+      y la conexion se cierra. A diferencia de la API, aqui no se emite una
+      sesion nueva en el CONNECT: no hay respuesta HTTP donde devolverla. El
+      cliente pide una con `POST /chat/sesiones` o sigue por HTTP.
+
+    El nombre del usuario de la conexion lo deriva el servidor y nunca sale
+    del cliente: el `uid` de un jugador, o `anonimo:` + la huella SHA-256 de
+    la sesion de un visitante (nunca la sesion misma).
+
+    **Que se admite.** Un interceptor del canal decide frame a frame:
+
+    - `SUBSCRIBE` solo a los cuatro destinos de usuario de este documento,
+      escritos tal cual (`/user/queue/...`). Cualquier otro —otro `/user/...`
+      (por ejemplo `/user/<uid>/queue/...`), `/queue/...` directo, `/topic`,
+      comodines— recibe `ERROR` y la conexion se cierra. Los destinos de
+      usuario se resuelven por la conexion de quien se suscribe: nadie puede
+      recibir la cola de otro.
+    - `SEND` solo a `/app/chat/mensajes`. Cualquier otro destino: `ERROR` y
+      cierre.
+
+    **Tamano.** Un mensaje WebSocket de mas de 16 640 caracteres (16 KiB +
+    256, el minimo que fija Spring para STOMP) cierra la conexion. Una
+    pregunta de 4000 caracteres ocupa unos 4100, u 8100 si todo son comillas
+    o saltos de linea; solo un texto lleno de caracteres de control (que el
+    JSON escribe con seis) se acerca al limite, y ese el cliente lo manda por
+    `POST /chat/mensajes`, como hace la ventana del asistente (mas de 16 000).
+
+    **En cada mensaje la identidad se vuelve a resolver** con las cabeceras
+    del CONNECT y las reglas de `POST /chat/mensajes`: si el token del
+    jugador vencio mientras tanto, el mensaje va a la conversacion del
+    visitante de `X-Id-Sesion-Anonima` (como en la API); si esa sesion
+    emitida vencio, se emite otra y viaja en la cabecera
+    `X-Id-Sesion-Anonima` de la respuesta. El limite por direccion de origen
+    usa la del handshake (`X-Real-IP` del borde).
+
+    **Correlacion.** El cliente pone `idCorrelacion` en el mensaje; las tres
+    respuestas a ese mensaje (estado, respuesta o error) la devuelven en la
+    cabecera STOMP `id-correlacion`, y el estado y el error tambien en el
+    cuerpo. La respuesta va solo a la conexion que pregunto.
+
+    **Traza (regla 5).** Cada pregunta abre su propia traza: las llamadas que
+    provoca (lista negra, consultas en vivo) la propagan, y el estado, la
+    respuesta y el error la llevan en la cabecera STOMP `traceparent` (W3C).
+    Un 400 de forma o un 429 por preguntas en vuelo se contestan antes de
+    abrirla y no la llevan.
+
+    **Latidos.** El servidor ofrece `heart-beat: 10000,10000` (10 s en cada
+    sentido; se negocia con lo que pida el cliente). La ventana del
+    asistente pide `0,10000`: recibe latidos del servidor y no manda.
+
+    **Una sola instancia.** El broker es el simple de Spring, en memoria de
+    la instancia: las conexiones, suscripciones y avisos son de la
+    instancia. En DEV hay una sola (`docker-compose.ms-chatbot.yml`). Escalar
+    horizontalmente exigiria un broker externo (relay STOMP), que no esta
+    desplegado; este contrato no promete mas.
+
+    Changelog:
+
+    - 1.0.0 (7.4.9, ms-chatbot.yaml 1.9.0): primer canal del chatbot.
+  license:
+    name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  local:
+    host: localhost:8094
+    protocol: ws
+    pathname: /api/v1/ws-chatbot
+    description: Desarrollo local (context-path /api/v1 del propio servicio).
+  borde:
+    host: localhost:8099
+    protocol: ws
+    pathname: /api/v1/ws-chatbot
+    description: |
+      El mismo canal detras del borde (banco E2E y host de DEV). Con el
+      dominio, por `wss://` en el 443.
+
+channels:
+  enviarMensaje:
+    address: '/app/chat/mensajes'
+    title: Pregunta al asistente
+    description: |
+      La pregunta, con la seccion donde esta el jugador. Pasa por
+      `ChatService.enviarMensaje`, lo mismo que `POST /chat/mensajes`. Antes,
+      el servidor comprueba la forma: un JSON que no se entiende, `contenido`
+      vacio o de mas de 4000 caracteres, una `vista` desconocida o un
+      `idCorrelacion` sin la forma pedida responden 400 por `errores`. Como
+      mucho 2 mensajes en vuelo por conexion (D-CHA-09, provisional): el
+      siguiente responde 429 hasta que llegue la respuesta anterior.
+    messages:
+      enviarMensaje:
+        $ref: '#/components/messages/EnviarMensajeEnVivo'
+
+  estado:
+    address: '/user/queue/chat/estado'
+    title: El asistente esta escribiendo
+    description: |
+      `ESCRIBIENDO` en cuanto el servidor acepta la pregunta y empieza a
+      procesarla (antes de los limites y la lista negra: sirve tambien de
+      acuse de recibo). La ventana pinta «escribiendo…» con esto.
+    messages:
+      estadoDeLaRespuesta:
+        $ref: '#/components/messages/EstadoDeLaRespuesta'
+
+  respuestas:
+    address: '/user/queue/chat/respuestas'
+    title: Respuesta del asistente
+    description: |
+      El `Mensaje` del bot, ya guardado en el historial: la misma forma que
+      devuelve `POST /chat/mensajes` (`ms-chatbot.yaml`, schema `Mensaje`),
+      con `enriquecido` cuando lo hay.
+    messages:
+      respuesta:
+        $ref: '#/components/messages/Respuesta'
+
+  errores:
+    address: '/user/queue/chat/errores'
+    title: La pregunta no se respondio
+    description: |
+      Los mismos errores que `POST /chat/mensajes`, con el mismo `motivo`:
+      400 (forma), 422 `CONTENIDO_BLOQUEADO` o `INYECCION_DETECTADA`, 429
+      `LIMITE_DE_FRECUENCIA` (con `reintentarEn`, los segundos de
+      `Retry-After`), 503 `MODERACION_NO_DISPONIBLE`; y 500 si algo falla en
+      el servidor. Propios del canal: 429 `LIMITE_DE_FRECUENCIA` con
+      `reintentarEn: 1` si la conexion ya tiene sus preguntas en vuelo, y 503
+      sin `motivo` si el servicio se esta apagando. Nada de lo rechazado se
+      guarda. La conexion sigue abierta.
+    messages:
+      errorDelCanal:
+        $ref: '#/components/messages/ErrorDelCanal'
+
+  ticketsDeSoporte:
+    address: '/user/queue/soporte/tickets'
+    title: Una solicitud de soporte cambio
+    description: |
+      Cuando un administrador atiende una solicitud
+      (`PATCH /chatbot/admin/tickets/{ticketId}`) y el cambio queda guardado,
+      su dueno lo recibe en TODAS sus conexiones: lo que ve de la solicitud,
+      con la misma forma que un elemento de `GET /chat/tickets`
+      (`TicketDeSoporte`, sin `uid`, asignacion ni contexto). Solo al dueno:
+      el destino es de usuario y se resuelve por su `uid`. Un visitante se
+      puede suscribir, pero no tiene solicitudes y nunca recibe nada.
+    messages:
+      ticketActualizado:
+        $ref: '#/components/messages/TicketActualizado'
+
+operations:
+  preguntar:
+    action: send
+    channel:
+      $ref: '#/channels/enviarMensaje'
+  recibirEstado:
+    action: receive
+    channel:
+      $ref: '#/channels/estado'
+  recibirRespuesta:
+    action: receive
+    channel:
+      $ref: '#/channels/respuestas'
+  recibirError:
+    action: receive
+    channel:
+      $ref: '#/channels/errores'
+  recibirTicket:
+    action: receive
+    channel:
+      $ref: '#/channels/ticketsDeSoporte'
+
+components:
+  messages:
+    EnviarMensajeEnVivo:
+      contentType: application/json
+      payload:
+        type: object
+        required: [contenido]
+        additionalProperties: true
+        description: |
+          `EnviarMensaje` de `ms-chatbot.yaml` mas `idCorrelacion`.
+          `adjuntoUrl` (obsoleto desde 1.3.0) se ignora, como en la API.
+        properties:
+          contenido:
+            type: string
+            minLength: 1
+            maxLength: 4000
+          vista:
+            type: [string, 'null']
+            enum: [INICIO, INVENTARIO, MISIONES, TORNEOS, SUBASTAS, CUENTA, null]
+          idCorrelacion:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{1,64}$'
+            description: La pone el cliente; vuelve en `id-correlacion`. Sin ella, la respuesta llega igual sin correlacion.
+
+    EstadoDeLaRespuesta:
+      contentType: application/json
+      headers:
+        $ref: '#/components/schemas/CabecerasDeRespuesta'
+      payload:
+        type: object
+        required: [estado]
+        properties:
+          estado:
+            type: string
+            enum: [ESCRIBIENDO]
+          idCorrelacion:
+            type: [string, 'null']
+
+    Respuesta:
+      contentType: application/json
+      headers:
+        type: object
+        properties:
+          id-correlacion:
+            type: string
+          traceparent:
+            type: string
+            pattern: '^00-[0-9a-f]{32}-[0-9a-f]{16}-01$'
+          X-Id-Sesion-Anonima:
+            type: string
+            pattern: '^anon_[A-Za-z0-9_-]{43}$'
+            description: Solo si para este mensaje se emitio una sesion de visitante nueva (la anterior vencio).
+      payload:
+        type: object
+        additionalProperties: true
+        description: '`Mensaje` de `ms-chatbot.yaml`, igual que la respuesta 200 de `POST /chat/mensajes`.'
+        required: [id, remitente, contenido, fechaEnvio]
+        properties:
+          id:
+            type: string
+            format: uuid
+          remitente:
+            type: string
+            enum: [BOT]
+          contenido:
+            type: string
+          adjuntoUrl:
+            type: [string, 'null']
+            deprecated: true
+          fechaEnvio:
+            type: string
+            format: date-time
+          enriquecido:
+            type: [object, 'null']
+            description: '`RespuestaEnriquecida` de `ms-chatbot.yaml`.'
+
+    ErrorDelCanal:
+      contentType: application/json
+      headers:
+        $ref: '#/components/schemas/CabecerasDeRespuesta'
+      payload:
+        type: object
+        required: [title, status]
+        description: Problem details (regla 4) en un objeto plano, con los campos de la API.
+        properties:
+          type:
+            type: string
+          title:
+            type: string
+          status:
+            type: integer
+            enum: [400, 422, 429, 500, 503]
+          detail:
+            type: string
+          instance:
+            type: string
+            const: /app/chat/mensajes
+          motivo:
+            type: [string, 'null']
+            enum: [LIMITE_DE_FRECUENCIA, CONTENIDO_BLOQUEADO, MODERACION_NO_DISPONIBLE, INYECCION_DETECTADA, null]
+          reintentarEn:
+            type: [integer, 'null']
+            minimum: 1
+            description: Solo en el 429, los segundos que la API manda en `Retry-After`.
+          idCorrelacion:
+            type: [string, 'null']
+
+    TicketActualizado:
+      contentType: application/json
+      payload:
+        type: object
+        additionalProperties: true
+        description: '`TicketDeSoporte` de `ms-chatbot.yaml`, igual que un elemento de `GET /chat/tickets`.'
+        required: [ticketId, categoria, asunto, mensaje, estado, creadoEn, actualizadoEn]
+        properties:
+          ticketId:
+            type: string
+            format: uuid
+          categoria:
+            type: string
+          asunto:
+            type: string
+          mensaje:
+            type: string
+          estado:
+            type: string
+            enum: [ABIERTO, EN_PROCESO, RESUELTO, CERRADO]
+          respuesta:
+            type: [string, 'null']
+          creadoEn:
+            type: string
+            format: date-time
+          actualizadoEn:
+            type: string
+            format: date-time
+
+  schemas:
+    CabecerasDeRespuesta:
+      type: object
+      properties:
+        id-correlacion:
+          type: string
+          description: El `idCorrelacion` del mensaje al que responde, si lo traia.
+        traceparent:
+          type: string
+          pattern: '^00-[0-9a-f]{32}-[0-9a-f]{16}-01$'
+          description: La traza de la pregunta (W3C). No va en un 400 de forma ni en un 429 por preguntas en vuelo.

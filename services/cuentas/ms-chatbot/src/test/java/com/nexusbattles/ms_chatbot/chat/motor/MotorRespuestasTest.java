@@ -27,7 +27,7 @@ class MotorRespuestasTest {
     @BeforeEach
     void configurar() {
         temaConocimientoRepository = mock(TemaConocimientoRepository.class);
-        motorRespuestas = new MotorRespuestas(temaConocimientoRepository);
+        motorRespuestas = MotoresDePrueba.sobre(temaConocimientoRepository);
 
         when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
             .thenReturn(List.of(temaRegistro(0), temaSubasta()));
