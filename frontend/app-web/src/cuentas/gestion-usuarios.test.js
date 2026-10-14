@@ -7,6 +7,7 @@ import {
   configurarEventos,
   RESULTADOS_POR_BUSQUEDA,
   usuarioDeLaDireccion,
+  instanteDe,
 } from './gestion-usuarios.js';
 
 const MATRIZ_BACKEND = {
@@ -754,7 +755,7 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     expect(ruta).toBe('/api/v1/admin/usuarios/15/suspender');
     expect(opciones.method).toBe('PUT');
     expect(JSON.parse(opciones.body)).toEqual({
-      suspendidoHasta: '2026-10-01T10:00',
+      suspendidoHasta: new Date('2026-10-01T10:00').toISOString(),
       motivo: 'Lenguaje ofensivo reiterado',
       causal: 'LENGUAJE_OFENSIVO',
     });
@@ -826,7 +827,7 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     await esperar();
 
     expect(JSON.parse(globalThis.fetch.mock.calls.at(-1)[1].body)).toEqual({
-      suspendidoHasta: '2026-10-01T10:00',
+      suspendidoHasta: new Date('2026-10-01T10:00').toISOString(),
       motivo: 'Lenguaje ofensivo en el chat',
       causal: 'LENGUAJE_OFENSIVO',
     });
@@ -896,5 +897,18 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     await esperar();
     expect(dialogo()).toBeNull();
     expect(globalThis.fetch.mock.calls.length).toBe(llamadas);
+  });
+});
+
+describe('SA-21 — la fecha fin de una suspensión viaja con su zona', () => {
+  test('la hora del campo sale como instante ISO-8601 con zona, el mismo momento', () => {
+    const enviado = instanteDe('2026-10-01T10:00');
+
+    expect(enviado).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    expect(Date.parse(enviado)).toBe(new Date('2026-10-01T10:00').getTime());
+  });
+
+  test('lo que no es una fecha va tal cual: el servidor dice por qué no', () => {
+    expect(instanteDe('mañana')).toBe('mañana');
   });
 });

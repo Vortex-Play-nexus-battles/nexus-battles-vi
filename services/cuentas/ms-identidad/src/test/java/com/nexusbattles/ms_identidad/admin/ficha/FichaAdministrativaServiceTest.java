@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import java.lang.reflect.RecordComponent;
+import java.time.OffsetDateTime;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -103,8 +104,9 @@ class FichaAdministrativaServiceTest {
         assertEquals("/avatares-subidos/ana.png", ficha.avatar());
         assertEquals("JUGADOR", ficha.rol());
         assertEquals("ACTIVO", ficha.estado());
-        assertEquals(LocalDateTime.of(2026, 9, 1, 10, 30), ficha.creadoEn());
-        assertEquals(LocalDateTime.of(2026, 10, 4, 21, 15), ficha.ultimoAcceso());
+        // SA-21: el instante con la zona del reloj del servicio (UTC en esta prueba).
+        assertEquals(OffsetDateTime.parse("2026-09-01T10:30:00Z"), ficha.creadoEn());
+        assertEquals(OffsetDateTime.parse("2026-10-04T21:15:00Z"), ficha.ultimoAcceso());
         assertFalse(ficha.bloqueada());
         assertTrue(ficha.accesoAuditado());
         // Mismo afectado que el resto de acciones del panel (el uid), quien
@@ -190,7 +192,7 @@ class FichaAdministrativaServiceTest {
         FichaAdministrativa ficha = servicio.consultar("15", "admin", "10.0.0.1");
 
         assertEquals("SUSPENDIDO", ficha.estado());
-        assertEquals(LocalDateTime.of(2026, 10, 9, 8, 0), ficha.suspendidoHasta());
+        assertEquals(OffsetDateTime.parse("2026-10-09T08:00:00Z"), ficha.suspendidoHasta());
     }
 
     @Test

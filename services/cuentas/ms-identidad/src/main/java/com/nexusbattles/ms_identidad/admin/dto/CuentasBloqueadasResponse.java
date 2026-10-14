@@ -67,13 +67,9 @@ public record CuentasBloqueadasResponse(
                     usuario.getApodo(),
                     usuario.getRol() != null ? usuario.getRol().getNombre() : null,
                     usuario.getEstado(),
-                    conZona(usuario.getUltimoBloqueoEn(), zona),
+                    MomentosDelServidor.conZona(usuario.getUltimoBloqueoEn(), zona),
                     vigente,
-                    vigente ? conZona(hasta, zona) : null);
-        }
-
-        private static OffsetDateTime conZona(LocalDateTime momento, ZoneId zona) {
-            return momento == null ? null : momento.atZone(zona).toOffsetDateTime();
+                    vigente ? MomentosDelServidor.conZona(hasta, zona) : null);
         }
     }
 }

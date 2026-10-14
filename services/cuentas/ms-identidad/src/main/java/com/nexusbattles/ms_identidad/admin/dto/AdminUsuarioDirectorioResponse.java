@@ -3,6 +3,8 @@ package com.nexusbattles.ms_identidad.admin.dto;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.UUID;
 
 /**
@@ -29,6 +31,7 @@ import java.util.UUID;
  * @param creadoEn      cuando se registro; nulo en cuentas anteriores al campo
  * @param ultimoAcceso  ultima entrada correcta; nulo = nunca ha entrado
  * @param suspendidoHasta fin de la suspension vigente, si la hay
+ *                      (SA-21: las tres con la zona del servidor, {@link MomentosDelServidor})
  * @param bloqueada     bloqueo temporal por intentos fallidos, ahora mismo
  * @param sancionesRegistradas 1.7.0: cuantas sanciones se le han emitido, segun
  *                      el resumen que mantiene moderacion-sanciones
@@ -40,15 +43,24 @@ public record AdminUsuarioDirectorioResponse(
         String email,
         String estado,
         String rol,
-        LocalDateTime creadoEn,
-        LocalDateTime ultimoAcceso,
-        LocalDateTime suspendidoHasta,
+        OffsetDateTime creadoEn,
+        OffsetDateTime ultimoAcceso,
+        OffsetDateTime suspendidoHasta,
         boolean bloqueada,
         int sancionesRegistradas) {
 
+    /** Con la zona del sistema, que es con la que se escriben las marcas (LocalDateTime.now()). */
     public static AdminUsuarioDirectorioResponse desde(Usuario usuario) {
+        return desde(usuario, ZoneId.systemDefault());
+    }
+
+    /**
+     * @param zona la del reloj con el que se escribieron las marcas (SA-21);
+     *             la exportacion pasa la de su reloj
+     */
+    public static AdminUsuarioDirectorioResponse desde(Usuario usuario, ZoneId zona) {
         boolean bloqueada = usuario.getBloqueadoHasta() != null
-                && LocalDateTime.now().isBefore(usuario.getBloqueadoHasta());
+                && LocalDateTime.now(zona).isBefore(usuario.getBloqueadoHasta());
         return new AdminUsuarioDirectorioResponse(
                 usuario.getId(),
                 usuario.getPublicId(),
@@ -56,9 +68,9 @@ public record AdminUsuarioDirectorioResponse(
                 usuario.getEmail(),
                 usuario.getEstado(),
                 usuario.getRol() != null ? usuario.getRol().getNombre() : null,
-                usuario.getCreadoEn(),
-                usuario.getUltimoAcceso(),
-                usuario.getSuspendidoHasta(),
+                MomentosDelServidor.conZona(usuario.getCreadoEn(), zona),
+                MomentosDelServidor.conZona(usuario.getUltimoAcceso(), zona),
+                MomentosDelServidor.conZona(usuario.getSuspendidoHasta(), zona),
                 bloqueada,
                 usuario.getSancionesRegistradas());
     }

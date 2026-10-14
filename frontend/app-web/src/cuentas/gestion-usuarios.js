@@ -838,6 +838,19 @@ async function guardarPerfil(evento) {
   }
 }
 
+/**
+ * SA-21 — la hora de un campo `datetime-local` (la de quien la escribe) como
+ * instante ISO-8601 con zona, que es lo que pide el contrato. Si no se
+ * entiende, va tal cual y el servidor dice por qué no.
+ *
+ * @param {string} valor `aaaa-mm-ddThh:mm`
+ * @returns {string}
+ */
+export function instanteDe(valor) {
+  const instante = new Date(valor);
+  return Number.isNaN(instante.getTime()) ? valor : instante.toISOString();
+}
+
 async function suspenderUsuario() {
   if (!validarUsuarioSeleccionado()) {
     return;
@@ -878,9 +891,11 @@ async function suspenderUsuario() {
   }
 
   // El servicio exige la fecha fin en el cuerpo (`SuspenderCuentaRequest`):
-  // antes la petición salía vacía y el servidor la rechazaba siempre.
+  // antes la petición salía vacía y el servidor la rechazaba siempre. SA-21:
+  // va como instante con su zona; el campo da la hora de quien lo escribe y,
+  // sin zona, el servidor la leía en la suya (UTC): terminaba cinco horas antes.
   await ejecutarAccionEstado(`/suspender`, 'SUSPENDIDO', 'Cuenta suspendida correctamente.', {
-    suspendidoHasta,
+    suspendidoHasta: instanteDe(suspendidoHasta),
     motivo: decision.motivo,
     causal: decision.seleccion,
   });
