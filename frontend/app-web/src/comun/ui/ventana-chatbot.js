@@ -17,12 +17,15 @@
  * - calificar cada respuesta del bot (útil / no útil, con comentario opcional);
  * - respuestas enriquecidas: pasos, enlaces a secciones del sitio, tarjetas,
  *   botones de respuesta rápida y «Hablar con soporte» (`enriquecido-chatbot.js`);
- *   cada mensaje manda la sección donde está el jugador (`vista`);
+ *   cada mensaje manda la sección donde está el jugador (`vista`). Desde
+ *   ms-chatbot.yaml 1.12.0, si no pudo responder, la solicitud de soporte ya
+ *   viene abierta y su aviso lleva a «Tus solicitudes» («Ver solicitud»);
  * - preguntas rápidas, temas frecuentes y autocompletado mientras se escribe
  *   (`sugerencias-chatbot.js`), sacados de lo que el asistente sabe responder;
  * - «Soporte»: abrir una solicitud de soporte humano y ver las propias
- *   (`soporte-chatbot.js`); el visitante recibe cómo conseguirlo: entrar
- *   (volviendo a esta página) o crear una cuenta;
+ *   (`soporte-chatbot.js`). Desde 1.12.0 también el visitante: las ve
+ *   mientras dure su sesión, y se le ofrece entrar (volviendo a esta página)
+ *   o crear una cuenta;
  * - «Preferencias» (7.4.5): el idioma de las respuestas y el nivel de detalle,
  *   guardados en el servidor (`preferencias-chatbot.js`);
  * - UXC-9 (§7.4, RNF-DIS-002): minimizarla a su barra de título sin perder la
@@ -43,8 +46,9 @@
  * - el lector de pantalla oye quién habla («Tú:», «Asistente:») y la
  *   conversación es una región `role="log"`;
  * - las acciones de la cabecera se parten en dos filas si no caben;
- * - un visitante que pide soporte humano recibe cómo conseguirlo (entrar con
- *   vuelta a esta página, o crear una cuenta), no un callejón sin salida.
+ * - un visitante que pide soporte humano no se queda en un callejón sin
+ *   salida: desde 1.12.0 la abre como cualquiera, y además puede entrar (con
+ *   vuelta a esta página) o crear una cuenta.
  *
  * 7.4.9 — con un `canal` (`../canal-chatbot.js`, lo pasa `asistente.js`), las
  * preguntas van por el canal en tiempo real mientras está abierto y por HTTP
@@ -66,6 +70,7 @@ import { h, vaciar } from './dom.js';
 import { introAntesDePasos, pintarEnriquecido, vistaDelChat } from './enriquecido-chatbot.js';
 import { estadoDeCarga } from './estado-vista.js';
 import { fechaHora } from './formato.js';
+import { icono } from './icono.js';
 import { crearPanelPreferencias } from './preferencias-chatbot.js';
 import { pintarEstadoDelCanal } from './reconexion.js';
 import { crearPanelSoporte } from './soporte-chatbot.js';
@@ -166,6 +171,8 @@ export const TEXTOS = Object.freeze({
   etiquetaMensaje: 'Tu pregunta',
   enviar: 'Enviar',
   enviando: 'Enviando…',
+  // 1.14.0 (§7.4.6) — el clip de la caja de texto.
+  adjuntarCaptura: 'Adjuntar una captura de pantalla para soporte',
   verCaptura: 'Ver captura adjunta',
   anteriores: 'Ver mensajes anteriores',
   cargandoAnteriores: 'Cargando mensajes anteriores…',
@@ -410,6 +417,20 @@ export function crearVentanaChatbot({
     texto: TEXTOS.enviar,
     atributos: { type: 'submit' },
   });
+  // ms-chatbot.yaml 1.14.0 (§7.4.6 y RF-CHA-002 «opción de adjuntar capturas
+  // de pantalla»): las capturas son para soporte técnico y van en la
+  // solicitud, no en la conversación (el asistente no lee imágenes). El clip
+  // lleva a «Soporte», al sitio donde se adjunta, con su aviso de privacidad.
+  const botonCaptura = h('button', {
+    clase: 'boton boton--icono boton--secundario chatbot-ventana__captura',
+    atributos: {
+      type: 'button',
+      'aria-label': TEXTOS.adjuntarCaptura,
+      title: TEXTOS.adjuntarCaptura,
+    },
+    datos: { accion: 'adjuntar-captura' },
+    hijos: [icono('imagen', { clase: 'icono', etiqueta: null })],
+  });
 
   // Preguntas rápidas y autocompletado. El autocompletado se conecta aquí,
   // antes del manejador de Enter de más abajo, para que Enter elija la
@@ -429,7 +450,7 @@ export function crearVentanaChatbot({
       rapidas.elemento,
       h('div', {
         clase: 'chatbot-ventana__fila chatbot-ventana__fila--entrada',
-        hijos: [autocompletado.elemento, entrada, botonEnviar],
+        hijos: [autocompletado.elemento, entrada, botonCaptura, botonEnviar],
       }),
     ],
   });
@@ -529,6 +550,8 @@ export function crearVentanaChatbot({
     const parteEnriquecida = pintarEnriquecido(enriquecido, {
       alPreguntar: enviarSugerencia,
       alPedirSoporte: () => mostrarSoporte(true),
+      // 1.12.0 — la solicitud ya está abierta: «Soporte» la enseña en «Tus solicitudes».
+      alVerSolicitud: () => mostrarSoporte(true),
       // #506 — un enlace a una vista que esta sesión no puede ver no se pinta.
       visible: (destino) => destinoVisible(destino, sesion() ?? null),
     });
@@ -1081,7 +1104,12 @@ export function crearVentanaChatbot({
     formulario.hidden = si;
   }
 
-  function mostrarSoporte(si) {
+  /**
+   * @param {boolean} si
+   * @param {{captura?: boolean}} [opciones] `captura`: se abrió con el clip
+   *   (1.14.0), así que el foco va a donde se adjunta una captura
+   */
+  function mostrarSoporte(si, { captura = false } = {}) {
     if (si) {
       ocultarPreferencias();
     }
@@ -1093,7 +1121,9 @@ export function crearVentanaChatbot({
       panelSoporte.elemento.hidden = true;
     }
     botonSoporte.setAttribute('aria-expanded', String(si));
-    if (si) {
+    if (si && captura) {
+      panelSoporte.enfocarCaptura();
+    } else if (si) {
       panelSoporte.enfocar();
     } else {
       enfocarDentro();
@@ -1101,6 +1131,7 @@ export function crearVentanaChatbot({
   }
 
   botonSoporte.addEventListener('click', () => mostrarSoporte(!soporteAbierto()));
+  botonCaptura.addEventListener('click', () => mostrarSoporte(true, { captura: true }));
 
   // ms-chatbot.yaml 1.8.0 — si alguna respuesta de esta conversación ofreció
   // soporte (no entendió, o «no me sirvió»), «Soporte» ofrece crear la

@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_chatbot.chat.catalogo;
 
 import com.nexusbattles.ms_chatbot.chat.enriquecido.EnlaceInterno;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.TarjetaInformativa;
 import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.ResultadoMotor;
 import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
@@ -92,6 +93,49 @@ class ConsultaDeCatalogoTest {
         assertThat(responder("que armas venden en la tienda").texto())
             .startsWith("Hay 3 armas a la venta, por ejemplo: «Espada de una mano» (120 créditos)");
         assertThat(responder("que epicas venden").texto()).isEqualTo("Ahora mismo no hay épicas a la venta en la «Tienda».");
+    }
+
+    // 1.13.0 (§7.4.3): una tarjeta por producto nombrado, con su imagen solo
+    // si es del propio catalogo.
+    @Test
+    void cadaProductoNombradoLlevaSuTarjetaConSuImagenSiEsSegura() {
+        ProductoDelCatalogoDto conRecurso = new ProductoDelCatalogoDto("6", "Escudo de roble", "", "ARMADURA", 60,
+            null, false, null, "/api/v1/productos/recursos/6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f");
+        ProductoDelCatalogoDto conNombreSuelto = new ProductoDelCatalogoDto("7", "Escudo de hierro", "", "ARMADURA",
+            70, null, false, null, "escudo.png");
+        when(catalogo.productos()).thenReturn(Optional.of(List.of(conRecurso, conNombreSuelto)));
+
+        ResultadoMotor uno = responder("¿Cuánto cuesta el escudo de roble?");
+        assertThat(uno.enriquecido().tarjetas()).singleElement().satisfies(tarjeta -> {
+            assertThat(tarjeta.titulo()).isEqualTo("Escudo de roble");
+            assertThat(tarjeta.texto()).isEqualTo("Armadura · 60 créditos");
+            assertThat(tarjeta.imagen()).isEqualTo("/api/v1/productos/recursos/6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f");
+        });
+        assertThat(uno.enriquecido().enlaces()).extracting(EnlaceInterno::destino).containsExactly("tienda");
+
+        assertThat(responder("cuanto cuesta un escudo").enriquecido().tarjetas())
+            .extracting(TarjetaInformativa::titulo, TarjetaInformativa::imagen)
+            .containsExactly(org.assertj.core.groups.Tuple.tuple("Escudo de roble",
+                    "/api/v1/productos/recursos/6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f"),
+                org.assertj.core.groups.Tuple.tuple("Escudo de hierro", null));
+    }
+
+    @Test
+    void elListadoLlevaLasTarjetasDeLosMismosEjemplosQueElTexto() {
+        ResultadoMotor listado = responder("¿Qué productos hay en la tienda?");
+
+        assertThat(listado.enriquecido().tarjetas()).extracting(TarjetaInformativa::titulo)
+            .containsExactly("Espada de una mano", "Espada de dos manos", "Orbe de manos ardientes",
+                "Guerrero Tanque", "Magma Ardiente");
+        assertThat(listado.enriquecido().tarjetas().get(3).texto()).isEqualTo("Héroe · 25.000 COP, solo con dinero real");
+        // Sin productos que nombrar, solo el enlace a la tienda.
+        assertThat(responder("que epicas venden").enriquecido().tarjetas()).isEmpty();
+    }
+
+    @Test
+    void laTarjetaEnInglesDiceElTipoYElPrecioEnIngles() {
+        assertThat(responder("how much is the Espada de una mano").enriquecido().tarjetas())
+            .extracting(TarjetaInformativa::texto).containsExactly("Weapon · 120 credits");
     }
 
     @Test

@@ -2940,6 +2940,89 @@ button.tarjeta--partida:disabled {
   color: var(--texto-2);
 }
 
+/* ms-chatbot.yaml 1.13.0 (§7.4.3) — la tarjeta de un producto con su imagen
+   del catálogo, a la izquierda del nombre. La imagen no cambia de tamaño al
+   cargar (ancho y alto fijos) y no se deforma. */
+.chatbot-enriquecido__tarjeta--con-imagen {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  column-gap: var(--e-2);
+  align-items: start;
+}
+
+.chatbot-enriquecido__tarjeta--con-imagen > :not(.chatbot-enriquecido__tarjeta-imagen) {
+  grid-column: 2;
+}
+
+.chatbot-enriquecido__tarjeta-imagen {
+  grid-column: 1;
+  grid-row: 1 / span 3;
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: var(--radio);
+  background: var(--cromo);
+}
+
+/* Con dos o más productos, en fila: se desliza con los botones, la rueda o
+   las flechas (la lista se puede enfocar). Cada tarjeta ocupa casi todo el
+   ancho, para que se vea que hay más. */
+.chatbot-enriquecido__carrusel {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--e-1);
+}
+
+.chatbot-enriquecido__carrusel-lista {
+  display: flex;
+  gap: var(--e-2);
+  margin: 0;
+  padding: var(--e-1) 0;
+  list-style: none;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+}
+
+.chatbot-enriquecido__carrusel-lista:focus-visible {
+  outline: 2px solid var(--primaria);
+  outline-offset: 2px;
+}
+
+.chatbot-enriquecido__carrusel-elemento {
+  flex: 0 0 85%;
+  scroll-snap-align: start;
+}
+
+.chatbot-enriquecido__carrusel-elemento > .chatbot-enriquecido__tarjeta {
+  height: 100%;
+}
+
+.chatbot-enriquecido__carrusel-boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--borde-int);
+  border-radius: 50%;
+  background: var(--superficie);
+  color: var(--primaria);
+  cursor: pointer;
+}
+
+.chatbot-enriquecido__carrusel-boton:focus-visible {
+  outline: 2px solid var(--primaria);
+  outline-offset: 2px;
+}
+
+/* El chevron apunta a la derecha: «anterior» es el mismo, girado. */
+.chatbot-enriquecido__carrusel-boton--anterior .icono {
+  transform: rotate(180deg);
+}
+
 .chatbot-enriquecido__enlaces {
   display: flex;
   flex-wrap: wrap;
@@ -2953,6 +3036,34 @@ button.tarjeta--partida:disabled {
 
 .chatbot-enriquecido__soporte {
   border-color: var(--primaria);
+}
+
+/* ms-chatbot.yaml 1.12.0 (RF-CHA-007) — la solicitud de soporte que el
+   asistente abrió al no resolver la pregunta, con un botón a «Tus
+   solicitudes». Tono de información: no es un error ni algo por hacer. */
+.chatbot-enriquecido__solicitud {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--e-1);
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--borde-tenue);
+  border-left: 3px solid var(--info);
+  border-radius: var(--radio);
+  background: var(--info-insignia);
+}
+
+.chatbot-enriquecido__solicitud-titulo {
+  margin: 0;
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--info);
+}
+
+.chatbot-enriquecido__solicitud-asunto {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+  overflow-wrap: anywhere;
 }
 
 /* Preguntas rápidas y autocompletado. Los botones son de texto, como las
@@ -3134,6 +3245,19 @@ button.tarjeta--partida:disabled {
   gap: var(--e-2);
 }
 
+/* ms-chatbot.yaml 1.12.0 — el visitante también pide ayuda; esta nota le
+   dice hasta cuándo verá la respuesta y le ofrece una cuenta. */
+.chatbot-soporte__visitante {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+  margin: var(--e-2) 0;
+  padding: var(--e-2) var(--e-3);
+  border-left: 3px solid var(--info);
+  border-radius: var(--radio);
+  background: var(--info-insignia);
+}
+
 /* ms-chatbot.yaml 1.8.0 — «Crear solicitud con esta conversación», encima
    del formulario, que sigue debajo para quien prefiere escribirla. */
 .chatbot-soporte__desde-conversacion {
@@ -3188,6 +3312,103 @@ button.tarjeta--partida:disabled {
 
 .chatbot-soporte__respuesta {
   margin-top: var(--e-2);
+}
+
+/* ms-chatbot.yaml 1.14.0 (§7.4.6) — capturas de pantalla de una solicitud:
+   en «Tus solicitudes», debajo de cada una, y la elegida en el formulario. */
+.chatbot-soporte__capturas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  margin-top: var(--e-2);
+}
+
+.chatbot-soporte__elegida {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+/* Capturas de soporte (comun/ui/capturas-chatbot.js): la lista con «Ver
+   captura», en la ventana del asistente y en el panel de soporte, y el
+   selector para adjuntarlas. Mismo patrón de entrada escondida que el
+   redactor de comentarios: el foco se pinta en la etiqueta que la sigue. */
+.capturas-chatbot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.capturas-chatbot__fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+.capturas-chatbot__datos {
+  font-size: var(--t-meta-tam);
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-2);
+}
+
+.capturas-chatbot__imagen {
+  margin-top: var(--e-1);
+}
+
+.capturas-chatbot__imagen img {
+  display: block;
+  max-width: 100%;
+  max-height: 60vh;
+  height: auto;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  background: var(--superficie);
+  object-fit: contain;
+}
+
+.capturas-chatbot__fallo {
+  margin: var(--e-1) 0 0;
+  font-size: var(--t-meta-tam);
+  color: var(--error);
+}
+
+.capturas-chatbot__selector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+.capturas-chatbot__selector .campo__pista {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.capturas-chatbot__adjuntar {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--e-2);
+  cursor: pointer;
+}
+
+.capturas-chatbot__archivo:focus-visible + .capturas-chatbot__adjuntar {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+/* Mientras sube, la entrada se apaga y su etiqueta lo enseña. */
+.capturas-chatbot__archivo:disabled + .capturas-chatbot__adjuntar {
+  opacity: 0.55;
+  cursor: progress;
 }
 
 /* 7.4.5 — «Preferencias» del asistente: ocupa el sitio de la conversación,

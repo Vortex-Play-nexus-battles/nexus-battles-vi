@@ -62,6 +62,64 @@ class MotorRespuestasTest {
         assertThat(resultado.categoria()).isEqualTo(Categoria.CUENTA_Y_REGISTRO);
     }
 
+    // Segunda auditoria del 7.4 (7.4.2): una sola palabra mal escrita basta
+    // si es la de una variante («registor» es «registro» con dos letras
+    // cambiadas de sitio). Antes sumaba 2 y la pregunta escalaba.
+    @Test
+    void generarRespuesta_unaPalabraClaveMalEscrita_bastaParaResponder() {
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("como me registor");
+
+        assertThat(resultado.requiereEscalamiento()).isFalse();
+        assertThat(resultado.temaClave()).isEqualTo("clave-registro");
+    }
+
+    // Una palabra que ya es otra palabra de la base no es un error de tecleo:
+    // «formas» no es «normas» mal escrito.
+    @Test
+    void generarRespuesta_otraPalabraDeLaBase_noSeTomaPorUnaErrata() {
+        TemaConocimiento normas = new TemaConocimiento(null, "clave-normas", Categoria.POLITICAS_Y_TERMINOS,
+            TipoRespuesta.DIRECTA, "Normas de conducta", "normas, normas de conducta", null, "Las normas.", null, 0,
+            true);
+        TemaConocimiento modos = new TemaConocimiento(null, "clave-modos", Categoria.MODALIDAD_JUEGO,
+            TipoRespuesta.DIRECTA, "Modos de juego", "modos de juego, formas de jugar", null, "Los modos.", null, 0,
+            true);
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(normas, modos));
+
+        assertThat(motorRespuestas.generarRespuesta("¿de qué formas puedo jugar contra otros?").temaClave())
+            .isEqualTo("clave-modos");
+        ResultadoMotor soloFormas = motorRespuestas.generarRespuesta("formas");
+        assertThat(soloFormas.temaClave()).isNotEqualTo("clave-normas");
+    }
+
+    // Una palabra corta mal escrita no completa una frase: «duela» no es
+    // «duelo».
+    @Test
+    void generarRespuesta_unaPalabraCortaParecida_noBastaParaResponder() {
+        TemaConocimiento duelo = new TemaConocimiento(null, "clave-duelo", Categoria.MODALIDAD_JUEGO,
+            TipoRespuesta.DIRECTA, "Duelo", "duelo", null, "Un duelo es 1 contra 1.", null, 0, true);
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(duelo));
+
+        assertThat(motorRespuestas.generarRespuesta("me duela la cabeza").requiereEscalamiento()).isTrue();
+    }
+
+    // El plural de una palabra de la base sigue siendo esa palabra.
+    @Test
+    void generarRespuesta_elPluralDeUnaPalabraDeLaBase_cuenta() {
+        TemaConocimiento recompensas = new TemaConocimiento(null, "clave-recompensas", Categoria.MODALIDAD_JUEGO,
+            TipoRespuesta.DIRECTA, "Recompensas de las misiones", "recompensa de mision, recompensa", null,
+            "Las recompensas.", null, 0, true);
+        TemaConocimiento batalla = new TemaConocimiento(null, "clave-batalla", Categoria.MECANICA_JUEGO,
+            TipoRespuesta.DIRECTA, "Recompensas de batalla", "recompensas de batalla", null, "De batalla.", null, 0,
+            true);
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(recompensas, batalla));
+
+        assertThat(motorRespuestas.generarRespuesta("que recompensas da una mision").temaClave())
+            .isEqualTo("clave-recompensas");
+    }
+
     // 1.3.4: una respuesta de un tema trae su parte enriquecida.
     @Test
     void generarRespuesta_deUnTema_traeSuEnlaceYOtrasPreguntasDeSuCategoria() {
@@ -93,9 +151,10 @@ class MotorRespuestasTest {
     @Test
     void generarRespuesta_escalada_noSugiereTemasDeCortesia() {
         TemaConocimiento saludo = new TemaConocimiento(null, "clave-saludo", Categoria.FAQ_GENERAL,
-            TipoRespuesta.DIRECTA, "Saludo", "hola, inventarioz", null, "¡Hola!", null, 0, true);
-        // "inventarioz" se parece a "inventario" (+2): el saludo queda como
-        // candidato, pero por debajo del umbral, asi que la consulta se escala.
+            TipoRespuesta.DIRECTA, "Saludo", "hola, inventarioz amigo", null, "¡Hola!", null, 0, true);
+        // "inventarioz" se parece a "inventario" (+2), pero la frase entera no
+        // esta: el saludo queda como candidato, por debajo del umbral, asi que
+        // la consulta se escala.
         when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
             .thenReturn(List.of(saludo, temaRegistro(0)));
 
@@ -175,7 +234,9 @@ class MotorRespuestasTest {
 
         assertThat(resultado.requiereEscalamiento()).isTrue();
         assertThat(resultado.categoria()).isNull();
-        assertThat(resultado.texto()).contains("soporte humano");
+        // 1.12.0: el contacto con soporte lo anade ChatService al abrir la solicitud.
+        assertThat(resultado.texto()).contains("quedó registrada");
+        assertThat(resultado.enriquecido().ofrecerSoporteHumano()).isTrue();
     }
 
     @Test
@@ -385,6 +446,20 @@ class MotorRespuestasTest {
 
         assertThat(resultado.requiereEscalamiento()).isFalse();
         assertThat(resultado.temaClave()).isEqualTo("clave-subasta");
+    }
+
+    // Segunda auditoria del 7.4: el vocabulario de la base son las palabras de
+    // las variantes de los temas ACTIVOS, en los dos idiomas.
+    @Test
+    void elVocabularioSonLasPalabrasDeLasVariantesDeLosTemasActivos() {
+        TemaConocimiento inactivo = new TemaConocimiento(null, "clave-vieja", Categoria.FAQ_GENERAL,
+            TipoRespuesta.DIRECTA, "Retirado", "palabraretirada", "retiredword", "x", "x", 0, false);
+        TemaConocimiento sinVariantes = new TemaConocimiento(null, "clave-sin", Categoria.FAQ_GENERAL,
+            TipoRespuesta.DIRECTA, "Sin variantes", "  ", null, "x", null, 0, true);
+
+        assertThat(MotorRespuestas.vocabularioDe(List.of(temaSubasta(), inactivo, sinVariantes)))
+            .contains("subasta", "subastas", "subastar", "vender", "auction", "sell")
+            .doesNotContain("palabraretirada", "retiredword", "");
     }
 
     private static TemaConocimiento temaTorneoSoloEnEspanol() {

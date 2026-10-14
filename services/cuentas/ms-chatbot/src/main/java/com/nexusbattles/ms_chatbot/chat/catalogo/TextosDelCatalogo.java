@@ -69,6 +69,12 @@ final class TextosDelCatalogo {
         return formato.format(valor);
     }
 
+    // 1.13.0: el texto de la tarjeta de un producto, debajo de su nombre.
+    String tarjeta(ProductoDelCatalogoDto producto) {
+        String tipo = tipo(producto.tipo(), false);
+        return Character.toUpperCase(tipo.charAt(0)) + tipo.substring(1) + " · " + precio(producto);
+    }
+
     String conPrecio(ProductoDelCatalogoDto producto) {
         return "«" + producto.nombre() + "» (" + tipo(producto.tipo(), false) + "): " + precio(producto);
     }

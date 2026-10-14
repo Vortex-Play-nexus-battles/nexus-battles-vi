@@ -1,6 +1,8 @@
 package com.nexusbattles.ms_chatbot.chat.catalogo;
 
 import com.nexusbattles.ms_chatbot.chat.enriquecido.Enriquecedor;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.ImagenDeProducto;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.TarjetaInformativa;
 import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.ResultadoMotor;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
@@ -199,18 +201,18 @@ public class ConsultaDeCatalogo {
 
     private ResultadoMotor precios(List<ProductoDelCatalogoDto> nombrados, TextosDelCatalogo t) {
         if (nombrados.size() == 1) {
-            return consultado(t.unPrecio(nombrados.get(0)), t);
+            return consultado(t.unPrecio(nombrados.get(0)), t, nombrados);
         }
-        String lista = nombrados.stream().limit(MAXIMO_DE_COINCIDENCIAS).map(t::conPrecio)
-            .collect(Collectors.joining("; "));
+        List<ProductoDelCatalogoDto> mostrados = nombrados.stream().limit(MAXIMO_DE_COINCIDENCIAS).toList();
+        String lista = mostrados.stream().map(t::conPrecio).collect(Collectors.joining("; "));
         return consultado(nombrados.size() > MAXIMO_DE_COINCIDENCIAS
             ? t.demasiados(nombrados.size(), lista)
-            : t.variosPrecios(nombrados.size(), lista), t);
+            : t.variosPrecios(nombrados.size(), lista), t, mostrados);
     }
 
     private ResultadoMotor describir(List<ProductoDelCatalogoDto> nombrados, TextosDelCatalogo t) {
         if (nombrados.size() == 1) {
-            return consultado(t.ficha(nombrados.get(0)), t);
+            return consultado(t.ficha(nombrados.get(0)), t, nombrados);
         }
         return precios(nombrados, t);
     }
@@ -223,7 +225,8 @@ public class ConsultaDeCatalogo {
             if (deTipo.isEmpty()) {
                 return consultado(t.ningunoDeTipo(t.tipo(tipo.get(), true)), t);
             }
-            return consultado(t.listadoDeTipo(deTipo.size(), t.tipo(tipo.get(), true), ejemplos(deTipo, t)), t);
+            return consultado(t.listadoDeTipo(deTipo.size(), t.tipo(tipo.get(), true), ejemplos(deTipo, t)), t,
+                primeros(deTipo));
         }
         if (productos.isEmpty()) {
             return consultado(t.catalogoVacio(), t);
@@ -235,13 +238,18 @@ public class ConsultaDeCatalogo {
                 .thenComparing(Map.Entry.comparingByKey()))
             .map(e -> e.getValue() + " " + t.tipo(e.getKey(), e.getValue() != 1))
             .collect(Collectors.joining(", "));
-        return consultado(t.listado(productos.size(), resumen, ejemplos(productos, t)), t);
+        return consultado(t.listado(productos.size(), resumen, ejemplos(productos, t)), t, primeros(productos));
     }
 
     private static String ejemplos(List<ProductoDelCatalogoDto> productos, TextosDelCatalogo t) {
-        return productos.stream().limit(EJEMPLOS)
+        return primeros(productos).stream()
             .map(p -> "«" + p.nombre() + "» (" + t.precio(p) + ")")
             .collect(Collectors.joining(", "));
+    }
+
+    // Los que se nombran como ejemplo: los mismos en el texto y en las tarjetas.
+    private static List<ProductoDelCatalogoDto> primeros(List<ProductoDelCatalogoDto> productos) {
+        return productos.stream().limit(EJEMPLOS).toList();
     }
 
     private static boolean contieneAlguna(String mensaje, List<String> frases) {
@@ -250,10 +258,27 @@ public class ConsultaDeCatalogo {
     }
 
     private static ResultadoMotor consultado(String texto, TextosDelCatalogo t) {
+        return consultado(texto, t, List.of());
+    }
+
+    // 1.13.0 (§7.4.3 «respuestas enriquecidas: incluyendo imagenes»): una
+    // tarjeta por producto nombrado, con su tipo, su precio y su imagen si es
+    // segura (ImagenDeProducto). El texto sigue siendo completo: quien no
+    // pinte las tarjetas no pierde nada.
+    private static ResultadoMotor consultado(String texto, TextosDelCatalogo t,
+                                             List<ProductoDelCatalogoDto> mostrados) {
+        List<TarjetaInformativa> tarjetas = mostrados.stream().map(p -> tarjetaDe(p, t)).toList();
         return ResultadoMotor.deTema(texto, Categoria.PRODUCTO, TipoRespuesta.CONTEXTUAL)
-            .conEnriquecido(Enriquecedor.conEnlace("tienda", t.ingles()))
+            .conEnriquecido(tarjetas.isEmpty()
+                ? Enriquecedor.conEnlace("tienda", t.ingles())
+                : Enriquecedor.conTarjetas(tarjetas, "tienda", t.ingles()))
             .enIngles(t.ingles())
             .conResultado(ResultadoDeRespuesta.CONSULTA_EN_VIVO);
+    }
+
+    private static TarjetaInformativa tarjetaDe(ProductoDelCatalogoDto producto, TextosDelCatalogo t) {
+        return new TarjetaInformativa(producto.nombre(), t.tarjeta(producto), null,
+            ImagenDeProducto.segura(producto.imagen()).orElse(null));
     }
 
     private static ResultadoMotor noDisponible(TextosDelCatalogo t) {

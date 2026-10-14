@@ -36,6 +36,8 @@ export function asistenteDe(page) {
     minimizar: ventana.locator('[data-accion="minimizar-asistente"]'),
     preferencias: ventana.locator('[data-accion="preferencias-asistente"]'),
     soporte: ventana.locator('[data-accion="hablar-con-soporte"]'),
+    // ms-chatbot.yaml 1.14.0: el clip de la caja de texto (capturas para soporte).
+    captura: ventana.locator('[data-accion="adjuntar-captura"]'),
   };
 }
 
