@@ -876,9 +876,24 @@ function seccionModeracion(consultarApi) {
   // respuesta, no lo repite.
   const reincidentes = panelDeReincidentes(consultarApi);
 
-  // Las dos cifras juntas arriba; la lista, la bitácora y el recuento, cada
-  // uno en su fila.
-  return [alertas, comentarios, reincidentes, auditoria, sanciones];
+  // SA-20 (D-45, señal 1): la otra señal del PO, las cuentas que se bloquearon
+  // al fallar el inicio de sesión (ms-identidad-admin 1.11.0), sin las de las
+  // pruebas automáticas, como el directorio.
+  const bloqueos = panelDeRecurso({
+    id: 'bloqueos',
+    ancho: 'completo',
+    titulo: 'Cuentas bloqueadas por intentos fallidos',
+    descripcion:
+      'Cuentas que se bloquearon al fallar varias veces el inicio de sesión en la última ' +
+      'semana: la otra alerta de comportamiento sospechoso.',
+    recurso: '/admin/jugadores/bloqueos?ocultarPruebas=true',
+    consultarApi,
+    pintar: (datos) => pintarBloqueos(datos),
+  });
+
+  // Las dos cifras juntas arriba; las dos alertas, la bitácora y el recuento,
+  // cada uno en su fila.
+  return [alertas, comentarios, reincidentes, bloqueos, auditoria, sanciones];
 }
 
 /**
@@ -1069,6 +1084,113 @@ export function pintarReincidentes(datos, apodos = new Map()) {
         },
       ],
       filas,
+    }),
+  ];
+}
+
+/**
+ * `2026-10-08` → «8 de octubre»: un día que publica un servicio, dentro de una
+ * frase. Un día no tiene hora ni zona: se escribe tal cual (leído como
+ * instante sería la medianoche UTC, que en Colombia aún es el día anterior).
+ *
+ * @param {string} dia `aaaa-mm-dd`
+ * @returns {string}
+ */
+function diaEnUnaFrase(dia) {
+  const partes = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dia ?? '').trim());
+  if (!partes) {
+    return String(dia);
+  }
+  const fecha = new Date(Date.UTC(Number(partes[1]), Number(partes[2]) - 1, Number(partes[3])));
+  return fecha.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', timeZone: 'UTC' });
+}
+
+/**
+ * Las cuentas que se bloquearon por intentos fallidos, tal como las publica
+ * ms-identidad (`GET /admin/jugadores/bloqueos`, 1.11.0): la de bloqueo más
+ * reciente primero, con lo que pasa ahora con cada una. Un cuerpo que no tenga
+ * esa forma se trata como «sin datos»: no se inventa a nadie.
+ *
+ * @param {{desde?: string, total?: number,
+ *          cuentas?: {uid?: string, apodo?: string, rol?: string, bloqueadaEn?: string,
+ *                     vigente?: boolean, bloqueadaHasta?: string|null}[]}} datos
+ * @returns {HTMLElement[]}
+ */
+export function pintarBloqueos(datos) {
+  const cuentas = (Array.isArray(datos?.cuentas) ? datos.cuentas : []).filter((c) => c?.uid);
+  const periodo = datos?.desde ? `desde el ${diaEnUnaFrase(datos.desde)}` : 'en la última semana';
+  if (cuentas.length === 0) {
+    return [
+      h('p', {
+        clase: 't-meta',
+        datos: { zona: 'sin-bloqueos' },
+        texto: `Ninguna cuenta se bloqueó por intentos fallidos ${periodo}.`,
+      }),
+    ];
+  }
+
+  const total =
+    Number.isInteger(datos?.total) && datos.total >= cuentas.length ? datos.total : cuentas.length;
+  const vigentes = cuentas.filter((c) => c.vigente === true).length;
+  let ahora = '';
+  if (vigentes === 1) {
+    ahora = ' Una sigue bloqueada.';
+  } else if (vigentes > 1) {
+    ahora = ` ${numero(vigentes)} siguen bloqueadas.`;
+  }
+  const cortada =
+    total > cuentas.length ? ` Se muestran las ${numero(cuentas.length)} más recientes.` : '';
+  return [
+    h('p', {
+      clase: 't-meta',
+      datos: { zona: 'resumen-bloqueos' },
+      texto:
+        `${numero(total)} ${total === 1 ? 'cuenta se bloqueó' : 'cuentas se bloquearon'} ` +
+        `por intentos fallidos ${periodo}.${ahora}${cortada}`,
+    }),
+    tablaDeDatos({
+      titulo: 'Cuentas bloqueadas por intentos fallidos',
+      claveDeFila: (c) => c.uid,
+      columnas: [
+        {
+          clave: 'apodo',
+          titulo: 'Cuenta',
+          principal: true,
+          valor: (c) =>
+            c.apodo ?? h('span', { clase: 'tabla-admin__sin-dato', texto: 'Sin apodo' }),
+        },
+        { clave: 'rol', titulo: 'Rol', valor: (c) => NOMBRE_DE_ROL[c.rol] ?? humanizar(c.rol) },
+        {
+          clave: 'bloqueadaEn',
+          titulo: 'Se bloqueó',
+          tipo: 'fecha',
+          valor: (c) => formatearFecha(c.bloqueadaEn),
+        },
+        {
+          // Lo que pasa ahora con la cuenta, en una celda: bloqueada (con su
+          // distintivo) y hasta cuándo, o que ya puede entrar. Una columna
+          // «Hasta» vacía para las que ya entran diría «Sin dato» sin serlo.
+          clave: 'vigente',
+          titulo: 'Ahora',
+          valor: (c) =>
+            c.vigente === true
+              ? h('span', {
+                  clase: 'bloqueo-vigente',
+                  hijos: [
+                    estadoSegun('BLOQUEADA', ESTADOS_DE_CUENTA_ADMIN),
+                    c.bloqueadaHasta ? ` hasta ${formatearFecha(c.bloqueadaHasta)}` : null,
+                  ],
+                })
+              : 'Ya puede entrar',
+        },
+        {
+          clave: 'acciones',
+          titulo: 'Acciones',
+          tipo: 'accion',
+          valor: (c) => [enlaceAFicha({ uid: c.uid, apodo: c.apodo ?? undefined })],
+        },
+      ],
+      filas: cuentas,
     }),
   ];
 }

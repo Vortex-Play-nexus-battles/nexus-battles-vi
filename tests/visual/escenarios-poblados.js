@@ -4904,6 +4904,38 @@ export const ESCENARIOS_SA2 = [
         }),
       ],
       [
+        // SA-20 (D-45, señal 1): una cuenta bloqueada ahora y otra que ya
+        // puede entrar. El patrón del directorio no la cubre: `*` no cruza la
+        // barra.
+        '**/api/v1/admin/jugadores/bloqueos*',
+        json({
+          desde: '2026-10-07',
+          total: 2,
+          ocultarPruebas: true,
+          calculadoEn: '2026-10-13T14:32:05Z',
+          cuentas: [
+            {
+              uid: 'b2222222-0000-4000-8000-000000000001',
+              apodo: 'lince_rojo',
+              rol: 'JUGADOR',
+              estado: 'ACTIVO',
+              bloqueadaEn: '2026-10-13T09:20:00-05:00',
+              vigente: true,
+              bloqueadaHasta: '2026-10-13T09:35:00-05:00',
+            },
+            {
+              uid: 'b2222222-0000-4000-8000-000000000002',
+              apodo: 'moderadora_luz',
+              rol: 'MODERADOR',
+              estado: 'ACTIVO',
+              bloqueadaEn: '2026-10-11T22:05:00-05:00',
+              vigente: false,
+              bloqueadaHasta: null,
+            },
+          ],
+        }),
+      ],
+      [
         '**/api/v1/admin/jugadores/indicadores*',
         json({
           total: 1894,
@@ -5039,6 +5071,7 @@ export const ESCENARIOS_SA2 = [
     ],
     exige: [
       '[data-panel="directorio"] .tabla-admin__tabla tbody tr',
+      '[data-panel="bloqueos"] .tabla-admin__tabla tbody tr',
       '[data-panel="sistema"] .estado-admin',
       '[data-panel="resumen-usuarios"] .grafico-admin__columna',
       '[data-panel="subastas"] .tabla-admin__tabla',
