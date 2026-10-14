@@ -19,8 +19,27 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Administracion de cuentas (ms-identidad)
-  version: 1.9.0
+  version: 1.10.0
   description: |
+    ### Cambios en 1.10.0 (§7.3.4, modificar el inventario de una cuenta — SA-10, implementado, aditivo)
+
+    - **`POST /api/v1/admin/usuarios/{usuarioId}/inventario/entregas`.** La
+      accion «ver y modificar inventario del usuario» de §7.3.4: entregar
+      unidades de un producto del catalogo al inventario de una cuenta (una
+      compensacion, un error de soporte). Administrador o Super
+      Administrador (`GESTIONAR_CUENTAS`), nunca sobre una cuenta de rol
+      igual o superior (7.3.1, la regla de editar el perfil). ms-identidad
+      la pide a inventario (`POST /api/v1/inventario/entregas`, origen
+      `ADMINISTRACION`, inventario.yaml 1.8.0) con el token de quien actua
+      —inventario anota al administrador como quien la pidio— y la deja en
+      la bitacora central con el motivo y la IP (§7.3.5). Idempotente por
+      `Idempotency-Key`: repetir con la misma clave devuelve la entrega
+      original (200) sin duplicar elementos ni la entrada de auditoria (la
+      clave viaja como `referencia`, ms-cumplimiento-auditoria 1.3.0). Si la
+      bitacora no responde, 503 `auditoria-no-disponible`: la entrega ya se
+      hizo y repetir con la misma clave termina el registro. La cuenta
+      recibe un aviso la primera vez. Todos los rechazos en problem details.
+
     ### Cambios en 1.9.0 (§7.3.2 y Tabla 24, titulares para la consola de moderacion — SA-4, implementado, aditivo)
 
     - **`GET /api/v1/admin/titulares`.** Quien es cada cuenta, con lo
@@ -813,6 +832,108 @@ paths:
         '503':
           $ref: '#/components/responses/AuditoriaNoDisponible'
 
+  /api/v1/admin/usuarios/{usuarioId}/inventario/entregas:
+    post:
+      tags: [administracion]
+      operationId: entregarProductosAUnaCuenta
+      summary: Entrega unidades de un producto al inventario de una cuenta (7.3.4)
+      description: |
+        1.10.0 (SA-10). Exige `GESTIONAR_CUENTAS` (Administrador y Super
+        Administrador en la matriz de `rbac.yaml`) y que la cuenta tenga un
+        rol estrictamente inferior al de quien actua, o que un Super
+        Administrador actue sobre otro (403 `jerarquia-insuficiente`).
+
+        Orden: primero inventario (idempotente por clave), despues la
+        bitacora central (fail-closed). Un producto inexistente es 422 y uno
+        suspendido 409, con el detalle de inventario; si inventario no
+        responde, 503 `inventario-no-disponible` y no se entrego nada.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/UsuarioId'
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: |
+            La clave de la operacion, de 8 a 64 caracteres sin espacios
+            (`[A-Za-z0-9._:-]`). El panel la genera al abrir el formulario y
+            la repite si tiene que reintentar.
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntregaAdministrativaRequest'
+      responses:
+        '201':
+          description: Entrega hecha por esta peticion y registrada en la auditoria.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntregaAdministrativa'
+        '200':
+          description: |
+            La misma clave ya se proceso: la entrega original, sin duplicar
+            nada (`nueva` falso).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntregaAdministrativa'
+        '400':
+          description: |
+            Sin clave o con una clave fuera de formato, o cuerpo invalido
+            (producto vacio, cantidad fuera de 1..20, motivo de menos de 3 o
+            mas de 500 caracteres). `type` `.../errors/datos-invalidos`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          $ref: '#/components/responses/ProhibidoOJerarquia'
+        '404':
+          description: No existe la cuenta. `type` `.../errors/cuenta-no-encontrada`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: |
+            Inventario no lo acepto: el producto esta suspendido o la clave ya
+            se uso con otra entrega (`type` `.../errors/entrega-rechazada`); o
+            la cuenta es anterior al `uid` y no tiene inventario (`type`
+            `.../errors/cuenta-sin-inventario`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: |
+            El producto no existe en el catalogo o no es de un tipo que el
+            inventario guarde. `type` `.../errors/entrega-rechazada`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: |
+            Inventario no respondio (`type` `.../errors/inventario-no-disponible`,
+            no se entrego nada) o la bitacora no respondio despues de entregar
+            (`type` `.../errors/auditoria-no-disponible`): repetir con la misma
+            clave no duplica la entrega y completa el registro.
+          headers:
+            Retry-After:
+              description: Segundos sugeridos antes de reintentar (30).
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
   /api/v1/admin/cuentas:
     post:
       tags: [administracion]
@@ -1305,6 +1426,64 @@ components:
             $ref: '#/components/schemas/ProblemDetail'
 
   schemas:
+    EntregaAdministrativaRequest:
+      type: object
+      description: 1.10.0 — que producto, cuantas unidades y por que (queda en la auditoria).
+      required: [productoId, cantidad, motivo]
+      properties:
+        productoId:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Identificador del producto en el catalogo (productos.yaml).
+        cantidad:
+          type: integer
+          minimum: 1
+          maximum: 20
+        motivo:
+          type: string
+          minLength: 3
+          maxLength: 500
+
+    ElementoEntregado:
+      type: object
+      description: Lo que ms-identidad devuelve de cada `ElementoInventario` entregado.
+      properties:
+        id:
+          type: string
+        productoId:
+          type: string
+        tipo:
+          type: string
+        nombrePropio:
+          type: string
+
+    EntregaAdministrativa:
+      type: object
+      description: 1.10.0 — la entrega de inventario, con sus elementos y si la hizo esta peticion.
+      required: [entregaId, uid, productoId, cantidad, elementos, nueva]
+      properties:
+        entregaId:
+          type: string
+        uid:
+          type: string
+          format: uuid
+        productoId:
+          type: string
+        cantidad:
+          type: integer
+          description: Unidades entregadas (elementos creados).
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ElementoEntregado'
+        entregadaEn:
+          type: [string, 'null']
+          format: date-time
+        nueva:
+          type: boolean
+          description: Falso cuando la clave ya se habia procesado (200).
+
     CausalDeSancion:
       type: string
       description: >-
