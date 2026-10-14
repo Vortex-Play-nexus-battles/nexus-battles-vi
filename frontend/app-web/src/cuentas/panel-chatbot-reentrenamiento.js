@@ -17,6 +17,10 @@
  *    sola en una fecha y hora, con la misma evaluación del paso 3. Si no la
  *    pasa, queda sin programar y aquí se avisa.
  *
+ * Desde 1.6.0, si otro administrador cambió las versiones a la vez (409
+ * `CAMBIO_CONCURRENTE`), no se cambió nada: se dice así y se muestra el
+ * estado actual.
+ *
  * @module cuentas/panel-chatbot-reentrenamiento
  */
 
@@ -35,7 +39,11 @@ import {
 import { fechaHora, numero, porcentaje } from '../comun/ui/formato.js';
 import { encabezadoDeSeccion } from '../comun/ui/pagina.js';
 import { tarjetaDeCifra } from '../comun/ui/tarjeta.js';
-import { textoDeArchivo } from './panel-chatbot-base.js';
+import {
+  esCambioConcurrente,
+  TEXTO_CAMBIO_CONCURRENTE,
+  textoDeArchivo,
+} from './panel-chatbot-base.js';
 import { textoDeErrorDelPanel } from './panel-chatbot-analiticas.js';
 
 /** Texto del «tema esperado» cuando el caso pide escalar. */
@@ -428,6 +436,10 @@ export function montarReentrenamiento(
         );
       } catch (error) {
         conCarga(desplegar, false);
+        if (esCambioConcurrente(error)) {
+          await recargarYAvisar(TEXTO_CAMBIO_CONCURRENTE);
+          return;
+        }
         if (error?.estado === 409 && error.problema?.candidata) {
           // Rinde peor: el cuerpo trae los dos resultados y los casos fallidos.
           vaciar(resultado).append(
@@ -546,6 +558,9 @@ export function montarReentrenamiento(
   }
 
   function textoDeFalloDeEvaluacion(error) {
+    if (esCambioConcurrente(error)) {
+      return TEXTO_CAMBIO_CONCURRENTE;
+    }
     if (error?.estado === 409) {
       return 'No se pudo evaluar: se necesita una candidata y al menos un caso de evaluación activo.';
     }
@@ -577,10 +592,13 @@ export function montarReentrenamiento(
         const restaurada = await cliente.revertir();
         mensaje = `Se restauró la versión ${restaurada.numero}.`;
       } catch (error) {
-        mensaje =
-          error?.estado === 409
-            ? 'No hay una versión anterior a la cual revertir.'
-            : textoDeErrorDelPanel(error).titulo;
+        if (esCambioConcurrente(error)) {
+          mensaje = TEXTO_CAMBIO_CONCURRENTE;
+        } else if (error?.estado === 409) {
+          mensaje = 'No hay una versión anterior a la cual revertir.';
+        } else {
+          mensaje = textoDeErrorDelPanel(error).titulo;
+        }
       }
       await recargarYAvisar(mensaje);
     });

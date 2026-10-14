@@ -6,6 +6,7 @@
 import { jest } from '@jest/globals';
 
 import { ErrorDelChatbot } from '../comun/cliente-chatbot.js';
+import { TEXTO_CAMBIO_CONCURRENTE } from './panel-chatbot-base.js';
 import {
   DEBE_ESCALAR,
   editarCasoEnDialogo,
@@ -146,6 +147,26 @@ describe('con candidata', () => {
     expect(vista.raiz.querySelector('[data-zona="fallos"]').textContent).toContain('como pujo');
   });
 
+  // ms-chatbot.yaml 1.6.0: otro administrador cambió las versiones a la vez.
+  test('si otro despliegue o una reversión ganó la carrera (409 CAMBIO_CONCURRENTE), lo dice y recarga', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({
+        desplegarCandidata: jest.fn(async () => {
+          throw new ErrorDelChatbot(
+            { title: 'Cambio simultaneo', motivo: 'CAMBIO_CONCURRENTE' },
+            409,
+          );
+        }),
+      }),
+    });
+    vista.raiz.querySelector('[data-accion="desplegar"]').click();
+    await esperar(6);
+
+    expect(nota(vista.raiz)).toBe(TEXTO_CAMBIO_CONCURRENTE);
+    expect(vista.cliente.listarVersiones).toHaveBeenCalledTimes(2);
+    expect(vista.raiz.querySelector('[data-zona="fallos"]')).toBeNull();
+  });
+
   test('sin casos activos (409 sin resultados) lo explica', async () => {
     const vista = await montar({
       cliente: clienteFalso({
@@ -275,6 +296,38 @@ describe('revertir', () => {
 
     expect(vista.cliente.revertir).toHaveBeenCalled();
     expect(nota(vista.raiz)).toBe('Se restauró la versión 1.');
+  });
+
+  // 1.6.0: un 409 por cambio simultáneo no es «no hay versión anterior».
+  test('si un despliegue cambió producción a la vez, no dice que falte la versión anterior', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({
+        revertir: jest.fn(async () => {
+          throw new ErrorDelChatbot(
+            { title: 'Cambio simultaneo', motivo: 'CAMBIO_CONCURRENTE' },
+            409,
+          );
+        }),
+      }),
+    });
+    vista.raiz.querySelector('[data-accion="revertir"]').click();
+    await esperar(6);
+
+    expect(nota(vista.raiz)).toBe(TEXTO_CAMBIO_CONCURRENTE);
+  });
+
+  test('sin versión anterior (409 sin motivo) lo dice', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({
+        revertir: jest.fn(async () => {
+          throw new ErrorDelChatbot({ title: 'Conflict' }, 409);
+        }),
+      }),
+    });
+    vista.raiz.querySelector('[data-accion="revertir"]').click();
+    await esperar(6);
+
+    expect(nota(vista.raiz)).toBe('No hay una versión anterior a la cual revertir.');
   });
 
   test('sin versiones retiradas el botón está deshabilitado', async () => {
