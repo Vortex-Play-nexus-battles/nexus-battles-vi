@@ -90,7 +90,13 @@ test.describe('Recorrido del Super Administrador (SA-9)', () => {
     await expect(page).toHaveURL(
       new RegExp(`/consola/usuarios/ficha\\?usuario=${superAdmin.claims.uid}$`),
     );
-    await expect(page.locator('h1').first()).toHaveText('Ficha del usuario', { timeout: 20_000 });
+    // Mientras carga dice «Ficha del usuario»; con la cuenta, «Ficha de <apodo>».
+    await expect(page.locator('h1').first()).toHaveText(
+      new RegExp(
+        `^Ficha (?:del usuario|de ${superAdmin.apodo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})$`,
+      ),
+      { timeout: 20_000 },
+    );
   });
 
   test('4 · crea una cuenta de moderación desde la consola y queda en el directorio', async ({
