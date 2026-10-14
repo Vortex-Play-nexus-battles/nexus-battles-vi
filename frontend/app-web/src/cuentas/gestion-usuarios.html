@@ -17,10 +17,7 @@
         <div>
           <p class="t-etiqueta">Administración</p>
           <h1>Gestión de usuarios</h1>
-          <p class="t-meta">
-            Perfil, rol, estado de la cuenta y restablecimiento de contraseña. Cada acción exige el
-            permiso correspondiente; las que no tienes no aparecen habilitadas.
-          </p>
+          <p class="t-meta">Busca una cuenta y gestiona su perfil, su rol y su estado.</p>
         </div>
         <div class="encabezado-pagina__acciones">
           <!-- SA-3 — §7.3.2: solo el Super Administrador crea cuentas de
@@ -148,7 +145,7 @@
             <div class="encabezado-seccion">
               <div>
                 <h2 class="tarjeta__titulo">Rol del usuario</h2>
-                <p class="t-meta">Asigna uno de los roles válidos del sistema.</p>
+                <p class="t-meta">Al cambiarlo, sus sesiones abiertas se cierran.</p>
               </div>
             </div>
 
@@ -181,7 +178,7 @@
             <div class="encabezado-seccion">
               <div>
                 <h2 class="tarjeta__titulo">Perfil</h2>
-                <p class="t-meta">Modifica la información básica del usuario.</p>
+                <p class="t-meta">Nombre, apellidos, apodo y preferencias de la cuenta.</p>
               </div>
             </div>
 
@@ -361,28 +358,6 @@
               >
                 Restablecer verificación en dos pasos
               </button>
-            </div>
-          </section>
-
-          <!-- UXC-9 — §7.3.4 pide una ficha con actividad, transacciones,
-               comentarios, reportes e inventario. La administración de
-               cuentas (`UsuarioAdministrado`) no los publica: se dice, y se
-               dice dónde está lo que sí existe. -->
-          <section class="tarjeta pila pila--compacta" data-zona="ficha-pendiente">
-            <div class="encabezado-seccion">
-              <div>
-                <h2 class="tarjeta__titulo">Lo que esta ficha aún no muestra</h2>
-                <p class="t-meta">
-                  Actividad, transacciones, comentarios, reportes e inventario de la cuenta: la
-                  administración de cuentas todavía no los publica. La última entrada de cada cuenta
-                  está en el directorio de Control integral, y desde allí se abren sus sanciones.
-                </p>
-              </div>
-            </div>
-            <div class="tarjeta__acciones">
-              <a class="boton boton--secundario" href="../plataforma/consola/control-integral.html">
-                Ir a Control integral
-              </a>
             </div>
           </section>
         </div>
