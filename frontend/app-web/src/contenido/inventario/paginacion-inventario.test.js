@@ -145,6 +145,49 @@ describe('Paginacion integrada en la vista de inventario', () => {
     expect(pedidas.filter((p) => p.categoria === 'HEROES').map((p) => p.numero)).toContain(1);
   });
 
+  test('«Mis héroes»: una página que llega tarde no tapa a la que se pidió después', async () => {
+    const { consultar } = servidor({ objetos: 0, heroes: 40 });
+    // El equipo de los héroes de la página 2 (h16…h31) tarda hasta que la
+    // prueba lo suelte; los demás llegan al momento.
+    let soltar;
+    const retenido = new Promise((resolver) => {
+      soltar = resolver;
+    });
+    const consultarEquipo = async (_id, heroeId) => {
+      const n = Number(heroeId.slice(1));
+      if (n >= 16 && n < 32) {
+        await retenido;
+      }
+      return { armas: [], armaduras: {}, items: [] };
+    };
+    await montarInventario(raiz, 'jugador-A', 0, { ...SIN_ESCRITURA, consultar, consultarEquipo });
+    const zona = raiz.querySelector('.inventario__paginacion--heroes');
+    const casilla = (texto) =>
+      [...zona.querySelectorAll('.paginacion__pagina:not([data-direccion])')].find(
+        (c) => c.textContent === texto,
+      );
+    const esperarVuelta = async () => {
+      for (let i = 0; i < 6; i += 1) {
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    };
+
+    casilla('2').click();
+    await esperarVuelta();
+    casilla('3').click();
+    await esperarVuelta();
+    expect(raiz.querySelectorAll('.inventario-heroes .hero-card')).toHaveLength(8);
+
+    soltar();
+    await esperarVuelta();
+
+    // Sigue la 3: sus ocho cartas y su casilla marcada.
+    const cartas = [...raiz.querySelectorAll('.inventario-heroes [data-heroe]')];
+    expect(cartas).toHaveLength(8);
+    expect(cartas[0].textContent).toContain('Heroe 32');
+    expect(zona.querySelector('[aria-current="page"]').textContent).toBe('3');
+  });
+
   test('compatibilidad: si el servidor ignora la categoría se reúne y se pagina aquí', async () => {
     const pedidas = [];
     const conHeroe = (numero) => {

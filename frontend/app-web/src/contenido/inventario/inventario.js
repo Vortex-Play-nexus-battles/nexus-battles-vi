@@ -33,7 +33,12 @@ import { acusar } from '../../comun/ui/acuse.js';
 import { confirmar as confirmarEnDialogo } from '../../comun/ui/dialogo.js';
 import { montarPestanas } from '../../comun/ui/pestanas.js';
 import { consultarProducto as consultarProductoDelCatalogo } from './cliente-productos.js';
-import { estadoDeHeroe, estadoDeObjeto, selloDeEstado } from '../../comun/ui/juego/estado-heroe.js';
+import {
+  ESTADOS,
+  estadoDeHeroe,
+  estadoDeObjeto,
+  selloDeEstado,
+} from '../../comun/ui/juego/estado-heroe.js';
 import { reunirInventario, esHeroe, paginaLocal, mapaDeEquipados } from './coleccion-inventario.js';
 import { pintarHeroes } from './heroes-inventario.js';
 import { pintarHeroesDelNexo } from './heroes-del-nexo.js';
@@ -67,6 +72,9 @@ const COMPLEMENTOS_DE_LA_FICHA = [complementoDeOpiniones()];
  * pulsarlas las muestran (ver `comun/paginacion.js`).
  */
 const PAGINACION_DE_7_1 = Object.freeze({ unaPagina: 'visible', flechas: 'revelan-ocultas' });
+
+/** inventario.yaml 1.7.0 — largo máximo del nombre propio (crear y renombrar). */
+const MAXIMO_NOMBRE_PROPIO = 60;
 
 /**
  * Tras repintar un control de paginación, el foco vuelve a donde estaba: a la
@@ -312,6 +320,8 @@ function construirGestion() {
     tipo.control.appendChild(opcion);
   }
   const nombre = campoFormulario('Nombre', 'nombrePropio');
+  // inventario.yaml 1.7.0: el nombre propio tiene como mucho 60 caracteres.
+  nombre.control.maxLength = MAXIMO_NOMBRE_PROPIO;
   const parte = campoFormulario('Parte de armadura', 'parteArmadura', 'select');
   for (const [valor, etiqueta] of PARTES_ARMADURA) {
     const opcion = document.createElement('option');
@@ -619,6 +629,16 @@ export async function montarInventario(
 
   /** Sello de estado de cada tarjeta de la vitrina de objetos. */
   function estadoDeTarjeta(elemento) {
+    if (esHeroe(elemento) && !equipos.has(elemento.id)) {
+      // Revisión final (13-oct): un héroe de otra página de «Mis héroes» (en
+      // una búsqueda, o en su ficha) no tiene su equipo leído. Sin él no se
+      // sabe si puede combatir, así que solo se dice lo que trae el propio
+      // elemento (en misión, en subasta); «Disponible» sería afirmar de más.
+      const propio = estadoDeHeroe({ elemento, equipamiento: undefined });
+      return propio.estado === ESTADOS.DISPONIBLE
+        ? null
+        : selloDeEstado(propio.estado, { detalle: propio.detalle });
+    }
     const estado = esHeroe(elemento)
       ? estadoDeHeroe({ elemento, equipamiento: equipos.get(elemento.id) })
       : estadoDeObjeto({
@@ -811,6 +831,7 @@ export async function montarInventario(
       alVerFicha: (heroe, contexto) => alVerFichaDeHeroe(heroe, contexto),
       alEquipar: (heroe) => abrirEquipamiento(heroe),
       consultarNiveles: () => consultarTablaDeNiveles(),
+      sigueVigente: () => miTurno === turnoHeroes,
     });
     if (miTurno !== turnoHeroes) {
       return true;
@@ -833,6 +854,9 @@ export async function montarInventario(
       await asegurarHeroes();
     } catch (fallo) {
       console.warn('No se pudo reunir la lista de tus héroes', fallo);
+    }
+    if (miTurno !== turnoHeroes) {
+      return true;
     }
     pintarNexo();
     pintarSelectorDeHeroe();
@@ -1220,17 +1244,26 @@ export async function montarInventario(
     vista.equipoTitulo.textContent = `Equipamiento de ${heroe.nombrePropio}`;
     mostrarMensaje('Cargando equipamiento...');
     const panelDelEquipo = vista.equipo;
+    // Revisión final (13-oct): si mientras esto llega se elige otro héroe, la
+    // respuesta de este se descarta (el panel ya dice «Equipamiento de» otro).
+    const sigueElegido = () => heroeSeleccionado === heroe;
     try {
       // Los candidatos: todos los objetos del jugador (una vez por recarga).
       await asegurarObjetos();
-      equipoActual = await consultarEquipo(identidad, heroe.id);
+      const equipo = await consultarEquipo(identidad, heroe.id);
+      if (!sigueElegido()) {
+        return;
+      }
+      equipoActual = equipo;
       panelDelEquipo.hidden = false;
       pintarEquipo();
       pintarHeroeDelEquipo(heroe);
       mostrarMensaje('');
     } catch (fallo) {
       console.error('No se pudo consultar el equipamiento', fallo);
-      mostrarMensaje('No pudimos cargar el equipamiento. Inténtalo de nuevo.', true);
+      if (sigueElegido()) {
+        mostrarMensaje('No pudimos cargar el equipamiento. Inténtalo de nuevo.', true);
+      }
     }
   }
 

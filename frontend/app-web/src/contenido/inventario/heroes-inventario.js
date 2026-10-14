@@ -43,6 +43,9 @@ const MOTIVO_SIN_EQUIPAR = Object.freeze({
  * @param {() => Promise<Array<{nivel: number, experienciaParaSubir?: number}>>} [opciones.consultarNiveles]
  *   UXC-9 — la tabla de progresión, para decir cuánto falta al siguiente nivel
  * @param {string} [opciones.hrefTienda]
+ * @param {() => boolean} [opciones.sigueVigente] revisión final (13-oct): si al
+ *   terminar de consultar ya se pidió otra página, no se pinta nada (una
+ *   respuesta tardía no tapa a la página que el control dice que se ve).
  * @returns {Promise<{equipos: Map<string, object|undefined>, prototipos: Map<string, string|null>}>}
  */
 export async function pintarHeroes(
@@ -57,6 +60,7 @@ export async function pintarHeroes(
     alEquipar,
     consultarNiveles = null,
     hrefTienda = '../../cuentas/tienda.html',
+    sigueVigente = () => true,
   },
 ) {
   const equipos = new Map();
@@ -150,6 +154,9 @@ export async function pintarHeroes(
     rejilla.append(h('li', { clase: 'hero-grid__celda', hijos: [carta] }));
   }
 
+  if (!sigueVigente()) {
+    return { equipos, prototipos };
+  }
   vaciar(contenedor);
   contenedor.append(rejilla);
   return { equipos, prototipos };

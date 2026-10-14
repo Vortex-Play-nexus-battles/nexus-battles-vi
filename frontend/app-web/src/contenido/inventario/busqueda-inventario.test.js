@@ -187,3 +187,30 @@ describe('enlace directo a una búsqueda (inventario.html?busqueda=…)', () => 
     expect(raiz.querySelector('.inventario__mensaje').textContent).toBe('');
   });
 });
+
+test('un héroe de otra página en los resultados no se da por «Disponible» sin conocer su equipo', async () => {
+  const otroHeroe = {
+    id: 'heroe-lejano',
+    productoId: 'p-heroe',
+    tipo: 'HEROE',
+    nombrePropio: 'Heroe Lejano',
+  };
+  await montarInventario(raiz, 'jugador-A', 0, {
+    consultar: async () => pagina([elemento('Espada de Bruma')]),
+    buscar: async () => pagina([otroHeroe]),
+    consultarEquipo: async () => ({ armas: [], armaduras: {}, items: [] }),
+  });
+
+  raiz.querySelector('[name="criterio"]').value = 'lejano';
+  enviar(raiz.querySelector('.inventario-busqueda'));
+  await esperarHasta(() => raiz.querySelector('.vitrina__nombre')?.textContent.includes('Lejano'));
+
+  const tarjeta = raiz.querySelector('.vitrina__producto');
+  expect(tarjeta.querySelector('[data-estado="DISPONIBLE"]')).toBeNull();
+});
+
+test('el nombre propio admite como mucho 60 caracteres (inventario.yaml 1.7.0)', async () => {
+  await montarInventario(raiz, 'jugador-A', 0, { consultar: async () => pagina() });
+
+  expect(raiz.querySelector('[name="nombrePropio"]').maxLength).toBe(60);
+});

@@ -470,6 +470,47 @@ test('un objeto que lleva OTRO héroe se ofrece apagado y dice quién lo lleva (
   expect(equipar).not.toHaveBeenCalled();
 });
 
+test('si se elige otro héroe mientras llega el equipo del primero, se queda el del segundo', async () => {
+  const dosHeroes = [
+    elementos[0],
+    { id: 'heroe-2', productoId: 'p-heroe', tipo: 'HEROE', nombrePropio: 'Bruno' },
+    ...elementos.slice(1),
+  ];
+  let retener = false;
+  let soltar;
+  const retenido = new Promise((resolver) => {
+    soltar = resolver;
+  });
+  const consultarEquipo = async (_identidad, heroeId) => {
+    if (heroeId === 'heroe-1' && retener) {
+      await retenido;
+      return { ...vacio(), heroeId: 'heroe-1', armas: ['arma-1'] };
+    }
+    return { ...vacio(), heroeId };
+  };
+  await montarInventario(raiz, 'jugador-A', 0, {
+    consultar: async () => ({ ...pagina(), elementos: dosHeroes, totalElementos: 4 }),
+    consultarEquipo,
+  });
+  await esperarHasta(() => raiz.querySelectorAll('[data-accion="equipar"]').length === 2);
+
+  retener = true;
+  const [deAyla, deBruno] = raiz.querySelectorAll('[data-accion="equipar"]');
+  deAyla.click();
+  deBruno.click();
+  await esperarHasta(() => !raiz.querySelector('.inventario-equipo').hidden);
+  soltar();
+  for (let i = 0; i < 5; i += 1) {
+    await new Promise((resolver) => setTimeout(resolver, 0));
+  }
+
+  expect(raiz.querySelector('.inventario-equipo__titulo').textContent).toBe(
+    'Equipamiento de Bruno',
+  );
+  // El equipo de Ayla (con la Espada) no tapó el de Bruno (vacío).
+  expect(ranuraPorEtiqueta(raiz, 'Espada')).toBeUndefined();
+});
+
 test('un heroe en mision (§7.8.10, inventario.yaml 1.6.0) se ve «En misión» y no deja cambiar su equipo', async () => {
   // Asi lo publica el inventario mientras misiones lo tiene bloqueado.
   const enMision = [
