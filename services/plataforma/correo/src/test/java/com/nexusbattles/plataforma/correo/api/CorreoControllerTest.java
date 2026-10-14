@@ -773,6 +773,22 @@ class CorreoControllerTest {
     }
 
     @Test
+    void laCausalYLaPoliticaLleganAlCorreoSiVienen() throws Exception {
+        // 1.6.0 (SA-4): 7.3.7 «referencias a las politicas violadas».
+        mockMvc.perform(comoServicio(SANCION).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero","tipo":"ADVERTENCIA",
+                 "motivo":"Insulto en el chat de la sala",
+                 "causal":"Uso de lenguaje ofensivo o abusivo en comentarios o chat",
+                 "politica":"  Normas de convivencia 2.1  "}
+                """))
+                .andExpect(status().isAccepted());
+
+        assertThat(encolado().datos())
+                .containsEntry("causal", "Uso de lenguaje ofensivo o abusivo en comentarios o chat")
+                .containsEntry("politica", "Normas de convivencia 2.1");
+    }
+
+    @Test
     void laResolucionDeUnaApelacionLlevaSuResultado() throws Exception {
         mockMvc.perform(comoServicio(SANCION).contentType(MediaType.APPLICATION_JSON).content("""
                 {"email":"jugador@ejemplo.com","apodo":"ElGuerrero","tipo":"APELACION_RESUELTA",

@@ -65,6 +65,23 @@ public class SeguridadConfig {
                                 .authenticated()
                                 .requestMatchers(HttpMethod.PATCH, "/api/v1/productos/{id}")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/productos/{id}/historial")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(
+                                        HttpMethod.POST,
+                                        "/api/v1/productos/{id}/reversiones")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/productos/{id}/diseno/versiones",
+                                        "/api/v1/productos/{id}/diseno/plantilla")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(
+                                        HttpMethod.POST,
+                                        "/api/v1/productos/{id}/diseno/importaciones")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 // B4 (contrato 1.4.0): suspender y reactivar son de la
                                 // administracion del catalogo (seccion 7.2.1).
                                 .requestMatchers(

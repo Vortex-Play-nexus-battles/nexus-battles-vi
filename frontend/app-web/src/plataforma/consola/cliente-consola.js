@@ -109,7 +109,8 @@ export async function consultar(recurso, { senal, buscar = fetchWithHttpErrorInt
 }
 
 /**
- * Un archivo de la API (HU-USR-008: la exportación del directorio en CSV).
+ * Un archivo de la API (HU-USR-008: la exportación del directorio en CSV; SA-5:
+ * la del registro de auditoría en CSV o PDF).
  *
  * Como {@link consultar}, **nunca lanza**: devuelve el contenido y el nombre
  * que da el servidor (`Content-Disposition`), o el desenlace y el motivo por
@@ -117,16 +118,24 @@ export async function consultar(recurso, { senal, buscar = fetchWithHttpErrorInt
  * el `detail`, y es lo que se enseña.
  *
  * @param {string} recurso por ejemplo `/admin/jugadores/exportacion?rol=JUGADOR`
- * @param {{senal?: AbortSignal, buscar?: typeof fetchWithHttpErrorInterceptor}} [opciones]
+ * @param {{senal?: AbortSignal, buscar?: typeof fetchWithHttpErrorInterceptor,
+ *   acepta?: string}} [opciones] `acepta`: el `Accept` (por omisión, CSV)
  * @returns {Promise<{resultado: string, contenido: Blob|null, nombreArchivo: string|null,
  *   estado: number|null, motivo: string, recurso: string}>}
  */
-export async function descargar(recurso, { senal, buscar = fetchWithHttpErrorInterceptor } = {}) {
+export async function descargar(
+  recurso,
+  {
+    senal,
+    buscar = fetchWithHttpErrorInterceptor,
+    acepta = 'text/csv, application/problem+json',
+  } = {},
+) {
   let respuesta;
   try {
     respuesta = await buscar(rutaDeApi(recurso), {
       method: 'GET',
-      headers: { Accept: 'text/csv, application/problem+json' },
+      headers: { Accept: acepta },
       signal: senal,
     });
   } catch {

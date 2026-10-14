@@ -22,7 +22,9 @@ public class SancionRechazada extends RuntimeException {
         /** La cuenta afectada tiene un rol igual o superior al de quien actua (7.3.1). */
         JERARQUIA_INSUFICIENTE,
         /** ms-identidad no dijo el rol de la cuenta: sin saberlo no se sanciona (fail-closed). */
-        IDENTIDAD_NO_DISPONIBLE
+        IDENTIDAD_NO_DISPONIBLE,
+        /** SA-4 (§7.3.2): un baneo no se levanta; solo lo revierte una apelacion favorable. */
+        BANEO_SOLO_POR_APELACION
     }
 
     private final Motivo motivo;

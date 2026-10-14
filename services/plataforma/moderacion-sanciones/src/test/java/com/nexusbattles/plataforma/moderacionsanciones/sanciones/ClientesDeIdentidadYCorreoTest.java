@@ -159,10 +159,26 @@ class ClientesDeIdentidadYCorreoTest {
                     .andExpect(jsonPath("$.apelableHasta").value("2026-09-27T10:00:00Z"))
                     .andExpect(jsonPath("$.hasta").doesNotExist())
                     .andExpect(jsonPath("$.resultadoApelacion").doesNotExist())
+                    .andExpect(jsonPath("$.causal").doesNotExist())
+                    .andExpect(jsonPath("$.politica").doesNotExist())
                     .andRespond(withStatus(HttpStatus.ACCEPTED));
 
             cliente.enviar("sancion-" + SANCION + "-emision",
                     new ClienteCorreo.CorreoSancion("lyra@nexus.test", "Lyra", "BANEO", "Fraude", null, HASTA, null));
+            servidor.verify();
+        }
+
+        @Test
+        @DisplayName("1.6.0: la causal y la politica viajan cuando la sancion las tiene")
+        void conCausalYPolitica() {
+            servidor.expect(requestTo("http://srv-correo:8082/api/v1/correos/sancion"))
+                    .andExpect(jsonPath("$.causal").value("Acoso a otros jugadores"))
+                    .andExpect(jsonPath("$.politica").value("Normas de convivencia"))
+                    .andRespond(withStatus(HttpStatus.ACCEPTED));
+
+            cliente.enviar("sancion-" + SANCION + "-emision",
+                    new ClienteCorreo.CorreoSancion("lyra@nexus.test", "Lyra", "SUSPENSION", "Insultos", HASTA, HASTA,
+                            null, "Acoso a otros jugadores", "Normas de convivencia"));
             servidor.verify();
         }
     }

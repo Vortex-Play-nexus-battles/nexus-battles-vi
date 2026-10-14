@@ -99,7 +99,22 @@ class AdminGestionUsuarioControllerTest {
         ResponseEntity<?> response = controller.suspender(1L, datos, request);
 
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
-        verify(adminGestionUsuarioService).suspenderCuenta(1L, fecha, "Spam", TOKEN, "admin", "ADMINISTRADOR", IP_ORIGEN);
+        verify(adminGestionUsuarioService).suspenderCuenta(1L, fecha, "Spam", null, null, TOKEN, "admin",
+            "ADMINISTRADOR", IP_ORIGEN);
+    }
+
+    @Test
+    void suspenderPasaLaCausalYLaPolitica() {
+        SuspenderCuentaRequest datos = new SuspenderCuentaRequest();
+        LocalDateTime fecha = LocalDateTime.of(2026, 10, 10, 12, 0);
+        datos.setSuspendidoHasta(fecha);
+        datos.setMotivo("Insultos");
+        datos.setCausal("ACOSO");
+        datos.setPolitica("Normas de convivencia");
+
+        assertEquals(HttpStatus.NO_CONTENT, controller.suspender(1L, datos, request).getStatusCode());
+        verify(adminGestionUsuarioService).suspenderCuenta(1L, fecha, "Insultos", "ACOSO", "Normas de convivencia",
+            TOKEN, "admin", "ADMINISTRADOR", IP_ORIGEN);
     }
 
     @Test
@@ -108,7 +123,8 @@ class AdminGestionUsuarioControllerTest {
         doThrow(new IllegalArgumentException("Fecha inválida"))
             .doThrow(new IllegalStateException("Usuario no encontrado"))
             .doThrow(new SancionRechazadaException(409, "El usuario ya está baneado."))
-            .when(adminGestionUsuarioService).suspenderCuenta(1L, null, null, TOKEN, "admin", "ADMINISTRADOR", IP_ORIGEN);
+            .when(adminGestionUsuarioService).suspenderCuenta(1L, null, null, null, null, TOKEN, "admin",
+                "ADMINISTRADOR", IP_ORIGEN);
 
         assertEquals(HttpStatus.BAD_REQUEST, controller.suspender(1L, datos, request).getStatusCode());
         assertEquals(HttpStatus.NOT_FOUND, controller.suspender(1L, datos, request).getStatusCode());
@@ -120,10 +136,16 @@ class AdminGestionUsuarioControllerTest {
     @Test
     void debeBanearCuentaConOSinMotivo() {
         assertEquals(HttpStatus.NO_CONTENT, controller.banear(1L, null, request).getStatusCode());
-        verify(adminGestionUsuarioService).banearCuenta(1L, null, TOKEN, "admin", "ADMINISTRADOR", IP_ORIGEN);
+        verify(adminGestionUsuarioService).banearCuenta(1L, null, null, null, TOKEN, "admin", "ADMINISTRADOR",
+            IP_ORIGEN);
 
         controller.banear(1L, new BanearCuentaRequest("Fraude en subastas"), request);
-        verify(adminGestionUsuarioService).banearCuenta(1L, "Fraude en subastas", TOKEN, "admin", "ADMINISTRADOR", IP_ORIGEN);
+        verify(adminGestionUsuarioService).banearCuenta(1L, "Fraude en subastas", null, null, TOKEN, "admin",
+            "ADMINISTRADOR", IP_ORIGEN);
+
+        controller.banear(1L, new BanearCuentaRequest("Duplico creditos", "FRAUDE", "Juego limpio"), request);
+        verify(adminGestionUsuarioService).banearCuenta(1L, "Duplico creditos", "FRAUDE", "Juego limpio", TOKEN,
+            "admin", "ADMINISTRADOR", IP_ORIGEN);
     }
 
     @Test
@@ -133,7 +155,8 @@ class AdminGestionUsuarioControllerTest {
             .doThrow(new SancionRechazadaException(403, "Un moderador no puede banear."))
             .doThrow(new SancionRechazadaException(404, "No existe."))
             .doThrow(new SancionRechazadaException(422, "Otra cosa."))
-            .when(adminGestionUsuarioService).banearCuenta(1L, null, TOKEN, "admin", "ADMINISTRADOR", IP_ORIGEN);
+            .when(adminGestionUsuarioService).banearCuenta(1L, null, null, null, TOKEN, "admin", "ADMINISTRADOR",
+                IP_ORIGEN);
 
         assertEquals(HttpStatus.BAD_REQUEST, controller.banear(1L, null, request).getStatusCode());
         assertEquals(HttpStatus.NOT_FOUND, controller.banear(1L, null, request).getStatusCode());

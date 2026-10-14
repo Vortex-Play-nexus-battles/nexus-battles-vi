@@ -14,6 +14,8 @@
  *     se modifica. El servidor valida el resultado fusionado: su motivo se
  *     enseña tal cual si lo rechaza.
  *   - `PUT /api/v1/productos/{id}/suspender|reactivar` — con confirmación.
+ *   - `GET  /api/v1/productos/{id}/historial` y `POST /reversiones` — historial
+ *     inmutable y restauración confirmada (HU-PRD-007).
  *
  * Aquí no se decide nada del catálogo: la validación de cada campo es la
  * misma del alta (`solicitud-producto.js`) y la última palabra es del servidor.
@@ -35,7 +37,16 @@ import {
   estadoVacio,
   pintarEstado,
 } from '../../comun/ui/estado-vista.js';
-import { cambiarDisponibilidad, listarProductos, modificarProducto } from './cliente-productos.js';
+import {
+  cambiarDisponibilidad,
+  consultarHistorialProducto,
+  consultarVersionesDiseno,
+  exportarPlantillaDiseno,
+  importarPlantillaDiseno,
+  listarProductos,
+  modificarProducto,
+  revertirProducto,
+} from './cliente-productos.js';
 import {
   CAMPOS_DE_PROMOCION,
   LIMITES_DE_PROMOCION,
@@ -512,6 +523,14 @@ export function abrirHojaDeProducto(
     clase: 'hoja-producto__disponibilidad',
     atributos: { 'aria-label': 'Disponibilidad' },
   });
+  const historial = h('section', {
+    clase: 'hoja-producto__historial',
+    atributos: { 'aria-labelledby': 'historial-producto-titulo' },
+  });
+  const diseno = h('section', {
+    clase: 'hoja-producto__diseno',
+    atributos: { 'aria-labelledby': 'versiones-diseno-titulo' },
+  });
 
   function pintarResumen() {
     const promocion = textoDePromocion(actual.promocion);
@@ -606,6 +625,251 @@ export function abrirHojaDeProducto(
     alCambiar(actual);
   }
 
+  async function cargarHistorial() {
+    historial.replaceChildren(
+      h('h3', { texto: 'Historial y reversión', atributos: { id: 'historial-producto-titulo' } }),
+      h('p', { clase: 't-meta', texto: 'Consultando los cambios registrados…' }),
+    );
+    try {
+      const cambios = await consultarHistorialProducto(actual.id, { fetchImpl });
+      const elementos = cambios.map((cambio) => {
+        const boton = h('button', {
+          clase: 'boton boton--secundario boton--pequeno',
+          texto: 'Revertir',
+          atributos: { type: 'button', disabled: !cambio.revertible },
+          datos: { accion: 'revertir-producto', respaldo: cambio.id },
+        });
+        boton.addEventListener('click', async () => {
+          const seguro = await confirmarAccion({
+            titulo: `¿Revertir «${actual.nombre}»?`,
+            mensaje: `El producto volverá a la versión ${cambio.versionAnterior}. La reversión también quedará en el historial.`,
+            textoConfirmar: 'Revertir',
+            peligro: true,
+          });
+          if (!seguro) {
+            return;
+          }
+          conCarga(boton, true, 'Revirtiendo…');
+          try {
+            const restaurado = await revertirProducto(actual.id, cambio.id, { fetchImpl });
+            aplicar(restaurado);
+            pintarAviso(zonaAviso, {
+              tono: 'exito',
+              titulo: 'Producto restaurado',
+              detalle: `El estado anterior quedó aplicado como versión ${restaurado.version}.`,
+            });
+            await cargarHistorial();
+          } catch (error) {
+            pintarAviso(zonaAviso, avisoDeFallo(error, 'revertir el producto'));
+            conCarga(boton, false);
+          }
+        });
+        return h('li', {
+          hijos: [
+            h('div', {
+              hijos: [
+                h('strong', {
+                  texto:
+                    {
+                      REVERSION: 'Reversión',
+                      CREACION: 'Creación',
+                      SUSPENSION: 'Suspensión',
+                      REACTIVACION: 'Reactivación',
+                      IMPORTACION_DISENO: 'Importación de diseño',
+                    }[cambio.tipo] ?? 'Modificación',
+                }),
+                h('p', {
+                  clase: 't-meta',
+                  texto: `${fechaHora(cambio.fecha)} · ${cambio.autor} · versión ${cambio.versionAnterior} → ${cambio.versionAplicada}`,
+                }),
+                h('p', {
+                  clase: 't-meta',
+                  texto: `Campos: ${cambio.campos?.join(', ') || 'estado del producto'}`,
+                }),
+              ],
+            }),
+            boton,
+          ],
+        });
+      });
+      historial.replaceChildren(
+        h('h3', { texto: 'Historial y reversión', atributos: { id: 'historial-producto-titulo' } }),
+        cambios.length
+          ? h('ul', { clase: 'hoja-producto__cambios', hijos: elementos })
+          : h('p', {
+              clase: 't-meta',
+              texto: 'Este producto todavía no tiene cambios registrados.',
+            }),
+      );
+    } catch (error) {
+      historial.replaceChildren(
+        h('h3', { texto: 'Historial y reversión', atributos: { id: 'historial-producto-titulo' } }),
+        h('p', { clase: 't-meta', texto: avisoDeFallo(error, 'consultar el historial').detalle }),
+        botonConsultarHistorial,
+      );
+    }
+  }
+
+  const botonConsultarHistorial = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: 'Ver historial',
+    atributos: { type: 'button' },
+    datos: { accion: 'consultar-historial' },
+  });
+  botonConsultarHistorial.addEventListener('click', () => void cargarHistorial());
+  historial.append(
+    h('h3', { texto: 'Historial y reversión', atributos: { id: 'historial-producto-titulo' } }),
+    h('p', {
+      clase: 't-meta',
+      texto: 'Consulta quién cambió el producto y restaura el último estado respaldado.',
+    }),
+    botonConsultarHistorial,
+  );
+
+  const listaVersionesDiseno = h('div', { datos: { zona: 'versiones-diseno' } });
+  const archivoPlantilla = h('input', {
+    atributos: { type: 'file', accept: 'application/json,.json', hidden: true },
+    datos: { accion: 'archivo-plantilla-diseno' },
+  });
+  const botonVersionesDiseno = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: 'Ver versiones',
+    atributos: { type: 'button' },
+    datos: { accion: 'consultar-versiones-diseno' },
+  });
+  const botonExportarDiseno = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: 'Exportar plantilla',
+    atributos: { type: 'button' },
+    datos: { accion: 'exportar-plantilla-diseno' },
+  });
+  const botonImportarDiseno = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: 'Importar plantilla',
+    atributos: { type: 'button' },
+    datos: { accion: 'importar-plantilla-diseno' },
+  });
+
+  async function cargarVersionesDiseno() {
+    conCarga(botonVersionesDiseno, true, 'Consultando…');
+    try {
+      const versiones = await consultarVersionesDiseno(actual.id, { fetchImpl });
+      listaVersionesDiseno.replaceChildren(
+        versiones.length
+          ? h('ol', {
+              clase: 'hoja-producto__versiones',
+              hijos: versiones.map((version) =>
+                h('li', {
+                  datos: { version: version.version },
+                  hijos: [
+                    h('strong', {
+                      texto: `Versión ${version.version}${version.actual ? ' · actual' : ''}`,
+                    }),
+                    h('span', {
+                      clase: 't-meta',
+                      texto: `${fechaHora(version.fecha)} · ${version.autor}`,
+                    }),
+                  ],
+                }),
+              ),
+            })
+          : h('p', { clase: 't-meta', texto: 'Todavía no hay versiones de diseño.' }),
+      );
+    } catch (error) {
+      listaVersionesDiseno.replaceChildren(
+        h('p', { clase: 't-meta', texto: avisoDeFallo(error, 'consultar las versiones').detalle }),
+      );
+    } finally {
+      conCarga(botonVersionesDiseno, false);
+    }
+  }
+
+  botonVersionesDiseno.addEventListener('click', () => void cargarVersionesDiseno());
+  botonExportarDiseno.addEventListener('click', async () => {
+    conCarga(botonExportarDiseno, true, 'Exportando…');
+    try {
+      const plantilla = await exportarPlantillaDiseno(actual.id, { fetchImpl });
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(plantilla, null, 2)], { type: 'application/json' }),
+      );
+      const enlace = h('a', {
+        atributos: {
+          href: url,
+          download: `diseno-${actual.id}-v${plantilla.versionProducto}.json`,
+        },
+      });
+      document.body.append(enlace);
+      enlace.click();
+      enlace.remove();
+      URL.revokeObjectURL(url);
+      pintarAviso(zonaAviso, {
+        tono: 'exito',
+        titulo: 'Plantilla exportada',
+        detalle: 'El archivo JSON conserva únicamente el diseño portable del producto.',
+      });
+    } catch (error) {
+      pintarAviso(zonaAviso, avisoDeFallo(error, 'exportar la plantilla'));
+    } finally {
+      conCarga(botonExportarDiseno, false);
+    }
+  });
+  botonImportarDiseno.addEventListener('click', () => archivoPlantilla.click());
+  archivoPlantilla.addEventListener('change', async () => {
+    const archivo = archivoPlantilla.files?.[0];
+    archivoPlantilla.value = '';
+    if (!archivo) {
+      return;
+    }
+    let plantilla;
+    try {
+      plantilla = JSON.parse(await archivo.text());
+    } catch {
+      pintarAviso(zonaAviso, {
+        tono: 'advertencia',
+        titulo: 'Plantilla inválida',
+        detalle: 'Selecciona un archivo JSON exportado por el catálogo.',
+      });
+      return;
+    }
+    const seguro = await confirmarAccion({
+      titulo: `¿Importar diseño en «${actual.nombre}»?`,
+      mensaje: 'Se reemplazarán la imagen y la descripción. Los demás datos no cambian.',
+      textoConfirmar: 'Importar',
+    });
+    if (!seguro) {
+      return;
+    }
+    conCarga(botonImportarDiseno, true, 'Importando…');
+    try {
+      const actualizado = await importarPlantillaDiseno(actual.id, plantilla, { fetchImpl });
+      aplicar(actualizado);
+      pintarAviso(zonaAviso, {
+        tono: 'exito',
+        titulo: 'Diseño importado',
+        detalle: `El cambio quedó registrado como versión ${actualizado.version}.`,
+      });
+      await cargarVersionesDiseno();
+    } catch (error) {
+      pintarAviso(zonaAviso, avisoDeFallo(error, 'importar la plantilla'));
+    } finally {
+      conCarga(botonImportarDiseno, false);
+    }
+  });
+
+  diseno.append(
+    h('h3', { texto: 'Versiones de diseño', atributos: { id: 'versiones-diseno-titulo' } }),
+    h('p', {
+      clase: 't-meta',
+      texto:
+        'Consulta quién cambió el diseño y reutiliza su imagen y descripción sin copiar precios ni reglas.',
+    }),
+    h('div', {
+      clase: 'hoja-producto__acciones-diseno',
+      hijos: [botonVersionesDiseno, botonExportarDiseno, botonImportarDiseno, archivoPlantilla],
+    }),
+    listaVersionesDiseno,
+  );
+
   const { formulario, marcarErrores } = formularioDeEdicion(actual);
   const guardar = h('button', {
     clase: 'boton boton--primario',
@@ -659,7 +923,7 @@ export function abrirHojaDeProducto(
   pintarDisponibilidad();
   const cuerpo = h('div', {
     clase: 'hoja-producto',
-    hijos: [resumen, zonaAviso, formulario, disponibilidad],
+    hijos: [resumen, zonaAviso, formulario, disponibilidad, historial, diseno],
   });
   const dialogo = abrirDialogo({ titulo: actual.nombre, cuerpo, cerrableFuera: false });
   dialogo.elemento.classList.add('dialogo--hoja');

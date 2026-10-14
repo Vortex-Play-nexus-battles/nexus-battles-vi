@@ -252,4 +252,71 @@ class ListaNegraAdminServiceTest {
             assertThat(pagina.getValue().getSort().getOrderFor("termino")).isNotNull();
         }
     }
+
+    @Nested
+    @DisplayName("SA-5 · bitacora central (§7.3.5)")
+    class BitacoraCentral {
+
+        private final com.nexusbattles.plataforma.moderacionsanciones.auditoria.BitacoraDeAuditoria bitacora =
+                org.mockito.Mockito.mock(com.nexusbattles.plataforma.moderacionsanciones.auditoria.BitacoraDeAuditoria.class);
+        private ListaNegraAdminService conBitacora;
+
+        @BeforeEach
+        void conBitacora() {
+            conBitacora = new ListaNegraAdminService(repositorio, catalogo, Clock.fixed(AHORA, ZoneOffset.UTC),
+                    bitacora);
+        }
+
+        @Test
+        @DisplayName("el alta queda como CREACION con el termino descrito; sin motivo, uno descriptivo")
+        void alta() {
+            conBitacora.agregar(new ListaNegraAdminService.DatosDeTermino("Troll", CategoriaDeTermino.OFENSIVO,
+                    ModoDeCoincidencia.PALABRA, true), "mod_ana");
+
+            verify(bitacora).registrar(com.nexusbattles.plataforma.moderacionsanciones.auditoria.TipoDeAccion.CREACION,
+                    "lista-negra:Troll", null, "«Troll» · Ofensivo · palabra completa · activo",
+                    "Alta en la lista negra");
+        }
+
+        @Test
+        @DisplayName("la edicion queda como ACTUALIZACION con como estaba, como quedo y el motivo de quien cambia")
+        void edicion() {
+            TerminoProhibido spider = existente("spiderman", CategoriaDeTermino.CELEBRIDAD, ModoDeCoincidencia.SUBCADENA);
+            org.mockito.Mockito.when(repositorio.findByNormalizado("spiderman"))
+                    .thenReturn(java.util.Optional.of(spider));
+
+            conBitacora.editar("spiderman", new ListaNegraAdminService.DatosDeTermino("spiderman", null, null, false,
+                    "  Da falsos positivos en el chat  "), "mod_ana");
+
+            verify(bitacora).registrar(
+                    com.nexusbattles.plataforma.moderacionsanciones.auditoria.TipoDeAccion.ACTUALIZACION,
+                    "lista-negra:spiderman", "«spiderman» · Celebridad · dentro de otras palabras · activo",
+                    "«spiderman» · Celebridad · dentro de otras palabras · apagado", "Da falsos positivos en el chat");
+        }
+
+        @Test
+        @DisplayName("la baja queda como ELIMINACION con lo que habia y el motivo")
+        void baja() {
+            TerminoProhibido troll = existente("troll", CategoriaDeTermino.OFENSIVO, ModoDeCoincidencia.PALABRA);
+            org.mockito.Mockito.when(repositorio.findByNormalizado("troll")).thenReturn(java.util.Optional.of(troll));
+
+            conBitacora.eliminar("troll", "mod_ana", "Repetido con otra forma");
+
+            verify(bitacora).registrar(
+                    com.nexusbattles.plataforma.moderacionsanciones.auditoria.TipoDeAccion.ELIMINACION,
+                    "lista-negra:troll", "«troll» · Ofensivo · palabra completa · activo", null,
+                    "Repetido con otra forma");
+        }
+
+        @Test
+        @DisplayName("un motivo de mas de 500 caracteres es 400 y no cambia nada")
+        void motivoLargo() {
+            assertThatThrownBy(() -> conBitacora.eliminar("troll", "mod_ana", "x".repeat(501)))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("500");
+
+            org.mockito.Mockito.verify(repositorio, org.mockito.Mockito.never()).delete(any(TerminoProhibido.class));
+            org.mockito.Mockito.verifyNoInteractions(bitacora);
+        }
+    }
 }

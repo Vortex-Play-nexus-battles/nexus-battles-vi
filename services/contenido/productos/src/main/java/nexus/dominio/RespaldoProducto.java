@@ -6,7 +6,12 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 /**
- * Estado de un {@link Producto} justo antes de una modificacion (HU-PRD-003).
+ * Entrada inmutable del historial de un producto (HU-PRD-003/HU-PRD-007).
+ *
+ * <p>{@code estadoAnterior} es también el punto de recuperación y
+ * {@code estadoAplicado} permite auditar exactamente qué cambió. En una
+ * creación no existe estado anterior. Una reversión agrega otra entrada en
+ * vez de modificar o borrar la original.
  *
  * <p>{@code autor} es el identificador estable (claim {@code uid}) del
  * administrador que hizo el cambio — B4. Hasta entonces el respaldo no decia
@@ -25,7 +30,35 @@ public record RespaldoProducto(
 
         Producto estadoAnterior,
 
+        Producto estadoAplicado,
+
         Instant modificadoEn,
 
-        String autor) {
+        String autor,
+
+        TipoCambioProducto tipoCambio,
+
+        String reversionDe) {
+
+        /** Compatibilidad con los respaldos creados antes de HU-PRD-007. */
+        public RespaldoProducto(
+                        String id,
+                        String productoId,
+                        Producto estadoAnterior,
+                        Instant modificadoEn,
+                        String autor) {
+                this(
+                                id,
+                                productoId,
+                                estadoAnterior,
+                                null,
+                                modificadoEn,
+                                autor,
+                                TipoCambioProducto.MODIFICACION,
+                                null);
+        }
+
+        public TipoCambioProducto tipoCambioNormalizado() {
+                return tipoCambio == null ? TipoCambioProducto.MODIFICACION : tipoCambio;
+        }
 }

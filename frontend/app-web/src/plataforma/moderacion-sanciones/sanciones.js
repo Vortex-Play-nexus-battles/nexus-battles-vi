@@ -1,16 +1,15 @@
 /**
  * Sanciones y apelaciones — HU-USR-004/005/006/007 y HU-NOT-005.
  *
- * Habla con `contracts/openapi/moderacion-sanciones-admin.yaml` (1.0.0) y con
- * `moderacion-sanciones-consulta.yaml` (1.3.0, para los límites vigentes)
- * por el borde. Dos vistas lo montan:
+ * Habla con `contracts/openapi/moderacion-sanciones-admin.yaml` (1.4.0) y con
+ * `moderacion-sanciones-consulta.yaml` (para los límites vigentes) por el
+ * borde. Aquí vive lo que comparten las dos vistas —el cliente, el error y la
+ * presentación de una sanción— y «Mis sanciones» del jugador (sus sanciones
+ * con el contador de tiempo restante, CA-03 de HU-USR-005, sus apelaciones y
+ * el formulario para apelar dentro de plazo).
  *
- *   - `sanciones-admin.html` (moderación): historial de un usuario por su
- *     uid, emitir advertencia / suspensión / baneo (con confirmación) y el
- *     panel de apelaciones pendientes con su resolución.
- *   - `mis-sanciones.html` (jugador): sus sanciones con contador de tiempo
- *     restante (CA-03 de HU-USR-005), sus apelaciones y el formulario para
- *     apelar dentro de plazo.
+ * La consola de moderación (`sanciones-admin.html`) está en
+ * `consola-sanciones.js` desde SA-4.
  *
  * Todo error llega como problem details; se decide por `estado` y `motivo`,
  * nunca comparando textos (`shared/ui-kit/MAPEO-ERRORES.md`).
@@ -19,11 +18,8 @@
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 import { nodo } from '../../comun/ui/dom.js';
 import { pintarAviso } from '../../comun/ui/aviso.js';
-import { estadoDeError, pintarEstado } from '../../comun/ui/estado-vista.js';
-import { campo } from '../../comun/ui/campo.js';
 import { cuentaAtrasRotulada, vigilarCuentasAtras } from '../../comun/ui/cuenta-atras.js';
-import { lineaDeTiempo } from '../../comun/ui/linea-de-tiempo.js';
-import { estadoDeCuenta, hechosDeSanciones, NOMBRE_DE_SANCION } from '../../comun/ui/sancion.js';
+import { estadoDeCuenta, NOMBRE_DE_SANCION } from '../../comun/ui/sancion.js';
 import {
   respaldoPorEstado,
   textoDelServidor,
@@ -110,6 +106,11 @@ export const api = {
   misApelaciones: (f) => pedir('/api/v1/apelaciones?mias=true', {}, f),
   resolver: (apelacionId, cuerpo, f) =>
     pedir(`/api/v1/apelaciones/${encodeURIComponent(apelacionId)}/resolucion`, json(cuerpo), f),
+  /** SA-4 — una sanción por su id (la que se apela, en el panel). */
+  sancion: (sancionId, f) => pedir(`/api/v1/sanciones/${encodeURIComponent(sancionId)}`, {}, f),
+  /** SA-4 — levantar una suspensión o retirar una advertencia vigente (solo administración). */
+  levantar: (sancionId, motivo, f) =>
+    pedir(`/api/v1/sanciones/${encodeURIComponent(sancionId)}/levantamiento`, json({ motivo }), f),
 };
 
 /* ---- Presentación (puro, probado) ---- */
@@ -192,25 +193,6 @@ export function frasePlazoDeApelacion(plazoDias) {
 }
 
 /**
- * La etiqueta del campo de duración de una suspensión, con el rango que aplica
- * hoy el servicio. Sin límites conocidos, la etiqueta no promete ningún rango:
- * el servicio sigue validando y su 400 dice el real.
- *
- * @param {{suspensionMinimaHoras?: number, suspensionMaximaDias?: number}|null} limites
- * @returns {string}
- */
-export function textoDeRangoDeSuspension(limites) {
-  const horas = Number(limites?.suspensionMinimaHoras);
-  const dias = Number(limites?.suspensionMaximaDias);
-  if (!Number.isFinite(horas) || !Number.isFinite(dias) || horas <= 0 || dias <= 0) {
-    return 'Duración en horas';
-  }
-  const enHoras = `${horas} ${horas === 1 ? 'hora' : 'horas'}`;
-  const enDias = `${dias} ${dias === 1 ? 'día' : 'días'}`;
-  return `Duración en horas (${enHoras} a ${enDias})`;
-}
-
-/**
  * Si todavía se puede apelar: vigente, sin apelación abierta y dentro del
  * plazo desde la emisión (misma regla que el servicio, para no ofrecer un
  * botón que va a fallar).
@@ -242,44 +224,6 @@ export function sePuedeApelar(sancion, apelaciones = [], ahora = Date.now(), pla
     return false;
   }
   return !apelaciones.some((a) => a.sancionId === sancion.id && a.estado === 'PENDIENTE');
-}
-
-/**
- * Cuerpo de la solicitud de emisión a partir del formulario. Sin inventar:
- * solo los campos del contrato, y `duracionHoras` solo para suspensión.
- *
- * @param {FormData|Record<string,string>} datos
- * @returns {object}
- */
-export function solicitudDesde(datos) {
-  const leer = (clave) => (datos instanceof FormData ? datos.get(clave) : datos[clave]) ?? '';
-  const tipo = String(leer('tipo'));
-  const cuerpo = {
-    usuarioId: String(leer('usuarioId')).trim(),
-    tipo,
-    motivo: String(leer('motivo')).trim(),
-  };
-  const politica = String(leer('politica')).trim();
-  if (politica) {
-    cuerpo.politica = politica;
-  }
-  const comentarioId = String(leer('comentarioId')).trim();
-  if (comentarioId) {
-    cuerpo.comentarioId = comentarioId;
-  }
-  if (tipo === TIPO.SUSPENSION) {
-    const horas = Number(leer('duracionHoras'));
-    if (Number.isFinite(horas) && horas > 0) {
-      cuerpo.duracionHoras = Math.floor(horas);
-    }
-  }
-  if (tipo === TIPO.BANEO) {
-    cuerpo.confirmacion =
-      leer('confirmacion') === 'on' ||
-      leer('confirmacion') === true ||
-      leer('confirmacion') === 'true';
-  }
-  return cuerpo;
 }
 
 /* ---- DOM ---- */
@@ -355,322 +299,55 @@ export function tarjetaDeSancion(
 }
 
 /**
- * Tarjeta de una apelación (panel y Mis sanciones).
+ * Tarjeta de una apelación en «Mis sanciones»: lo que se argumentó, cuándo, y
+ * la decisión cuando llega (la resuelve el panel, en la consola).
  *
  * @param {object} apelacion
- * @param {{resolver?: (apelacion: object, decision: string, motivo: string, nuevaVigencia: string|null) => void}} [opciones]
  */
-export function tarjetaDeApelacion(apelacion, { resolver } = {}) {
+export function tarjetaDeApelacion(apelacion) {
   const tarjeta = nodo('article', 'tarjeta pila pila--compacta');
   tarjeta.dataset.apelacionId = apelacion.id;
   tarjeta.dataset.estado = apelacion.estado;
   tarjeta.appendChild(
-    nodo('strong', 'tarjeta__titulo', `Apelación · ${apelacion.estado.toLowerCase()}`),
+    nodo(
+      'strong',
+      'tarjeta__titulo',
+      `Apelación · ${ESTADO_DE_TU_APELACION[apelacion.estado] ?? apelacion.estado.toLowerCase()}`,
+    ),
   );
   tarjeta.appendChild(nodo('p', 't-cuerpo', apelacion.argumento));
   tarjeta.appendChild(
-    nodo(
-      'p',
-      't-meta',
-      `Sanción ${apelacion.sancionId} · abierta el ${new Date(apelacion.creadaEn).toLocaleString('es-CO')}`,
-    ),
+    nodo('p', 't-meta', `Presentada el ${new Date(apelacion.creadaEn).toLocaleString('es-CO')}`),
   );
+  if (apelacion.estado === 'PENDIENTE' && apelacion.decisionAntesDe) {
+    tarjeta.appendChild(
+      nodo(
+        'p',
+        't-meta',
+        `El panel decide a más tardar el ${new Date(apelacion.decisionAntesDe).toLocaleDateString(
+          'es-CO',
+          {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          },
+        )}.`,
+      ),
+    );
+  }
   if (apelacion.decisionMotivo) {
     tarjeta.appendChild(nodo('p', 't-meta', `Decisión: ${apelacion.decisionMotivo}`));
-  }
-  if (apelacion.estado === 'PENDIENTE' && typeof resolver === 'function') {
-    const form = nodo('form', 'pila pila--compacta');
-    form.dataset.zona = 'resolucion';
-    // Con `campo()` en vez de una plantilla en `innerHTML`: etiqueta asociada
-    // por for/id y el motivo del rechazo en su sitio, igual que en el resto
-    // de formularios del producto.
-    const decision = campo({
-      nombre: 'decision',
-      etiqueta: 'Decisión',
-      requerido: true,
-      opciones: [
-        { valor: 'MANTENIDA', texto: 'Mantener' },
-        { valor: 'REDUCIDA', texto: 'Reducir (suspensión)' },
-        { valor: 'REVERTIDA', texto: 'Revertir' },
-      ],
-    });
-    const nuevaVigencia = campo({
-      nombre: 'nuevaVigencia',
-      etiqueta: 'Nueva fecha fin',
-      tipo: 'datetime-local',
-      pista: 'Solo al reducir la sanción.',
-    });
-    const motivacion = campo({
-      nombre: 'motivo',
-      etiqueta: 'Motivación',
-      requerido: true,
-      multilinea: true,
-    });
-    const resolverBoton = nodo('button', 'boton boton--primario boton--pequeno', 'Resolver');
-    resolverBoton.type = 'submit';
-    resolverBoton.dataset.accion = 'resolver';
-    form.append(decision.elemento, nuevaVigencia.elemento, motivacion.elemento, resolverBoton);
-    form.addEventListener('submit', (evento) => {
-      evento.preventDefault();
-      const datos = new FormData(form);
-      const local = String(datos.get('nuevaVigencia') ?? '');
-      resolver(
-        apelacion,
-        String(datos.get('decision')),
-        String(datos.get('motivo') ?? '').trim(),
-        local ? new Date(local).toISOString() : null,
-      );
-    });
-    tarjeta.appendChild(form);
   }
   return tarjeta;
 }
 
-/**
- * Monta el panel de moderación.
- *
- * UXC-9 — `usuarioInicial` (por omisión, `?usuario=` de la URL) abre el
- * historial de esa cuenta al montar: el directorio de la consola enlaza
- * aquí cada jugador, y antes había que copiar su identificador a mano.
- *
- * @param {ParentNode} raiz documento con las zonas `[data-zona=...]`
- * @param {{rol?: string|null, fetchImpl?: Function, ahora?: () => number,
- *          usuarioInicial?: string|null}} [opciones]
- */
-export function montarPanelDeModeracion(
-  raiz,
-  {
-    rol = null,
-    fetchImpl,
-    ahora = () => Date.now(),
-    usuarioInicial = new URLSearchParams(globalThis.location?.search ?? '').get('usuario'),
-  } = {},
-) {
-  const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
-  const formBuscar = raiz.querySelector('[data-zona="buscar"]');
-  const formEmitir = raiz.querySelector('[data-zona="emitir"]');
-  const zonaHistorial = raiz.querySelector('[data-zona="historial"]');
-  const zonaApelaciones = raiz.querySelector('[data-zona="apelaciones"]');
-  const selectorTipo = formEmitir?.querySelector('[name="tipo"]');
-  const opcionBaneo = formEmitir?.querySelector('[name="tipo"] option[value="BANEO"]');
-
-  if (!ROLES_DE_MODERACION.includes(rol)) {
-    pintarAviso(zonaAviso, {
-      tono: 'advertencia',
-      titulo: 'Este panel es de moderación',
-      detalle: 'Tu rol no permite emitir ni revisar sanciones.',
-    });
-    raiz.querySelectorAll('form button, form input, form select, form textarea').forEach((c) => {
-      c.disabled = true;
-    });
-    return;
-  }
-  // El moderador solo emite temporales (Tabla 24): no se le ofrece el baneo.
-  if (opcionBaneo && !ROLES_DE_ADMINISTRACION.includes(rol)) {
-    opcionBaneo.disabled = true;
-    opcionBaneo.textContent = 'Baneo definitivo (solo administradores)';
-  }
-
-  const sincronizarCampos = () => {
-    const tipo = selectorTipo?.value;
-    formEmitir.querySelectorAll('[data-solo]').forEach((zona) => {
-      zona.hidden = zona.dataset.solo !== tipo;
-    });
-  };
-  selectorTipo?.addEventListener('change', sincronizarCampos);
-  sincronizarCampos();
-
-  /**
-   * El rango de la suspensión sale del servicio, no del HTML.
-   *
-   * El `max="720"` que había escrito en la vista eran 30 días convertidos a
-   * mano: con `sanciones.suspension.maxima-dias` en 2, el formulario aceptaba
-   * 720 horas y el servidor respondía 400. Ahora el tope, el mínimo y la
-   * etiqueta salen de `GET /api/v1/sanciones/limites`, que es la misma fuente
-   * que usa la validación.
-   */
-  /**
-   * UXC-7 — AdminTimeline: el estado de la cuenta (con la cuenta atrás de la
-   * sanción que la restringe) y su historial como línea de tiempo: emitida,
-   * revertida, termina o terminó. Antes eran tarjetas sueltas sin orden.
-   *
-   * @param {object[]} sanciones
-   */
-  function pintarHistorialDeLaCuenta(sanciones) {
-    pararCuentas();
-    zonaHistorial.replaceChildren(
-      estadoDeCuenta(sanciones, { persona: 'tercera', titulo: 'Estado de la cuenta consultada' }),
-    );
-    if (sanciones.length === 0) {
-      zonaHistorial.appendChild(nodo('p', 't-meta', 'Este usuario no tiene sanciones.'));
-      return;
-    }
-    zonaHistorial.appendChild(
-      lineaDeTiempo(hechosDeSanciones(sanciones, { ahora: ahora() }), {
-        etiqueta: 'Historial de sanciones de la cuenta',
-      }),
-    );
-    pararCuentas = vigilarCuentasAtras(zonaHistorial);
-  }
-
-  async function aplicarLimites() {
-    const duracion = formEmitir?.querySelector('[name="duracionHoras"]');
-    const etiqueta = raiz.querySelector('[data-campo="rango-suspension"]');
-    let limites;
-    try {
-      limites = await api.limites(fetchImpl);
-    } catch (error) {
-      // Sin límites el campo se queda sin tope y la etiqueta sin rango: el
-      // servicio sigue validando, y su 400 dice el rango real. Inventar un
-      // tope aquí sería volver al defecto que esto corrige.
-      console.warn('[sanciones] no se pudieron leer los límites vigentes:', error);
-      return null;
-    }
-    if (etiqueta) {
-      etiqueta.textContent = textoDeRangoDeSuspension(limites);
-    }
-    if (duracion) {
-      const minimo = Number(limites?.suspensionMinimaHoras);
-      const maximo = Number(limites?.suspensionMaximaHoras);
-      if (Number.isFinite(minimo) && minimo > 0) {
-        duracion.min = String(minimo);
-        if (Number(duracion.value) < minimo) {
-          duracion.value = String(minimo);
-        }
-      }
-      if (Number.isFinite(maximo) && maximo > 0) {
-        duracion.max = String(maximo);
-        if (Number(duracion.value) > maximo) {
-          duracion.value = String(maximo);
-        }
-      }
-    }
-    return limites;
-  }
-
-  let pararCuentas = () => {};
-
-  async function cargarHistorial(uid) {
-    zonaHistorial.replaceChildren(nodo('p', 't-meta', 'Cargando…'));
-    try {
-      const sanciones = await api.historial(uid, fetchImpl);
-      pintarHistorialDeLaCuenta(sanciones);
-    } catch (error) {
-      const deNegocio = error instanceof ErrorDeSanciones;
-      pintarEstado(
-        zonaHistorial,
-        estadoDeError({
-          titulo: deNegocio ? error.titulo : 'No pudimos cargar el historial',
-          detalle: deNegocio
-            ? error.detalle
-            : 'El servicio de moderación no respondió. Vuelve a intentarlo.',
-          alReintentar: () => cargarHistorial(uid),
-        }),
-      );
-    }
-  }
-
-  async function cargarApelaciones() {
-    if (!zonaApelaciones) {
-      return;
-    }
-    try {
-      const pendientes = await api.apelacionesPendientes(fetchImpl);
-      zonaApelaciones.replaceChildren();
-      if (pendientes.length === 0) {
-        zonaApelaciones.appendChild(nodo('p', 't-meta', 'No hay apelaciones pendientes.'));
-      }
-      pendientes.forEach((a) =>
-        zonaApelaciones.appendChild(
-          tarjetaDeApelacion(a, {
-            resolver: async (apelacion, decision, motivo, nuevaVigencia) => {
-              try {
-                await api.resolver(apelacion.id, { decision, motivo, nuevaVigencia }, fetchImpl);
-                pintarAviso(zonaAviso, {
-                  tono: 'exito',
-                  titulo: 'Apelación resuelta',
-                  detalle: `Decisión: ${decision.toLowerCase()}. El jugador queda avisado.`,
-                });
-                await cargarApelaciones();
-              } catch (error) {
-                avisarError(zonaAviso, error);
-              }
-            },
-          }),
-        ),
-      );
-    } catch (error) {
-      // UX-R3.11 — igual que en parametros: el fallo de una zona se cuenta EN
-      // esa zona y con reintento, no como una pildora suelta encima de una
-      // pantalla vacia.
-      zonaAviso.hidden = true;
-      const deNegocio = error instanceof ErrorDeSanciones;
-      pintarEstado(
-        zonaApelaciones,
-        estadoDeError({
-          titulo: deNegocio ? error.titulo : 'No pudimos cargar las apelaciones',
-          detalle: deNegocio
-            ? error.detalle
-            : 'El servicio de moderación no respondió. Vuelve a intentarlo.',
-          alReintentar: cargarApelaciones,
-        }),
-      );
-    }
-  }
-
-  formBuscar?.addEventListener('submit', (evento) => {
-    evento.preventDefault();
-    const uid = String(new FormData(formBuscar).get('usuarioId') ?? '').trim();
-    if (uid) {
-      formEmitir.querySelector('[name="usuarioId"]').value = uid;
-      cargarHistorial(uid);
-    }
-  });
-
-  formEmitir?.addEventListener('submit', async (evento) => {
-    evento.preventDefault();
-    zonaAviso.hidden = true;
-    const cuerpo = solicitudDesde(new FormData(formEmitir));
-    if (cuerpo.tipo === TIPO.BANEO && !cuerpo.confirmacion) {
-      pintarAviso(zonaAviso, {
-        tono: 'advertencia',
-        titulo: 'El baneo es definitivo',
-        detalle: 'Marca la confirmación para continuar.',
-      });
-      return;
-    }
-    const boton = formEmitir.querySelector('[type="submit"]');
-    boton.disabled = true;
-    try {
-      const sancion = await api.emitir(cuerpo, fetchImpl);
-      pintarAviso(zonaAviso, {
-        tono: 'exito',
-        titulo: 'Sanción emitida',
-        detalle: `${descripcionDe(sancion, ahora())}. El jugador recibirá el aviso.`,
-      });
-      formEmitir.querySelector('[name="motivo"]').value = '';
-      await cargarHistorial(cuerpo.usuarioId);
-    } catch (error) {
-      avisarError(zonaAviso, error);
-    } finally {
-      boton.disabled = false;
-    }
-  });
-
-  aplicarLimites();
-  cargarApelaciones();
-  const pedido = String(usuarioInicial ?? '').trim();
-  if (pedido) {
-    for (const formulario of [formBuscar, formEmitir]) {
-      const campoUsuario = formulario?.querySelector('[name="usuarioId"]');
-      if (campoUsuario) {
-        campoUsuario.value = pedido;
-      }
-    }
-    cargarHistorial(pedido);
-  }
-  return { cargarHistorial, cargarApelaciones, aplicarLimites };
-}
+/** El estado de una apelación, para quien la presentó. */
+const ESTADO_DE_TU_APELACION = Object.freeze({
+  PENDIENTE: 'en revisión',
+  MANTENIDA: 'la sanción se mantiene',
+  REDUCIDA: 'la sanción se redujo',
+  REVERTIDA: 'revertida',
+});
 
 /**
  * Monta «Mis sanciones» para el jugador.
