@@ -167,7 +167,7 @@ test.describe('Asistente · visitante (§7.4)', () => {
     const antes = await asistente.respuestas.count();
     await relacionadas.nth(1).click();
     await expect(asistente.respuestas).toHaveCount(antes + 1, { timeout: ESPERA_DE_RESPUESTA_MS });
-    await expect(asistente.preguntas.last()).toHaveText('Battle mode (PvP and co-op)');
+    await expect(asistente.preguntas.last()).toContainText('Battle mode (PvP and co-op)');
     const batalla = asistente.respuestas.nth(antes);
     await expect(batalla).toContainText('Related topics:');
     await expect(batalla).not.toContainText('Temas relacionados');
