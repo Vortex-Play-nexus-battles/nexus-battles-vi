@@ -12613,6 +12613,37 @@ body:has(.chatbot-flotante) main:not(.combate) {
   gap: 8px;
 }
 
+/* SA-16 (§7.3.8) — el comentario en su contexto: la conversación del hilo
+   del producto, con el que se revisa marcado en su sitio (aria-current) y con
+   texto, no solo con color. */
+.contexto-hilo {
+  display: grid;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.contexto-hilo__comentario {
+  display: grid;
+  gap: var(--e-1);
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--radio-chico);
+  background: var(--superficie);
+  overflow-wrap: anywhere;
+}
+
+.contexto-hilo__comentario > p {
+  margin: 0;
+}
+
+.contexto-hilo__comentario[aria-current='true'] {
+  border-color: color-mix(in srgb, var(--primaria) 40%, transparent);
+  background: color-mix(in srgb, var(--primaria) 9%, var(--superficie));
+  box-shadow: inset 3px 0 0 var(--primaria);
+}
+
 /* SA-8 (punto 22) — los parámetros de plataforma: una tabla por área con las
    mismas columnas, para que de un área a otra el valor, lo que admite y el
    último cambio caigan en el mismo sitio. En el teléfono cada fila se apila

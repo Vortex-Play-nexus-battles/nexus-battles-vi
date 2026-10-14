@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
@@ -16,6 +17,8 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
+import nexus.auditoria.RegistroDeOperaciones;
+import nexus.auditoria.TipoOperacion;
 import nexus.dominio.EstadoProducto;
 import nexus.dominio.Producto;
 import nexus.dominio.ProductoNoEncontradoException;
@@ -39,9 +42,10 @@ class GestionarRecursosServicioTest {
     private final RecursoGraficoRepository recursos = mock(RecursoGraficoRepository.class);
     private final MongoTemplate mongo = mock(MongoTemplate.class);
     private final ProductoRepository productos = mock(ProductoRepository.class);
+    private final RegistroDeOperaciones operaciones = mock(RegistroDeOperaciones.class);
     private final GestionarRecursosServicio servicio = new GestionarRecursosServicio(
             recursos, mongo, productos, new ExaminadorDeRecursos(LimitesDeRecursos.porOmision()),
-            Clock.fixed(AHORA, ZoneOffset.UTC));
+            Clock.fixed(AHORA, ZoneOffset.UTC), operaciones);
 
     private static RecursoGrafico recurso(String id, String productoId) {
         return new RecursoGrafico(id, ClaseDeRecurso.IMAGEN, FormatoDeRecurso.PNG, 10, 4, 4, "huella",
@@ -84,6 +88,8 @@ class GestionarRecursosServicioTest {
             assertThat(guardado.huella()).hasSize(64).isEqualTo(GestionarRecursosServicio.huellaDe(png));
             assertThat(guardado.url()).isEqualTo("/api/v1/productos/recursos/" + guardado.id());
             assertThat(guardado.retirado()).isFalse();
+            // SA-18: el alta queda en el registro de operaciones administrativas.
+            verify(operaciones).deRecurso(TipoOperacion.ALTA_RECURSO, null, guardado, ADMIN, null);
         }
 
         @Test
@@ -100,6 +106,8 @@ class GestionarRecursosServicioTest {
             assertThat(subida.nuevo()).isFalse();
             assertThat(subida.recurso()).isSameAs(existente);
             verify(recursos, never()).insert(any(RecursoGrafico.class));
+            // El mismo archivo devuelto no es una operación nueva.
+            verifyNoInteractions(operaciones);
         }
 
         @Test
@@ -183,6 +191,7 @@ class GestionarRecursosServicioTest {
             assertThat(retirado.retiradoPor()).isEqualTo(ADMIN);
             assertThat(retirado.motivoRetiro()).isEqualTo("Imagen duplicada");
             assertThat(retirado.contenido()).containsExactly(1, 2, 3);
+            verify(operaciones).deRecurso(TipoOperacion.RETIRO_RECURSO, libre, retirado, ADMIN, "Imagen duplicada");
         }
 
         @Test
@@ -215,6 +224,7 @@ class GestionarRecursosServicioTest {
             assertThatThrownBy(() -> servicio.retirar("nada", ADMIN, null))
                     .isInstanceOf(RecursoNoEncontradoException.class);
             verify(recursos, never()).save(any(RecursoGrafico.class));
+            verifyNoInteractions(operaciones);
         }
     }
 

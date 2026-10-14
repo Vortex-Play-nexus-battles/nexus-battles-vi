@@ -129,7 +129,12 @@ function montar({ rol = 'SUPER_ADMINISTRADOR', rutas = {} } = {}) {
       <div data-zona="indicadores"></div>
       <div data-zona="catalogo"></div>
     </main>`;
-  const fetchImpl = servicio({ 'GET /api/v1/parametros': { cuerpo: CATALOGO }, ...rutas });
+  const fetchImpl = servicio({
+    'GET /api/v1/parametros': { cuerpo: CATALOGO },
+    // SA-11: el panel de las políticas de uso se carga por su cuenta.
+    'GET /api/v1/parametros/politicas/cambios': { cuerpo: [] },
+    ...rutas,
+  });
   const consultarApi = jest.fn(async (recurso) =>
     recurso.startsWith('/admin/titulares')
       ? {
@@ -452,11 +457,22 @@ describe('la vista', () => {
     expect(historial.textContent).toContain('Sistema');
   });
 
+  test('SA-11: debajo de los valores, el panel de los cambios en las políticas de uso', async () => {
+    montar();
+    await asentar();
+    const paneles = [...document.querySelectorAll('[data-zona="catalogo"] [data-panel]')].map(
+      (p) => p.dataset.panel,
+    );
+    expect(paneles).toEqual(['parametros', 'politicas-de-uso']);
+    expect(document.querySelector('[data-accion="publicar-cambio-de-politica"]')).not.toBeNull();
+  });
+
   test('sin rol de administración no hay acciones ni se piden apodos', async () => {
     const { consultarApi } = montar({ rol: 'MODERADOR' });
     await asentar();
     expect(document.querySelectorAll('[data-accion="cambiar"]')).toHaveLength(0);
     expect(document.querySelectorAll('[data-accion="historial"]')).toHaveLength(0);
+    expect(document.querySelector('[data-accion="publicar-cambio-de-politica"]')).toBeNull();
     expect(consultarApi).not.toHaveBeenCalled();
   });
 

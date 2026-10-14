@@ -31,7 +31,11 @@
  *  13. (B3) lo mismo desde la pantalla: la consola lleva a «Comentarios», el
  *      comentario reportado de nuevo esta en la cola, se MARCA desde su
  *      detalle (y la pantalla dice que es una nota interna), sale en
- *      «Marcados para seguimiento» y se EDITA escribiendo el texto nuevo
+ *      «Marcados para seguimiento» y se EDITA escribiendo el texto nuevo; el
+ *      detalle lo ensena «En su contexto» (SA-16): el producto por su nombre
+ *      y la conversacion con el comentario en su sitio
+ *   5b. (SA-16, 1.17.0) el contexto por la API: los comentarios que lo rodean
+ *      en el hilo del producto, en cualquier estado; un jugador no lo lee
  *
  * El paso 10 es el que cierra el defecto: sin el, todo lo anterior seria un
  * camino de ida a otro agujero.
@@ -206,6 +210,38 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
     expect(d.historial, 'todavia no se ha decidido nada: el historial esta vacio').toHaveLength(0);
   });
 
+  test('5b: el comentario en su contexto: la conversacion del hilo, solo para moderacion (SA-16)', async () => {
+    const respuesta = await api.post(hiloDe(), {
+      headers: conToken(invitado.token),
+      data: { texto: 'A mi la espada me funciona bien, revisen su equipo' },
+    });
+    expect(respuesta.status(), await respuesta.text()).toBe(201);
+    const posterior = await respuesta.json();
+
+    const r = await api.get(`${COLA}/${comentario.id}/contexto?alrededor=2`, {
+      headers: conToken(moderadora.token),
+    });
+    expect(r.status(), await r.text()).toBe(200);
+    const contexto = await r.json();
+    expect(contexto.comentarioId).toBe(comentario.id);
+    expect(contexto.productoId).toBe(producto);
+    expect(contexto.anteriores).toEqual([]);
+    expect(contexto.posteriores.map((c) => c.id)).toContain(posterior.id);
+    const suyo = contexto.posteriores.find((c) => c.id === posterior.id);
+    expect(suyo.apodoAutor).toBe(invitado.apodo);
+    expect(suyo.estado).toBe('PUBLICADO');
+    expect(contexto.totalEnElHilo).toBeGreaterThanOrEqual(2);
+
+    const deJugador = await api.get(`${COLA}/${comentario.id}/contexto`, {
+      headers: conToken(invitado.token),
+    });
+    expect(deJugador.status(), 'un JUGADOR no lee la conversacion de moderacion').toBe(403);
+    const inexistente = await api.get(`${COLA}/no-existe-${Date.now()}/contexto`, {
+      headers: conToken(moderadora.token),
+    });
+    expect(inexistente.status()).toBe(404);
+  });
+
   test('6-7: la moderadora oculta, el asiento lleva SU uid y queda en el historial', async () => {
     const r = await decidir(moderadora, 'OCULTAR', 'Afirmacion no verificable sobre el producto');
     expect(r.status(), await r.text()).toBe(200);
@@ -287,7 +323,9 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
       headers: conToken(moderadora.token),
     });
     expect(seguimiento.status()).toBe(200);
-    expect((await seguimiento.json()).entradas.map((e) => e.comentario.id)).toContain(comentario.id);
+    expect((await seguimiento.json()).entradas.map((e) => e.comentario.id)).toContain(
+      comentario.id,
+    );
 
     const h = await hilo();
     expect(
@@ -303,7 +341,9 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
     const despues = await api.get(`${COLA}?marcado=true&productoId=${producto}`, {
       headers: conToken(moderadora.token),
     });
-    expect((await despues.json()).entradas.map((e) => e.comentario.id)).not.toContain(comentario.id);
+    expect((await despues.json()).entradas.map((e) => e.comentario.id)).not.toContain(
+      comentario.id,
+    );
   });
 
   test('12: editarlo cambia el texto visible, lo marca como editado y guarda el anterior (7.3.3)', async () => {
@@ -376,8 +416,20 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
     await expect(tarjeta).toBeVisible({ timeout: 20_000 });
     await tarjeta.locator('[data-accion="revisar"]').click();
 
-    // MARCAR con su motivo: nota interna, y el detalle se queda delante.
+    // SA-16 (§7.3.8): el detalle lo ensena en su contexto, con el producto por
+    // su nombre y el comentario marcado en la conversacion.
     const panel = page.locator('[data-zona="detalle"]');
+    const contexto = panel.locator('[data-zona="contexto"]');
+    await expect(contexto.locator('[data-campo="producto"]')).toContainText(
+      'Producto de moderacion E2E',
+      { timeout: 20_000 },
+    );
+    await expect(
+      contexto.locator(`[data-zona="contexto-hilo"] li[aria-current="true"]`),
+    ).toHaveAttribute('data-comentario-id', comentario.id);
+    await expect(contexto).not.toContainText(producto);
+
+    // MARCAR con su motivo: nota interna, y el detalle se queda delante.
     await panel.locator('#accion').selectOption('MARCAR');
     await expect(panel.locator('#motivo-pista')).toContainText('nota interna');
     await panel.locator('#motivo').fill('Seguimiento especial desde la pantalla');
@@ -451,7 +503,9 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
     expect(resuelto.asiento.estadoAnterior).toBe('PUBLICADO');
     expect(resuelto.autorNotificado, 'nada cambio para el autor: no se le avisa').toBe(false);
 
-    const cola = await api.get(`${COLA}?productoId=${producto}`, { headers: conToken(moderadora.token) });
+    const cola = await api.get(`${COLA}?productoId=${producto}`, {
+      headers: conToken(moderadora.token),
+    });
     expect(
       (await cola.json()).entradas.map((e) => e.comentario.id),
       'aprobado: sus reportes ya no estan pendientes',

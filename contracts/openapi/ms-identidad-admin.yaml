@@ -19,8 +19,20 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Administracion de cuentas (ms-identidad)
-  version: 1.10.0
+  version: 1.11.0
   description: |
+    ### Cambios en 1.11.0 (§7.3.4, alertas de comportamiento sospechoso — SA-20, implementado, aditivo)
+
+    - **`GET /api/v1/admin/jugadores/bloqueos`.** La señal 1 de «comportamiento
+      sospechoso» que decidio el PO (D-45, 2026-10-06): las cuentas bloqueadas
+      por intentos fallidos de inicio de sesion desde un dia (por omision, la
+      ultima semana), la de bloqueo mas reciente primero, con el total real y
+      la lista cortada en `limite` (100 como maximo). Usa la regla de bloqueo
+      que ya existe; no introduce ningun numero nuevo. Identifica cuentas
+      porque es una alerta para actuar, no una estadistica: mismo permiso que
+      el directorio y sin correo. La marca del ultimo bloqueo (V9) no se borra
+      al volver a entrar; los bloqueos anteriores a ella no se inventan.
+
     ### Cambios en 1.10.0 (§7.3.4, modificar el inventario de una cuenta — SA-10, implementado, aditivo)
 
     - **`POST /api/v1/admin/usuarios/{usuarioId}/inventario/entregas`.** La
@@ -441,6 +453,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/IndicadoresDeCuentas'
+        '400':
+          $ref: '#/components/responses/ConsultaInvalida'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+
+  /api/v1/admin/jugadores/bloqueos:
+    get:
+      tags: [administracion]
+      operationId: cuentasBloqueadasPorIntentos
+      summary: Cuentas bloqueadas por intentos fallidos en un periodo (SA-20, 1.11.0)
+      description: |
+        §7.3.4 «Alertas de comportamiento sospechoso», señal 1 de D-45: las
+        cuentas que la regla de intentos fallidos bloqueo desde `desde` (por
+        omision, los ultimos `IDENTIDAD_BLOQUEOS_DIAS_POR_OMISION` dias, 7)
+        hasta ahora. Una cuenta bloqueada dos veces sale una vez, con su ultimo
+        bloqueo. `vigente` dice si sigue bloqueada en este momento y
+        `bloqueadaHasta`, hasta cuando.
+
+        Un `desde` futuro, mal escrito o un periodo de mas de
+        `IDENTIDAD_INDICADORES_DIAS_MAXIMOS` dias responde 400, igual que un
+        `limite` fuera de 1..100. Mismo permiso que el directorio. Solo lee.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: Primer dia del periodo (inclusive), `aaaa-mm-dd`.
+          schema:
+            type: string
+            format: date
+        - name: limite
+          in: query
+          required: false
+          description: Cuantas cuentas devolver como mucho (las de bloqueo mas reciente).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+        - $ref: '#/components/parameters/OcultarPruebas'
+      responses:
+        '200':
+          description: Las cuentas bloqueadas en el periodo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CuentasBloqueadasPorIntentos'
         '400':
           $ref: '#/components/responses/ConsultaInvalida'
         '403':
@@ -1643,6 +1703,62 @@ components:
           type: string
           format: date-time
           description: Cuando se contaron.
+
+    CuentasBloqueadasPorIntentos:
+      type: object
+      description: 1.11.0 — `GET /admin/jugadores/bloqueos` (SA-20, D-45 señal 1).
+      required: [desde, total, cuentas, ocultarPruebas, calculadoEn]
+      properties:
+        desde:
+          type: string
+          format: date
+          description: Primer dia del periodo (inclusive); llega hasta ahora.
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Cuentas bloqueadas en el periodo, aunque la lista se corte en `limite`.
+        cuentas:
+          type: array
+          description: La de bloqueo mas reciente primero.
+          items:
+            $ref: '#/components/schemas/CuentaBloqueadaPorIntentos'
+        ocultarPruebas:
+          type: boolean
+          description: Si se dejaron fuera las cuentas de pruebas automaticas.
+        calculadoEn:
+          type: string
+          format: date-time
+          description: Cuando se consulto.
+
+    CuentaBloqueadaPorIntentos:
+      type: object
+      description: |
+        1.11.0 — una cuenta bloqueada por intentos fallidos. Sin correo ni nada
+        que sirva para entrar. Las horas llevan su zona.
+      required: [uid, apodo, rol, estado, bloqueadaEn, vigente, bloqueadaHasta]
+      properties:
+        uid:
+          type: string
+          format: uuid
+        apodo:
+          type: string
+        rol:
+          type: [string, 'null']
+        estado:
+          type: string
+          description: Estado de la cuenta; el bloqueo por intentos no lo cambia.
+        bloqueadaEn:
+          type: string
+          format: date-time
+          description: Cuando empezo su ultimo bloqueo.
+        vigente:
+          type: boolean
+          description: Si sigue bloqueada ahora mismo.
+        bloqueadaHasta:
+          type: [string, 'null']
+          format: date-time
+          description: Hasta cuando, si sigue bloqueada; nulo si ya puede entrar.
 
     RegistrosPorDia:
       type: object

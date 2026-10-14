@@ -1819,6 +1819,55 @@ function bannersVigentes() {
   ];
 }
 
+/* SA-18: quién publica y quién edita los banners de laboratorio. */
+const UID_PUBLICADOR_DE_BANNERS = 'b1111111-0000-4000-8000-000000000001';
+const UID_EDITORA_DE_BANNERS = 'b2222222-0000-4000-8000-000000000002';
+
+/** La lista de la consola (uno vigente, uno retirado) con sus autores y sus apodos. */
+function rutasDeBannersConAutores() {
+  return [
+    [
+      /\/api\/v1\/banners$/,
+      json([
+        bannerDeLaboratorio(
+          '1',
+          'Temporada de otoño: nuevos prototipos en la tienda hasta el domingo.',
+          {
+            creadoPor: UID_PUBLICADOR_DE_BANNERS,
+            modificadoPor: UID_EDITORA_DE_BANNERS,
+            modificadoEn: new Date(Date.now() - 3_600_000).toISOString(),
+          },
+        ),
+        bannerDeLaboratorio('3', 'Doble de créditos el fin de semana pasado.', {
+          publicarDesde: new Date(Date.now() - 9 * 86_400_000).toISOString(),
+          vigenteHasta: new Date(Date.now() - 7 * 86_400_000).toISOString(),
+          retirado: true,
+          creadoPor: UID_PUBLICADOR_DE_BANNERS,
+          modificadoPor: UID_PUBLICADOR_DE_BANNERS,
+          modificadoEn: new Date(Date.now() - 7 * 86_400_000).toISOString(),
+        }),
+      ]),
+    ],
+    [
+      '**/api/v1/admin/titulares*',
+      json([
+        {
+          uid: UID_PUBLICADOR_DE_BANNERS,
+          apodo: 'admin_catalogo',
+          estado: 'ACTIVO',
+          rol: 'ADMINISTRADOR',
+        },
+        {
+          uid: UID_EDITORA_DE_BANNERS,
+          apodo: 'editora_anuncios',
+          estado: 'ACTIVO',
+          rol: 'ADMINISTRADOR',
+        },
+      ]),
+    ],
+  ];
+}
+
 const UID_SANCIONADO = 'dddddddd-7777-4777-8777-000000000001';
 
 function sancionDeLaboratorio(cambios = {}) {
@@ -1977,6 +2026,29 @@ export const ESCENARIOS = [
               valorNuevo: null,
               motivo: 'CREDENTIAL_MISSING',
             }),
+            // SA-18: lo que la bitácora importa del catálogo, con el nombre
+            // que tenía lo afectado en ese momento.
+            registroDeAuditoria(7, {
+              administrador: UID_AUDITORIA_MODERADORA,
+              tipoAccion: 'REACTIVACION',
+              afectado: 'producto:aaaaaaa1-0000-4000-8000-000000000001',
+              nombreAfectado: 'Corona del Nexo',
+              valorAnterior: 'Estado: Suspendido',
+              valorNuevo: 'Estado: Pieza única',
+              motivo: 'El balance quedó corregido en la versión 3.',
+              referencia: 'productos:op-7',
+            }),
+            registroDeAuditoria(8, {
+              administrador: UID_AUDITORIA_MODERADORA,
+              tipoAccion: 'ELIMINACION_LOGICA',
+              afectado: 'banner:b0000000-0000-4000-8000-000000000003',
+              nombreAfectado: 'Doble de créditos el fin de semana pasado.',
+              valorAnterior:
+                '«Doble de créditos el fin de semana pasado.» · Publicación: 2026-10-04 00:00 UTC',
+              valorNuevo: '«Doble de créditos el fin de semana pasado.» · Retirado',
+              motivo: 'El evento terminó antes de lo previsto.',
+              referencia: 'productos:op-8',
+            }),
           ],
           totalElements: 128,
           totalPages: 8,
@@ -2084,6 +2156,80 @@ export const ESCENARIOS = [
       ],
     ],
     exige: ['[data-comentario], .cola__entrada, article'],
+  },
+  {
+    // SA-16 (§7.3.8): el detalle de un comentario reportado, con su producto
+    // por el nombre y la conversación en la que estaba (comentarios 1.17.0).
+    id: 'moderacion-detalle-en-contexto',
+    titulo: 'detalle de moderación con el comentario en su contexto (SA-16, §7.3.8)',
+    ruta: 'plataforma/comentarios/moderar-comentarios.html',
+    sesion: () => sesionDe('qa_moderador', 'MODERADOR'),
+    rutas: [
+      [
+        '**/api/v1/comentarios/moderacion*',
+        json({ entradas: [comentarioReportado(1)], total: 1, pagina: 0, tamano: 16 }),
+      ],
+      [
+        `**/api/v1/comentarios/moderacion/${comentarioReportado(1).comentario.id}`,
+        json({
+          comentario: comentarioReportado(1).comentario,
+          reportes: [
+            {
+              id: 'rep-lab-1',
+              categoria: 'CONTENIDO_OFENSIVO',
+              descripcion: 'Insulta a quien lo compró.',
+              fecha: new Date(Date.now() - 3_000_000).toISOString(),
+            },
+          ],
+          historial: [],
+        }),
+      ],
+      [
+        '**/api/v1/comentarios/moderacion/*/contexto*',
+        json({
+          comentarioId: comentarioReportado(1).comentario.id,
+          productoId: comentarioReportado(1).comentario.productoId,
+          anteriores: [
+            ['kira_del_sur', 'PUBLICADO', '¿Alguien lo probó contra el Mago de Hielo?', 4],
+            ['thar_vex', 'OCULTO', 'Esto es una estafa, igual que quien lo vende.', 3],
+          ].map(([apodoAutor, estado, texto, horas], n) => ({
+            id: `44444444-2222-4222-8222-${String(n).padStart(12, '0')}`,
+            apodoAutor,
+            texto,
+            fechaPublicacion: new Date(Date.now() - horas * 3_600_000).toISOString(),
+            estado,
+            editado: false,
+          })),
+          posteriores: [
+            {
+              id: '44444444-2222-4222-8222-000000000009',
+              apodoAutor: 'nyx_valiente',
+              texto: 'A mí me llegó bien, sin problemas.',
+              fechaPublicacion: new Date(Date.now() - 3_600_000).toISOString(),
+              estado: 'PUBLICADO',
+              editado: false,
+            },
+          ],
+          totalEnElHilo: 12,
+        }),
+      ],
+      [
+        `**/api/v1/productos/${comentarioReportado(1).comentario.productoId}`,
+        json({
+          id: comentarioReportado(1).comentario.productoId,
+          nombre: 'Yelmo del Centinela',
+          tipo: 'ARMADURA',
+        }),
+      ],
+    ],
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-accion="revisar"]').first().click();
+    },
+    exige: [
+      '[data-zona="contexto"] [data-campo="producto"]',
+      '[data-zona="contexto-hilo"] li[aria-current="true"]',
+      '[data-zona="contexto-hilo"] li [data-dato="estado"]',
+    ],
   },
   {
     // UX-GAME-5 — el árbol de doble eliminación con la primera ronda jugada.
@@ -3535,25 +3681,51 @@ export const ESCENARIOS = [
   },
   {
     // HU-PRD-013 (#854) — la gestión de banners en la consola: uno vigente y
-    // uno retirado (su «Retirar» deshabilitado), con sus fechas.
+    // uno retirado (su «Retirar» deshabilitado), con sus fechas. SA-18: cada
+    // uno dice quién lo publicó y quién lo tocó por última vez.
     id: 'banners-admin',
     titulo: 'consola: banners programados, uno vigente y uno retirado',
     ruta: 'contenido/productos/banners.html',
     sesion: SESION_ADMIN_CATALOGO,
+    rutas: rutasDeBannersConAutores(),
+    exige: ['.banners__lista article', 'form textarea[name="contenido"]', '.banners__autoria'],
+  },
+  {
+    // SA-18 (§7.2.5, §7.3.5) — el historial de un banner abierto: su
+    // publicación, una edición con el antes y el después, y quién las hizo.
+    id: 'banners-admin-historial',
+    titulo: 'consola: el historial de un banner, con autor, antes y después',
+    ruta: 'contenido/productos/banners.html',
+    sesion: SESION_ADMIN_CATALOGO,
     rutas: [
+      ...rutasDeBannersConAutores(),
       [
-        /\/api\/v1\/banners$/,
+        /\/api\/v1\/banners\/[^/]+\/historial$/,
         json([
-          ...bannersVigentes().slice(0, 1),
-          bannerDeLaboratorio('3', 'Doble de créditos el fin de semana pasado.', {
-            publicarDesde: new Date(Date.now() - 9 * 86_400_000).toISOString(),
-            vigenteHasta: new Date(Date.now() - 7 * 86_400_000).toISOString(),
-            retirado: true,
-          }),
+          {
+            id: 'op-2',
+            fecha: new Date(Date.now() - 3_600_000).toISOString(),
+            autor: UID_EDITORA_DE_BANNERS,
+            tipo: 'MODIFICACION_BANNER',
+            valorAnterior: '«Temporada de otoño: nuevos prototipos en la tienda.»',
+            valorNuevo: '«Temporada de otoño: nuevos prototipos en la tienda hasta el domingo.»',
+            descripcion: 'Edición de un banner',
+          },
+          {
+            id: 'op-1',
+            fecha: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+            autor: UID_PUBLICADOR_DE_BANNERS,
+            tipo: 'ALTA_BANNER',
+            valorNuevo: '«Temporada de otoño: nuevos prototipos en la tienda.»',
+            descripcion: 'Publicación de un banner',
+          },
         ]),
       ],
     ],
-    exige: ['.banners__lista article', 'form textarea[name="contenido"]'],
+    interaccion: async (pagina) => {
+      await pagina.getByRole('button', { name: 'Historial' }).first().click();
+    },
+    exige: ['.banners__historial .banners__cambios li'],
   },
   {
     id: 'mis-sanciones-suspendida',
@@ -4732,6 +4904,38 @@ export const ESCENARIOS_SA2 = [
         }),
       ],
       [
+        // SA-20 (D-45, señal 1): una cuenta bloqueada ahora y otra que ya
+        // puede entrar. El patrón del directorio no la cubre: `*` no cruza la
+        // barra.
+        '**/api/v1/admin/jugadores/bloqueos*',
+        json({
+          desde: '2026-10-07',
+          total: 2,
+          ocultarPruebas: true,
+          calculadoEn: '2026-10-13T14:32:05Z',
+          cuentas: [
+            {
+              uid: 'b2222222-0000-4000-8000-000000000001',
+              apodo: 'lince_rojo',
+              rol: 'JUGADOR',
+              estado: 'ACTIVO',
+              bloqueadaEn: '2026-10-13T09:20:00-05:00',
+              vigente: true,
+              bloqueadaHasta: '2026-10-13T09:35:00-05:00',
+            },
+            {
+              uid: 'b2222222-0000-4000-8000-000000000002',
+              apodo: 'moderadora_luz',
+              rol: 'MODERADOR',
+              estado: 'ACTIVO',
+              bloqueadaEn: '2026-10-11T22:05:00-05:00',
+              vigente: false,
+              bloqueadaHasta: null,
+            },
+          ],
+        }),
+      ],
+      [
         '**/api/v1/admin/jugadores/indicadores*',
         json({
           total: 1894,
@@ -4867,6 +5071,7 @@ export const ESCENARIOS_SA2 = [
     ],
     exige: [
       '[data-panel="directorio"] .tabla-admin__tabla tbody tr',
+      '[data-panel="bloqueos"] .tabla-admin__tabla tbody tr',
       '[data-panel="sistema"] .estado-admin',
       '[data-panel="resumen-usuarios"] .grafico-admin__columna',
       '[data-panel="subastas"] .tabla-admin__tabla',
@@ -5683,6 +5888,29 @@ const CATALOGO_DE_PLATAFORMA = [
   }),
 ];
 
+/** SA-11 (§7.3.7): lo publicado en las políticas de uso, lo más reciente primero. */
+const CAMBIOS_DE_POLITICA = [
+  {
+    id: '9d0c6a52-7a59-4d4b-8f3e-2d64c1b2a002',
+    politica: 'TERMINOS_Y_CONDICIONES',
+    nombreDeLaPolitica: 'Términos y condiciones del servicio',
+    titulo: 'Reglas del chat',
+    descripcion:
+      'Los enlaces externos en el chat de las salas se ocultan hasta que un moderador los revise.',
+    vigenteDesde: '2026-10-20T05:00:00Z',
+    publicadoEn: '2026-10-13T16:10:00Z',
+  },
+  {
+    id: '9d0c6a52-7a59-4d4b-8f3e-2d64c1b2a001',
+    politica: 'POLITICA_DE_PRIVACIDAD',
+    nombreDeLaPolitica: 'Política de privacidad',
+    titulo: 'Datos del chat',
+    descripcion: 'Los mensajes del chat se guardan noventa días y después se borran.',
+    vigenteDesde: '2026-10-08T05:00:00Z',
+    publicadoEn: '2026-10-07T14:00:00Z',
+  },
+];
+
 export const ESCENARIOS_SA8 = [
   {
     id: 'parametros-poblado',
@@ -5691,6 +5919,7 @@ export const ESCENARIOS_SA8 = [
     sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
     rutas: [
       ['**/api/v1/parametros', json(CATALOGO_DE_PLATAFORMA)],
+      ['**/api/v1/parametros/politicas/cambios', json(CAMBIOS_DE_POLITICA)],
       [
         '**/api/v1/admin/titulares*',
         json([{ uid: UID_ADMIN_PARAMETROS, apodo: 'admin_operaciones', estado: 'ACTIVO' }]),
@@ -5701,6 +5930,7 @@ export const ESCENARIOS_SA8 = [
       '[data-area="Sanciones y moderación"] tbody tr',
       '[data-fila="torneos.cupos"] [data-campo="fijo"]',
       '[data-fila="chat.historial.tamano"] [data-campo="programado"]',
+      '[data-panel="politicas-de-uso"] tbody tr',
     ],
   },
 ];
@@ -5761,6 +5991,29 @@ ESCENARIOS_SA8.push(
     exige: ['[role="dialog"] [data-zona="historial"] .linea-tiempo__hecho'],
   },
 );
+
+ESCENARIOS_SA8.push({
+  id: 'parametros-politicas-publicar',
+  titulo:
+    'parámetros: publicar un cambio en las políticas de uso, con la vista previa del aviso (SA-11)',
+  ruta: 'plataforma/admin-parametros/parametros-admin.html',
+  sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+  rutas: ESCENARIOS_SA8[0].rutas,
+  interaccion: async (pagina) => {
+    await pagina.locator('[data-accion="publicar-cambio-de-politica"]').click();
+    const formulario = pagina.locator('[data-zona="publicacion"]');
+    await formulario.locator('[name="politica"]').selectOption('POLITICA_DE_PRIVACIDAD');
+    await formulario.locator('[name="titulo"]').fill('Datos de las partidas');
+    await formulario
+      .locator('[name="descripcion"]')
+      .fill('El historial de partidas se guarda un año y después se resume en tus estadísticas.');
+    await formulario.locator('[name="motivo"]').fill('Revisión anual de la política de datos');
+  },
+  exige: [
+    '[role="dialog"] [data-zona="vista-previa-del-aviso"]',
+    '[role="dialog"] [data-zona="consecuencia"]',
+  ],
+});
 
 ESCENARIOS_SA8.push({
   id: 'metricas-poblado',
