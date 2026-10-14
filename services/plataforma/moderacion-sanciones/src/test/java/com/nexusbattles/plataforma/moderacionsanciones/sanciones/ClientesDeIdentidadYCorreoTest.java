@@ -75,6 +75,46 @@ class ClientesDeIdentidadYCorreoTest {
         }
 
         @Test
+        @DisplayName("lee el rol de la cuenta en su ruta propia, sin datos de contacto")
+        void rol() {
+            servidor.expect(requestTo("http://srv-ms-identidad:8089/api/v1/internal/usuarios/" + UID + "/rol"))
+                    .andExpect(method(HttpMethod.GET))
+                    .andRespond(withSuccess("{\"uid\":\"" + UID + "\",\"rol\":\"ADMINISTRADOR\",\"estado\":\"ACTIVO\"}",
+                            MediaType.APPLICATION_JSON));
+
+            ClienteIdentidad.RolDeCuenta rol = cliente.rol(UID);
+
+            assertThat(rol.rol()).isEqualTo("ADMINISTRADOR");
+            assertThat(rol.estado()).isEqualTo("ACTIVO");
+            servidor.verify();
+        }
+
+        @Test
+        @DisplayName("RolesDesdeIdentidad: 404 es cuenta inexistente; caida, 5xx o rol raro, fail-closed")
+        void rolesFailClosed() {
+            RolesDesdeIdentidad roles = new RolesDesdeIdentidad(cliente);
+            String ruta = "http://srv-ms-identidad:8089/api/v1/internal/usuarios/" + UID + "/rol";
+            // MockRestServiceServer exige declarar todo antes de la primera peticion.
+            servidor.expect(requestTo(ruta)).andRespond(withSuccess("{\"rol\":\" moderador \"}",
+                    MediaType.APPLICATION_JSON));
+            servidor.expect(requestTo(ruta)).andRespond(withStatus(HttpStatus.NOT_FOUND));
+            servidor.expect(requestTo(ruta)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+            servidor.expect(requestTo(ruta)).andRespond(withStatus(HttpStatus.FORBIDDEN));
+            servidor.expect(requestTo(ruta)).andRespond(withSuccess("{\"rol\":\"ROOT\"}", MediaType.APPLICATION_JSON));
+
+            assertThat(roles.rolDe(UID)).isEqualTo("MODERADOR");
+            assertThatThrownBy(() -> roles.rolDe(UID)).isInstanceOf(SancionRechazada.class)
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.NO_ENCONTRADA);
+            assertThatThrownBy(() -> roles.rolDe(UID))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.IDENTIDAD_NO_DISPONIBLE);
+            assertThatThrownBy(() -> roles.rolDe(UID))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.IDENTIDAD_NO_DISPONIBLE);
+            assertThatThrownBy(() -> roles.rolDe(UID))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.IDENTIDAD_NO_DISPONIBLE);
+            servidor.verify();
+        }
+
+        @Test
         @DisplayName("un 404 sale como error del cliente, para que el destino decida")
         void noExiste() {
             servidor.expect(requestTo("http://srv-ms-identidad:8089/api/v1/internal/usuarios/" + UID + "/contacto"))

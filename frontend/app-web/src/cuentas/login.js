@@ -199,6 +199,13 @@ export function avisoDelMotivo(motivo) {
       };
     case MOTIVOS.CERRADA:
       return { tipo: 'info', texto: 'Cerraste sesión. ¡Hasta la próxima batalla!' };
+    case MOTIVOS.INACTIVIDAD:
+      return {
+        tipo: 'advertencia',
+        texto:
+          'Cerramos tu sesión porque no hubo actividad durante un rato: así nadie puede usar ' +
+          'la consola en tu lugar. Vuelve a entrar y te llevamos a donde estabas.',
+      };
     case MOTIVOS.REGISTRADA:
       return {
         tipo: 'exito',

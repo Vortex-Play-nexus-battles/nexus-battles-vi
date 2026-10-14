@@ -4,6 +4,7 @@ import {
   abrirDialogo,
   bloquearDesplazamiento,
   confirmar,
+  confirmarConMotivo,
   confirmarCritico,
   esElModalDeArriba,
   pedirTexto,
@@ -238,5 +239,70 @@ describe('varios modales a la vez (auditoría de DEV del 30-sep)', () => {
     soltarFicha();
     soltarFicha(); // soltar dos veces no hace nada más
     expect(document.documentElement.classList.contains('con-modal')).toBe(false);
+  });
+});
+
+describe('confirmarConMotivo (7.3.5, 7.3.9)', () => {
+  const escribir = (campo, valor) => {
+    campo.value = valor;
+    campo.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  test('el motivo es obligatorio: el botón no se activa hasta el mínimo', async () => {
+    const promesa = confirmarConMotivo({ titulo: 'Cambiar rol', minimo: 5 });
+    const motivo = document.querySelector('textarea');
+    const aceptar = document.querySelector('[data-accion="confirmar"]');
+
+    expect(aceptar.disabled).toBe(true);
+    escribir(motivo, '  abc ');
+    expect(aceptar.disabled).toBe(true);
+    escribir(motivo, 'Refuerzo de moderación');
+    expect(aceptar.disabled).toBe(false);
+
+    aceptar.click();
+    await expect(promesa).resolves.toBe('Refuerzo de moderación');
+    expect(document.querySelector('.velo')).toBeNull();
+  });
+
+  test('el campo tiene su etiqueta y su pista asociadas, y recibe el foco', () => {
+    confirmarConMotivo({ titulo: 'x', etiquetaMotivo: 'Motivo del baneo', minimo: 10 });
+    const motivo = document.querySelector('textarea');
+
+    expect(document.querySelector(`label[for="${motivo.id}"]`).textContent).toBe(
+      'Motivo del baneo',
+    );
+    const pista = document.getElementById(motivo.getAttribute('aria-describedby'));
+    expect(pista.textContent).toContain('Mínimo 10 caracteres');
+    expect(document.activeElement).toBe(motivo);
+  });
+
+  test('con palabra, además hay que escribirla tal cual', async () => {
+    const promesa = confirmarConMotivo({ titulo: 'Banear', palabra: 'Lyra' });
+    const [motivo, palabra] = [
+      document.querySelector('textarea'),
+      document.querySelector('input[type="text"]'),
+    ];
+    const aceptar = document.querySelector('[data-accion="confirmar"]');
+
+    escribir(motivo, 'Fraude comprobado en subastas');
+    expect(aceptar.disabled).toBe(true);
+    escribir(palabra, 'lyra');
+    expect(aceptar.disabled).toBe(true);
+    escribir(palabra, 'Lyra');
+    expect(aceptar.disabled).toBe(false);
+
+    aceptar.click();
+    await expect(promesa).resolves.toBe('Fraude comprobado en subastas');
+  });
+
+  test('el motivo inicial llega escrito; cancelar o Escape resuelven null', async () => {
+    const primera = confirmarConMotivo({ titulo: 'x', motivoInicial: 'Spam reiterado' });
+    expect(document.querySelector('textarea').value).toBe('Spam reiterado');
+    document.querySelector('[data-accion="cancelar"]').click();
+    await expect(primera).resolves.toBeNull();
+
+    const segunda = confirmarConMotivo({ titulo: 'x' });
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await expect(segunda).resolves.toBeNull();
   });
 });

@@ -31,6 +31,14 @@ import java.util.UUID;
  * entrega {@link EntregadorDeSalidas} con reintento: la sancion queda
  * registrada aunque identidad o correo esten caidos. Tampoco escala
  * advertencias a suspension (CA-05 de HU-USR-004, decision del PO).
+ *
+ * <p><b>Sobre quien (7.3.1).</b> La Tabla 24 dice que puede hacer cada rol;
+ * la jerarquia dice sobre quien: emitir, levantar y resolver la apelacion solo
+ * sobre una cuenta de rol estrictamente inferior al de quien actua. Antes un
+ * moderador podia suspender a un administrador y un administrador banear al
+ * ultimo Super Administrador. El rol se pregunta a ms-identidad en el momento
+ * ({@link RolesDeCuentas}); si no responde, no se registra nada (503): una
+ * sancion puede esperar unos segundos, una sancion indebida no se deshace sola.
  */
 @Service
 public class SancionesService {
@@ -48,21 +56,25 @@ public class SancionesService {
     private final SalidasDeSancion salidas;
     private final Clock reloj;
     private final LimitesDeSancion limites;
+    private final RolesDeCuentas roles;
 
     @org.springframework.beans.factory.annotation.Autowired
     public SancionesService(SancionRepository sanciones, ApelacionRepository apelaciones,
-                            SalidasDeSancion salidas, Clock reloj, LimitesDeSancion limites) {
+                            SalidasDeSancion salidas, Clock reloj, LimitesDeSancion limites,
+                            RolesDeCuentas roles) {
         this.sanciones = Objects.requireNonNull(sanciones);
         this.apelaciones = Objects.requireNonNull(apelaciones);
         this.salidas = Objects.requireNonNull(salidas);
         this.reloj = Objects.requireNonNull(reloj);
         this.limites = Objects.requireNonNull(limites);
+        this.roles = Objects.requireNonNull(roles);
     }
 
     /** Limites fijos (pruebas): rango de la suspension y plazo de apelacion de 30 dias. */
     public SancionesService(SancionRepository sanciones, ApelacionRepository apelaciones,
-                            SalidasDeSancion salidas, Clock reloj, long minimaHoras, long maximaDias) {
-        this(sanciones, apelaciones, salidas, reloj, LimitesDeSancion.Fijos.de(minimaHoras, maximaDias, 30));
+                            SalidasDeSancion salidas, Clock reloj, long minimaHoras, long maximaDias,
+                            RolesDeCuentas roles) {
+        this(sanciones, apelaciones, salidas, reloj, LimitesDeSancion.Fijos.de(minimaHoras, maximaDias, 30), roles);
     }
 
     /**
@@ -123,6 +135,8 @@ public class SancionesService {
             }
         }
 
+        exigirJerarquia(actor, solicitud.usuarioId(), "sancionar a");
+
         Sancion sancion = new Sancion(UUID.randomUUID(), solicitud.usuarioId(), solicitud.tipo(),
                 solicitud.motivo().strip(), vacioANulo(solicitud.politica()), vacioANulo(solicitud.comentarioId()),
                 actor.id(), actor.rol(), ahora, vigenteHasta);
@@ -168,6 +182,7 @@ public class SancionesService {
             throw new SancionRechazada(SancionRechazada.Motivo.SANCION_NO_VIGENTE,
                     "la sancion ya no esta vigente: no hay nada que levantar");
         }
+        exigirJerarquia(actor, sancion.usuarioId(), "levantar la sancion de");
         sancion.revertir(actor.id(), motivoLimpio, ahora);
         sanciones.save(sancion);
         BITACORA.info("Sancion levantada: id={} tipo={} usuario={} por={} ({})", sancion.id(), sancion.tipo(),
@@ -280,6 +295,7 @@ public class SancionesService {
             throw new SancionRechazada(SancionRechazada.Motivo.APELACION_RESUELTA, "la apelacion ya esta resuelta");
         }
         Sancion sancion = sanciones.findById(apelacion.sancionId()).orElseThrow();
+        exigirJerarquia(actor, sancion.usuarioId(), "resolver la apelacion de");
         OffsetDateTime ahora = ahora();
         try {
             switch (decision) {
@@ -310,6 +326,21 @@ public class SancionesService {
     }
 
     /* ---- helpers ---- */
+
+    /**
+     * 7.3.1: solo sobre un rol estrictamente inferior. Para actuar sobre una
+     * cuenta administrativa, primero un Super Administrador le cambia el rol en
+     * ms-identidad (y ese cambio queda auditado).
+     */
+    private void exigirJerarquia(Actor actor, UUID cuenta, String que) {
+        String rolDeLaCuenta = roles.rolDe(cuenta);
+        if (!actor.superaA(rolDeLaCuenta)) {
+            BITACORA.info("Sancion rechazada por jerarquia: actor={} ({}) cuenta={} ({})", actor.id(), actor.rol(),
+                    cuenta, rolDeLaCuenta);
+            throw new SancionRechazada(SancionRechazada.Motivo.JERARQUIA_INSUFICIENTE,
+                    "no puedes " + que + " una cuenta con un rol igual o superior al tuyo");
+        }
+    }
 
     private boolean estaBaneado(UUID usuarioId, OffsetDateTime ahora) {
         return sanciones.findByUsuarioIdAndRevertidaEnIsNullAndTipoNot(usuarioId, Sancion.Tipo.ADVERTENCIA).stream()

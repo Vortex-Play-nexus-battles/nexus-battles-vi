@@ -12,7 +12,8 @@ public enum Action {
     CREAR_ADMIN_MODERADOR("Crear cuentas Administrador/Moderador"),
     GESTIONAR_PRODUCTOS("Gestionar productos de la tienda"),
     ASIGNAR_ROL("Asignar un rol a un usuario existente"),
-    GESTIONAR_CUENTAS("Gestionar cuentas de otros usuarios");
+    GESTIONAR_CUENTAS("Gestionar cuentas de otros usuarios"),
+    RESTABLECER_SEGUNDO_FACTOR("Restablecer el segundo factor de otra cuenta");
 
     private final String description;
 

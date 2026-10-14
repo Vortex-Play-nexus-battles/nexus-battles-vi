@@ -4,7 +4,7 @@
  * servicios reales del banco.
  *
  *   1. cada servicio del catalogo tiene sonda: ninguno sale NO_OBSERVABLE, los
- *      que no estan en el banco (ms-chatbot, ms-cumplimiento) salen
+ *      que no estan en el banco (ms-chatbot) salen
  *      NO_DESPLEGADO y los que si estan contestan su salud de Actuator. Es la
  *      prueba de punta a punta de la sonda estricta: solo cuenta UP si recibe
  *      el JSON de Actuator con status UP en la raiz.
@@ -36,6 +36,7 @@ const EN_EL_BANCO = [
   'metricas-plataforma',
   'admin-parametros',
   'ms-identidad',
+  'ms-cumplimiento',
   'ms-ecommerce',
   'ms-finanzas',
   'ms-subastas',
@@ -45,7 +46,7 @@ const EN_EL_BANCO = [
   'motor-combate',
   'misiones',
 ];
-const FUERA_DEL_BANCO = ['ms-chatbot', 'ms-cumplimiento'];
+const FUERA_DEL_BANCO = ['ms-chatbot'];
 
 test.describe('Estado de los servicios de la consola (RFINAL-08)', () => {
   test.describe.configure({ mode: 'serial' });

@@ -275,8 +275,8 @@
                   aria-describedby="pista-motivo-sancion"
                 ></textarea>
                 <p class="campo__pista" id="pista-motivo-sancion">
-                  Opcional. Queda en el registro de la sanción; si lo dejas vacío, se anota que vino
-                  de este panel.
+                  Obligatorio para suspender o banear. Queda en el historial de la sanción y en el
+                  aviso que recibe la cuenta; si no lo escribes aquí, se pide al confirmar.
                 </p>
               </div>
             </div>
@@ -314,8 +314,9 @@
               <div>
                 <h2 class="tarjeta__titulo">Seguridad</h2>
                 <p class="t-meta">
-                  El restablecimiento se envía al correo del usuario. Ni tú ni el sistema ven la
-                  contraseña nueva.
+                  El restablecimiento de la contraseña se envía al correo de la cuenta: ni tú ni el
+                  sistema ven la contraseña nueva. La verificación en dos pasos solo la restablece
+                  un Super Administrador, con motivo.
                 </p>
               </div>
             </div>
@@ -328,6 +329,14 @@
                 data-has-permission="GESTIONAR_CUENTAS"
               >
                 Restablecer contraseña
+              </button>
+              <button
+                type="button"
+                id="btn-restablecer-segundo-factor"
+                class="boton boton--secundario"
+                data-has-permission="RESTABLECER_SEGUNDO_FACTOR"
+              >
+                Restablecer verificación en dos pasos
               </button>
             </div>
           </section>

@@ -25,6 +25,7 @@ public class AuditoriaDelSegundoFactor {
             case ACTIVADO -> "totp";
             case DESACTIVADO -> "sin-segundo-factor";
             case RECUPERACION_USADA -> "codigos-restantes=" + (cambio.restantes() == null ? 0 : cambio.restantes());
+            case RESTABLECIDO_POR_ADMINISTRACION -> "sin-segundo-factor (restablecido por administracion)";
         };
         auditoria.segundoFactor(cambio.afectado(), cambio.cambio().motivo(), valorNuevo, cambio.ip());
     }

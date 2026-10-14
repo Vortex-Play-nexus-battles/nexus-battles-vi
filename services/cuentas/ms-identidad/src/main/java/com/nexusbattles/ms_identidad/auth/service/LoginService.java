@@ -146,7 +146,13 @@ public class LoginService {
 
         // --- Verificación de contraseña (antes que el estado: B1) ---
         if (!passwordEncoder.matches(datos.getPassword(), usuario.getPassword())) {
-            intentosFallidosService.registrarIntentoFallido(usuario.getId());
+            if (intentosFallidosService.registrarIntentoFallido(usuario.getId())) {
+                // 7.3.9 — el bloqueo temporal queda en la auditoria, una vez.
+                auditLog.info("CUENTA_BLOQUEADA usuarioId={} ip={}", usuario.getId(), direccionIp);
+                auditoriaLoginClient.registrarBloqueo(
+                    usuario.getPublicId() != null ? usuario.getPublicId().toString() : "usuario-" + usuario.getId(),
+                    direccionIp);
+            }
             throw credencialesInvalidas(datos.getEmail(), direccionIp);
         }
 

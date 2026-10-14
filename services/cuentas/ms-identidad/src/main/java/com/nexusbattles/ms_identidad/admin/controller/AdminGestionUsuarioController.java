@@ -2,6 +2,7 @@ package com.nexusbattles.ms_identidad.admin.controller;
 
 import com.nexusbattles.ms_identidad.admin.dto.AdminUsuarioResumenResponse;
 import com.nexusbattles.ms_identidad.admin.dto.BanearCuentaRequest;
+import com.nexusbattles.ms_identidad.admin.dto.RestablecerSegundoFactorRequest;
 import com.nexusbattles.ms_identidad.admin.dto.SuspenderCuentaRequest;
 import com.nexusbattles.ms_identidad.admin.service.AdminGestionUsuarioService;
 import com.nexusbattles.ms_identidad.perfiles.dto.ActualizarPerfilRequest;
@@ -52,7 +53,7 @@ public class AdminGestionUsuarioController {
             PerfilUsuario actualizado = adminGestionUsuarioService.editarPerfilDeUsuario(
                 usuarioId, datos.getNombres(), datos.getApellidos(), datos.getAvatar(),
                 datos.getPreferencias(), datos.getApodo(),
-                administradorId, obtenerIpReal(request));
+                administradorId, rolActual(request), obtenerIpReal(request));
             return ResponseEntity.ok(PerfilUsuarioResponse.from(actualizado));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
@@ -74,7 +75,8 @@ public class AdminGestionUsuarioController {
         try {
             String administradorId = (String) request.getAttribute("usuarioActual");
             adminGestionUsuarioService.suspenderCuenta(usuarioId, datos.getSuspendidoHasta(), datos.getMotivo(),
-                request.getHeader(HttpHeaders.AUTHORIZATION), administradorId, obtenerIpReal(request));
+                request.getHeader(HttpHeaders.AUTHORIZATION), administradorId, rolActual(request),
+                obtenerIpReal(request));
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
@@ -94,7 +96,8 @@ public class AdminGestionUsuarioController {
         try {
             String administradorId = (String) request.getAttribute("usuarioActual");
             adminGestionUsuarioService.banearCuenta(usuarioId, datos == null ? null : datos.motivo(),
-                request.getHeader(HttpHeaders.AUTHORIZATION), administradorId, obtenerIpReal(request));
+                request.getHeader(HttpHeaders.AUTHORIZATION), administradorId, rolActual(request),
+                obtenerIpReal(request));
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
@@ -111,7 +114,7 @@ public class AdminGestionUsuarioController {
         try {
             String administradorId = (String) request.getAttribute("usuarioActual");
             adminGestionUsuarioService.reactivarCuenta(usuarioId, request.getHeader(HttpHeaders.AUTHORIZATION),
-                administradorId, obtenerIpReal(request));
+                administradorId, rolActual(request), obtenerIpReal(request));
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
@@ -127,11 +130,39 @@ public class AdminGestionUsuarioController {
     public ResponseEntity<?> restablecerPassword(@PathVariable Long usuarioId, HttpServletRequest request) {
         try {
             String administradorId = (String) request.getAttribute("usuarioActual");
-            adminGestionUsuarioService.restablecerPassword(usuarioId, administradorId, obtenerIpReal(request));
+            adminGestionUsuarioService.restablecerPassword(usuarioId, administradorId, rolActual(request),
+                obtenerIpReal(request));
             return ResponseEntity.noContent().build();
         } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
         }
+    }
+
+    /**
+     * 7.3.9 — la cuenta perdio su aplicacion de autenticacion y sus codigos de
+     * recuperacion: el Super Administrador le quita el segundo factor, con
+     * motivo, auditoria fail-closed y aviso. Nunca sobre la propia cuenta.
+     */
+    @PostMapping("/{usuarioId}/segundo-factor/restablecimiento")
+    @RequirePermission(Action.RESTABLECER_SEGUNDO_FACTOR)
+    public ResponseEntity<?> restablecerSegundoFactor(@PathVariable Long usuarioId,
+                                                      @Valid @RequestBody RestablecerSegundoFactorRequest datos,
+                                                      HttpServletRequest request) {
+        try {
+            String administradorId = (String) request.getAttribute("usuarioActual");
+            adminGestionUsuarioService.restablecerSegundoFactor(usuarioId, datos.motivo(), administradorId,
+                (String) request.getAttribute("uidActual"), rolActual(request), obtenerIpReal(request));
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+        }
+    }
+
+    private static String rolActual(HttpServletRequest request) {
+        Object rol = request.getAttribute("rolActual");
+        return rol == null ? null : rol.toString();
     }
 
     /**

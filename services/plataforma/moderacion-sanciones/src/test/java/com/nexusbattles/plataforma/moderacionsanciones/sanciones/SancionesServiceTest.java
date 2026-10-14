@@ -14,7 +14,9 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -47,6 +49,10 @@ class SancionesServiceTest {
 
     private SancionesService servicio;
     private final List<Sancion> guardadas = new ArrayList<>();
+    /** El rol de cada cuenta segun ms-identidad; las que no estan son jugadores. */
+    private final Map<UUID, String> rolesDeLasCuentas = new HashMap<>();
+    /** Si no es nulo, ms-identidad "no responde" con este rechazo. */
+    private SancionRechazada identidadCaida;
 
     @BeforeEach
     void preparar() {
@@ -63,7 +69,14 @@ class SancionesServiceTest {
     }
 
     private SancionesService nuevo(Clock reloj, LimitesDeSancion limites) {
-        return new SancionesService(sanciones, apelaciones, new SalidasDeSancion(salidasGuardadas), reloj, limites);
+        RolesDeCuentas roles = cuenta -> {
+            if (identidadCaida != null) {
+                throw identidadCaida;
+            }
+            return rolesDeLasCuentas.getOrDefault(cuenta, "JUGADOR");
+        };
+        return new SancionesService(sanciones, apelaciones, new SalidasDeSancion(salidasGuardadas), reloj, limites,
+                roles);
     }
 
     private static SancionesService.SolicitudDeSancion solicitud(Sancion.Tipo tipo, Long horas, boolean confirmacion) {
@@ -403,5 +416,107 @@ class SancionesServiceTest {
         assertThat(servicio.historialDe(MODERADORA, JUGADOR)).isEmpty();
         assertThatThrownBy(() -> servicio.historialDe(OTRO_JUGADOR, JUGADOR))
                 .extracting("motivo").isEqualTo(SancionRechazada.Motivo.PERMISO_INSUFICIENTE);
+    }
+
+    @Nested
+    @DisplayName("7.3.1 · jerarquia: solo sobre un rol inferior")
+    class Jerarquia {
+
+        private static final UUID CUENTA = UUID.fromString("66666666-6666-6666-6666-666666666666");
+
+        private SancionesService.SolicitudDeSancion contra(String rol, Sancion.Tipo tipo, Long horas,
+                                                          boolean confirmacion) {
+            rolesDeLasCuentas.put(CUENTA, rol);
+            return new SancionesService.SolicitudDeSancion(CUENTA, tipo, "Abuso de herramientas", null, null, horas,
+                    confirmacion);
+        }
+
+        @Test
+        @DisplayName("un moderador no advierte ni suspende a otro moderador, a un administrador ni a un super")
+        void moderadorSobreIgualesOSuperiores() {
+            for (String rol : List.of("MODERADOR", "ADMINISTRADOR", "SUPER_ADMINISTRADOR")) {
+                assertThatThrownBy(() -> servicio.emitir(MODERADORA, contra(rol, Sancion.Tipo.SUSPENSION, 24L, false)))
+                        .isInstanceOf(SancionRechazada.class)
+                        .extracting("motivo").isEqualTo(SancionRechazada.Motivo.JERARQUIA_INSUFICIENTE);
+                assertThatThrownBy(() -> servicio.emitir(MODERADORA, contra(rol, Sancion.Tipo.ADVERTENCIA, null, false)))
+                        .extracting("motivo").isEqualTo(SancionRechazada.Motivo.JERARQUIA_INSUFICIENTE);
+            }
+            verify(sanciones, never()).save(any());
+            verify(salidasGuardadas, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("un administrador no banea a otro administrador ni a un super; un super no banea a otro super")
+        void baneoSobreIgualesOSuperiores() {
+            assertThatThrownBy(() -> servicio.emitir(ADMIN, contra("ADMINISTRADOR", Sancion.Tipo.BANEO, null, true)))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.JERARQUIA_INSUFICIENTE);
+            assertThatThrownBy(() -> servicio.emitir(ADMIN,
+                    contra("SUPER_ADMINISTRADOR", Sancion.Tipo.BANEO, null, true)))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.JERARQUIA_INSUFICIENTE);
+            assertThatThrownBy(() -> servicio.emitir(SUPER,
+                    contra("SUPER_ADMINISTRADOR", Sancion.Tipo.BANEO, null, true)))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.JERARQUIA_INSUFICIENTE);
+            verify(sanciones, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("sobre un rol inferior si: el administrador suspende a un moderador, el super a un administrador")
+        void sobreUnRolInferior() {
+            Sancion aModeradora = servicio.emitir(ADMIN, contra("MODERADOR", Sancion.Tipo.SUSPENSION, 24L, false));
+            Sancion aAdmin = servicio.emitir(SUPER, contra("ADMINISTRADOR", Sancion.Tipo.ADVERTENCIA, null, false));
+
+            assertThat(aModeradora.usuarioId()).isEqualTo(CUENTA);
+            assertThat(aAdmin.rolEmisor()).isEqualTo("SUPER_ADMINISTRADOR");
+        }
+
+        @Test
+        @DisplayName("levantar la sancion de un administrador es del super, no de otro administrador")
+        void levantarSobreUnIgual() {
+            Sancion suspension = servicio.emitir(SUPER, contra("ADMINISTRADOR", Sancion.Tipo.SUSPENSION, 24L, false));
+            when(sanciones.findById(suspension.id())).thenReturn(Optional.of(suspension));
+
+            assertThatThrownBy(() -> servicio.levantar(ADMIN, suspension.id(), "Ya hablamos con el"))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.JERARQUIA_INSUFICIENTE);
+            assertThat(suspension.revertidaEn()).isNull();
+
+            servicio.levantar(SUPER, suspension.id(), "Ya hablamos con el");
+            assertThat(suspension.revertidaEn()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("con ms-identidad sin responder no se registra nada (fail-closed)")
+        void identidadSinResponder() {
+            identidadCaida = new SancionRechazada(SancionRechazada.Motivo.IDENTIDAD_NO_DISPONIBLE,
+                    RolesDesdeIdentidad.NO_DISPONIBLE);
+
+            assertThatThrownBy(() -> servicio.emitir(MODERADORA, solicitud(Sancion.Tipo.ADVERTENCIA, null, false)))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.IDENTIDAD_NO_DISPONIBLE);
+            verify(sanciones, never()).save(any());
+            verify(salidasGuardadas, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("el rol se comprueba despues de las reglas locales: una solicitud invalida ni pregunta")
+        void primeroLasReglasLocales() {
+            identidadCaida = new SancionRechazada(SancionRechazada.Motivo.IDENTIDAD_NO_DISPONIBLE, "caida");
+
+            assertThatThrownBy(() -> servicio.emitir(MODERADORA, solicitud(Sancion.Tipo.BANEO, null, true)))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.PERMISO_INSUFICIENTE);
+            assertThatThrownBy(() -> servicio.emitir(OTRO_JUGADOR, solicitud(Sancion.Tipo.ADVERTENCIA, null, false)))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.PERMISO_INSUFICIENTE);
+        }
+    }
+
+    @Test
+    @DisplayName("Actor.superaA: estrictamente por encima; un rol desconocido no supera a nadie")
+    void superaA() {
+        assertThat(MODERADORA.superaA("JUGADOR")).isTrue();
+        assertThat(MODERADORA.superaA("MODERADOR")).isFalse();
+        assertThat(SUPER.superaA("ADMINISTRADOR")).isTrue();
+        assertThat(SUPER.superaA("SUPER_ADMINISTRADOR")).isFalse();
+        assertThat(OTRO_JUGADOR.superaA("JUGADOR")).isFalse();
+        assertThat(new Actor(UUID.randomUUID(), "SERVICIO").superaA("JUGADOR")).isFalse();
+        assertThat(ADMIN.superaA(null)).isFalse();
+        assertThat(SUPER.superaA("ROOT")).isFalse();
     }
 }

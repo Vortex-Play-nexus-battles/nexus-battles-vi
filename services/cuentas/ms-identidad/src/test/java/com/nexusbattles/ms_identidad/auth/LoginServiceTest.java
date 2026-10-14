@@ -161,6 +161,53 @@ class LoginServiceTest {
     }
 
     @Test
+    @DisplayName("7.3.9: el intento que bloquea la cuenta queda auditado una vez, con su uid y la ip")
+    void elIntentoQueBloqueaSeAudita() {
+        Usuario usuario = usuarioActivo();
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+        when(intentosFallidosService.registrarIntentoFallido(1L)).thenReturn(true);
+        LoginRequest datos = datosValidos();
+        datos.setPassword("ClaveIncorrecta1!");
+
+        assertThrows(CredencialesInvalidasException.class,
+            () -> loginService.iniciarSesion(datos, "10.0.0.8", "agente"));
+
+        verify(auditoriaLoginClient).registrarBloqueo(UID.toString(), "10.0.0.8");
+        verify(auditoriaLoginClient).registrarLoginFallido("cristian@test.com", "10.0.0.8");
+    }
+
+    @Test
+    @DisplayName("7.3.9: una cuenta antigua sin uid se audita por su id interno, nunca por el correo")
+    void bloqueoDeCuentaSinUid() {
+        Usuario usuario = usuarioActivo();
+        usuario.setPublicId(null);
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+        when(intentosFallidosService.registrarIntentoFallido(1L)).thenReturn(true);
+        LoginRequest datos = datosValidos();
+        datos.setPassword("ClaveIncorrecta1!");
+
+        assertThrows(CredencialesInvalidasException.class,
+            () -> loginService.iniciarSesion(datos, "10.0.0.8", "agente"));
+
+        verify(auditoriaLoginClient).registrarBloqueo("usuario-1", "10.0.0.8");
+    }
+
+    @Test
+    @DisplayName("7.3.9: un intento fallido que no bloquea no deja evento de bloqueo")
+    void intentoQueNoBloqueaNoAuditaBloqueo() {
+        Usuario usuario = usuarioActivo();
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+        when(intentosFallidosService.registrarIntentoFallido(1L)).thenReturn(false);
+        LoginRequest datos = datosValidos();
+        datos.setPassword("ClaveIncorrecta1!");
+
+        assertThrows(CredencialesInvalidasException.class,
+            () -> loginService.iniciarSesion(datos, "10.0.0.8", "agente"));
+
+        verify(auditoriaLoginClient, never()).registrarBloqueo(anyString(), anyString());
+    }
+
+    @Test
     void debeRechazarCuentaBaneada() {
 
         Usuario usuario = usuarioActivo();

@@ -9,10 +9,10 @@
  *      cache; la jugadora no puede (403); una cuenta que no existe es un
  *      problem details 404 `cuenta-no-encontrada` (CA-03).
  *   2. la vista: datos de la cuenta, sanciones y comentarios de sus servicios,
- *      lo que no tiene fuente dicho como tal, y el aviso de auditoría. El banco
- *      no tiene ms-cumplimiento, así que aquí la consulta NO queda auditada y
- *      la vista tiene que decirlo (nunca en silencio); en un entorno con la
- *      bitácora, lo contrario.
+ *      lo que no tiene fuente dicho como tal, y el aviso de auditoría. Desde
+ *      SA-1 el banco tiene ms-cumplimiento y la consulta queda auditada; si la
+ *      bitácora no respondiera, la vista tendría que decirlo (nunca en
+ *      silencio).
  *   3. el directorio de Control integral abre la ficha de cada cuenta.
  */
 

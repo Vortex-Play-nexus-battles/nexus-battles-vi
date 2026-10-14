@@ -483,21 +483,35 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     await elegirUsuario();
   });
 
-  test('suspender pregunta en un diálogo con el apodo y la fecha, y manda la fecha fin', async () => {
+  /** Escribe en un campo del diálogo como lo haría una persona. */
+  function escribir(campo, valor) {
+    campo.value = valor;
+    campo.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  test('suspender pide el motivo en el diálogo, con el apodo y la fecha, y lo manda con la fecha fin', async () => {
     document.getElementById('suspendido-hasta').value = '2026-10-01T10:00';
     document.getElementById('btn-suspender').click();
     await esperar();
 
     expect(dialogo().querySelector('h2').textContent).toBe('¿Suspender a nyx_valiente?');
     expect(dialogo().textContent).toMatch(/No podrá entrar al juego hasta el 1 de octubre/);
+    const confirmarBoton = dialogo().querySelector('[data-accion="confirmar"]');
+    // 7.3.9 — sin motivo no se puede confirmar.
+    expect(confirmarBoton.disabled).toBe(true);
+    escribir(dialogo().querySelector('textarea'), 'Lenguaje ofensivo reiterado');
+    expect(confirmarBoton.disabled).toBe(false);
     globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
-    dialogo().querySelector('[data-accion="confirmar"]').click();
+    confirmarBoton.click();
     await esperar();
 
     const [ruta, opciones] = globalThis.fetch.mock.calls.at(-1);
     expect(ruta).toBe('/api/v1/admin/usuarios/15/suspender');
     expect(opciones.method).toBe('PUT');
-    expect(JSON.parse(opciones.body)).toEqual({ suspendidoHasta: '2026-10-01T10:00' });
+    expect(JSON.parse(opciones.body)).toEqual({
+      suspendidoHasta: '2026-10-01T10:00',
+      motivo: 'Lenguaje ofensivo reiterado',
+    });
     expect(window.confirm).not.toHaveBeenCalled();
   });
 
@@ -507,10 +521,15 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     await esperar();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     await esperar();
+    document.getElementById('suspendido-hasta').value = '2026-10-01T10:00';
+    document.getElementById('btn-suspender').click();
+    await esperar();
+    dialogo().querySelector('[data-accion="cancelar"]').click();
+    await esperar();
     expect(globalThis.fetch.mock.calls.length).toBe(llamadas);
   });
 
-  test('banear es crítico: no se confirma hasta escribir el apodo de la cuenta', async () => {
+  test('banear es crítico: motivo obligatorio y, además, escribir el apodo de la cuenta', async () => {
     document.getElementById('btn-banear').click();
     await esperar();
 
@@ -519,34 +538,37 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     expect(caja.querySelector('.confirmacion-critica__consecuencias').textContent).toContain(
       'No podrá volver a entrar con esta cuenta.',
     );
-    const campo = caja.querySelector('input');
+    const motivo = caja.querySelector('textarea');
+    const palabra = caja.querySelector('input');
     const boton = caja.querySelector('[data-accion="confirmar"]');
-    expect(document.activeElement).toBe(campo);
+    expect(document.activeElement).toBe(motivo);
     expect(boton.disabled).toBe(true);
 
-    campo.value = 'nyx';
-    campo.dispatchEvent(new Event('input'));
+    escribir(palabra, 'nyx_valiente');
     expect(boton.disabled).toBe(true);
-
-    campo.value = 'nyx_valiente';
-    campo.dispatchEvent(new Event('input'));
+    escribir(motivo, 'corto');
+    expect(boton.disabled).toBe(true);
+    escribir(motivo, 'Fraude comprobado en subastas');
+    escribir(palabra, 'nyx');
+    expect(boton.disabled).toBe(true);
+    escribir(palabra, 'nyx_valiente');
     expect(boton.disabled).toBe(false);
     globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
     boton.click();
     await esperar();
 
-    expect(globalThis.fetch.mock.calls.at(-1)[0]).toBe('/api/v1/admin/usuarios/15/banear');
-    // Sin causal escrita el cuerpo no viaja (es opcional en el contrato).
-    expect(globalThis.fetch.mock.calls.at(-1)[1].body).toBeUndefined();
+    const [ruta, opciones] = globalThis.fetch.mock.calls.at(-1);
+    expect(ruta).toBe('/api/v1/admin/usuarios/15/banear');
+    expect(JSON.parse(opciones.body)).toEqual({ motivo: 'Fraude comprobado en subastas' });
   });
 
-  test('UXC-9 — la causal escrita viaja con la suspensión y se lee en el diálogo', async () => {
+  test('UXC-9 — la causal escrita en el formulario llega escrita al diálogo y viaja sin espacios', async () => {
     document.getElementById('suspendido-hasta').value = '2026-10-01T10:00';
     document.getElementById('motivo-sancion').value = '  Lenguaje ofensivo en el chat  ';
     document.getElementById('btn-suspender').click();
     await esperar();
 
-    expect(dialogo().textContent).toContain('Motivo: «Lenguaje ofensivo en el chat».');
+    expect(dialogo().querySelector('textarea').value).toContain('Lenguaje ofensivo en el chat');
     globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
     dialogo().querySelector('[data-accion="confirmar"]').click();
     await esperar();
@@ -578,6 +600,7 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     await esperar();
 
     document.getElementById('suspendido-hasta').value = '2026-10-01T10:00';
+    document.getElementById('motivo-sancion').value = 'Spam reiterado en el chat';
     document.getElementById('btn-suspender').click();
     await esperar();
     globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
@@ -587,24 +610,37 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     expect(globalThis.fetch.mock.calls.at(-1)[0]).toBe('/api/v1/admin/usuarios/15/suspender');
   });
 
-  test('UXC-9 — la causal viaja con el baneo y queda en sus consecuencias', async () => {
-    document.getElementById('motivo-sancion').value = 'Fraude en subastas';
-    document.getElementById('btn-banear').click();
-    await esperar();
+  test('7.3.9 — restablecer el segundo factor pide motivo y lo manda; sin permiso ni pregunta', async () => {
+    const boton = document.createElement('button');
+    boton.id = 'btn-restablecer-segundo-factor';
+    document.getElementById('panel-usuario').append(boton);
+    setPermissionMatrix({
+      SUPER_ADMINISTRADOR: {
+        GESTIONAR_CUENTAS: 'GRANTED',
+        RESTABLECER_SEGUNDO_FACTOR: 'GRANTED',
+      },
+    });
+    configurarEventos();
 
+    boton.click();
+    await esperar();
     const caja = dialogo();
-    expect(caja.querySelector('.confirmacion-critica__consecuencias').textContent).toContain(
-      'Motivo que queda registrado: «Fraude en subastas».',
-    );
-    const campo = caja.querySelector('input');
-    campo.value = 'nyx_valiente';
-    campo.dispatchEvent(new Event('input'));
+    expect(caja.querySelector('h2').textContent).toContain('verificación en dos pasos');
+    escribir(caja.querySelector('textarea'), 'Perdió el teléfono y los códigos');
     globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
     caja.querySelector('[data-accion="confirmar"]').click();
     await esperar();
 
     const [ruta, opciones] = globalThis.fetch.mock.calls.at(-1);
-    expect(ruta).toBe('/api/v1/admin/usuarios/15/banear');
-    expect(JSON.parse(opciones.body)).toEqual({ motivo: 'Fraude en subastas' });
+    expect(ruta).toBe('/api/v1/admin/usuarios/15/segundo-factor/restablecimiento');
+    expect(opciones.method).toBe('POST');
+    expect(JSON.parse(opciones.body)).toEqual({ motivo: 'Perdió el teléfono y los códigos' });
+
+    setCurrentRole('ADMINISTRADOR');
+    const llamadas = globalThis.fetch.mock.calls.length;
+    boton.click();
+    await esperar();
+    expect(dialogo()).toBeNull();
+    expect(globalThis.fetch.mock.calls.length).toBe(llamadas);
   });
 });
