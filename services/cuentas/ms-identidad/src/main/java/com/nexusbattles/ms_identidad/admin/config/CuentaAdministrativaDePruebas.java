@@ -27,6 +27,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -73,7 +74,7 @@ public class CuentaAdministrativaDePruebas implements CommandLineRunner {
 
     private static final Logger BITACORA = LoggerFactory.getLogger(CuentaAdministrativaDePruebas.class);
     static final String ROL_POR_OMISION = "SUPER_ADMINISTRADOR";
-    static final Set<String> ROLES = Set.of("MODERADOR", "ADMINISTRADOR", "SUPER_ADMINISTRADOR");
+    static final Set<String> ROLES_ADMITIDOS = Set.of("MODERADOR", "ADMINISTRADOR", "SUPER_ADMINISTRADOR");
     private static final int LONGITUD_MINIMA_CLAVE = 12;
     private static final int BYTES_MINIMOS_DEL_SECRETO = 16;
 
@@ -195,7 +196,7 @@ public class CuentaAdministrativaDePruebas implements CommandLineRunner {
         if (apodo.isEmpty() || email.isEmpty()) {
             throw new IllegalStateException("app.admins.qa: apodo y correo no pueden ir vacios.");
         }
-        if (!ROLES.contains(rol)) {
+        if (!ROLES_ADMITIDOS.contains(rol)) {
             throw new IllegalStateException("app.admins.qa: el rol de " + apodo + " debe ser MODERADOR, "
                     + "ADMINISTRADOR o SUPER_ADMINISTRADOR.");
         }
@@ -210,6 +211,32 @@ public class CuentaAdministrativaDePruebas implements CommandLineRunner {
         return new CuentaQa(apodo, email, clave, secreto, rol);
     }
 
+    /**
+     * Una cuenta de pruebas ya validada. Lleva la clave y el secreto TOTP, asi
+     * que su {@code toString} no los imprime nunca (ni por descuido en una
+     * traza), y la igualdad compara el contenido del secreto, no la referencia
+     * del arreglo.
+     */
     record CuentaQa(String apodo, String email, String clave, byte[] secreto, String rol) {
+
+        @Override
+        public boolean equals(Object otro) {
+            return otro instanceof CuentaQa cuenta
+                    && Objects.equals(apodo, cuenta.apodo)
+                    && Objects.equals(email, cuenta.email)
+                    && Objects.equals(clave, cuenta.clave)
+                    && Arrays.equals(secreto, cuenta.secreto)
+                    && Objects.equals(rol, cuenta.rol);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * Objects.hash(apodo, email, clave, rol) + Arrays.hashCode(secreto);
+        }
+
+        @Override
+        public String toString() {
+            return "CuentaQa[apodo=" + apodo + ", email=" + email + ", rol=" + rol + "]";
+        }
     }
 }

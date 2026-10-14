@@ -94,7 +94,8 @@ public class RenovacionDeSesionService {
         return new SesionRenovada(token, expiraEn);
     }
 
-    private Optional<Usuario> titular(Claims claims) {
+    /** La cuenta del token: por su {@code uid} y, en un token anterior al uid, por su apodo. */
+    Optional<Usuario> titular(Claims claims) {
         String uid = claims.get("uid", String.class);
         if (uid != null && !uid.isBlank()) {
             try {

@@ -75,12 +75,4 @@ public class IntentosFallidosService {
         usuarioRepository.save(usuario);
         return bloqueaAhora;
     }
-
-    public int umbral() {
-        return umbralIntentosFallidos;
-    }
-
-    public int minutosDeBloqueo() {
-        return minutosBloqueo;
-    }
 }

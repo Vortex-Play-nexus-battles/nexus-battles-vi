@@ -150,7 +150,9 @@ test.describe('7.3.9 · seguridad de las cuentas administrativas', () => {
     for (const autorizacion of [null, 'Bearer no-es-un-token']) {
       const rechazo = await leer(
         await api.post('/api/v1/auth/sesion/renovacion', {
-          headers: autorizacion ? { Accept: ACEPTA, Authorization: autorizacion } : { Accept: ACEPTA },
+          headers: autorizacion
+            ? { Accept: ACEPTA, Authorization: autorizacion }
+            : { Accept: ACEPTA },
         }),
       );
       expect(rechazo.estado).toBe(401);
@@ -233,7 +235,10 @@ test.describe('7.3.9 · seguridad de las cuentas administrativas', () => {
     });
     expect(sinMotivo.status()).toBe(400);
 
-    const hecho = await api.post(ruta(ascendido.usuarioId), { ...como(superAdmin, json), data: motivo });
+    const hecho = await api.post(ruta(ascendido.usuarioId), {
+      ...como(superAdmin, json),
+      data: motivo,
+    });
     expect(hecho.status(), await hecho.text()).toBe(204);
 
     // Sus sesiones abiertas se cierran y el siguiente login le pide enrolarse.
@@ -342,7 +347,10 @@ test.describe('7.3.9 · seguridad de las cuentas administrativas', () => {
 
     // Y no quedó nada registrado contra ellos.
     for (const cuenta of [admin, superAdmin]) {
-      const historial = await api.get(`/api/v1/sanciones/usuarios/${cuenta.claims.uid}`, como(superAdmin));
+      const historial = await api.get(
+        `/api/v1/sanciones/usuarios/${cuenta.claims.uid}`,
+        como(superAdmin),
+      );
       expect(historial.status()).toBe(200);
       const sanciones = await historial.json();
       expect(JSON.stringify(sanciones)).not.toContain(`Jerarquía ${SUFIJO}`);
@@ -406,17 +414,30 @@ test.describe('7.3.9 · seguridad de las cuentas administrativas', () => {
       },
       [sesion.token, sesion.apodo, sesion.claims.rol, sesion.claims.uid],
     );
+    // Lo que le queda al token en la hora del SERVIDOR, como la mide la página.
+    // `page.clock` adelanta el navegador y no el servidor: para la consola es
+    // un reloj descuadrado, y lo corrige con el desfase que mide al recibir
+    // cada token (`nexus.desfaseDelReloj`, atado a su `iat`).
     const restante = () =>
       page.evaluate(() => {
         const token = sessionStorage.getItem('nexus.token');
-        const cuerpo = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-        return JSON.parse(atob(cuerpo)).exp * 1000 - Date.now();
+        const claims = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        let desfase = 0;
+        try {
+          const medido = JSON.parse(sessionStorage.getItem('nexus.desfaseDelReloj') ?? 'null');
+          if (medido && medido.iat === claims.iat) {
+            desfase = medido.ms;
+          }
+        } catch {
+          desfase = 0;
+        }
+        return claims.exp * 1000 - (Date.now() - desfase);
       });
     const esRenovacion = (r) =>
       r.request().method() === 'POST' && r.url().includes('/api/v1/auth/sesion/renovacion');
 
     await page.goto(CONSOLA);
-    await expect(page.locator('[data-cabecera-app]')).not.toBeEmpty();
+    await expect(page.locator('header[data-cabecera-app]')).not.toBeEmpty();
     const tokenInicial = await page.evaluate(() => sessionStorage.getItem('nexus.token'));
 
     // a) Abrir la página es actividad: al entrar en los últimos 5 minutos,

@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_identidad.rbac;
 
+import com.nexusbattles.ms_identidad.admin.service.UsuarioNoEncontradoException;
 import com.nexusbattles.ms_identidad.auth.service.JwtService;
 import com.nexusbattles.ms_identidad.rbac.controller.RoleAssignmentController;
 import com.nexusbattles.ms_identidad.rbac.model.Role;
@@ -7,6 +8,7 @@ import com.nexusbattles.ms_identidad.rbac.repository.RbacMatrixRepository;
 import com.nexusbattles.ms_identidad.rbac.security.SecurityInterceptor;
 import com.nexusbattles.ms_identidad.rbac.service.RbacAuthorizationService;
 import com.nexusbattles.ms_identidad.rbac.service.RoleAssignmentService;
+import com.nexusbattles.ms_identidad.rbac.service.UltimoSuperAdministradorException;
 import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -173,5 +175,57 @@ class RoleAssignmentControllerTest {
             null,
             null
         );
+    }
+
+    private void comoSuperAdministrador() {
+        when(jwtService.validarYObtenerClaims("token-valido")).thenReturn(claims);
+        when(claims.getSubject()).thenReturn("super_admin");
+        when(claims.get("rol", String.class)).thenReturn("SUPER_ADMINISTRADOR");
+        when(claims.get("uid", String.class)).thenReturn("uid-del-super");
+    }
+
+    @Test
+    void elMotivoYElUidDeQuienActuaLleganAlServicio() throws Exception {
+        comoSuperAdministrador();
+
+        mockMvc.perform(put("/api/v1/rbac/usuarios/2/rol")
+                .header("Authorization", "Bearer token-valido")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"nuevoRol": "MODERADOR", "motivo": "Refuerzo del equipo de moderación"}
+                    """))
+            .andExpect(status().isOk());
+
+        verify(roleAssignmentService).asignarRol(eq(2L), eq(Role.MODERADOR), eq("super_admin"), anyString(),
+            eq("Refuerzo del equipo de moderación"), eq("uid-del-super"));
+    }
+
+    @Test
+    void cuentaInexistenteEs404ConSuTipo() throws Exception {
+        comoSuperAdministrador();
+        doThrow(new UsuarioNoEncontradoException(99L)).when(roleAssignmentService)
+            .asignarRol(eq(99L), any(), anyString(), anyString(), any(), any());
+
+        mockMvc.perform(put("/api/v1/rbac/usuarios/99/rol")
+                .header("Authorization", "Bearer token-valido")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nuevoRol\": \"MODERADOR\"}"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.type").value("https://nexusbattles.upb.edu.co/errors/cuenta-no-encontrada"));
+    }
+
+    @Test
+    void quitarElUltimoSuperAdministradorEs409() throws Exception {
+        comoSuperAdministrador();
+        doThrow(new UltimoSuperAdministradorException()).when(roleAssignmentService)
+            .asignarRol(eq(2L), any(), anyString(), anyString(), any(), any());
+
+        mockMvc.perform(put("/api/v1/rbac/usuarios/2/rol")
+                .header("Authorization", "Bearer token-valido")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nuevoRol\": \"ADMINISTRADOR\"}"))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.type")
+                .value("https://nexusbattles.upb.edu.co/errors/ultimo-super-administrador"));
     }
 }

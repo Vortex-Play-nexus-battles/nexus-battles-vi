@@ -81,8 +81,14 @@ public class AuthAdminServiceImpl implements AuthAdminService {
         // login (que busca en minusculas) solo encontraba una de las dos.
         String correo = email == null ? null : email.strip().toLowerCase(Locale.ROOT);
         String apodoLimpio = apodo == null ? null : apodo.strip();
-        if (correo == null || correo.isEmpty() || usuarioRepository.existsByEmailIgnoreCase(correo)) {
+        if (correo == null || correo.isEmpty()) {
+            throw new IllegalArgumentException("El correo electrónico es obligatorio.");
+        }
+        if (usuarioRepository.existsByEmailIgnoreCase(correo)) {
             throw new IllegalArgumentException("El correo electrónico ya está registrado.");
+        }
+        if (apodoLimpio == null || apodoLimpio.isEmpty()) {
+            throw new IllegalArgumentException("El apodo es obligatorio.");
         }
         // Igual que en el registro (B13): la lista negra antes que la unicidad.
         apodoBlacklistValidator.validar(apodoLimpio);

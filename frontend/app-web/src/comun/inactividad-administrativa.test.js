@@ -9,7 +9,7 @@
 
 import { jest } from '@jest/globals';
 
-import { CLAVES, MOTIVOS } from './sesion.js';
+import { CLAVES, MOTIVOS, guardarSesion, leerSesion } from './sesion.js';
 import {
   AVISAR_CUANDO_QUEDEN_MS,
   RENOVACION,
@@ -288,6 +288,103 @@ describe('si la persona se va', () => {
     reloj.avanzar(2 * 60_000);
     await vaciarPromesas();
     expect(terminar).not.toHaveBeenCalled();
+    guarda.detener();
+  });
+});
+
+describe('un reloj descuadrado (7.3.9)', () => {
+  const TRES_HORAS = 3 * 3600_000;
+
+  /**
+   * El servidor vive TRES HORAS por detrás de este equipo: su token dice
+   * `iat` y `exp` en SU hora. Es lo que pasa con un reloj mal puesto, y lo
+   * mismo que hace `page.clock` en el E2E al adelantar el navegador.
+   */
+  function servidorAtrasado(reloj) {
+    const horaDelServidor = () => reloj.ahora() - TRES_HORAS;
+    const emitir = (extra = {}) => {
+      const iat = Math.floor(horaDelServidor() / 1000);
+      return tokenCon({
+        uid: 'u-1',
+        sub: 'ana_admin',
+        rol: 'ADMINISTRADOR',
+        iat,
+        exp: iat + QUINCE_MINUTOS / 1000,
+        ...extra,
+      });
+    };
+    const fetchImpl = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ token: emitir({ veces: fetchImpl.mock.calls.length }) }),
+    }));
+    return { emitir, fetchImpl };
+  }
+
+  test('sin medir el desfase, el token recién emitido parecería caducado', () => {
+    const reloj = crearReloj();
+    const { emitir } = servidorAtrasado(reloj);
+    guardarSesion({ token: emitir(), apodo: 'ana_admin', rol: 'ADMINISTRADOR' }, sessionStorage);
+
+    expect(leerSesion(sessionStorage, reloj.ahora).caducada).toBe(true);
+  });
+
+  test('medido al recibirlo, la sesión vale, se renueva a 5 minutos del fin real y avisa al minuto', async () => {
+    const reloj = crearReloj();
+    const { emitir, fetchImpl } = servidorAtrasado(reloj);
+    guardarSesion(
+      { token: emitir(), apodo: 'ana_admin', rol: 'ADMINISTRADOR', recibidoEn: reloj.ahora() },
+      sessionStorage,
+    );
+    expect(leerSesion(sessionStorage, reloj.ahora).autenticado).toBe(true);
+    const { guarda, avisos, terminar } = montar(reloj, { fetchImpl });
+    expect(guarda).not.toBeNull();
+
+    // Abrir la página es actividad: renueva al entrar en los últimos 5 minutos
+    // del token, contados en la hora del servidor; no antes.
+    reloj.avanzar(QUINCE_MINUTOS - RENOVAR_CUANDO_QUEDEN_MS - 30_000);
+    await vaciarPromesas();
+    expect(fetchImpl).not.toHaveBeenCalled();
+    reloj.avanzar(31_000);
+    await vaciarPromesas();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(terminar).not.toHaveBeenCalled();
+
+    // Sin actividad: el aviso sale un minuto antes del fin del token renovado.
+    reloj.avanzar(QUINCE_MINUTOS - AVISAR_CUANDO_QUEDEN_MS - 1_000);
+    await vaciarPromesas();
+    expect(avisos).toHaveLength(0);
+    reloj.avanzar(1_000);
+    await vaciarPromesas();
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0].restanteMs).toBeGreaterThan(AVISAR_CUANDO_QUEDEN_MS - 2_000);
+    expect(avisos[0].restanteMs).toBeLessThanOrEqual(AVISAR_CUANDO_QUEDEN_MS);
+
+    reloj.avanzar(AVISAR_CUANDO_QUEDEN_MS);
+    await vaciarPromesas();
+    expect(terminar).toHaveBeenCalledWith(MOTIVOS.INACTIVIDAD);
+  });
+
+  test('el desfase se vuelve a medir con cada token renovado', async () => {
+    const reloj = crearReloj();
+    const { emitir, fetchImpl } = servidorAtrasado(reloj);
+    guardarSesion(
+      { token: emitir(), apodo: 'ana_admin', rol: 'ADMINISTRADOR', recibidoEn: reloj.ahora() },
+      sessionStorage,
+    );
+    const { guarda, documento } = montar(reloj, { fetchImpl });
+
+    // Una hora de trabajo con el reloj descuadrado: renueva siempre a tiempo.
+    for (let minuto = 0; minuto < 60; minuto += 1) {
+      reloj.avanzar(60_000);
+      documento.dispatchEvent(new Event('keydown'));
+      await vaciarPromesas();
+      expect(leerSesion(sessionStorage, reloj.ahora).autenticado).toBe(true);
+    }
+    expect(fetchImpl.mock.calls.length).toBeGreaterThanOrEqual(5);
+    expect(JSON.parse(sessionStorage.getItem(CLAVES.desfase)).ms).toBeGreaterThanOrEqual(
+      TRES_HORAS,
+    );
     guarda.detener();
   });
 });

@@ -156,11 +156,6 @@ public class JwtService {
             : Duration.ofHours(horasExpiracion);
     }
 
-    /** Minutos de inactividad que cierran una sesion administrativa. */
-    public int minutosSesionAdministrativa() {
-        return minutosSesionAdministrativa;
-    }
-
     /**
      * Cuando se autentico la sesion de este token: su {@code auth_time} o, en
      * un token anterior a 7.3.9, su {@code iat}.

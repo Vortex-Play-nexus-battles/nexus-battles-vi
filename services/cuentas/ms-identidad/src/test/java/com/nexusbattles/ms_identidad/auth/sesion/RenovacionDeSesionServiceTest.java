@@ -118,6 +118,47 @@ class RenovacionDeSesionServiceTest {
     }
 
     @Test
+    @DisplayName("un token anterior al uid se renueva buscando la cuenta por su apodo")
+    void tokenSinUid() {
+        when(usuarios.findByApodo("ana_admin")).thenReturn(Optional.of(cuenta));
+        String sinUid = "Bearer " + jwt.generarToken("ana_admin", "ADMINISTRADOR", 2, null, List.of("pwd", "otp"),
+            Instant.now().minus(Duration.ofMinutes(5)));
+
+        RenovacionDeSesionService.SesionRenovada sesion = servicio.renovar(sinUid);
+
+        assertThat(jwt.validarYObtenerClaims(sesion.token()).get("uid", String.class)).isEqualTo(UID.toString());
+    }
+
+    @Test
+    @DisplayName("un uid mal formado, o un token sin uid ni apodo, no tiene titular")
+    void titularIlegible() {
+        Claims malFormado = mock(Claims.class);
+        when(malFormado.get("uid", String.class)).thenReturn("no-es-un-uuid");
+        assertThat(servicio.titular(malFormado)).isEmpty();
+
+        Claims vacio = mock(Claims.class);
+        when(vacio.get("uid", String.class)).thenReturn(" ");
+        when(vacio.getSubject()).thenReturn(" ");
+        assertThat(servicio.titular(vacio)).isEmpty();
+
+        Claims sinNada = mock(Claims.class);
+        assertThat(servicio.titular(sinNada)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("una cuenta sin rol renueva como jugador: su token no se vuelve administrativo")
+    void cuentaSinRol() {
+        cuenta.setRol(null);
+        String token = tokenAutenticadoHace(Duration.ofMinutes(5));
+
+        RenovacionDeSesionService.SesionRenovada sesion = servicio.renovar(token);
+
+        Claims claims = jwt.validarYObtenerClaims(sesion.token());
+        assertThat(claims.get("rol")).isNull();
+        assertThat(Duration.between(Instant.now(), sesion.expiraEn())).isGreaterThan(Duration.ofHours(18));
+    }
+
+    @Test
     @DisplayName("la cuenta que ya no existe no se renueva")
     void sinTitular() {
         String token = tokenAutenticadoHace(Duration.ofMinutes(5));

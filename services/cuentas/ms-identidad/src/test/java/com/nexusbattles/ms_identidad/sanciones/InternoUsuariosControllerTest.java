@@ -163,6 +163,13 @@ class InternoUsuariosControllerTest {
                     .andExpect(status().isForbidden());
         }
 
+        // Una cuenta sin rol asignado no se toma por administrativa: el rol sale vacio.
+        ada.setRol(null);
+        mvc.perform(get("/api/v1/internal/usuarios/" + UID + "/rol")
+                        .header("Authorization", servicio("moderacion-sanciones")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rol").value(org.hamcrest.Matchers.nullValue()));
+
         when(usuarios.findByPublicId(UID)).thenReturn(Optional.empty());
         mvc.perform(get("/api/v1/internal/usuarios/" + UID + "/rol")
                         .header("Authorization", servicio("moderacion-sanciones")))

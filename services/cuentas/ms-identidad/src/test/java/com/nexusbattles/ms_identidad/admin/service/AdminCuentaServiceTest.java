@@ -87,6 +87,23 @@ class AdminCuentaServiceTest {
     }
 
     @Test
+    void laCuentaAfectadaSeAuditaPorSuUid() {
+        CrearCuentaAdminRequest datos = crearDatos("MODERADOR");
+        Usuario usuarioCreado = new Usuario();
+        usuarioCreado.setApodo("Santi");
+        java.util.UUID uid = java.util.UUID.fromString("0d6c1f2e-6a1b-4c3d-9e8f-7a6b5c4d3e2f");
+        usuarioCreado.setPublicId(uid);
+        when(avatarStorageService.guardarAvatar(datos.getAvatar())).thenReturn(URL_AVATAR);
+        when(authAdminService.crearCuentaConRol(anyString(), anyString(), anyString(), anyString(), anyString(),
+            eq(Role.MODERADOR))).thenReturn(usuarioCreado);
+
+        service.crearCuentaAdministrativa(datos, "admin", IP_ORIGEN);
+
+        verify(auditoriaClient).registrar(eq("CREACION"), eq("admin"), eq(uid.toString()), isNull(),
+            eq("rol=MODERADOR, estado=INACTIVO"), anyString(), eq(IP_ORIGEN));
+    }
+
+    @Test
     void debeCrearCuentaConRolAdministrador() {
         CrearCuentaAdminRequest datos = crearDatos("ADMINISTRADOR");
 

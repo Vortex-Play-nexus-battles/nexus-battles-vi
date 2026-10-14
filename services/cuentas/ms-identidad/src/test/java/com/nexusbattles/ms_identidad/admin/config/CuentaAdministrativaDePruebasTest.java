@@ -171,4 +171,61 @@ class CuentaAdministrativaDePruebasTest {
         assertThat(CuentaAdministrativaDePruebas.leer("a|a@nexus.test|" + CLAVE + "|" + SECRETO).rol())
             .isEqualTo("SUPER_ADMINISTRADOR");
     }
+
+    @Test
+    @DisplayName("sin entradas, o con entradas incompletas o vacias, no arranca y no muestra ningun valor")
+    void entradasIncompletas() {
+        assertThatThrownBy(() -> CuentaAdministrativaDePruebas.leerTodas(null))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("ninguna cuenta");
+        assertThatThrownBy(() -> CuentaAdministrativaDePruebas.leerTodas(" ; ;"))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("ninguna cuenta");
+        assertThatThrownBy(() -> CuentaAdministrativaDePruebas.leer(null))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("apodo|correo|clave");
+        assertThatThrownBy(() -> CuentaAdministrativaDePruebas.leer("a|a@nexus.test|" + CLAVE))
+            .isInstanceOf(IllegalStateException.class).hasMessageNotContaining(CLAVE);
+        assertThatThrownBy(() -> CuentaAdministrativaDePruebas.leer(" |a@nexus.test|" + CLAVE + "|" + SECRETO))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("vacios");
+        assertThatThrownBy(() -> CuentaAdministrativaDePruebas.leer("a| |" + CLAVE + "|" + SECRETO))
+            .isInstanceOf(IllegalStateException.class).hasMessageContaining("vacios");
+        // Un separador de mas no es una cuenta.
+        assertThat(CuentaAdministrativaDePruebas.leerTodas("a|a@nexus.test|" + CLAVE + "|" + SECRETO + ";;"))
+            .hasSize(1);
+    }
+
+    @Test
+    @DisplayName("la cuenta leida nunca imprime la clave ni el secreto, y se compara por su contenido")
+    void cuentaSinSecretosEnTexto() {
+        String otroSecreto = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
+        CuentaAdministrativaDePruebas.CuentaQa una =
+            CuentaAdministrativaDePruebas.leer("a|a@nexus.test|" + CLAVE + "|" + SECRETO + "|MODERADOR");
+        CuentaAdministrativaDePruebas.CuentaQa igual =
+            CuentaAdministrativaDePruebas.leer(" a | A@Nexus.test |" + CLAVE + "|" + SECRETO + "|moderador");
+
+        assertThat(una).isEqualTo(igual).hasSameHashCodeAs(igual);
+        assertThat(una.toString()).contains("a@nexus.test", "MODERADOR")
+            .doesNotContain(CLAVE).doesNotContain(SECRETO);
+        assertThat(una)
+            .isNotEqualTo("a")
+            .isNotEqualTo(CuentaAdministrativaDePruebas.leer("b|a@nexus.test|" + CLAVE + "|" + SECRETO + "|MODERADOR"))
+            .isNotEqualTo(CuentaAdministrativaDePruebas.leer("a|b@nexus.test|" + CLAVE + "|" + SECRETO + "|MODERADOR"))
+            .isNotEqualTo(CuentaAdministrativaDePruebas.leer("a|a@nexus.test|" + CLAVE + "x|" + SECRETO + "|MODERADOR"))
+            .isNotEqualTo(CuentaAdministrativaDePruebas.leer("a|a@nexus.test|" + CLAVE + "|" + otroSecreto + "|MODERADOR"))
+            .isNotEqualTo(CuentaAdministrativaDePruebas.leer("a|a@nexus.test|" + CLAVE + "|" + SECRETO));
+    }
+
+    @Test
+    @DisplayName("el constructor que usa Spring guarda la clave con BCrypt, nunca en claro")
+    void constructorDeSpring() {
+        CuentaAdministrativaDePruebas runner = new CuentaAdministrativaDePruebas(
+            "qa_mod|qa_mod@nexus.test|" + CLAVE + "|" + SECRETO + "|MODERADOR",
+            usuarios, roles, perfiles, segundos, cifrado, entorno);
+
+        runner.run();
+
+        org.mockito.ArgumentCaptor<Usuario> guardado = org.mockito.ArgumentCaptor.forClass(Usuario.class);
+        verify(usuarios).save(guardado.capture());
+        assertThat(guardado.getValue().getPassword()).startsWith("$2").isNotEqualTo(CLAVE);
+        assertThat(new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder()
+            .matches(CLAVE, guardado.getValue().getPassword())).isTrue();
+    }
 }

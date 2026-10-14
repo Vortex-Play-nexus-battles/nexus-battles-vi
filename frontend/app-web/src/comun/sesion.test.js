@@ -10,14 +10,18 @@ import { jest } from '@jest/globals';
 
 import {
   CLAVES,
+  DESFASE_DESPRECIABLE_MS,
   MOTIVOS,
   MOTIVOS_DE_VERIFICACION,
   RUTAS,
+  ahoraEnElServidor,
   avisarCierreAlServidor,
   cerrarSesion,
   guardarSesion,
+  desfaseDelReloj,
   hayRutasLimpias,
   leerSesion,
+  medirDesfase,
   olvidarSesion,
   resolver,
   rutaDeVuelta,
@@ -84,6 +88,112 @@ describe('leerSesion', () => {
     sessionStorage.setItem(CLAVES.token, 'esto-no-es-un-jwt');
     expect(() => leerSesion(sessionStorage)).not.toThrow();
     expect(leerSesion(sessionStorage).autenticado).toBe(true);
+  });
+});
+
+describe('el reloj de este equipo frente al del servidor (7.3.9)', () => {
+  const AHORA = 1_760_000_000_000;
+  const DOS_HORAS = 2 * 3600_000;
+  /** Un token que el servidor emitió «ahora» en SU hora, con 15 minutos de vida. */
+  const emitidoPorElServidor = (horaDelServidor, extra = {}) => {
+    const iat = Math.floor(horaDelServidor / 1000);
+    return tokenCon({
+      uid: UID,
+      sub: 'ana_admin',
+      rol: 'ADMINISTRADOR',
+      iat,
+      exp: iat + 900,
+      ...extra,
+    });
+  };
+
+  test('medirDesfase: la llegada menos el iat; nada si es despreciable o si no hay iat', () => {
+    const token = emitidoPorElServidor(AHORA - DOS_HORAS);
+    expect(medirDesfase(token, AHORA)).toBe(DOS_HORAS);
+    expect(medirDesfase(emitidoPorElServidor(AHORA + DOS_HORAS), AHORA)).toBe(-DOS_HORAS);
+    expect(medirDesfase(emitidoPorElServidor(AHORA - 500), AHORA)).toBeNull();
+    expect(medirDesfase(tokenCon({ sub: 'x', exp: 1 }), AHORA)).toBeNull();
+    expect(medirDesfase('no-es-un-jwt', AHORA)).toBeNull();
+    expect(medirDesfase(token, Number.NaN)).toBeNull();
+    expect(DESFASE_DESPRECIABLE_MS).toBe(2_000);
+  });
+
+  test('con el equipo dos horas adelantado, un token recién recibido no se da por caducado', () => {
+    const token = emitidoPorElServidor(AHORA - DOS_HORAS);
+    const ahora = () => AHORA;
+
+    guardarSesion(
+      { token, apodo: 'ana_admin', rol: 'ADMINISTRADOR', recibidoEn: AHORA },
+      sessionStorage,
+    );
+
+    expect(desfaseDelReloj(sessionStorage)).toBe(DOS_HORAS);
+    expect(ahoraEnElServidor(sessionStorage, ahora)).toBe(AHORA - DOS_HORAS);
+    expect(leerSesion(sessionStorage, ahora)).toMatchObject({ autenticado: true, caducada: false });
+    // …y caduca cuando dice el servidor, ni antes ni después.
+    expect(leerSesion(sessionStorage, () => AHORA + 899_000).autenticado).toBe(true);
+    expect(leerSesion(sessionStorage, () => AHORA + 900_000).caducada).toBe(true);
+  });
+
+  test('con el equipo atrasado, el token caduca a su hora y no 2 horas después', () => {
+    const token = emitidoPorElServidor(AHORA + DOS_HORAS);
+    guardarSesion({ token, recibidoEn: AHORA }, sessionStorage);
+
+    expect(leerSesion(sessionStorage, () => AHORA + 900_000).caducada).toBe(true);
+    // Sin corregir habría seguido «vivo» hasta dos horas después.
+    sessionStorage.removeItem(CLAVES.desfase);
+    expect(leerSesion(sessionStorage, () => AHORA + 900_000).caducada).toBe(false);
+  });
+
+  test('el desfase va atado a su token: con otro token no se aplica', () => {
+    guardarSesion(
+      { token: emitidoPorElServidor(AHORA - DOS_HORAS), recibidoEn: AHORA },
+      sessionStorage,
+    );
+    const otro = emitidoPorElServidor(AHORA - DOS_HORAS + 60_000);
+
+    expect(desfaseDelReloj(sessionStorage, otro)).toBe(0);
+    sessionStorage.setItem(CLAVES.desfase, '{roto');
+    expect(desfaseDelReloj(sessionStorage)).toBe(0);
+    expect(desfaseDelReloj(sessionStorage, null)).toBe(0);
+  });
+
+  test('volver a guardar el mismo token (otro apodo) conserva el desfase; uno nuevo sin medir lo descarta', () => {
+    const token = emitidoPorElServidor(AHORA - DOS_HORAS);
+    guardarSesion({ token, apodo: 'ana_admin', recibidoEn: AHORA }, sessionStorage);
+
+    guardarSesion({ token, apodo: 'ana_nueva' }, sessionStorage);
+    expect(desfaseDelReloj(sessionStorage)).toBe(DOS_HORAS);
+
+    guardarSesion({ token: emitidoPorElServidor(AHORA - DOS_HORAS + 1_000) }, sessionStorage);
+    expect(sessionStorage.getItem(CLAVES.desfase)).toBeNull();
+  });
+
+  test('el que comparte otra pestaña del mismo equipo se copia; uno despreciable no se guarda', () => {
+    const token = emitidoPorElServidor(AHORA - DOS_HORAS);
+    guardarSesion({ token, desfase: DOS_HORAS }, sessionStorage);
+    expect(desfaseDelReloj(sessionStorage)).toBe(DOS_HORAS);
+
+    guardarSesion({ token, desfase: 300 }, sessionStorage);
+    expect(sessionStorage.getItem(CLAVES.desfase)).toBeNull();
+  });
+
+  test('con el reloj en hora no se guarda nada y todo sigue como siempre', () => {
+    const token = emitidoPorElServidor(AHORA - 200);
+    guardarSesion({ token, recibidoEn: AHORA }, sessionStorage);
+
+    expect(sessionStorage.getItem(CLAVES.desfase)).toBeNull();
+    expect(desfaseDelReloj(sessionStorage)).toBe(0);
+    expect(ahoraEnElServidor(sessionStorage, () => AHORA)).toBe(AHORA);
+  });
+
+  test('olvidar la sesión olvida también el desfase', () => {
+    guardarSesion(
+      { token: emitidoPorElServidor(AHORA - DOS_HORAS), recibidoEn: AHORA },
+      sessionStorage,
+    );
+    olvidarSesion(sessionStorage);
+    expect(sessionStorage.getItem(CLAVES.desfase)).toBeNull();
   });
 });
 

@@ -35,7 +35,92 @@ export const CLAVES = Object.freeze({
   apodo: 'nexus.apodoActual',
   rol: 'nexus.rolActual',
   usuarioId: 'nexus.usuarioId',
+  // 7.3.9 — lo que va el reloj de este equipo por delante (o por detrás) del
+  // del servidor, medido al recibir el token (`desfaseDelReloj`).
+  desfase: 'nexus.desfaseDelReloj',
 });
+
+/**
+ * Por debajo de esto, la diferencia entre relojes es la propia latencia y el
+ * redondeo del `iat` a segundos: no se corrige nada.
+ */
+export const DESFASE_DESPRECIABLE_MS = 2_000;
+
+/**
+ * Cuánto va el reloj de este equipo por delante del del servidor (en
+ * milisegundos; negativo si va por detrás), para el token en uso.
+ *
+ * ## Por qué hace falta
+ *
+ * El `exp` del token es la hora del SERVIDOR. Compararlo con `Date.now()` da
+ * por hecho que los dos relojes coinciden, y con los tokens administrativos
+ * de 15 minutos (7.3.9) unos pocos minutos de diferencia bastan para romper
+ * la sesión: un equipo atrasado renueva tarde y el servidor ya lo rechazó; uno
+ * adelantado da la sesión por caducada nada más entrar. Pasa con relojes mal
+ * puestos de verdad (un arranque dual que confunde la hora local con la UTC
+ * descuadra horas enteras).
+ *
+ * Por eso, al recibir un token recién emitido, se anota la diferencia entre la
+ * hora local y su `iat`, y se guarda **atada a ese token** (por su `iat`): un
+ * desfase medido con otro token no se aplica nunca.
+ *
+ * @param {Storage} [almacen]
+ * @param {string|null} [token] por omisión, el de la sesión
+ * @returns {number}
+ */
+export function desfaseDelReloj(
+  almacen = globalThis.sessionStorage,
+  token = almacen?.getItem?.(CLAVES.token) ?? null,
+) {
+  const guardado = almacen?.getItem?.(CLAVES.desfase);
+  if (!guardado || !token) {
+    return 0;
+  }
+  let medido;
+  try {
+    medido = JSON.parse(guardado);
+  } catch {
+    return 0;
+  }
+  const iat = cuerpoDelToken(token)?.iat;
+  return Number.isFinite(medido?.ms) && typeof iat === 'number' && medido.iat === iat
+    ? medido.ms
+    : 0;
+}
+
+/**
+ * La hora del servidor según este equipo: la local corregida con el desfase
+ * medido para el token en uso. Es contra la que se compara el `exp`.
+ *
+ * @param {Storage} [almacen]
+ * @param {() => number} [ahora]
+ * @param {string|null} [token]
+ * @returns {number} milisegundos
+ */
+export function ahoraEnElServidor(
+  almacen = globalThis.sessionStorage,
+  ahora = () => Date.now(),
+  token = almacen?.getItem?.(CLAVES.token) ?? null,
+) {
+  return ahora() - desfaseDelReloj(almacen, token);
+}
+
+/**
+ * El desfase de un token recién recibido: la hora local de llegada menos su
+ * `iat`. `null` si no hay `iat` o si la diferencia es despreciable.
+ *
+ * @param {string} token
+ * @param {number} recibidoEn hora local de la llegada (ms)
+ * @returns {number|null}
+ */
+export function medirDesfase(token, recibidoEn) {
+  const iat = cuerpoDelToken(token)?.iat;
+  if (typeof iat !== 'number' || !Number.isFinite(recibidoEn)) {
+    return null;
+  }
+  const ms = recibidoEn - iat * 1000;
+  return Math.abs(ms) < DESFASE_DESPRECIABLE_MS ? null : ms;
+}
 
 /**
  * Rutas de la aplicación, relativas a ESTE módulo (`src/comun/`) y resueltas
@@ -130,7 +215,10 @@ export function leerSesion(almacen = globalThis.sessionStorage, ahora = () => Da
   } catch {
     claims = {};
   }
-  const caducada = typeof claims.exp === 'number' && claims.exp * 1000 <= ahora();
+  // 7.3.9 — contra la hora del servidor, no la de este equipo (`desfaseDelReloj`).
+  const caducada =
+    typeof claims.exp === 'number' &&
+    claims.exp * 1000 <= ahora() - desfaseDelReloj(almacen, token);
   return {
     autenticado: !caducada,
     caducada,
@@ -153,10 +241,19 @@ export function leerSesion(almacen = globalThis.sessionStorage, ahora = () => Da
  * distingue «no está» de «está vacía», y una cadena vacía taparía lo que
  * dice el token.
  *
- * @param {{token: string, apodo?: string|null, rol?: string|null, uid?: string|null}} datos
+ * 7.3.9 — el desfase del reloj (`desfaseDelReloj`): con `recibidoEn` (la hora
+ * local a la que llegó un token RECIÉN emitido: el login, una renovación) se
+ * mide; con `desfase` (lo que midió otra pestaña de este mismo equipo) se
+ * copia. Sin ninguno de los dos, uno guardado para otro token se descarta.
+ *
+ * @param {{token: string, apodo?: string|null, rol?: string|null, uid?: string|null, recibidoEn?: number, desfase?: number}} datos
  * @param {Storage} [almacen]
  */
-export function guardarSesion({ token, apodo, rol, uid }, almacen = globalThis.sessionStorage) {
+export function guardarSesion(
+  { token, apodo, rol, uid, recibidoEn, desfase },
+  almacen = globalThis.sessionStorage,
+) {
+  const anterior = almacen.getItem(CLAVES.token);
   const valores = {
     [CLAVES.token]: token,
     [CLAVES.apodo]: apodo,
@@ -170,6 +267,25 @@ export function guardarSesion({ token, apodo, rol, uid }, almacen = globalThis.s
       almacen.setItem(clave, String(valor));
     }
   }
+  guardarDesfase(token, anterior, { recibidoEn, desfase }, almacen);
+}
+
+function guardarDesfase(token, anterior, { recibidoEn, desfase }, almacen) {
+  const iat = cuerpoDelToken(token)?.iat;
+  let ms = null;
+  if (Number.isFinite(desfase)) {
+    ms = Math.abs(desfase) < DESFASE_DESPRECIABLE_MS ? null : desfase;
+  } else if (Number.isFinite(recibidoEn)) {
+    ms = medirDesfase(token, recibidoEn);
+  } else if (token && token === anterior) {
+    // El mismo token con otro apodo o rol: su desfase sigue valiendo.
+    return;
+  }
+  if (ms === null || typeof iat !== 'number') {
+    almacen.removeItem(CLAVES.desfase);
+    return;
+  }
+  almacen.setItem(CLAVES.desfase, JSON.stringify({ iat, ms }));
 }
 
 /** Borra del navegador todo lo que dejó el login. */

@@ -107,6 +107,31 @@ class AuthAdminServiceImplTest {
     }
 
     @Test
+    void sinCorreoOSinApodoNoHayCuenta() {
+
+        authAdminService = construir();
+
+        IllegalArgumentException sinCorreo = assertThrows(IllegalArgumentException.class,
+            () -> authAdminService.crearCuentaConRol("Cristian", "Chaparro", null, "cristianc", null,
+                Role.MODERADOR));
+        assertEquals("El correo electrónico es obligatorio.", sinCorreo.getMessage());
+        assertThrows(IllegalArgumentException.class,
+            () -> authAdminService.crearCuentaConRol("Cristian", "Chaparro", "   ", "cristianc", null,
+                Role.MODERADOR));
+
+        when(usuarioRepository.existsByEmailIgnoreCase(anyString())).thenReturn(false);
+        IllegalArgumentException sinApodo = assertThrows(IllegalArgumentException.class,
+            () -> authAdminService.crearCuentaConRol("Cristian", "Chaparro", "nuevo@test.com", null, null,
+                Role.MODERADOR));
+        assertEquals("El apodo es obligatorio.", sinApodo.getMessage());
+        assertThrows(IllegalArgumentException.class,
+            () -> authAdminService.crearCuentaConRol("Cristian", "Chaparro", "nuevo@test.com", "  ", null,
+                Role.MODERADOR));
+        verify(usuarioRepository, never()).save(any());
+        verify(apodoBlacklistValidator, never()).validar(any());
+    }
+
+    @Test
     void elApodoRepetidoSinDistinguirMayusculasSeRechaza() {
 
         authAdminService = construir();

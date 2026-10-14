@@ -248,4 +248,13 @@ class JwtServiceTest {
 
         assertEquals(emitido, JwtService.autenticadoEn(anterior));
     }
+
+    @Test
+    void sinAuthTimeNiEmisionLaSesionNoTieneAntiguedadQueAlargar() {
+        // Un token sin ninguna de las dos marcas se trata como autenticado en el
+        // origen de los tiempos: su maximo de sesion ya paso y no se renueva.
+        Claims sinMarcas = org.mockito.Mockito.mock(Claims.class);
+
+        assertEquals(Instant.EPOCH, JwtService.autenticadoEn(sinMarcas));
+    }
 }

@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_identidad.admin.controller;
 
 import com.nexusbattles.ms_identidad.admin.dto.BanearCuentaRequest;
+import com.nexusbattles.ms_identidad.admin.dto.RestablecerSegundoFactorRequest;
 import com.nexusbattles.ms_identidad.admin.dto.SuspenderCuentaRequest;
 import com.nexusbattles.ms_identidad.admin.service.AdminGestionUsuarioService;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
@@ -173,6 +174,34 @@ class AdminGestionUsuarioControllerTest {
         doThrow(new IllegalStateException("Usuario no encontrado"))
             .when(adminGestionUsuarioService).restablecerPassword(2L, "admin", "ADMINISTRADOR", IP_ORIGEN);
         assertEquals(HttpStatus.NOT_FOUND, controller.restablecerPassword(2L, request).getStatusCode());
+    }
+
+    @Test
+    void restablecerSegundoFactorConMotivoUidYRol() {
+        when(request.getAttribute("uidActual")).thenReturn("uid-del-super");
+        when(request.getAttribute("rolActual")).thenReturn("SUPER_ADMINISTRADOR");
+
+        ResponseEntity<?> respuesta = controller.restablecerSegundoFactor(7L,
+            new RestablecerSegundoFactorRequest("Perdió el teléfono con la aplicación"), request);
+
+        assertEquals(HttpStatus.NO_CONTENT, respuesta.getStatusCode());
+        verify(adminGestionUsuarioService).restablecerSegundoFactor(7L, "Perdió el teléfono con la aplicación",
+            "admin", "uid-del-super", "SUPER_ADMINISTRADOR", IP_ORIGEN);
+    }
+
+    @Test
+    void restablecerSegundoFactorTraduceLosRechazos() {
+        when(request.getAttribute("rolActual")).thenReturn(null);
+        doThrow(new IllegalArgumentException("No puedes restablecer tu propio segundo factor."))
+            .doThrow(new IllegalStateException("Usuario no encontrado"))
+            .when(adminGestionUsuarioService)
+            .restablecerSegundoFactor(eq(7L), anyString(), eq("admin"), any(), isNull(), eq(IP_ORIGEN));
+
+        RestablecerSegundoFactorRequest datos = new RestablecerSegundoFactorRequest("motivo suficiente");
+        ResponseEntity<?> propia = controller.restablecerSegundoFactor(7L, datos, request);
+        assertEquals(HttpStatus.BAD_REQUEST, propia.getStatusCode());
+        assertEquals("No puedes restablecer tu propio segundo factor.", propia.getBody());
+        assertEquals(HttpStatus.NOT_FOUND, controller.restablecerSegundoFactor(7L, datos, request).getStatusCode());
     }
 
     @Test

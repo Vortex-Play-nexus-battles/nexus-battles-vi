@@ -27,13 +27,17 @@
  * Cada pestaña tiene su propio token (sessionStorage) y su propia actividad:
  * una pestaña olvidada se cierra sola sin tocar a las demás.
  *
+ * Los plazos se miden en la hora del SERVIDOR (`ahoraEnElServidor`): el `exp`
+ * es suyo, y un equipo con el reloj descuadrado unos minutos renovaría tarde o
+ * avisaría a destiempo. El desfase se mide al recibir cada token.
+ *
  * @module comun/inactividad-administrativa
  */
 
 import { rutaDeApi } from './base-api.js';
 import { cuerpoDelToken } from './identidad.js';
 import { esRolDeTrastienda } from './matriz-acceso.js';
-import { MOTIVOS, guardarSesion, leerSesion } from './sesion.js';
+import { MOTIVOS, ahoraEnElServidor, guardarSesion, leerSesion } from './sesion.js';
 import { abrirDialogo } from './ui/dialogo.js';
 import { h } from './ui/dom.js';
 
@@ -224,6 +228,10 @@ export function crearGuardaDeInactividad({
   let ultimaActividad = ahora();
   let ultimaRenovacion = Number.NEGATIVE_INFINITY;
   const desenganches = [];
+  // El `exp` es hora del servidor: se compara con la hora del servidor según
+  // este equipo, no con su reloj (un reloj descuadrado no cierra antes ni
+  // renueva tarde).
+  const servidor = () => ahoraEnElServidor(almacen, ahora);
 
   function cerrarAviso() {
     reloj.clearTimeout(cuentaAtras);
@@ -278,7 +286,13 @@ export function crearGuardaDeInactividad({
         if (resultado.estado === RENOVACION.RENOVADA) {
           ultimaRenovacion = pedidaEn;
           guardarSesion(
-            { token: resultado.token, apodo: sesion.apodo, rol: sesion.rol, uid: sesion.uid },
+            {
+              token: resultado.token,
+              apodo: sesion.apodo,
+              rol: sesion.rol,
+              uid: sesion.uid,
+              recibidoEn: ahora(),
+            },
             almacen,
           );
           cerrarAviso();
@@ -316,7 +330,7 @@ export function crearGuardaDeInactividad({
       }
       const fin = caducidadDelToken(leerSesion(almacen, ahora).token);
       if (fin !== null) {
-        aviso.actualizar(fin - ahora());
+        aviso.actualizar(fin - servidor());
       }
       cuentaAtras = reloj.setTimeout(latir, 1_000);
     };
@@ -339,7 +353,7 @@ export function crearGuardaDeInactividad({
       detener();
       return;
     }
-    const restante = fin - ahora();
+    const restante = fin - servidor();
     if (restante <= ADELANTO_DEL_CIERRE_MS) {
       if (huboActividad()) {
         // Hubo actividad pero la renovación no llegó (red): no es
@@ -367,7 +381,7 @@ export function crearGuardaDeInactividad({
     if (fin === null) {
       return;
     }
-    const restante = fin - ahora();
+    const restante = fin - servidor();
     const hitos = [PERIODO_DE_REVISION_MS, restante - ADELANTO_DEL_CIERRE_MS];
     if (!aviso) {
       hitos.push(restante - AVISAR_CUANDO_QUEDEN_MS);
@@ -390,7 +404,7 @@ export function crearGuardaDeInactividad({
     if (momento - ultimaSenal > 1_000) {
       ultimaSenal = momento;
       const fin = caducidadDelToken(leerSesion(almacen, ahora).token);
-      if (fin !== null && fin - momento <= RENOVAR_CUANDO_QUEDEN_MS) {
+      if (fin !== null && fin - servidor() <= RENOVAR_CUANDO_QUEDEN_MS) {
         renovar();
       }
     }
