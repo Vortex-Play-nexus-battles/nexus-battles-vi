@@ -53,6 +53,10 @@ const CAMPOS_PUBLICOS = new Set([
   'esPropio',
   'enListaDeseos',
   'precioCreditos',
+  // SA-13 (ecommerce-carrito.yaml 1.8.0, §7.2.1 y §7.2.2): que es una pieza
+  // única y que se paga en moneda real se le dice al jugador en la tienda.
+  'unico',
+  'premium',
 ]);
 
 function sesionDe(api, apodo, opciones = {}) {
