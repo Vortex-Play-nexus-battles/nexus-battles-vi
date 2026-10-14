@@ -78,6 +78,17 @@ export const PLAZOS_DEL_CANAL = Object.freeze({ acuseMs: 5000, respuestaMs: 3000
  */
 export const LATIDOS_DEL_CANAL = '0,10000';
 
+/**
+ * El cuerpo más largo (en caracteres del JSON) que se manda por el canal. El
+ * servidor cierra la conexión ante un mensaje WebSocket de más de 16 640
+ * caracteres (16 KiB + 256, el mínimo que fija Spring para STOMP). Una
+ * pregunta de 4000 caracteres ocupa unos 4100, u 8100 si todo son comillas o
+ * saltos de línea; solo un texto lleno de caracteres de control (que el JSON
+ * escribe con seis) pasa de aquí, y ese va por HTTP, que admite lo mismo que
+ * siempre.
+ */
+export const CUERPO_MAXIMO_POR_EL_CANAL = 16000;
+
 /** Cabecera STOMP con la que el servidor devuelve la correlación. */
 const CABECERA_CORRELACION = 'id-correlacion';
 
@@ -272,9 +283,17 @@ export function crearCanalChatbot({
     return vista ? cliente.enviarMensaje(contenido, { vista }) : cliente.enviarMensaje(contenido);
   }
 
-  function porElCanal(contenido, vista, alEscribiendo) {
+  function cuerpoDe(contenido, vista, idCorrelacion) {
+    const cuerpo = { contenido, idCorrelacion };
+    if (vista) {
+      cuerpo.vista = vista;
+    }
+    return cuerpo;
+  }
+
+  function porElCanal(cuerpo, alEscribiendo) {
     return new Promise((resolver, rechazar) => {
-      const idCorrelacion = generarId();
+      const { idCorrelacion } = cuerpo;
       pendientes.set(idCorrelacion, {
         resolver,
         rechazar,
@@ -282,10 +301,6 @@ export function crearCanalChatbot({
         acusada: false,
         temporizador: null,
       });
-      const cuerpo = { contenido, idCorrelacion };
-      if (vista) {
-        cuerpo.vista = vista;
-      }
       try {
         fachada.enviar(DESTINOS_DEL_CHATBOT.preguntar, cuerpo);
       } catch {
@@ -341,9 +356,10 @@ export function crearCanalChatbot({
    * @returns {Promise<object>} el `Mensaje` del bot
    */
   async function enviarMensaje(contenido, { vista = null, alEscribiendo = () => {} } = {}) {
-    if (listoParaPreguntar()) {
+    const cuerpo = cuerpoDe(contenido, vista, generarId());
+    if (JSON.stringify(cuerpo).length <= CUERPO_MAXIMO_POR_EL_CANAL && listoParaPreguntar()) {
       try {
-        return await porElCanal(contenido, vista, alEscribiendo);
+        return await porElCanal(cuerpo, alEscribiendo);
       } catch (error) {
         if (!(error instanceof SinRespuestaDelCanal)) {
           throw error;

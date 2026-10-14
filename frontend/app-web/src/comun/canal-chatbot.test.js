@@ -7,6 +7,7 @@ import { jest } from '@jest/globals';
 
 import { ErrorDelChatbot } from './cliente-chatbot.js';
 import {
+  CUERPO_MAXIMO_POR_EL_CANAL,
   DESTINOS_DEL_CHATBOT,
   LATIDOS_DEL_CANAL,
   PLAZOS_DEL_CANAL,
@@ -437,6 +438,21 @@ describe('degradación controlada (riesgo #7)', () => {
     await expect(pregunta).resolves.toEqual(POR_HTTP);
     expect(cliente.enviarMensaje).toHaveBeenCalledWith('hola', { vista: 'TORNEOS' });
     expect(canal.enVivo).toBe(false);
+  });
+
+  test('una pregunta que el JSON alarga demasiado va por HTTP: el servidor cortaría la conexión', async () => {
+    const { canal, red, cliente } = await abierto();
+    // 4000 caracteres, el máximo del contrato, pero cada uno el JSON lo escribe con seis.
+    const larga = '\u0001'.repeat(4000);
+    expect(JSON.stringify({ contenido: larga }).length).toBeGreaterThan(CUERPO_MAXIMO_POR_EL_CANAL);
+
+    await expect(canal.enviarMensaje(larga)).resolves.toEqual(POR_HTTP);
+    expect(cliente.enviarMensaje).toHaveBeenCalledWith(larga);
+    expect(red.ultima.enviados).toEqual([]);
+
+    // 4000 comillas (el doble al escaparlas) todavía caben y van por el canal.
+    canal.enviarMensaje('"'.repeat(4000), { vista: 'INVENTARIO' });
+    expect(red.ultima.enviados).toHaveLength(1);
   });
 
   test('si HTTP también falla, el error llega a la ventana', async () => {

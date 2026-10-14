@@ -62,6 +62,13 @@ info:
     - `SEND` solo a `/app/chat/mensajes`. Cualquier otro destino: `ERROR` y
       cierre.
 
+    **Tamano.** Un mensaje WebSocket de mas de 16 640 caracteres (16 KiB +
+    256, el minimo que fija Spring para STOMP) cierra la conexion. Una
+    pregunta de 4000 caracteres ocupa unos 4100, u 8100 si todo son comillas
+    o saltos de linea; solo un texto lleno de caracteres de control (que el
+    JSON escribe con seis) se acerca al limite, y ese el cliente lo manda por
+    `POST /chat/mensajes`, como hace la ventana del asistente (mas de 16 000).
+
     **En cada mensaje la identidad se vuelve a resolver** con las cabeceras
     del CONNECT y las reglas de `POST /chat/mensajes`: si el token del
     jugador vencio mientras tanto, el mensaje va a la conversacion del

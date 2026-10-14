@@ -464,6 +464,26 @@ class CanalDelChatbotIT {
     }
 
     @Test
+    @DisplayName("hasta 16 640 caracteres el mensaje llega (y se valida); mas, cierra la conexion (chatbot.yaml)")
+    void elTamanoDelMensajeEsElDelContrato() throws Exception {
+        Cliente cliente = conectar(visitante(sesionDeclarada())).suscritoATodo();
+
+        // 7900 comillas escapadas: unos 15 900 caracteres. Llega, y el servidor
+        // responde lo de siempre: el contenido pasa de 4000 caracteres.
+        cliente.preguntar("{\"contenido\":\"" + "\\\"".repeat(7900) + "\",\"idCorrelacion\":\"t-1\"}");
+        JsonNode error = cliente.siguiente("/user/queue/chat/errores").cuerpo();
+        assertThat(error.get("status").intValue()).isEqualTo(400);
+        assertThat(error.get("idCorrelacion").stringValue()).isEqualTo("t-1");
+        assertThat(cliente.sesion.isConnected()).isTrue();
+
+        // 8400: 16 800 caracteres, mas de lo que Spring admite en un mensaje STOMP.
+        cliente.preguntar("{\"contenido\":\"" + "\\\"".repeat(8400) + "\"}");
+        assertThat(cliente.fallos.poll(ESPERA_S, TimeUnit.SECONDS)).as("la conexion se corta")
+            .isEqualTo("TRANSPORTE: Connection closed");
+        assertThat(cliente.sesion.isConnected()).isFalse();
+    }
+
+    @Test
     @DisplayName("los errores vuelven por la cola de errores con el estado y el motivo de la API")
     void losErroresVuelvenConElMotivoDeLaApi() throws Exception {
         doThrow(new ContenidoBloqueado())
