@@ -75,6 +75,12 @@ info:
     cabecera STOMP `id-correlacion`, y el estado y el error tambien en el
     cuerpo. La respuesta va solo a la conexion que pregunto.
 
+    **Traza (regla 5).** Cada pregunta abre su propia traza: las llamadas que
+    provoca (lista negra, consultas en vivo) la propagan, y el estado, la
+    respuesta y el error la llevan en la cabecera STOMP `traceparent` (W3C).
+    Un 400 de forma o un 429 por preguntas en vuelo se contestan antes de
+    abrirla y no la llevan.
+
     **Latidos.** El servidor ofrece `heart-beat: 10000,10000` (10 s en cada
     sentido; se negocia con lo que pida el cliente). La ventana del
     asistente pide `0,10000`: recibe latidos del servidor y no manda.
@@ -108,8 +114,6 @@ servers:
 channels:
   enviarMensaje:
     address: '/app/chat/mensajes'
-    x-implementacion: pendiente
-    x-fase: '#506'
     title: Pregunta al asistente
     description: |
       La pregunta, con la seccion donde esta el jugador. Pasa por
@@ -153,7 +157,10 @@ channels:
       400 (forma), 422 `CONTENIDO_BLOQUEADO` o `INYECCION_DETECTADA`, 429
       `LIMITE_DE_FRECUENCIA` (con `reintentarEn`, los segundos de
       `Retry-After`), 503 `MODERACION_NO_DISPONIBLE`; y 500 si algo falla en
-      el servidor. Nada de lo rechazado se guarda. La conexion sigue abierta.
+      el servidor. Propios del canal: 429 `LIMITE_DE_FRECUENCIA` con
+      `reintentarEn: 1` si la conexion ya tiene sus preguntas en vuelo, y 503
+      sin `motivo` si el servicio se esta apagando. Nada de lo rechazado se
+      guarda. La conexion sigue abierta.
     messages:
       errorDelCanal:
         $ref: '#/components/messages/ErrorDelCanal'
@@ -240,6 +247,9 @@ components:
         properties:
           id-correlacion:
             type: string
+          traceparent:
+            type: string
+            pattern: '^00-[0-9a-f]{32}-[0-9a-f]{16}-01$'
           X-Id-Sesion-Anonima:
             type: string
             pattern: '^anon_[A-Za-z0-9_-]{43}$'
@@ -335,3 +345,7 @@ components:
         id-correlacion:
           type: string
           description: El `idCorrelacion` del mensaje al que responde, si lo traia.
+        traceparent:
+          type: string
+          pattern: '^00-[0-9a-f]{32}-[0-9a-f]{16}-01$'
+          description: La traza de la pregunta (W3C). No va en un 400 de forma ni en un 429 por preguntas en vuelo.
