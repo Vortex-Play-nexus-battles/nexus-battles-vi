@@ -161,3 +161,23 @@ describe('UXC-9 — la promoción (productos.yaml 1.4.0)', () => {
     ).toThrow(/descuento no puede ser mayor que 90/i);
   });
 });
+
+test('SA-13: la disponibilidad «único» viaja en la solicitud; «activo» o sin el campo, no', () => {
+  const conUnico = formularioBase('ARMA');
+  agregar(conUnico, 'poderDeAtaque', 25, 'number');
+  agregar(conUnico, 'tasaDeCaida', 10, 'number');
+  agregar(conUnico, 'estado', 'UNICO');
+  expect(construirSolicitudProducto(conUnico).estado).toBe('UNICO');
+
+  const conActivo = formularioBase('ARMA');
+  agregar(conActivo, 'poderDeAtaque', 25, 'number');
+  agregar(conActivo, 'tasaDeCaida', 10, 'number');
+  agregar(conActivo, 'estado', 'ACTIVO');
+  expect(construirSolicitudProducto(conActivo)).not.toHaveProperty('estado');
+
+  const raro = formularioBase('ARMA');
+  agregar(raro, 'poderDeAtaque', 25, 'number');
+  agregar(raro, 'tasaDeCaida', 10, 'number');
+  agregar(raro, 'estado', 'SUSPENDIDO');
+  expect(() => construirSolicitudProducto(raro)).toThrow(/disponibilidad/);
+});
