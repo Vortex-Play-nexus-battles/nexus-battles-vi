@@ -23,5 +23,4 @@ public interface RepositorioDeInventarios {
      */
     List<Inventario> buscarTodosPorElementoId(String elementoId);
 
-    List<ElementoInventario> buscarElementos(String propietarioId, String criterio);
 }
