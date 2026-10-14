@@ -834,4 +834,101 @@ class SancionesServiceTest {
                 .isInstanceOf(SancionRechazada.class)
                 .extracting("motivo").isEqualTo(SancionRechazada.Motivo.SOLICITUD_INVALIDA);
     }
+
+    @Nested
+    @DisplayName("SA-5 · bitacora central (§7.3.5)")
+    class BitacoraCentral {
+
+        private final com.nexusbattles.plataforma.moderacionsanciones.auditoria.BitacoraDeAuditoria bitacora =
+                org.mockito.Mockito.mock(com.nexusbattles.plataforma.moderacionsanciones.auditoria.BitacoraDeAuditoria.class);
+        private SancionesService conBitacora;
+
+        @BeforeEach
+        void conBitacora() {
+            conBitacora = new SancionesService(sanciones, apelaciones, new SalidasDeSancion(salidasGuardadas),
+                    Clock.fixed(AHORA, ZoneOffset.UTC), LimitesDeSancion.Fijos.de(1, 30, 30),
+                    cuenta -> rolesDeLasCuentas.getOrDefault(cuenta, "JUGADOR"), PlazoDeDecision.deLunesAViernes(),
+                    bitacora);
+        }
+
+        @Test
+        @DisplayName("una advertencia queda como SANCION sobre el uid, con lo que se impuso y el motivo")
+        void advertencia() {
+            conBitacora.emitir(MODERADORA, solicitud(Sancion.Tipo.ADVERTENCIA, null, false));
+
+            verify(bitacora).registrar(com.nexusbattles.plataforma.moderacionsanciones.auditoria.TipoDeAccion.SANCION,
+                    JUGADOR.toString(), null, "Advertencia · Política: Normas de convivencia",
+                    "Lenguaje ofensivo en el chat");
+        }
+
+        @Test
+        @DisplayName("una suspension queda como SUSPENSION con su fin en la hora de Colombia")
+        void suspension() {
+            conBitacora.emitir(MODERADORA, solicitud(Sancion.Tipo.SUSPENSION, 72L, false));
+
+            ArgumentCaptor<String> nuevo = ArgumentCaptor.forClass(String.class);
+            verify(bitacora).registrar(
+                    eq(com.nexusbattles.plataforma.moderacionsanciones.auditoria.TipoDeAccion.SUSPENSION),
+                    eq(JUGADOR.toString()), org.mockito.ArgumentMatchers.isNull(), nuevo.capture(),
+                    eq("Lenguaje ofensivo en el chat"));
+            assertThat(nuevo.getValue()).startsWith("Suspensión hasta el 24 de septiembre de 2026, 5:00")
+                    .endsWith("· Política: Normas de convivencia");
+        }
+
+        @Test
+        @DisplayName("levantar queda como ACTUALIZACION: como estaba, que se levanto y por que")
+        void levantar() {
+            Sancion suspension = conBitacora.emitir(ADMIN, solicitud(Sancion.Tipo.SUSPENSION, 48L, false));
+            when(sanciones.findById(suspension.id())).thenReturn(Optional.of(suspension));
+
+            conBitacora.levantar(SUPER, suspension.id(), "  Error de moderacion  ");
+
+            ArgumentCaptor<String> antes = ArgumentCaptor.forClass(String.class);
+            verify(bitacora).registrar(
+                    eq(com.nexusbattles.plataforma.moderacionsanciones.auditoria.TipoDeAccion.ACTUALIZACION),
+                    eq(JUGADOR.toString()), antes.capture(), eq("Suspensión levantada antes de su fin"),
+                    eq("Error de moderacion"));
+            assertThat(antes.getValue()).startsWith("Suspensión hasta el 23 de septiembre de 2026");
+        }
+
+        @Test
+        @DisplayName("una apelacion estimada es APROBACION; desestimada, RECHAZO; las dos con la decision motivada")
+        void apelaciones() {
+            Sancion suspension = conBitacora.emitir(MODERADORA, solicitud(Sancion.Tipo.SUSPENSION, 72L, false));
+            when(sanciones.findById(suspension.id())).thenReturn(Optional.of(suspension));
+            when(apelaciones.findBySancionIdAndEstado(suspension.id(), Apelacion.Estado.PENDIENTE))
+                    .thenReturn(Optional.empty());
+            Apelacion apelacion = conBitacora.apelar(SANCIONADO, suspension.id(), "No fui yo");
+            when(apelaciones.findById(apelacion.id())).thenReturn(Optional.of(apelacion));
+
+            conBitacora.resolver(ADMIN, apelacion.id(), Apelacion.Estado.MANTENIDA, "Las pruebas son claras", null);
+
+            ArgumentCaptor<String> antes = ArgumentCaptor.forClass(String.class);
+            verify(bitacora).registrar(
+                    eq(com.nexusbattles.plataforma.moderacionsanciones.auditoria.TipoDeAccion.RECHAZO),
+                    eq(JUGADOR.toString()), antes.capture(), eq("Apelación desestimada: la sanción se mantiene"),
+                    eq("Las pruebas son claras"));
+            assertThat(antes.getValue()).startsWith("Apelación pendiente · Suspensión hasta el");
+        }
+
+        @Test
+        @DisplayName("una accion rechazada (un moderador que intenta banear) no deja asiento")
+        void rechazadaNoSeRegistra() {
+            assertThatThrownBy(() -> conBitacora.emitir(MODERADORA, solicitud(Sancion.Tipo.BANEO, null, true)))
+                    .isInstanceOf(SancionRechazada.class);
+
+            org.mockito.Mockito.verifyNoInteractions(bitacora);
+        }
+
+        @Test
+        @DisplayName("descripcionDe: baneo con causal")
+        void descripcionDelBaneo() {
+            Sancion baneo = new Sancion(UUID.randomUUID(), JUGADOR, Sancion.Tipo.BANEO, Causal.values()[0],
+                    "Reincidencia grave", null, null, ADMIN.id(), ADMIN.rol(),
+                    OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC), null);
+
+            assertThat(SancionesService.descripcionDe(baneo))
+                    .isEqualTo("Inhabilitación definitiva · Causal: " + Causal.values()[0].etiqueta());
+        }
+    }
 }

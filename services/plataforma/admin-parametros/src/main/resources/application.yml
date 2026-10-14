@@ -29,16 +29,19 @@ spring:
     schemas: admin_parametros
     default-schema: admin_parametros
 
-# HU-AUD-001: cada cambio se envia a la auditoria de ms-cumplimiento con la
-# credencial de servicio (ADR-005). Vacio = no se audita fuera (solo el
-# historial local), y se dice en la bitacora.
+# HU-AUD-001 / SA-5 (§7.3.5): cada cambio llega a la bitacora central de
+# ms-cumplimiento (.../api/v1/admin/auditoria/eventos) desde su version, con
+# la IP de quien cambio y la credencial de servicio (ADR-005), con reintentos.
+# Vacio = las versiones esperan en el historial local y cada cambio queda en
+# la bitacora JSON.
 parametros:
   auditoria:
     url: ${AUDITORIA_URL:}
-    # B12: tiempos de espera del cliente de auditoria; sin ellos, una auditoria
-    # colgada dejaba colgado el cambio de parametro.
+    # B12: tiempos de espera del cliente de auditoria.
     tiempo-conexion-ms: ${AUDITORIA_TIEMPO_CONEXION_MS:2000}
     tiempo-respuesta-ms: ${AUDITORIA_TIEMPO_RESPUESTA_MS:5000}
+    reintento-ms: ${AUDITORIA_REINTENTO_MS:10000}
+    espera-maxima-ms: ${AUDITORIA_ESPERA_MAXIMA_MS:900000}
 
 seguridad:
   servicio:

@@ -12276,3 +12276,17 @@ body:has(.chatbot-flotante) main:not(.combate) {
   color: var(--texto-3);
   font-style: italic;
 }
+
+/* SA-5 — una celda de texto largo (el cambio y el motivo de la bitácora) en
+   dos líneas como mucho: el texto entero queda en el detalle de la fila y en
+   su `title`. Sin esto, una frase larga estiraba la fila o la columna y el
+   resto de la tabla salía del panel. */
+.celda-recortada {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  max-width: 22rem;
+  overflow-wrap: anywhere;
+}

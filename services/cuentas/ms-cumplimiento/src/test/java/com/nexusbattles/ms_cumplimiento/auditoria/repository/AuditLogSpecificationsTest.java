@@ -21,6 +21,14 @@ class AuditLogSpecificationsTest {
     }
 
     @Test
+    @DisplayName("1.3.0: varios administradores; sin ninguno util, no hay filtro")
+    void conAdministradores() {
+        assertThat(AuditLogSpecifications.conAdministradores(null)).isNull();
+        assertThat(AuditLogSpecifications.conAdministradores(Arrays.asList(" ", null))).isNull();
+        assertThat(AuditLogSpecifications.conAdministradores(List.of("moderadora_qa", "5b2e1c4e"))).isNotNull();
+    }
+
+    @Test
     @DisplayName("los demas filtros vacios tampoco filtran")
     void filtrosVacios() {
         assertThat(AuditLogSpecifications.conAdministrador(" ")).isNull();

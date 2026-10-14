@@ -126,7 +126,7 @@ class AdminGestionUsuarioServiceTest {
                 25L, null);
         verify(proyecciones).aplicar(cuenta, EstadoCuenta.SUSPENDIDO, fin, SANCION);
         verify(auditoriaClient).registrar(eq("SUSPENSION"), eq(ADMINISTRADOR_ID), eq(UID.toString()), eq("ACTIVO"),
-                anyString(), eq("Suspensión de cuenta (moderacion-sanciones)"), eq(IP_ORIGEN));
+                anyString(), eq(AdminGestionUsuarioService.MOTIVO_SUSPENSION), eq(IP_ORIGEN));
         verifyNoInteractions(notificacionClient, authAdminService);
     }
 
@@ -157,6 +157,12 @@ class AdminGestionUsuarioServiceTest {
         service.banearCuenta(USUARIO_ID, "Duplico creditos", "FRAUDE", " ", ADMIN, ADMINISTRADOR_ID, ROL_ACTOR,
                 IP_ORIGEN);
         verify(moderacion).emitir(ADMIN, UID, "BANEO", "FRAUDE", "Duplico creditos", null, null, Boolean.TRUE);
+
+        // SA-5 (§7.3.5): la bitacora central lleva el motivo de quien actua y la causal, no una etiqueta fija.
+        verify(auditoriaClient).registrar(eq("SUSPENSION"), eq(ADMINISTRADOR_ID), eq(UID.toString()), anyString(),
+                org.mockito.ArgumentMatchers.contains("· causal ACOSO"), eq("Insultos en la sala 12"), eq(IP_ORIGEN));
+        verify(auditoriaClient).registrar(eq("SANCION"), eq(ADMINISTRADOR_ID), eq(UID.toString()), anyString(),
+                org.mockito.ArgumentMatchers.contains("· causal FRAUDE"), eq("Duplico creditos"), eq(IP_ORIGEN));
     }
 
     @Test

@@ -37,6 +37,7 @@
  */
 
 import { consultar, RESULTADO } from '../consola/cliente-consola.js';
+import { directorioDeTitulares } from '../consola/titulares.js';
 import { panel, pintarDesenlace } from '../consola/panel.js';
 import { urlDeVista } from '../../comun/acceso.js';
 import { construirPaginacion } from '../../comun/paginacion.js';
@@ -81,9 +82,6 @@ import {
 
 /** RNF-USA-001: dieciséis por página. */
 export const POR_PAGINA = 16;
-
-/** Hasta cuántas cuentas se nombran de una vez (ms-identidad-admin 1.9.0). */
-const TITULARES_POR_CONSULTA = 100;
 
 const UID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -354,85 +352,12 @@ export function consecuenciasDeLaEmision(tipo, { horas = null, ahora = Date.now(
 }
 
 /* =========================================================================
-   Quién es cada cuenta
+   Quién es cada cuenta: `directorioDeTitulares` vive en la consola
+   (../consola/titulares.js), porque lo usan también la bitácora de auditoría
+   y la consola de control integral.
    ========================================================================= */
 
-/**
- * Los titulares de las cuentas, con lo que ya se sabe guardado: cada página
- * pide solo los que faltan, de una vez.
- *
- * @param {{consultarApi: typeof consultar}} opciones
- */
-export function directorioDeTitulares({ consultarApi }) {
-  /** @type {Map<string, {uid: string, apodo: string, estado: string, rol?: string|null}>} */
-  const conocidos = new Map();
-  /**
-   * Las consultas en curso, por `uid`: el listado y las apelaciones cargan a
-   * la vez y piden muchas de las mismas cuentas; la segunda espera a la
-   * primera en vez de repetirla.
-   *
-   * @type {Map<string, Promise<boolean>>}
-   */
-  const enCurso = new Map();
-
-  const recordar = (titular) => {
-    if (titular?.uid) {
-      conocidos.set(String(titular.uid).toLowerCase(), titular);
-    }
-  };
-
-  /** @param {string[]} tanda */
-  async function consultarTanda(tanda) {
-    const desenlace = await consultarApi(`/admin/titulares?uids=${tanda.join(',')}`);
-    if (desenlace.resultado === RESULTADO.VACIO) {
-      return true;
-    }
-    if (desenlace.resultado !== RESULTADO.DATOS || !Array.isArray(desenlace.datos)) {
-      return false;
-    }
-    desenlace.datos.forEach(recordar);
-    return true;
-  }
-
-  return {
-    /** @param {string} uid */
-    de(uid) {
-      return conocidos.get(String(uid ?? '').toLowerCase()) ?? null;
-    },
-    recordar,
-    /**
-     * @param {string[]} uids
-     * @returns {Promise<boolean>} false si identidad no respondió
-     */
-    async nombrar(uids) {
-      const pedidos = [...new Set(uids.map((u) => String(u ?? '').toLowerCase()))].filter((u) =>
-        UID.test(u),
-      );
-      const faltan = pedidos.filter((u) => !conocidos.has(u) && !enCurso.has(u));
-      for (let i = 0; i < faltan.length; i += TITULARES_POR_CONSULTA) {
-        const tanda = faltan.slice(i, i + TITULARES_POR_CONSULTA);
-        const promesa = consultarTanda(tanda).finally(() =>
-          tanda.forEach((u) => enCurso.delete(u)),
-        );
-        tanda.forEach((u) => enCurso.set(u, promesa));
-      }
-      const esperadas = new Set(pedidos.map((u) => enCurso.get(u)).filter(Boolean));
-      const resultados = await Promise.all([...esperadas]);
-      return resultados.every(Boolean);
-    },
-    /**
-     * @param {string} texto apodo o parte de él, o un `uid`
-     * @returns {Promise<import('../consola/cliente-consola.js').Desenlace>}
-     */
-    async buscar(texto) {
-      const desenlace = await consultarApi(`/admin/titulares?buscar=${encodeURIComponent(texto)}`);
-      if (desenlace.resultado === RESULTADO.DATOS && Array.isArray(desenlace.datos)) {
-        desenlace.datos.forEach(recordar);
-      }
-      return desenlace;
-    },
-  };
-}
+export { directorioDeTitulares };
 
 /* =========================================================================
    La consola

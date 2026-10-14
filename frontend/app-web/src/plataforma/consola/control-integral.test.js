@@ -952,6 +952,51 @@ describe('las consultas son las que el sistema atiende de verdad', () => {
     expect(auditoria.textContent).not.toContain('CAMBIO_ROL');
   });
 
+  test('SA-5: la bitácora dice el apodo de quien actuó y de la cuenta, nunca su uid ni un prefijo técnico', async () => {
+    const moderadora = '5b2e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55';
+    const lyra = '7a1e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55';
+    const { raiz, consultarApi } = await montar({
+      consultarApi: apiSimulada({
+        '/admin/auditoria': conDatos({
+          content: [
+            {
+              id: 'e-1',
+              fechaHora: '2026-10-14T15:00:02Z',
+              ocurridoEn: '2026-10-14T15:00:00Z',
+              administrador: moderadora,
+              tipoAccion: 'SANCION',
+              afectado: lyra,
+              motivo: 'Insultos en el chat general',
+            },
+            {
+              id: 'e-2',
+              fechaHora: '2026-10-14T14:00:00Z',
+              administrador: moderadora,
+              tipoAccion: 'ACTUALIZACION',
+              afectado: 'comentario:c-42',
+              motivo: `Fuera de tema ${'x'.repeat(200)}`,
+            },
+          ],
+        }),
+        '/admin/titulares': conDatos([
+          { uid: moderadora, apodo: 'moderadora_qa', estado: 'ACTIVO' },
+          { uid: lyra, apodo: 'lyra_92', estado: 'ACTIVO' },
+        ]),
+      }),
+    });
+
+    const auditoria = raiz.querySelector('[data-panel="auditoria"]');
+    expect(celdas(auditoria).slice(1, 3)).toEqual(['moderadora_qa', 'Sanción']);
+    expect(auditoria.textContent).toContain('lyra_92');
+    expect(auditoria.textContent).toContain('Comentario');
+    expect(auditoria.textContent).not.toContain(lyra);
+    expect(auditoria.textContent).not.toContain(moderadora);
+    expect(auditoria.textContent).not.toContain('comentario:');
+    expect(auditoria.textContent).toContain('…');
+    const pedidas = consultarApi.mock.calls.map((c) => c[0]);
+    expect(pedidas.filter((r) => r.startsWith('/admin/titulares?uids='))).toHaveLength(1);
+  });
+
   test('la cola de moderación cuenta bien aunque llame a su lista «entradas»', async () => {
     const { raiz } = await montar();
 

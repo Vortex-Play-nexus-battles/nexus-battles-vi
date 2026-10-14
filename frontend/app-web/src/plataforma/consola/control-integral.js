@@ -34,6 +34,15 @@
 import { consultar, descargar, filasDe, totalDe, RESULTADO } from './cliente-consola.js';
 import { indicador, panel, pintarDesenlace } from './panel.js';
 import {
+  celdaDeSobre,
+  momentoDe,
+  quienDe,
+  recortado,
+  sobreDe,
+  uidsDe,
+} from './entradas-de-auditoria.js';
+import { directorioDeTitulares } from './titulares.js';
+import {
   ESTADOS_DE_CUENTA,
   exportarDirectorio,
   guardarArchivo,
@@ -817,36 +826,10 @@ function seccionTorneos(consultarApi) {
    ------------------------------------------------------------------------- */
 
 function seccionModeracion(consultarApi) {
-  const auditoria = panelDeRecurso({
-    id: 'auditoria',
-    ancho: 'completo',
-    titulo: 'Bitácora de acciones administrativas',
-    acciones: [enlaceA('auditoria', 'Ver toda la auditoría')].filter(Boolean),
-    // La ruta de LECTURA es /admin/auditoria (la de escritura, /eventos, a un
-    // GET responde 405). Fecha descendente y el `id` como desempate.
-    recurso: '/admin/auditoria?page=0&size=15&sort=fechaHora,desc&sort=id,desc',
-    consultarApi,
-    vacio: { titulo: 'Todavía no hay acciones registradas' },
-    pintar: (datos) =>
-      tablaDeDatos({
-        titulo: 'Bitácora de acciones administrativas',
-        resumen: 'Las quince acciones más recientes',
-        columnas: [
-          {
-            clave: 'fechaHora',
-            titulo: 'Fecha',
-            tipo: 'fecha',
-            principal: true,
-            valor: (e) => fechaOVacio(e.fechaHora),
-          },
-          { clave: 'administrador', titulo: 'Quién' },
-          { clave: 'tipoAccion', titulo: 'Acción', valor: (e) => nombreDeAccion(e.tipoAccion) },
-          { clave: 'afectado', titulo: 'Sobre' },
-          { clave: 'motivo', titulo: 'Motivo' },
-        ],
-        filas: filasDe(datos),
-      }),
-  });
+  // §7.3.5 (SA-5): las quince acciones más recientes de la bitácora central,
+  // con nombres en vez de identificadores; «Ver toda la auditoría» lleva al
+  // registro completo, con sus filtros y su exportación.
+  const auditoria = panelDeBitacora(consultarApi);
 
   // No hay listado global de sanciones en esta sección: el servicio publica
   // el recuento de la ventana de treinta días, y eso es lo que se enseña.
@@ -893,6 +876,82 @@ function seccionModeracion(consultarApi) {
   // Las dos cifras juntas arriba; la lista, la bitácora y el recuento, cada
   // uno en su fila.
   return [alertas, comentarios, reincidentes, auditoria, sanciones];
+}
+
+/**
+ * El panel de la bitácora central (§7.3.5, SA-5): las quince acciones más
+ * recientes, con el apodo de quien actuó y de la cuenta afectada.
+ *
+ * @param {typeof consultar} consultarApi
+ */
+function panelDeBitacora(consultarApi) {
+  const partes = panel({
+    id: 'auditoria',
+    titulo: 'Bitácora de acciones administrativas',
+    acciones: [enlaceA('auditoria', 'Ver toda la auditoría')].filter(Boolean),
+    ancho: 'completo',
+  });
+  const titulares = directorioDeTitulares({ consultarApi });
+  const cargar = async () => {
+    // La ruta de LECTURA es /admin/auditoria (la de escritura, /eventos, a un
+    // GET responde 405). Fecha descendente y el `id` como desempate.
+    const desenlace = await consultarApi(
+      '/admin/auditoria?page=0&size=15&sort=fechaHora,desc&sort=id,desc',
+    );
+    if (desenlace.resultado === RESULTADO.DATOS) {
+      await titulares.nombrar(uidsDe(filasDe(desenlace.datos)));
+    }
+    pintarDesenlace(partes, desenlace, (datos) => pintarBitacora(datos, titulares), {
+      alReintentar: cargar,
+      vacio: { titulo: 'Todavía no hay acciones registradas' },
+    });
+    return desenlace;
+  };
+  return { ...partes, cargar, id: 'auditoria' };
+}
+
+/**
+ * Las acciones recientes de la bitácora: cuándo, quién, qué, sobre qué y por
+ * qué, con los textos largos recortados (el registro completo los tiene
+ * enteros) para que la tabla no se desborde.
+ *
+ * @param {{content?: object[]}} datos `PaginaDeAuditoria`
+ * @param {{de: (uid: string) => ({apodo?: string}|null)}} titulares
+ * @returns {HTMLElement}
+ */
+export function pintarBitacora(datos, titulares) {
+  return tablaDeDatos({
+    titulo: 'Bitácora de acciones administrativas',
+    resumen: 'Las quince acciones más recientes',
+    claveDeFila: (e) => e.id,
+    columnas: [
+      {
+        clave: 'fechaHora',
+        titulo: 'Fecha',
+        tipo: 'fecha',
+        principal: true,
+        valor: (e) => fechaOVacio(momentoDe(e)),
+      },
+      {
+        clave: 'administrador',
+        titulo: 'Quién',
+        valor: (e) => {
+          const quien = quienDe(e.administrador, titulares);
+          return quien.identificado
+            ? quien.texto
+            : h('span', { clase: 'tabla-admin__sin-dato', texto: quien.texto });
+        },
+      },
+      { clave: 'tipoAccion', titulo: 'Acción', valor: (e) => nombreDeAccion(e.tipoAccion) },
+      {
+        clave: 'afectado',
+        titulo: 'Sobre',
+        valor: (e) => celdaDeSobre(sobreDe(e.afectado, titulares)),
+      },
+      { clave: 'motivo', titulo: 'Motivo', valor: (e) => recortado(e.motivo, 70) },
+    ],
+    filas: filasDe(datos),
+  });
 }
 
 /**

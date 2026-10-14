@@ -15,14 +15,13 @@ package com.nexusbattles.plataforma.comentarios.moderacion;
  * comentario?" la contesta el asiento; "¿que ha hecho este moderador este
  * mes?" solo la contesta la bitacora transversal.
  *
- * <h2>Fail-open, y dicho</h2>
+ * <h2>Desde SA-5, por la cola del propio asiento</h2>
  *
- * ms-cumplimiento no esta desplegado en el host de dev por capacidad (#459):
- * hoy solo existe en el banco E2E. Un registro que no sale no puede tumbar una
- * decision de moderacion ya confirmada —seria degradar la moderacion por una
- * dependencia que ni siquiera esta arriba—, asi que esto no lanza. Lo que si
- * hace es dejarlo en la bitacora local en JSON, que es lo que se puede
- * garantizar mientras el servicio no exista en AWS.
+ * Este punto ya no llama a nadie: deja la linea de la decision en la bitacora
+ * JSON (regla 6). La entrega a ms-cumplimiento la hace {@link EnvioDeAuditoria}
+ * desde el asiento, que se guarda en la transaccion de la decision, con
+ * reintentos y una referencia por asiento: una bitacora central caida no
+ * tumba una decision ni la pierde.
  */
 public interface RegistroDeAuditoria {
 

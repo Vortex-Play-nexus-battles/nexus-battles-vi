@@ -29,7 +29,7 @@ import { distintivoDeEstado } from '../../comun/ui/admin/estado.js';
 import { rejillaDeIndicadores, tarjetaDeIndicador } from '../../comun/ui/admin/indicador.js';
 import { abrirPanelLateral } from '../../comun/ui/admin/panel-lateral.js';
 import { tablaDeDatos } from '../../comun/ui/admin/tabla-de-datos.js';
-import { confirmar as confirmarConDialogo } from '../../comun/ui/dialogo.js';
+import { confirmarConMotivo } from '../../comun/ui/dialogo.js';
 import { h, vaciar } from '../../comun/ui/dom.js';
 import { estadoDeCarga, estadoDeError, pintarEstado } from '../../comun/ui/estado-vista.js';
 import { fecha as fechaCorta } from '../../comun/ui/formato.js';
@@ -191,8 +191,52 @@ export const api = {
   listar: (filtros, pagina, f) => pedir(`${BASE_URL}${consultaDe(filtros, pagina)}`, {}, f),
   agregar: (cuerpo, f) => pedir(BASE_URL, conCuerpo('POST', cuerpo), f),
   editar: (termino, cuerpo, f) => pedir(caminoDe(termino), conCuerpo('PUT', cuerpo), f),
-  eliminar: (termino, f) => pedir(caminoDe(termino), { method: 'DELETE' }, f),
+  // 2.2.0: el motivo va a la bitácora central (§7.3.5).
+  eliminar: (termino, motivo, f) =>
+    pedir(
+      motivo ? `${caminoDe(termino)}?motivo=${encodeURIComponent(motivo)}` : caminoDe(termino),
+      { method: 'DELETE' },
+      f,
+    ),
 };
+
+/** Mínimo y máximo del motivo de un cambio (la bitácora central admite 500). */
+export const MOTIVO_MINIMO = 5;
+export const MOTIVO_MAXIMO = 500;
+
+/**
+ * Lo que dice el diálogo de cada acción sobre un término; las tres piden el
+ * motivo, que queda en el registro de auditoría (§7.3.5).
+ *
+ * @param {object} termino
+ * @param {'quitar'|'apagar'|'activar'} accion
+ */
+export function dialogoDeAccion(termino, accion) {
+  const nombre = `«${termino.termino}»`;
+  if (accion === 'quitar') {
+    return {
+      titulo: `¿Quitar ${nombre} de la lista negra?`,
+      mensaje:
+        'Deja de filtrarse desde este momento. Si solo quieres dejar de aplicarlo un tiempo, apágalo.',
+      textoConfirmar: 'Quitar término',
+      peligro: true,
+    };
+  }
+  if (accion === 'apagar') {
+    return {
+      titulo: `¿Apagar ${nombre}?`,
+      mensaje: 'Deja de aplicarse sin borrarse; lo puedes volver a activar cuando quieras.',
+      textoConfirmar: 'Apagar',
+      peligro: false,
+    };
+  }
+  return {
+    titulo: `¿Activar ${nombre}?`,
+    mensaje: 'Vuelve a filtrarse en apodos, nombres, comentarios y chat desde este momento.',
+    textoConfirmar: 'Activar',
+    peligro: false,
+  };
+}
 
 /* ---- DOM ---- */
 
@@ -387,7 +431,8 @@ export function tablaDeTerminos(terminos, { resumen = null, ...acciones } = {}) 
  * cómo se busca, con los valores de ahora.
  *
  * @param {object} termino
- * @returns {{elemento: HTMLFormElement, leer: () => {termino: string, categoria: string, modo: string}}}
+ * @returns {{elemento: HTMLFormElement,
+ *   leer: () => {termino: string, categoria: string, modo: string, motivo: string}}}
  */
 export function formularioDeEdicion(termino) {
   secuencia += 1;
@@ -412,6 +457,33 @@ export function formularioDeEdicion(termino) {
         opciones: OPCIONES_DE_MODO,
         valor: termino.modo ?? 'SUBCADENA',
       }),
+      h('div', {
+        clase: 'campo',
+        hijos: [
+          h('label', {
+            clase: 'campo__etiqueta',
+            texto: 'Motivo del cambio',
+            atributos: { for: `${id}-motivo` },
+          }),
+          h('textarea', {
+            clase: 'campo__control',
+            atributos: {
+              id: `${id}-motivo`,
+              name: 'motivo',
+              rows: 3,
+              minlength: MOTIVO_MINIMO,
+              maxlength: MOTIVO_MAXIMO,
+              required: true,
+              'aria-describedby': `${id}-motivo-pista`,
+            },
+          }),
+          h('p', {
+            clase: 'campo__pista',
+            texto: 'Queda en el registro de auditoría con tu nombre y la fecha.',
+            atributos: { id: `${id}-motivo-pista` },
+          }),
+        ],
+      }),
       h('p', {
         clase: 'campo__error',
         atributos: { role: 'alert' },
@@ -426,6 +498,7 @@ export function formularioDeEdicion(termino) {
       termino: String(datos.get('termino') ?? '').trim(),
       categoria: String(datos.get('categoria') ?? ''),
       modo: String(datos.get('modo') ?? ''),
+      motivo: String(datos.get('motivo') ?? '').trim(),
     };
   };
   return { elemento, leer };
@@ -441,7 +514,8 @@ export function formularioDeEdicion(termino) {
  *
  * @param {ParentNode} raiz
  * @param {{fetchImpl?: Function,
- *          confirmar?: (termino: object) => boolean|Promise<boolean>,
+ *          confirmar?: (termino: object, accion: 'quitar'|'apagar'|'activar') =>
+ *            string|boolean|null|Promise<string|boolean|null>,
  *          abrirEdicion?: typeof abrirPanelLateral}} [opciones]
  * @returns {{cargar: (pagina?: number) => Promise<void>, cargarCifras: () => Promise<void>}}
  */
@@ -449,13 +523,11 @@ export function montarListaNegra(
   raiz,
   {
     fetchImpl,
-    confirmar = (termino) =>
-      confirmarConDialogo({
-        titulo: `¿Quitar «${termino.termino}» de la lista negra?`,
-        mensaje:
-          'Deja de filtrarse desde este momento. Si solo quieres dejar de aplicarlo un tiempo, apágalo.',
-        textoConfirmar: 'Quitar término',
-        peligro: true,
+    confirmar = (termino, accion) =>
+      confirmarConMotivo({
+        ...dialogoDeAccion(termino, accion),
+        minimo: MOTIVO_MINIMO,
+        maximo: MOTIVO_MAXIMO,
       }),
     abrirEdicion = abrirPanelLateral,
   } = {},
@@ -650,6 +722,12 @@ export function montarListaNegra(
         error.hidden = false;
         return;
       }
+      if (cuerpo.motivo.length < MOTIVO_MINIMO) {
+        error.textContent = `Escribe el motivo del cambio (al menos ${MOTIVO_MINIMO} caracteres).`;
+        error.hidden = false;
+        formulario.elemento.querySelector('[name="motivo"]')?.focus();
+        return;
+      }
       guardar.disabled = true;
       try {
         const editado = await api.editar(termino.termino, cuerpo, fetchImpl);
@@ -676,12 +754,32 @@ export function montarListaNegra(
     });
   }
 
+  /**
+   * El motivo de una acción, o null si se canceló. Un `confirmar` que solo
+   * dice sí o no (sin motivo) deja que el servicio ponga uno descriptivo.
+   */
+  async function motivoPara(termino, accion) {
+    const respuesta = await confirmar(termino, accion);
+    if (typeof respuesta === 'string') {
+      return respuesta.trim() || null;
+    }
+    return respuesta ? '' : null;
+  }
+
   async function alternar(termino) {
     limpiarAviso(zonaAviso);
+    const motivo = await motivoPara(termino, termino.activo ? 'apagar' : 'activar');
+    if (motivo === null) {
+      return;
+    }
     try {
       await api.editar(
         termino.termino,
-        { termino: termino.termino, activo: !termino.activo },
+        {
+          termino: termino.termino,
+          activo: !termino.activo,
+          ...(motivo ? { motivo } : {}),
+        },
         fetchImpl,
       );
       await recargarTodo();
@@ -698,11 +796,12 @@ export function montarListaNegra(
 
   async function eliminar(termino) {
     limpiarAviso(zonaAviso);
-    if (!(await confirmar(termino))) {
+    const motivo = await motivoPara(termino, 'quitar');
+    if (motivo === null) {
       return;
     }
     try {
-      await api.eliminar(termino.termino, fetchImpl);
+      await api.eliminar(termino.termino, motivo || null, fetchImpl);
       await recargarTodo();
       contarExito('Término quitado', `«${termino.termino}» ya no está en la lista negra.`);
     } catch (error) {
