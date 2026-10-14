@@ -238,4 +238,19 @@ class FiltrosDelDirectorioEnBaseTest {
                 LocalDateTime.of(2026, 9, 30, 12, 0),
                 LocalDateTime.of(2026, 9, 15, 8, 0));
     }
+
+    @Test
+    void elHistorialDeSancionesFiltraConYSinSanciones() {
+        // 1.7.0 (§7.3.4): el resumen que fija moderacion-sanciones.
+        Usuario sancionado = usuarioRepository.findAll().stream()
+                .filter(u -> u.getApodo().equals("Beto" + marca)).findFirst().orElseThrow();
+        sancionado.setSancionesRegistradas(2);
+        sancionado.setUltimaSancionEn(LocalDateTime.of(2026, 10, 1, 9, 0));
+        usuarioRepository.save(sancionado);
+
+        assertThat(apodos(FiltroDelDirectorio.de(marca, false, null, null, null, null, "CON")))
+                .containsExactly("Beto");
+        assertThat(apodos(FiltroDelDirectorio.de(marca, false, null, null, null, null, "SIN")))
+                .doesNotContain("Beto").contains("Ana", "Dani");
+    }
 }

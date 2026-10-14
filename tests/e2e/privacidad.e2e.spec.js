@@ -15,6 +15,10 @@
  *   4. pide el cierre con su contraseña, lo ve «Cierre programado para el …»
  *      (y la API dice lo mismo, 30 días después de pedirlo) y lo cancela.
  *
+ * SA-14 (comentarios.yaml 1.16.0): la cuenta publica un comentario y
+ * `GET /comentarios/mios` se lo devuelve (solo a ella); el JSON descargado lo
+ * trae en el módulo «comentarios», que ya no es una consulta pendiente.
+ *
  * El cierre pregunta a ms-subastas si la cuenta tiene subastas activas o
  * pujas vigentes (`IDENTIDAD_SUBASTAS_URL` del banco): una cuenta recién
  * creada no tiene ninguna, así que se programa. Si ms-subastas no contesta,
@@ -45,6 +49,7 @@ function sesionDe(api, apodo, opciones = {}) {
 }
 
 const rutaDelCierre = (uid) => `/api/v1/perfiles/${uid}/cierre`;
+const TEXTO_DEL_COMENTARIO = `Mi opinión para el portal de privacidad ${MARCA}`;
 
 const conToken = (jugador) => ({
   Authorization: `Bearer ${jugador.token}`,
@@ -141,6 +146,34 @@ test.describe('RFINAL-05 · «Privacidad»: tus datos y el cierre de la cuenta',
     expect(ajena.status(), await ajena.text()).toBe(403);
   });
 
+  test('1b · SA-14: su comentario sale en «mis comentarios», que exige sesión', async () => {
+    const catalogo = await api.get('/api/v1/productos?tipo=ARMA&page=0&size=1');
+    expect(catalogo.status(), await catalogo.text()).toBe(200);
+    const [producto] = (await catalogo.json()).content;
+    expect(producto, 'el banco no tiene armas en el catálogo').toBeTruthy();
+
+    const publicado = await api.post(`/api/v1/products/${producto.id}/comments`, {
+      headers: { ...conToken(jugadora), 'Content-Type': 'application/json' },
+      data: { texto: TEXTO_DEL_COMENTARIO },
+    });
+    expect(publicado.status(), await publicado.text()).toBe(201);
+
+    const mios = await api.get('/api/v1/comentarios/mios?pagina=0&tamano=100', {
+      headers: conToken(jugadora),
+    });
+    expect(mios.status(), await mios.text()).toBe(200);
+    const cuerpo = await mios.json();
+    expect(cuerpo.total).toBeGreaterThanOrEqual(1);
+    const propio = cuerpo.comentarios.find((c) => c.texto === TEXTO_DEL_COMENTARIO);
+    expect(propio, JSON.stringify(cuerpo)).toBeTruthy();
+    expect(propio.productoId).toBe(String(producto.id));
+    // Solo los suyos: la autora sale del token, no de la consulta.
+    expect(cuerpo.autorId).toBe(jugadora.claims.uid);
+
+    const sinSesion = await api.get('/api/v1/comentarios/mios', { headers: { Accept: ACEPTA } });
+    expect(sinSesion.status()).toBe(401);
+  });
+
   test('2 · ve su portal «Tus datos» y descarga el JSON generado en el navegador', async ({
     page,
   }) => {
@@ -175,6 +208,12 @@ test.describe('RFINAL-05 · «Privacidad»: tus datos y el cierre de la cuenta',
     expect(exportado.modulos.perfil.estado).toBe('completo');
     expect(exportado.modulos.perfil.datos.email).toBe(jugadora.email);
     expect(exportado.modulos.perfil.datos.apodo).toBe(jugadora.apodo);
+    // SA-14: el comentario propio viaja en el JSON.
+    expect(exportado.modulos.comentarios.estado).toBe('completo');
+    expect(
+      exportado.modulos.comentarios.datos.elementos.map((c) => c.texto),
+      JSON.stringify(exportado.modulos.comentarios),
+    ).toContain(TEXTO_DEL_COMENTARIO);
     // Cada módulo que no está completo aparece en la lista, con su motivo.
     const incompletos = new Set(exportado.modulosIncompletos.map((m) => m.modulo));
     for (const [id, modulo] of Object.entries(exportado.modulos)) {

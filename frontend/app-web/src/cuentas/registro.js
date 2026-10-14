@@ -24,8 +24,9 @@ sinCredencialesEnLaDireccion();
 // RFINAL-03 (informe del superadministrador del 4-oct): con la sesión
 // abierta, /registro seguía ofreciendo crear otra cuenta. Como hace el login,
 // quien ya entró va a su inicio. Una sesión caducada no cuenta.
-if (leerSesion().autenticado) {
-  globalThis.location.replace(destinoTrasEntrar(null));
+const sesionAbierta = leerSesion();
+if (sesionAbierta.autenticado) {
+  globalThis.location.replace(destinoTrasEntrar({ rol: sesionAbierta.rol }));
 }
 
 const TAMANO_SALIDA_PX = 512; // Resolución del avatar final, cuadrado.

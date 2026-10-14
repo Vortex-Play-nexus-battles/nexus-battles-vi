@@ -7,6 +7,10 @@
  * atiende: la pone en revisión, la responde o la cierra. La respuesta es lo
  * que el jugador lee en la ventana del asistente.
  *
+ * ms-chatbot.yaml 1.12.0 (RF-CHA-007) — también las abre un visitante
+ * (`deVisitante`): no tiene cuenta, así que en vez de un uid se dice que es
+ * un visitante, que verá la respuesta mientras dure su sesión.
+ *
  * @module cuentas/panel-chatbot-soporte
  */
 
@@ -24,10 +28,14 @@ import {
 import { fechaHora, numero } from '../comun/ui/formato.js';
 import { encabezadoDeSeccion } from '../comun/ui/pagina.js';
 import { CATEGORIAS, ESTADOS } from '../comun/ui/soporte-chatbot.js';
-import { textoDeErrorDelPanel } from './panel-chatbot-analiticas.js';
+import { fraseDeErrorDelPanel, textoDeErrorDelPanel } from './panel-chatbot-errores.js';
 
 /** Cuántas solicitudes por página. */
 export const POR_PAGINA = 20;
+
+/** 1.12.0 — quién abrió la solicitud cuando no es una cuenta. */
+export const TEXTO_VISITANTE =
+  'Un visitante sin cuenta (verá la respuesta mientras dure su sesión)';
 
 /** Transiciones del contrato: a qué estados puede pasar cada uno. */
 export const SIGUIENTES = Object.freeze({
@@ -69,7 +77,7 @@ export function textoDeFalloAlAtender(error) {
   if (error?.estado === 400) {
     return 'Revisa la respuesta: admite hasta 2000 caracteres.';
   }
-  return textoDeErrorDelPanel(error).titulo;
+  return fraseDeErrorDelPanel(error, 'No se pudo guardar el cambio de la solicitud');
 }
 
 /**
@@ -115,7 +123,10 @@ export function atenderEnDialogo({ cliente, ticketId }) {
         guardar.disabled = formulario === null;
       })
       .catch((error) => {
-        pintarEstado(cuerpo, estadoDeError(textoDeErrorDelPanel(error)));
+        pintarEstado(
+          cuerpo,
+          estadoDeError(textoDeErrorDelPanel(error, 'No se pudo abrir la solicitud')),
+        );
       });
 
     guardar.addEventListener('click', async () => {
@@ -146,12 +157,13 @@ export function atenderEnDialogo({ cliente, ticketId }) {
  * @returns {{datos: () => object|null, avisar: (texto: string|null) => void}|null}
  */
 function pintarDetalle(cuerpo, ticket) {
+  const visitante = ticket.deVisitante === true;
   const datosDelTicket = h('dl', {
     clase: 'panel-chatbot__datos',
     hijos: [
       ['Asunto', ticket.asunto],
       ['Tema', nombreDeCategoria(ticket.categoria)],
-      ['Jugador', ticket.uid],
+      visitante ? ['Quién', TEXTO_VISITANTE] : ['Jugador', ticket.uid],
       ['Abierta', fechaHora(ticket.creadoEn)],
     ].flatMap(([termino, valor]) => [h('dt', { texto: termino }), h('dd', { texto: valor ?? '' })]),
   });
@@ -160,13 +172,14 @@ function pintarDetalle(cuerpo, ticket) {
     hijos: ['Estado: ', distintivoDeEstado(ticket.estado)],
   });
 
+  const quienPregunta = visitante ? 'Visitante' : 'Jugador';
   const conversacion = (ticket.contexto ?? []).map((m) =>
     h('li', {
       clase: `panel-chatbot__contexto panel-chatbot__contexto--${m.remitente === 'BOT' ? 'bot' : 'jugador'}`,
       hijos: [
         h('p', {
           clase: 't-meta',
-          texto: `${m.remitente === 'BOT' ? 'Asistente' : 'Jugador'} · ${fechaHora(m.fechaEnvio)}`,
+          texto: `${m.remitente === 'BOT' ? 'Asistente' : quienPregunta} · ${fechaHora(m.fechaEnvio)}`,
         }),
         h('p', { texto: m.contenido }),
       ],
@@ -176,7 +189,7 @@ function pintarDetalle(cuerpo, ticket) {
   vaciar(cuerpo).append(
     datosDelTicket,
     estadoActual,
-    h('p', { clase: 't-etiqueta', texto: 'Mensaje del jugador' }),
+    h('p', { clase: 't-etiqueta', texto: `Mensaje del ${quienPregunta.toLowerCase()}` }),
     h('p', { clase: 'panel-chatbot__mensaje-ticket', texto: ticket.mensaje }),
     h('p', { clase: 't-etiqueta', texto: 'Conversación con el asistente' }),
     conversacion.length > 0
@@ -207,8 +220,10 @@ function pintarDetalle(cuerpo, ticket) {
   });
   const respuesta = campo({
     nombre: 'respuesta',
-    etiqueta: 'Respuesta para el jugador',
-    pista: 'Es lo que el jugador leerá en la ventana del asistente.',
+    etiqueta: `Respuesta para el ${quienPregunta.toLowerCase()}`,
+    pista: visitante
+      ? 'La leerá en la ventana del asistente mientras siga en su sesión de visitante.'
+      : 'Es lo que el jugador leerá en la ventana del asistente.',
     multilinea: true,
     valor: ticket.respuesta ?? '',
     atributos: { maxlength: 2000 },
@@ -221,7 +236,9 @@ function pintarDetalle(cuerpo, ticket) {
       const nuevoEstado = estado.control.value;
       const texto = respuesta.control.value.trim();
       const falta = nuevoEstado === 'RESUELTO' && !texto;
-      respuesta.marcarError(falta ? 'Escribe la respuesta para el jugador.' : null);
+      respuesta.marcarError(
+        falta ? `Escribe la respuesta para el ${quienPregunta.toLowerCase()}.` : null,
+      );
       if (falta) {
         return null;
       }
@@ -300,7 +317,10 @@ export function montarSoporte(raiz, { cliente, atender = atenderEnDialogo }) {
     } catch (error) {
       pintarEstado(
         zona,
-        estadoDeError({ ...textoDeErrorDelPanel(error), alReintentar: () => cargar() }),
+        estadoDeError({
+          ...textoDeErrorDelPanel(error, 'No se pudieron cargar las solicitudes de soporte'),
+          alReintentar: () => cargar(),
+        }),
       );
     }
   }

@@ -9,8 +9,9 @@
 
 import { jest } from '@jest/globals';
 
-import { ErrorDeApi, MOTIVO, TIPO } from './cliente-comentarios.js';
+import { ErrorDeApi, MAXIMO_DE_CARACTERES, MOTIVO, TIPO } from './cliente-comentarios.js';
 import {
+  caracteresDe,
   ESTADO_IMAGEN,
   FORMATOS_DE_IMAGEN,
   mensajeDePublicacion,
@@ -365,6 +366,88 @@ describe('publicar', () => {
     const texto = formulario.querySelector('textarea');
     expect(texto.getAttribute('aria-invalid')).toBe('true');
     expect(document.activeElement).toBe(texto);
+  });
+});
+
+describe('largo máximo: 2000 caracteres (comentarios.yaml 1.11.0, decisión del PO)', () => {
+  function escribir(formulario, valor) {
+    const texto = formulario.querySelector('textarea');
+    texto.value = valor;
+    texto.dispatchEvent(new Event('input', { bubbles: true }));
+    return texto;
+  }
+
+  test('el campo no deja pasar de 2000 y la cuenta se lee al llegar a él', () => {
+    const { formulario } = montar();
+    const texto = formulario.querySelector('textarea');
+    const cuenta = formulario.querySelector('.redactor-comentario__cuenta');
+
+    expect(MAXIMO_DE_CARACTERES).toBe(2000);
+    expect(texto.maxLength).toBe(2000);
+    expect(texto.getAttribute('aria-describedby')).toBe(cuenta.id);
+    expect(cuenta.textContent).toBe('0 de 2000 caracteres');
+
+    escribir(formulario, 'Muy buena espada');
+    expect(cuenta.textContent).toBe('16 de 2000 caracteres');
+  });
+
+  test('cerca del máximo dice cuántos quedan y lo anuncia una sola vez', () => {
+    const { formulario } = montar();
+    const cuenta = formulario.querySelector('.redactor-comentario__cuenta');
+    const anuncio = formulario.querySelector('[role="status"][aria-live="polite"]');
+
+    escribir(formulario, 'a'.repeat(1950));
+    expect(cuenta.textContent).toBe('1950 de 2000 caracteres · te quedan 50');
+    expect(cuenta.dataset.cerca).toBe('true');
+    expect(anuncio.textContent).toBe('Te quedan 50 caracteres.');
+
+    escribir(formulario, 'a'.repeat(1960));
+    // Mismo umbral: no se vuelve a dictar con cada pulsación.
+    expect(anuncio.textContent).toBe('Te quedan 50 caracteres.');
+
+    escribir(formulario, 'a'.repeat(2000));
+    expect(anuncio.textContent).toBe('Llegaste al máximo de 2000 caracteres.');
+  });
+
+  test('un emoji cuenta uno, como en el servicio', () => {
+    expect(caracteresDe('🗡️')).toBe(2);
+    expect(caracteresDe('🗡')).toBe(1);
+    expect(caracteresDe('Espada')).toBe(6);
+  });
+
+  test('si llegara uno más largo (por programa), no se envía y se dice por qué', async () => {
+    const { formulario, publicarImpl } = montar();
+    const texto = formulario.querySelector('textarea');
+    // `maxlength` solo frena al teclado; un valor puesto por programa no.
+    texto.value = 'a'.repeat(2001);
+
+    formulario.requestSubmit();
+    await esperar();
+
+    expect(publicarImpl).not.toHaveBeenCalled();
+    expect(texto.getAttribute('aria-invalid')).toBe('true');
+    expect(formulario.querySelector('.campo__error').textContent).toBe(
+      'Tu opinión tiene 2001 caracteres; puede tener como mucho 2000.',
+    );
+    // El error y la cuenta, los dos, describen el campo.
+    expect(texto.getAttribute('aria-describedby').split(' ')).toHaveLength(2);
+  });
+
+  test('400 texto-demasiado-largo del servicio: se explica, se marca el campo y el texto se queda', async () => {
+    const publicarImpl = jest
+      .fn()
+      .mockRejectedValue(new ErrorDeApi({ type: TIPO.TEXTO_DEMASIADO_LARGO, status: 400 }, 400));
+    const { formulario } = montar({ publicarImpl });
+
+    const texto = escribir(formulario, 'Un texto que el servicio rechaza');
+    formulario.requestSubmit();
+    await esperar();
+
+    expect(formulario.querySelector('.aviso--advertencia').textContent).toMatch(
+      /Tu opinión es demasiado larga/,
+    );
+    expect(texto.value).toBe('Un texto que el servicio rechaza');
+    expect(texto.getAttribute('aria-invalid')).toBe('true');
   });
 });
 

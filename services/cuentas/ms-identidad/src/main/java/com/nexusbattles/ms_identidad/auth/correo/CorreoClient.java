@@ -3,6 +3,7 @@ package com.nexusbattles.ms_identidad.auth.correo;
 import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoAvisoAccesoRequest;
 import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoBienvenidaRequest;
 import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoCambioClaveRequest;
+import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoCierreCuentaRequest;
 import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoConfirmacionCuentaRequest;
 import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoRecuperacionClaveRequest;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -59,6 +60,10 @@ public class CorreoClient {
     @Value("${app.correo.url-cambio-clave}")
     private String urlCambioClave;
 
+    // SA-14 (§7.3.6): la confirmacion de que la cuenta se elimino.
+    @Value("${app.correo.url-cierre-cuenta}")
+    private String urlCierreCuenta;
+
     public CorreoClient(RestClient correoRestClient) {
         this.restClient = correoRestClient;
     }
@@ -76,6 +81,24 @@ public class CorreoClient {
 
     private void enviarCambioClaveConFallback(CorreoCambioClaveRequest datos, String claveIdempotencia, Throwable ex) {
         log.warn("Servicio de correo no disponible, no se pudo enviar el aviso de cambio de contraseña a '{}'. Motivo: {}",
+            Enmascarado.correo(datos.getEmail()), ex.getMessage());
+    }
+
+    /**
+     * Confirmacion de que la eliminacion de la cuenta se completo (§7.3.6,
+     * SA-14). Sale despues de anonimizar y es informativa: si el correo no
+     * sale, la cuenta ya esta anonimizada y no se deshace; se deja constancia
+     * (sin la direccion completa) y se sigue.
+     */
+    @Retry(name = "correo", fallbackMethod = "enviarCierreCuentaConFallback")
+    @CircuitBreaker(name = "correo")
+    public void enviarCierreCuenta(CorreoCierreCuentaRequest datos, String claveIdempotencia) {
+        publicar(urlCierreCuenta, datos, claveIdempotencia);
+    }
+
+    private void enviarCierreCuentaConFallback(CorreoCierreCuentaRequest datos, String claveIdempotencia,
+                                               Throwable ex) {
+        log.warn("Servicio de correo no disponible, no se pudo enviar la confirmacion de cierre de cuenta a '{}'. Motivo: {}",
             Enmascarado.correo(datos.getEmail()), ex.getMessage());
     }
 

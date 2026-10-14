@@ -14,7 +14,9 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -47,6 +49,10 @@ class SancionesServiceTest {
 
     private SancionesService servicio;
     private final List<Sancion> guardadas = new ArrayList<>();
+    /** El rol de cada cuenta segun ms-identidad; las que no estan son jugadores. */
+    private final Map<UUID, String> rolesDeLasCuentas = new HashMap<>();
+    /** Si no es nulo, ms-identidad "no responde" con este rechazo. */
+    private SancionRechazada identidadCaida;
 
     @BeforeEach
     void preparar() {
@@ -63,7 +69,14 @@ class SancionesServiceTest {
     }
 
     private SancionesService nuevo(Clock reloj, LimitesDeSancion limites) {
-        return new SancionesService(sanciones, apelaciones, new SalidasDeSancion(salidasGuardadas), reloj, limites);
+        RolesDeCuentas roles = cuenta -> {
+            if (identidadCaida != null) {
+                throw identidadCaida;
+            }
+            return rolesDeLasCuentas.getOrDefault(cuenta, "JUGADOR");
+        };
+        return new SancionesService(sanciones, apelaciones, new SalidasDeSancion(salidasGuardadas), reloj, limites,
+                roles);
     }
 
     private static SancionesService.SolicitudDeSancion solicitud(Sancion.Tipo tipo, Long horas, boolean confirmacion) {
@@ -102,7 +115,7 @@ class SancionesServiceTest {
             assertThat(aviso.tipo()).isEqualTo("SANCION_ADVERTENCIA");
             assertThat(aviso.cuerpo()).contains("Lenguaje ofensivo").contains("apelar");
             assertThat(salidas()).extracting(SalidaPendiente::canal)
-                    .containsExactly(CanalDeSalida.AVISO, CanalDeSalida.CORREO);
+                    .containsExactly(CanalDeSalida.AVISO, CanalDeSalida.CORREO, CanalDeSalida.HISTORIAL);
             assertThat(servicio.activaDe(JUGADOR)).isEmpty();
         }
 
@@ -145,7 +158,10 @@ class SancionesServiceTest {
 
             conPlazoCorto.emitir(MODERADORA, solicitud(Sancion.Tipo.ADVERTENCIA, null, false));
 
-            assertThat(avisos().get(0).cuerpo()).contains("dentro de los 7 dias").doesNotContain("30 dias");
+            OffsetDateTime emitida = OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC);
+            assertThat(avisos().get(0).cuerpo())
+                    .contains("Puedes apelar hasta el " + TextosDeSancion.fecha(emitida.plusDays(7)))
+                    .doesNotContain(TextosDeSancion.fecha(emitida.plusDays(30)));
         }
 
         @Test
@@ -155,7 +171,8 @@ class SancionesServiceTest {
             Sancion baneo = conPlazoCorto.emitir(ADMIN, solicitud(Sancion.Tipo.BANEO, null, true));
             when(sanciones.findById(baneo.id())).thenReturn(Optional.of(baneo));
 
-            assertThat(avisos().get(0).cuerpo()).contains("dentro de los 7 dias");
+            assertThat(avisos().get(0).cuerpo()).contains("Puedes apelar hasta el "
+                    + TextosDeSancion.fecha(OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC).plusDays(7)));
 
             SancionesService alOctavoDia = nuevo(Clock.fixed(AHORA.plus(java.time.Duration.ofDays(8)), ZoneOffset.UTC),
                     LimitesDeSancion.Fijos.de(1, 30, 7));
@@ -190,7 +207,8 @@ class SancionesServiceTest {
                     .extracting(SalidaPendiente::canal, SalidaPendiente::sancionId)
                     .containsExactly(org.assertj.core.api.Assertions.tuple(CanalDeSalida.AVISO, s.id()),
                             org.assertj.core.api.Assertions.tuple(CanalDeSalida.PROYECCION, s.id()),
-                            org.assertj.core.api.Assertions.tuple(CanalDeSalida.CORREO, s.id()));
+                            org.assertj.core.api.Assertions.tuple(CanalDeSalida.CORREO, s.id()),
+                            org.assertj.core.api.Assertions.tuple(CanalDeSalida.HISTORIAL, s.id()));
         }
 
         @Test
@@ -270,6 +288,67 @@ class SancionesServiceTest {
             verify(apelaciones).save(a);
         }
 
+        /**
+         * §7.3.2: el panel notifica su decision «en un plazo de 15 dias
+         * habiles». El sancionado sabe desde el primer momento que su
+         * apelacion llego y hasta cuando tiene el panel para responderle.
+         */
+        @Test
+        @DisplayName("SA-4: al apelar llega el aviso de recibida con la fecha limite de los 15 dias habiles")
+        void avisoDeRecibida() {
+            Apelacion a = servicio.apelar(SANCIONADO, suspension.id(), "No fui yo");
+
+            SalidaPendiente aviso = avisos().get(avisos().size() - 1);
+            assertThat(aviso.tipo()).isEqualTo("APELACION_RECIBIDA");
+            assertThat(aviso.clave()).isEqualTo("apelacion-" + a.id() + "-recibida-aviso");
+            assertThat(aviso.usuarioId()).isEqualTo(JUGADOR);
+            assertThat(aviso.titulo()).isEqualTo("Recibimos tu apelación");
+            // Presentada el lunes 21 de septiembre: del 22 al 12 de octubre, quince dias habiles.
+            assertThat(aviso.cuerpo()).isEqualTo("Un panel de moderadores y administradores revisará tu apelación "
+                    + "sobre tu suspensión y te notificará su decisión a más tardar el 12 de octubre de 2026, "
+                    + "11:59 p. m.");
+            assertThat(salidas()).filteredOn(s -> s.clave().equals(aviso.clave()))
+                    .extracting(SalidaPendiente::canal).containsExactly(CanalDeSalida.AVISO);
+        }
+
+        @Test
+        @DisplayName("SA-4: con festivos configurados, la fecha limite del aviso se corre")
+        void avisoConFestivos() {
+            SancionesService conFestivo = new SancionesService(sanciones, apelaciones,
+                    new SalidasDeSancion(salidasGuardadas), Clock.fixed(AHORA, ZoneOffset.UTC),
+                    LimitesDeSancion.Fijos.de(1, 30, 30), cuenta -> "JUGADOR",
+                    new PlazoDeDecision(java.util.Set.of(java.time.LocalDate.of(2026, 10, 12))));
+
+            conFestivo.apelar(SANCIONADO, suspension.id(), "No fui yo");
+
+            assertThat(avisos().get(avisos().size() - 1).cuerpo())
+                    .endsWith("a más tardar el 13 de octubre de 2026, 11:59 p. m.");
+        }
+
+        @Test
+        @DisplayName("SA-4: el panel elige pendientes (por omision), resueltas o todas; un jugador no lo ve")
+        void panelPorEstado() {
+            Apelacion pendiente = new Apelacion(UUID.randomUUID(), suspension.id(), JUGADOR, "x",
+                    OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC));
+            Apelacion resuelta = new Apelacion(UUID.randomUUID(), suspension.id(), JUGADOR, "y",
+                    OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC));
+            when(apelaciones.findByEstadoOrderByCreadaEnAsc(Apelacion.Estado.PENDIENTE)).thenReturn(List.of(pendiente));
+            when(apelaciones.findByEstadoNotOrderByResueltaEnDesc(Apelacion.Estado.PENDIENTE))
+                    .thenReturn(List.of(resuelta));
+            when(apelaciones.findAllByOrderByCreadaEnDesc()).thenReturn(List.of(resuelta, pendiente));
+
+            assertThat(servicio.apelacionesDelPanel(MODERADORA, null)).containsExactly(pendiente);
+            assertThat(servicio.apelacionesDelPanel(MODERADORA, SancionesService.EstadoDeLaLista.PENDIENTES))
+                    .containsExactly(pendiente);
+            assertThat(servicio.apelacionesPendientes(ADMIN)).containsExactly(pendiente);
+            assertThat(servicio.apelacionesDelPanel(ADMIN, SancionesService.EstadoDeLaLista.RESUELTAS))
+                    .containsExactly(resuelta);
+            assertThat(servicio.apelacionesDelPanel(SUPER, SancionesService.EstadoDeLaLista.TODAS))
+                    .containsExactly(resuelta, pendiente);
+            assertThatThrownBy(() -> servicio.apelacionesDelPanel(SANCIONADO, SancionesService.EstadoDeLaLista.TODAS))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.PERMISO_INSUFICIENTE);
+        }
+
         @Test
         @DisplayName("otro jugador no apela por el; fuera de plazo o ya abierta, no procede (CA-02)")
         void noProcede() {
@@ -328,18 +407,18 @@ class SancionesServiceTest {
     @DisplayName("1.1.0 · levantamiento")
     class Levantamiento {
 
-        private Sancion baneo;
+        private Sancion suspension;
 
         @BeforeEach
-        void conBaneo() {
-            baneo = servicio.emitir(ADMIN, solicitud(Sancion.Tipo.BANEO, null, true));
-            lenient().when(sanciones.findById(baneo.id())).thenReturn(Optional.of(baneo));
+        void conSuspension() {
+            suspension = servicio.emitir(ADMIN, solicitud(Sancion.Tipo.SUSPENSION, 48L, false));
+            lenient().when(sanciones.findById(suspension.id())).thenReturn(Optional.of(suspension));
         }
 
         @Test
         @DisplayName("un administrador levanta: queda revertida con motivo y autor, deja de restringir, avisa y proyecta")
         void levanta() {
-            Sancion levantada = servicio.levantar(SUPER, baneo.id(), "  Error de moderacion  ");
+            Sancion levantada = servicio.levantar(SUPER, suspension.id(), "  Error de moderacion  ");
 
             assertThat(levantada.revertidaEn()).isEqualTo(OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC));
             assertThat(levantada.revertidaPor()).isEqualTo(SUPER.id());
@@ -349,27 +428,51 @@ class SancionesServiceTest {
                             || s.tipo().equals("LEVANTAMIENTO"))
                     .extracting(SalidaPendiente::canal)
                     .containsExactly(CanalDeSalida.AVISO, CanalDeSalida.PROYECCION);
-            assertThat(avisos().get(avisos().size() - 1).titulo()).isEqualTo("Tu inhabilitacion fue levantada");
+            SalidaPendiente aviso = avisos().get(avisos().size() - 1);
+            assertThat(aviso.titulo()).isEqualTo("Tu suspensión fue levantada");
+            assertThat(aviso.cuerpo()).isEqualTo("Un administrador levantó tu suspensión. Motivo: Error de moderacion.");
+        }
+
+        /**
+         * 7.3.2: el baneo es «inhabilitacion definitiva» y su unica via de
+         * reversion es la apelacion ante el panel. Ni un Super Administrador
+         * lo levanta a mano: el 409 lo dice, y nada cambia ni se avisa.
+         */
+        @Test
+        @DisplayName("un baneo no se levanta a mano, ni por un Super Administrador: 409 y nada cambia")
+        void elBaneoSoloPorApelacion() {
+            Sancion baneo = servicio.emitir(ADMIN, solicitud(Sancion.Tipo.BANEO, null, true));
+            when(sanciones.findById(baneo.id())).thenReturn(Optional.of(baneo));
+            int salidasAntes = salidas().size();
+
+            assertThatThrownBy(() -> servicio.levantar(SUPER, baneo.id(), "Error de moderacion"))
+                    .isInstanceOf(SancionRechazada.class)
+                    .hasMessageContaining("apelacion")
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.BANEO_SOLO_POR_APELACION);
+
+            assertThat(baneo.revertidaEn()).isNull();
+            assertThat(servicio.activaDe(JUGADOR)).isPresent();
+            assertThat(salidas()).hasSize(salidasAntes);
         }
 
         @Test
         @DisplayName("un moderador o un jugador no levantan: 403")
         void permisos() {
-            assertThatThrownBy(() -> servicio.levantar(MODERADORA, baneo.id(), "motivo"))
+            assertThatThrownBy(() -> servicio.levantar(MODERADORA, suspension.id(), "motivo"))
                     .extracting("motivo").isEqualTo(SancionRechazada.Motivo.PERMISO_INSUFICIENTE);
-            assertThatThrownBy(() -> servicio.levantar(SANCIONADO, baneo.id(), "motivo"))
+            assertThatThrownBy(() -> servicio.levantar(SANCIONADO, suspension.id(), "motivo"))
                     .extracting("motivo").isEqualTo(SancionRechazada.Motivo.PERMISO_INSUFICIENTE);
-            assertThat(baneo.revertidaEn()).isNull();
+            assertThat(suspension.revertidaEn()).isNull();
         }
 
         @Test
         @DisplayName("sin motivo (menos de 3 caracteres) o con uno de mas de 1000: 400")
         void motivo() {
-            assertThatThrownBy(() -> servicio.levantar(ADMIN, baneo.id(), " ok "))
+            assertThatThrownBy(() -> servicio.levantar(ADMIN, suspension.id(), " ok "))
                     .extracting("motivo").isEqualTo(SancionRechazada.Motivo.SOLICITUD_INVALIDA);
-            assertThatThrownBy(() -> servicio.levantar(ADMIN, baneo.id(), null))
+            assertThatThrownBy(() -> servicio.levantar(ADMIN, suspension.id(), null))
                     .extracting("motivo").isEqualTo(SancionRechazada.Motivo.SOLICITUD_INVALIDA);
-            assertThatThrownBy(() -> servicio.levantar(ADMIN, baneo.id(), "x".repeat(1001)))
+            assertThatThrownBy(() -> servicio.levantar(ADMIN, suspension.id(), "x".repeat(1001)))
                     .extracting("motivo").isEqualTo(SancionRechazada.Motivo.SOLICITUD_INVALIDA);
         }
 
@@ -381,8 +484,8 @@ class SancionesServiceTest {
             assertThatThrownBy(() -> servicio.levantar(ADMIN, inexistente, "motivo"))
                     .extracting("motivo").isEqualTo(SancionRechazada.Motivo.NO_ENCONTRADA);
 
-            servicio.levantar(ADMIN, baneo.id(), "Primera vez");
-            assertThatThrownBy(() -> servicio.levantar(ADMIN, baneo.id(), "Otra vez"))
+            servicio.levantar(ADMIN, suspension.id(), "Primera vez");
+            assertThatThrownBy(() -> servicio.levantar(ADMIN, suspension.id(), "Otra vez"))
                     .extracting("motivo").isEqualTo(SancionRechazada.Motivo.SANCION_NO_VIGENTE);
 
             Sancion corta = servicio.emitir(MODERADORA, solicitud(Sancion.Tipo.SUSPENSION, 1L, false));
@@ -403,5 +506,429 @@ class SancionesServiceTest {
         assertThat(servicio.historialDe(MODERADORA, JUGADOR)).isEmpty();
         assertThatThrownBy(() -> servicio.historialDe(OTRO_JUGADOR, JUGADOR))
                 .extracting("motivo").isEqualTo(SancionRechazada.Motivo.PERMISO_INSUFICIENTE);
+    }
+
+    @Nested
+    @DisplayName("SA-4 · apelacion sin sesion (la cuenta suspendida o baneada no puede entrar)")
+    class ApelacionSinSesion {
+
+        private Sancion suspension;
+
+        @BeforeEach
+        void conSuspension() {
+            suspension = servicio.emitir(MODERADORA, solicitud(Sancion.Tipo.SUSPENSION, 72L, false));
+            lenient().when(sanciones.findById(suspension.id())).thenReturn(Optional.of(suspension));
+            lenient().when(apelaciones.findBySancionIdAndEstado(suspension.id(), Apelacion.Estado.PENDIENTE))
+                    .thenReturn(Optional.empty());
+            lenient().when(apelaciones.findFirstBySancionIdOrderByCreadaEnDesc(suspension.id()))
+                    .thenReturn(Optional.empty());
+        }
+
+        @Test
+        @DisplayName("con la suspension vigente y sin apelacion: se puede apelar hasta la emision + 30 dias")
+        void apelable() {
+            SancionesService.EstadoDeApelacion estado = servicio.estadoDeApelacionDe(JUGADOR);
+
+            assertThat(estado.sancion()).isSameAs(suspension);
+            assertThat(estado.apelableHasta()).isEqualTo(OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC).plusDays(30));
+            assertThat(estado.puedeApelar()).isTrue();
+            assertThat(estado.motivoNoApelable()).isNull();
+            assertThat(estado.apelacion()).isNull();
+        }
+
+        @Test
+        @DisplayName("con una apelacion abierta no se abre otra; fuera de plazo, tampoco; sin sancion, nada que apelar")
+        void noApelable() {
+            Apelacion abierta = new Apelacion(UUID.randomUUID(), suspension.id(), JUGADOR, "x",
+                    OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC));
+            when(apelaciones.findFirstBySancionIdOrderByCreadaEnDesc(suspension.id())).thenReturn(Optional.of(abierta));
+            SancionesService.EstadoDeApelacion conAbierta = servicio.estadoDeApelacionDe(JUGADOR);
+            assertThat(conAbierta.puedeApelar()).isFalse();
+            assertThat(conAbierta.motivoNoApelable()).isEqualTo(SancionesService.MotivoNoApelable.APELACION_ABIERTA);
+            assertThat(conAbierta.apelacion()).isSameAs(abierta);
+
+            Apelacion resuelta = new Apelacion(UUID.randomUUID(), suspension.id(), JUGADOR, "y",
+                    OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC));
+            resuelta.resolver(Apelacion.Estado.MANTENIDA, "Se mantiene", ADMIN.id(),
+                    OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC), null);
+            SancionesService unMesDespues = nuevo(Clock.fixed(AHORA.plus(java.time.Duration.ofDays(31)), ZoneOffset.UTC),
+                    LimitesDeSancion.Fijos.de(1, 60, 30));
+            Sancion larga = servicio.emitir(ADMIN, new SancionesService.SolicitudDeSancion(JUGADOR,
+                    Sancion.Tipo.BANEO, "Fraude", null, null, null, true));
+            when(apelaciones.findFirstBySancionIdOrderByCreadaEnDesc(larga.id())).thenReturn(Optional.of(resuelta));
+            SancionesService.EstadoDeApelacion tarde = unMesDespues.estadoDeApelacionDe(JUGADOR);
+            assertThat(tarde.sancion()).isSameAs(larga);
+            assertThat(tarde.motivoNoApelable()).isEqualTo(SancionesService.MotivoNoApelable.FUERA_DE_PLAZO);
+            assertThat(tarde.apelacion()).as("la ultima, aunque este resuelta").isSameAs(resuelta);
+
+            SancionesService.EstadoDeApelacion otro = servicio.estadoDeApelacionDe(UUID.randomUUID());
+            assertThat(otro.sancion()).isNull();
+            assertThat(otro.puedeApelar()).isFalse();
+            assertThat(otro.motivoNoApelable()).isEqualTo(SancionesService.MotivoNoApelable.SIN_SANCION);
+        }
+
+        @Test
+        @DisplayName("apela en su nombre la sancion que le impide entrar, con las reglas de siempre y su aviso")
+        void apelaSinSesion() {
+            Apelacion a = servicio.apelarSinSesion(JUGADOR, suspension.id(), "  No fui yo  ");
+
+            assertThat(a.estado()).isEqualTo(Apelacion.Estado.PENDIENTE);
+            assertThat(a.usuarioId()).isEqualTo(JUGADOR);
+            assertThat(a.argumento()).isEqualTo("No fui yo");
+            assertThat(avisos().get(avisos().size() - 1).tipo()).isEqualTo("APELACION_RECIBIDA");
+        }
+
+        @Test
+        @DisplayName("otra sancion que no es la que impide entrar, o una cuenta sin sancion: 422 y nada guardado")
+        void soloLaQueImpideEntrar() {
+            Sancion advertencia = servicio.emitir(MODERADORA, solicitud(Sancion.Tipo.ADVERTENCIA, null, false));
+
+            assertThatThrownBy(() -> servicio.apelarSinSesion(JUGADOR, advertencia.id(), "x"))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.APELACION_NO_PROCEDE);
+            assertThatThrownBy(() -> servicio.apelarSinSesion(UUID.randomUUID(), suspension.id(), "x"))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.APELACION_NO_PROCEDE);
+            verify(apelaciones, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("SA-4 · causal de §7.3.2")
+    class CausalDeLaSancion {
+
+        @Test
+        @DisplayName("la causal se guarda con la sancion y abre el aviso, antes del motivo concreto")
+        void conCausal() {
+            Sancion s = servicio.emitir(MODERADORA, new SancionesService.SolicitudDeSancion(JUGADOR,
+                    Sancion.Tipo.ADVERTENCIA, Causal.LENGUAJE_OFENSIVO, "Insulto en el chat de la sala 12",
+                    "Normas de convivencia", null, null, false));
+
+            assertThat(s.causal()).isEqualTo(Causal.LENGUAJE_OFENSIVO);
+            assertThat(guardadas).extracting(Sancion::causal).containsExactly(Causal.LENGUAJE_OFENSIVO);
+            assertThat(avisos().get(0).cuerpo()).startsWith(
+                    "Causal: Uso de lenguaje ofensivo o abusivo en comentarios o chat. "
+                            + "Motivo: Insulto en el chat de la sala 12. Política: Normas de convivencia.");
+        }
+
+        @Test
+        @DisplayName("sin causal (quien emitia antes de SA-4) la sancion se emite igual")
+        void sinCausal() {
+            Sancion s = servicio.emitir(MODERADORA, solicitud(Sancion.Tipo.ADVERTENCIA, null, false));
+
+            assertThat(s.causal()).isNull();
+            assertThat(avisos().get(0).cuerpo()).startsWith("Motivo: Lenguaje ofensivo en el chat.");
+        }
+    }
+
+    @Nested
+    @DisplayName("SA-4 · listado global de sanciones")
+    class ListadoGlobal {
+
+        private final FiltroDeSanciones porTipo = new FiltroDeSanciones(Sancion.Tipo.BANEO, null, null, null, null,
+                null);
+
+        @Test
+        @DisplayName("de la mas reciente a la mas antigua, con la pagina pedida")
+        void ordenYPagina() {
+            when(sanciones.findAll(org.mockito.ArgumentMatchers.<org.springframework.data.jpa.domain.Specification<Sancion>>any(),
+                    any(org.springframework.data.domain.Pageable.class)))
+                    .thenReturn(org.springframework.data.domain.Page.empty());
+            ArgumentCaptor<org.springframework.data.domain.Pageable> pagina =
+                    ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
+
+            servicio.buscar(MODERADORA, porTipo, 2, 16);
+
+            verify(sanciones).findAll(org.mockito.ArgumentMatchers.<org.springframework.data.jpa.domain.Specification<Sancion>>any(),
+                    pagina.capture());
+            assertThat(pagina.getValue().getPageNumber()).isEqualTo(2);
+            assertThat(pagina.getValue().getPageSize()).isEqualTo(16);
+            assertThat(pagina.getValue().getSort().toList()).containsExactly(
+                    org.springframework.data.domain.Sort.Order.desc("emitidaEn"),
+                    org.springframework.data.domain.Sort.Order.asc("id"));
+        }
+
+        @Test
+        @DisplayName("sin filtro se listan todas")
+        void sinFiltro() {
+            when(sanciones.findAll(org.mockito.ArgumentMatchers.<org.springframework.data.jpa.domain.Specification<Sancion>>any(),
+                    any(org.springframework.data.domain.Pageable.class)))
+                    .thenReturn(org.springframework.data.domain.Page.empty());
+
+            assertThat(servicio.buscar(ADMIN, null, 0, 16)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("un jugador no lista sanciones: 403, sin consultar la base")
+        void soloModeracion() {
+            assertThatThrownBy(() -> servicio.buscar(OTRO_JUGADOR, porTipo, 0, 16))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.PERMISO_INSUFICIENTE);
+            verify(sanciones, never()).findAll(
+                    org.mockito.ArgumentMatchers.<org.springframework.data.jpa.domain.Specification<Sancion>>any(),
+                    any(org.springframework.data.domain.Pageable.class));
+        }
+
+        @Test
+        @DisplayName("periodo al reves o vacio, pagina negativa, o de 0 o mas de 100 filas: 400")
+        void solicitudInvalida() {
+            OffsetDateTime ahora = OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC);
+            FiltroDeSanciones alReves = new FiltroDeSanciones(null, null, null, null, ahora, ahora.minusDays(1));
+            FiltroDeSanciones vacio = new FiltroDeSanciones(null, null, null, null, ahora, ahora);
+
+            assertThatThrownBy(() -> servicio.buscar(MODERADORA, alReves, 0, 16))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.SOLICITUD_INVALIDA);
+            assertThatThrownBy(() -> servicio.buscar(MODERADORA, vacio, 0, 16))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.SOLICITUD_INVALIDA);
+            assertThatThrownBy(() -> servicio.buscar(MODERADORA, porTipo, -1, 16))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.SOLICITUD_INVALIDA);
+            assertThatThrownBy(() -> servicio.buscar(MODERADORA, porTipo, 0, 0))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.SOLICITUD_INVALIDA);
+            assertThatThrownBy(() -> servicio.buscar(MODERADORA, porTipo, 0, 101))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.SOLICITUD_INVALIDA);
+        }
+    }
+
+    @Nested
+    @DisplayName("7.3.1 · jerarquia: solo sobre un rol inferior")
+    class Jerarquia {
+
+        private static final UUID CUENTA = UUID.fromString("66666666-6666-6666-6666-666666666666");
+
+        private SancionesService.SolicitudDeSancion contra(String rol, Sancion.Tipo tipo, Long horas,
+                                                          boolean confirmacion) {
+            rolesDeLasCuentas.put(CUENTA, rol);
+            return new SancionesService.SolicitudDeSancion(CUENTA, tipo, "Abuso de herramientas", null, null, horas,
+                    confirmacion);
+        }
+
+        @Test
+        @DisplayName("un moderador no advierte ni suspende a otro moderador, a un administrador ni a un super")
+        void moderadorSobreIgualesOSuperiores() {
+            for (String rol : List.of("MODERADOR", "ADMINISTRADOR", "SUPER_ADMINISTRADOR")) {
+                assertThatThrownBy(() -> servicio.emitir(MODERADORA, contra(rol, Sancion.Tipo.SUSPENSION, 24L, false)))
+                        .isInstanceOf(SancionRechazada.class)
+                        .extracting("motivo").isEqualTo(SancionRechazada.Motivo.JERARQUIA_INSUFICIENTE);
+                assertThatThrownBy(() -> servicio.emitir(MODERADORA, contra(rol, Sancion.Tipo.ADVERTENCIA, null, false)))
+                        .extracting("motivo").isEqualTo(SancionRechazada.Motivo.JERARQUIA_INSUFICIENTE);
+            }
+            verify(sanciones, never()).save(any());
+            verify(salidasGuardadas, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("un administrador no banea a otro administrador ni a un super; un super no banea a otro super")
+        void baneoSobreIgualesOSuperiores() {
+            assertThatThrownBy(() -> servicio.emitir(ADMIN, contra("ADMINISTRADOR", Sancion.Tipo.BANEO, null, true)))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.JERARQUIA_INSUFICIENTE);
+            assertThatThrownBy(() -> servicio.emitir(ADMIN,
+                    contra("SUPER_ADMINISTRADOR", Sancion.Tipo.BANEO, null, true)))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.JERARQUIA_INSUFICIENTE);
+            assertThatThrownBy(() -> servicio.emitir(SUPER,
+                    contra("SUPER_ADMINISTRADOR", Sancion.Tipo.BANEO, null, true)))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.JERARQUIA_INSUFICIENTE);
+            verify(sanciones, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("sobre un rol inferior si: el administrador suspende a un moderador, el super a un administrador")
+        void sobreUnRolInferior() {
+            Sancion aModeradora = servicio.emitir(ADMIN, contra("MODERADOR", Sancion.Tipo.SUSPENSION, 24L, false));
+            Sancion aAdmin = servicio.emitir(SUPER, contra("ADMINISTRADOR", Sancion.Tipo.ADVERTENCIA, null, false));
+
+            assertThat(aModeradora.usuarioId()).isEqualTo(CUENTA);
+            assertThat(aAdmin.rolEmisor()).isEqualTo("SUPER_ADMINISTRADOR");
+        }
+
+        @Test
+        @DisplayName("levantar la sancion de un administrador es del super, no de otro administrador")
+        void levantarSobreUnIgual() {
+            Sancion suspension = servicio.emitir(SUPER, contra("ADMINISTRADOR", Sancion.Tipo.SUSPENSION, 24L, false));
+            when(sanciones.findById(suspension.id())).thenReturn(Optional.of(suspension));
+
+            assertThatThrownBy(() -> servicio.levantar(ADMIN, suspension.id(), "Ya hablamos con el"))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.JERARQUIA_INSUFICIENTE);
+            assertThat(suspension.revertidaEn()).isNull();
+
+            servicio.levantar(SUPER, suspension.id(), "Ya hablamos con el");
+            assertThat(suspension.revertidaEn()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("con ms-identidad sin responder no se registra nada (fail-closed)")
+        void identidadSinResponder() {
+            identidadCaida = new SancionRechazada(SancionRechazada.Motivo.IDENTIDAD_NO_DISPONIBLE,
+                    RolesDesdeIdentidad.NO_DISPONIBLE);
+
+            assertThatThrownBy(() -> servicio.emitir(MODERADORA, solicitud(Sancion.Tipo.ADVERTENCIA, null, false)))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.IDENTIDAD_NO_DISPONIBLE);
+            verify(sanciones, never()).save(any());
+            verify(salidasGuardadas, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("el rol se comprueba despues de las reglas locales: una solicitud invalida ni pregunta")
+        void primeroLasReglasLocales() {
+            identidadCaida = new SancionRechazada(SancionRechazada.Motivo.IDENTIDAD_NO_DISPONIBLE, "caida");
+
+            assertThatThrownBy(() -> servicio.emitir(MODERADORA, solicitud(Sancion.Tipo.BANEO, null, true)))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.PERMISO_INSUFICIENTE);
+            assertThatThrownBy(() -> servicio.emitir(OTRO_JUGADOR, solicitud(Sancion.Tipo.ADVERTENCIA, null, false)))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.PERMISO_INSUFICIENTE);
+        }
+    }
+
+    @Test
+    @DisplayName("Actor.superaA: estrictamente por encima; un rol desconocido no supera a nadie")
+    void superaA() {
+        assertThat(MODERADORA.superaA("JUGADOR")).isTrue();
+        assertThat(MODERADORA.superaA("MODERADOR")).isFalse();
+        assertThat(SUPER.superaA("ADMINISTRADOR")).isTrue();
+        assertThat(SUPER.superaA("SUPER_ADMINISTRADOR")).isFalse();
+        assertThat(OTRO_JUGADOR.superaA("JUGADOR")).isFalse();
+        assertThat(new Actor(UUID.randomUUID(), "SERVICIO").superaA("JUGADOR")).isFalse();
+        assertThat(ADMIN.superaA(null)).isFalse();
+        assertThat(SUPER.superaA("ROOT")).isFalse();
+    }
+
+    // ---- D-45 (HU-USR-008): usuarios con 3 o mas sanciones no revertidas ----
+
+    private static SancionRepository.Reincidente reincidente(UUID usuario, long cuantas, String ultima) {
+        return new SancionRepository.Reincidente() {
+            @Override public UUID getUsuarioId() { return usuario; }
+            @Override public long getSanciones() { return cuantas; }
+            @Override public OffsetDateTime getUltimaEn() { return OffsetDateTime.parse(ultima); }
+        };
+    }
+
+    @Test
+    @DisplayName("quien modera ve a los reincidentes; el total dice cuantos hay aunque la lista se corte")
+    void reincidentesParaQuienModera() {
+        UUID a = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        UUID b = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        when(sanciones.reincidentes(eq(3L), any(org.springframework.data.domain.Pageable.class))).thenReturn(List.of(
+                reincidente(a, 5, "2026-09-20T10:00:00Z"), reincidente(b, 3, "2026-09-19T10:00:00Z")));
+        when(sanciones.contarReincidentes(3L)).thenReturn(7L);
+
+        SancionesService.Reincidentes reincidentes = servicio.reincidentes(MODERADORA, 3);
+
+        assertThat(reincidentes.minimo()).isEqualTo(3);
+        assertThat(reincidentes.total()).isEqualTo(7);
+        assertThat(reincidentes.usuarios()).extracting(SancionesService.UsuarioReincidente::usuarioId)
+                .containsExactly(a, b);
+        assertThat(reincidentes.usuarios().get(0).sanciones()).isEqualTo(5);
+        assertThat(reincidentes.usuarios().get(0).ultimaEn()).isEqualTo(OffsetDateTime.parse("2026-09-20T10:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("la lista de reincidentes es de quien modera: un jugador no la ve y ni se consulta")
+    void unJugadorNoVeLosReincidentes() {
+        assertThatThrownBy(() -> servicio.reincidentes(OTRO_JUGADOR, 3))
+                .isInstanceOf(SancionRechazada.class)
+                .extracting("motivo").isEqualTo(SancionRechazada.Motivo.PERMISO_INSUFICIENTE);
+        verify(sanciones, never()).reincidentes(org.mockito.ArgumentMatchers.anyLong(),
+                any(org.springframework.data.domain.Pageable.class));
+    }
+
+    @Test
+    @DisplayName("un minimo menor que uno no es un criterio: se rechaza en vez de listar a todo el mundo")
+    void minimoSinSentido() {
+        assertThatThrownBy(() -> servicio.reincidentes(MODERADORA, 0))
+                .isInstanceOf(SancionRechazada.class)
+                .extracting("motivo").isEqualTo(SancionRechazada.Motivo.SOLICITUD_INVALIDA);
+    }
+
+    @Nested
+    @DisplayName("SA-5 · bitacora central (§7.3.5)")
+    class BitacoraCentral {
+
+        private final com.nexusbattles.plataforma.moderacionsanciones.auditoria.BitacoraDeAuditoria bitacora =
+                org.mockito.Mockito.mock(com.nexusbattles.plataforma.moderacionsanciones.auditoria.BitacoraDeAuditoria.class);
+        private SancionesService conBitacora;
+
+        @BeforeEach
+        void conBitacora() {
+            conBitacora = new SancionesService(sanciones, apelaciones, new SalidasDeSancion(salidasGuardadas),
+                    Clock.fixed(AHORA, ZoneOffset.UTC), LimitesDeSancion.Fijos.de(1, 30, 30),
+                    cuenta -> rolesDeLasCuentas.getOrDefault(cuenta, "JUGADOR"), PlazoDeDecision.deLunesAViernes(),
+                    bitacora);
+        }
+
+        @Test
+        @DisplayName("una advertencia queda como SANCION sobre el uid, con lo que se impuso y el motivo")
+        void advertencia() {
+            conBitacora.emitir(MODERADORA, solicitud(Sancion.Tipo.ADVERTENCIA, null, false));
+
+            verify(bitacora).registrar(com.nexusbattles.plataforma.moderacionsanciones.auditoria.TipoDeAccion.SANCION,
+                    JUGADOR.toString(), null, "Advertencia · Política: Normas de convivencia",
+                    "Lenguaje ofensivo en el chat");
+        }
+
+        @Test
+        @DisplayName("una suspension queda como SUSPENSION con su fin en la hora de Colombia")
+        void suspension() {
+            conBitacora.emitir(MODERADORA, solicitud(Sancion.Tipo.SUSPENSION, 72L, false));
+
+            ArgumentCaptor<String> nuevo = ArgumentCaptor.forClass(String.class);
+            verify(bitacora).registrar(
+                    eq(com.nexusbattles.plataforma.moderacionsanciones.auditoria.TipoDeAccion.SUSPENSION),
+                    eq(JUGADOR.toString()), org.mockito.ArgumentMatchers.isNull(), nuevo.capture(),
+                    eq("Lenguaje ofensivo en el chat"));
+            assertThat(nuevo.getValue()).startsWith("Suspensión hasta el 24 de septiembre de 2026, 5:00")
+                    .endsWith("· Política: Normas de convivencia");
+        }
+
+        @Test
+        @DisplayName("levantar queda como ACTUALIZACION: como estaba, que se levanto y por que")
+        void levantar() {
+            Sancion suspension = conBitacora.emitir(ADMIN, solicitud(Sancion.Tipo.SUSPENSION, 48L, false));
+            when(sanciones.findById(suspension.id())).thenReturn(Optional.of(suspension));
+
+            conBitacora.levantar(SUPER, suspension.id(), "  Error de moderacion  ");
+
+            ArgumentCaptor<String> antes = ArgumentCaptor.forClass(String.class);
+            verify(bitacora).registrar(
+                    eq(com.nexusbattles.plataforma.moderacionsanciones.auditoria.TipoDeAccion.ACTUALIZACION),
+                    eq(JUGADOR.toString()), antes.capture(), eq("Suspensión levantada antes de su fin"),
+                    eq("Error de moderacion"));
+            assertThat(antes.getValue()).startsWith("Suspensión hasta el 23 de septiembre de 2026");
+        }
+
+        @Test
+        @DisplayName("una apelacion estimada es APROBACION; desestimada, RECHAZO; las dos con la decision motivada")
+        void apelaciones() {
+            Sancion suspension = conBitacora.emitir(MODERADORA, solicitud(Sancion.Tipo.SUSPENSION, 72L, false));
+            when(sanciones.findById(suspension.id())).thenReturn(Optional.of(suspension));
+            when(apelaciones.findBySancionIdAndEstado(suspension.id(), Apelacion.Estado.PENDIENTE))
+                    .thenReturn(Optional.empty());
+            Apelacion apelacion = conBitacora.apelar(SANCIONADO, suspension.id(), "No fui yo");
+            when(apelaciones.findById(apelacion.id())).thenReturn(Optional.of(apelacion));
+
+            conBitacora.resolver(ADMIN, apelacion.id(), Apelacion.Estado.MANTENIDA, "Las pruebas son claras", null);
+
+            ArgumentCaptor<String> antes = ArgumentCaptor.forClass(String.class);
+            verify(bitacora).registrar(
+                    eq(com.nexusbattles.plataforma.moderacionsanciones.auditoria.TipoDeAccion.RECHAZO),
+                    eq(JUGADOR.toString()), antes.capture(), eq("Apelación desestimada: la sanción se mantiene"),
+                    eq("Las pruebas son claras"));
+            assertThat(antes.getValue()).startsWith("Apelación pendiente · Suspensión hasta el");
+        }
+
+        @Test
+        @DisplayName("una accion rechazada (un moderador que intenta banear) no deja asiento")
+        void rechazadaNoSeRegistra() {
+            assertThatThrownBy(() -> conBitacora.emitir(MODERADORA, solicitud(Sancion.Tipo.BANEO, null, true)))
+                    .isInstanceOf(SancionRechazada.class);
+
+            org.mockito.Mockito.verifyNoInteractions(bitacora);
+        }
+
+        @Test
+        @DisplayName("descripcionDe: baneo con causal")
+        void descripcionDelBaneo() {
+            Sancion baneo = new Sancion(UUID.randomUUID(), JUGADOR, Sancion.Tipo.BANEO, Causal.values()[0],
+                    "Reincidencia grave", null, null, ADMIN.id(), ADMIN.rol(),
+                    OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC), null);
+
+            assertThat(SancionesService.descripcionDe(baneo))
+                    .isEqualTo("Inhabilitación definitiva · Causal: " + Causal.values()[0].etiqueta());
+        }
     }
 }

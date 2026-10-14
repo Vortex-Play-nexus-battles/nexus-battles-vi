@@ -32,7 +32,7 @@ import {
   urlDeVista,
   vistaDeRuta,
 } from './acceso.js';
-import { CLAVES } from './sesion.js';
+import { CLAVES, CLAVE_SESION_ANONIMA } from './sesion.js';
 
 const BASE = 'http://localhost:8099/frontend/app-web/src/comun/acceso.js';
 const UID = '7a1e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55';
@@ -126,7 +126,10 @@ describe('la matriz cubre lo que hay en disco', () => {
     // B1 — `verificar-cuenta` entra: la usa quien todavía no puede iniciar
     // sesión, porque su correo está sin confirmar. F6 — `portada` entra: es
     // la raíz pública con la tienda, para quien aún no tiene cuenta.
+    // 1.8.0 — `ayuda` entra: el centro de ayuda es lo que el asistente sabe
+    // responder, y el asistente atiende también a quien no tiene cuenta.
     expect(publicas).toEqual([
+      'ayuda',
       'login',
       'portada',
       'pujas',
@@ -180,6 +183,7 @@ describe('puedeVer (RF-RBAC-002)', () => {
     // POST/PUT/DELETE /api/v1/banners y para el listado completo.
     expect(MATRIZ.banners).toEqual({
       ruta: 'contenido/productos/banners.html',
+      limpia: '/consola/productos/banners',
       acceso: ACCESO.ADMINISTRACION,
       armazon: 'admin',
     });
@@ -252,31 +256,50 @@ describe('vistaDeRuta y urlDeVista', () => {
     );
   });
 
-  test('R17.3, B1 y F6 — doce direcciones limpias, únicas, y cada una de una vista del jugador o del portal', () => {
-    const limpias = Object.entries(MATRIZ).filter(([, v]) => v.limpia);
-    // B1 suma las dos a las que llevan los enlaces del correo (correo 1.4.0):
-    // la verificación de la cuenta y el canje del código de recuperación. F6
-    // suma la raíz: la portada pública con la tienda.
-    expect(limpias.map(([, v]) => v.limpia).sort()).toEqual([
-      '/',
-      '/cuenta',
-      '/inicio',
-      '/inventario',
-      '/jugar',
-      '/login',
-      '/preparando',
-      '/registro',
-      '/restablecer',
-      '/subastas',
-      '/torneos',
-      '/verificar',
-    ]);
-    for (const [, entrada] of limpias) {
-      expect(['publico', 'jugador']).toContain(entrada.armazon);
-      expect(entrada.limpia).toMatch(/^\/[a-z]*$/);
+  test('R17.3 y SA-7 — toda vista tiene su dirección limpia, única, sin carpetas ni .html', () => {
+    const entradas = Object.entries(MATRIZ);
+    // SA-7 (punto crítico externo del informe de revisión): ya no queda
+    // ninguna vista que solo se sirva por la ruta de su fichero.
+    expect(entradas.filter(([, v]) => !v.limpia).map(([id]) => id)).toEqual([]);
+    const limpias = entradas.map(([, v]) => v.limpia);
+    expect(limpias).toEqual(expect.arrayContaining(['/', '/login', '/jugar', '/consola']));
+    const malas = [];
+    for (const [id, entrada] of entradas) {
+      if (!/^\/(?:[a-z-]+(?:\/[a-z-]+)*)?$/.test(entrada.limpia)) {
+        malas.push(`${id}: ${entrada.limpia} no es una dirección limpia`);
+      }
+      // La consola vive bajo /consola; el juego y el portal, fuera.
+      const enLaConsola = /^\/consola(?:\/|$)/.test(entrada.limpia);
+      if (enLaConsola !== (entrada.armazon === 'admin')) {
+        malas.push(`${id}: ${entrada.limpia} con armazón ${entrada.armazon}`);
+      }
+      // Y la dirección limpia abre su propia vista, con o sin barra final.
+      if (vistaDeRuta(entrada.limpia) !== id) {
+        malas.push(`${id}: ${entrada.limpia} abre ${vistaDeRuta(entrada.limpia)}`);
+      }
+      if (entrada.limpia !== '/' && vistaDeRuta(`${entrada.limpia}/`) !== id) {
+        malas.push(`${id}: ${entrada.limpia}/ abre ${vistaDeRuta(`${entrada.limpia}/`)}`);
+      }
     }
+    expect(malas).toEqual([]);
     // Las direcciones no se repiten: dos vistas no pueden servirse en la misma.
-    expect(new Set(limpias.map(([, v]) => v.limpia)).size).toBe(limpias.length);
+    expect(new Set(limpias).size).toBe(limpias.length);
+  });
+
+  test('6-oct — /recuperar y /misiones abren su vista, y cada una con su acceso', () => {
+    expect(vistaDeRuta('/recuperar')).toBe('restablecer-solicitar');
+    expect(vistaDeRuta('/recuperar/')).toBe('restablecer-solicitar');
+    expect(vistaDeRuta('/misiones?categoria=HISTORIA')).toBe('misiones');
+    expect(vistaDeRuta('/frontend/app-web/src/contenido/misiones/misiones.html')).toBe('misiones');
+    // Pedir el código es del portal (aún no hay sesión); el tablón, del jugador.
+    expect(armazonDeVista('restablecer-solicitar')).toBe('publico');
+    expect(puedeVer('restablecer-solicitar', { autenticado: false }).veredicto).toBe(
+      VEREDICTO.VISIBLE,
+    );
+    expect(armazonDeVista('misiones')).toBe('jugador');
+    expect(puedeVer('misiones', { autenticado: false }).veredicto).not.toBe(VEREDICTO.VISIBLE);
+    // La del canje no se confunde con la de pedir el código.
+    expect(vistaDeRuta('/restablecer')).toBe('restablecer-confirmar');
   });
 
   test('F6 — la raíz es la portada pública, y solo la raíz', () => {
@@ -381,6 +404,56 @@ describe('guardas de ruta (§16)', () => {
   test('la pantalla sin permiso se anuncia a los lectores de pantalla', () => {
     pintarSinPermiso(document, { base: BASE, rolesAdmitidos: ROLES_DE_ADMINISTRACION });
     expect(document.querySelector('[data-zona="sin-permiso"]').getAttribute('role')).toBe('alert');
+  });
+
+  // #506 — privacidad: olvidar una sesión caducada olvida también el
+  // visitante del asistente.
+  test('exigirSesion con sesión caducada olvida también el visitante del asistente', () => {
+    sesionDe('JUGADOR', { caducada: true });
+    sessionStorage.setItem(CLAVE_SESION_ANONIMA, 'visitante-de-antes');
+    exigirSesion({
+      navegar: jest.fn(),
+      base: BASE,
+      ubicacion: { pathname: '/x.html', search: '' },
+    });
+    expect(sessionStorage.getItem(CLAVE_SESION_ANONIMA)).toBeNull();
+  });
+});
+
+// #506 — RF-CHA-001: el asistente está en todas las vistas, también en la de
+// «Sin acceso», que sustituye el <body> entero.
+describe('el asistente en la pantalla «Sin acceso»', () => {
+  test('pintarSinPermiso monta el botón del asistente después de sustituir el <body>', () => {
+    const asistente = jest.fn();
+    pintarSinPermiso(document, { base: BASE, rolesAdmitidos: null, asistente });
+
+    expect(asistente).toHaveBeenCalledWith(document);
+    expect(document.querySelector('[data-zona="sin-permiso"]')).not.toBeNull();
+  });
+
+  test('con el botón real: está, y fuera de la tarjeta de «Sin acceso»', () => {
+    sesionDe('JUGADOR');
+    exigirAcceso('gestion-usuarios', {
+      navegar: jest.fn(),
+      base: BASE,
+      ubicacion: { pathname: '/cuentas/gestion-usuarios.html', search: '' },
+    });
+
+    const botones = document.querySelectorAll('.chatbot-flotante');
+    expect(botones).toHaveLength(1);
+    expect(botones[0].parentElement).toBe(document.body);
+    expect(botones[0].getAttribute('aria-label')).toBe('Abrir asistente Nexus');
+    expect(document.querySelector('[data-zona="sin-permiso"] .chatbot-flotante')).toBeNull();
+  });
+
+  test('si la vista ya tenía el botón, queda uno solo', () => {
+    const previo = document.createElement('button');
+    previo.className = 'chatbot-flotante';
+    document.body.append(previo);
+
+    pintarSinPermiso(document, { base: BASE, rolesAdmitidos: ROLES_DE_ADMINISTRACION });
+
+    expect(document.querySelectorAll('.chatbot-flotante')).toHaveLength(1);
   });
 });
 

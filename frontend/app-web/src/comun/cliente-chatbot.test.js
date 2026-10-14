@@ -8,11 +8,14 @@ import {
   CLAVE_BASE_LOCAL,
   CLAVE_SESION_ANONIMA,
   ErrorDelChatbot,
+  TIEMPO_DE_ESPERA_MS,
   baseDelChatbot,
   crearClienteChatbot,
   idDeSesionAnonima,
   rutaDelChatbot,
+  segundosDeEspera,
 } from './cliente-chatbot.js';
+import { CLAVE_SESION_ANONIMA as CLAVE_EN_SESION } from './sesion.js';
 
 function almacenEnMemoria(inicial = {}) {
   const datos = new Map(Object.entries(inicial));
@@ -23,12 +26,26 @@ function almacenEnMemoria(inicial = {}) {
   };
 }
 
-function respuestaJson(cuerpo, status = 200) {
+function respuestaJson(cuerpo, status = 200, cabeceras = {}) {
+  const valores = new Map(Object.entries(cabeceras).map(([k, v]) => [k.toLowerCase(), v]));
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: { get: (nombre) => valores.get(String(nombre).toLowerCase()) ?? null },
     json: async () => cuerpo,
   };
+}
+
+/** Un `fetch` que no responde nunca, salvo para abortarse con su señal. */
+function fetchColgado() {
+  return jest.fn(
+    (_url, { signal }) =>
+      new Promise((_resolver, rechazar) => {
+        signal.addEventListener('abort', () =>
+          rechazar(new DOMException('Abortada', 'AbortError')),
+        );
+      }),
+  );
 }
 
 const VISITANTE = { autenticado: false, token: null };
@@ -345,4 +362,175 @@ describe('errores', () => {
     expect(new ErrorDelChatbot(null, 403).sinPermiso).toBe(true);
     expect(new ErrorDelChatbot(null, 400).sinPermiso).toBe(false);
   });
+});
+
+// #506 — el error dice el estado, el motivo y, en un 429, cuánto esperar.
+describe('motivo y Retry-After (#506)', () => {
+  test.each([
+    ['CONTENIDO_BLOQUEADO', 422],
+    ['INYECCION_DETECTADA', 422],
+    ['MODERACION_NO_DISPONIBLE', 503],
+  ])('un %s llega con su estado y su motivo', async (motivo, estado) => {
+    const fetch = jest.fn(async () =>
+      respuestaJson({ title: 'x', status: estado, motivo }, estado),
+    );
+
+    const error = await cliente({ fetch })
+      .enviarMensaje('hola')
+      .catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDelChatbot);
+    expect(error.estado).toBe(estado);
+    expect(error.motivo).toBe(motivo);
+    expect(error.reintentarEn).toBeNull();
+  });
+
+  test('un 429 lee los segundos de la cabecera Retry-After', async () => {
+    const fetch = jest.fn(async () =>
+      respuestaJson({ title: 'Too Many Requests', motivo: 'LIMITE_DE_FRECUENCIA' }, 429, {
+        'Retry-After': '17',
+      }),
+    );
+
+    const error = await cliente({ fetch })
+      .enviarMensaje('hola')
+      .catch((e) => e);
+
+    expect(error.estado).toBe(429);
+    expect(error.motivo).toBe('LIMITE_DE_FRECUENCIA');
+    expect(error.reintentarEn).toBe(17);
+    expect(error.noDisponible).toBe(false);
+  });
+
+  test('un 429 del borde, sin cuerpo ni Retry-After, sigue siendo un 429', async () => {
+    const fetch = jest.fn(async () => ({
+      ok: false,
+      status: 429,
+      json: async () => {
+        throw new SyntaxError('no es JSON');
+      },
+    }));
+
+    const error = await cliente({ fetch })
+      .enviarMensaje('hola')
+      .catch((e) => e);
+
+    expect(error.estado).toBe(429);
+    expect(error.motivo).toBeNull();
+    expect(error.reintentarEn).toBeNull();
+  });
+
+  // El asistente respondió; lo que no pudo es revisar el texto.
+  test('el 503 de la moderación no es «el asistente no está»; otro 503 sí', () => {
+    expect(new ErrorDelChatbot({ motivo: 'MODERACION_NO_DISPONIBLE' }, 503).noDisponible).toBe(
+      false,
+    );
+    expect(new ErrorDelChatbot({ title: 'Service Unavailable' }, 503).noDisponible).toBe(true);
+  });
+
+  test('un motivo que no es texto no se toma por motivo', () => {
+    expect(new ErrorDelChatbot({ motivo: { raro: true } }, 422).motivo).toBeNull();
+    expect(new ErrorDelChatbot(null, 422).motivo).toBeNull();
+  });
+
+  test('segundosDeEspera entiende segundos y fechas, y nada más', () => {
+    const ahora = () => Date.parse('2026-10-14T12:00:00Z');
+    expect(segundosDeEspera('30')).toBe(30);
+    expect(segundosDeEspera(' 0 ')).toBe(0);
+    expect(segundosDeEspera('Wed, 14 Oct 2026 12:00:42 GMT', ahora)).toBe(42);
+    expect(segundosDeEspera('Wed, 14 Oct 2026 11:00:00 GMT', ahora)).toBe(0);
+    expect(segundosDeEspera(null)).toBeNull();
+    expect(segundosDeEspera('')).toBeNull();
+    expect(segundosDeEspera('pronto')).toBeNull();
+    // V8 lee estos dos como fechas de 2001: no son segundos válidos.
+    expect(segundosDeEspera('-5')).toBeNull();
+    expect(segundosDeEspera('1.5')).toBeNull();
+  });
+});
+
+// #506 — una petición que no responde se corta y cuenta como sin red.
+describe('tiempo de espera (#506)', () => {
+  test('por omisión son diez segundos', () => {
+    expect(TIEMPO_DE_ESPERA_MS).toBe(10_000);
+  });
+
+  test('pasado el tiempo, se aborta y es un fallo de red (estado 0, no disponible)', async () => {
+    const fetch = fetchColgado();
+    const chat = crearClienteChatbot({
+      fetch,
+      almacen: almacenEnMemoria(),
+      almacenLocal: almacenEnMemoria(),
+      sesion: () => VISITANTE,
+      tiempoDeEspera: 5,
+    });
+
+    const error = await chat.enviarMensaje('hola').catch((e) => e);
+
+    expect(fetch.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+    expect(fetch.mock.calls[0][1].signal.aborted).toBe(true);
+    expect(error).toBeInstanceOf(ErrorDelChatbot);
+    expect(error.estado).toBe(0);
+    expect(error.tiempoAgotado).toBe(true);
+    expect(error.noDisponible).toBe(true);
+  });
+
+  test('también si lo que se atasca es el cuerpo de la respuesta', async () => {
+    const fetch = jest.fn(async (_url, { signal }) => ({
+      ok: true,
+      status: 200,
+      json: () =>
+        new Promise((_resolver, rechazar) => {
+          signal.addEventListener('abort', () => rechazar(new DOMException('x', 'AbortError')));
+        }),
+    }));
+    const chat = crearClienteChatbot({
+      fetch,
+      almacen: almacenEnMemoria(),
+      almacenLocal: almacenEnMemoria(),
+      sesion: () => VISITANTE,
+      tiempoDeEspera: 5,
+    });
+
+    const error = await chat.obtenerHistorial().catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDelChatbot);
+    expect(error.estado).toBe(0);
+    expect(error.tiempoAgotado).toBe(true);
+  });
+
+  test('una respuesta a tiempo no se aborta después', async () => {
+    const fetch = jest.fn(async () => respuestaJson([]));
+    const chat = crearClienteChatbot({
+      fetch,
+      almacen: almacenEnMemoria(),
+      almacenLocal: almacenEnMemoria(),
+      sesion: () => VISITANTE,
+      tiempoDeEspera: 5,
+    });
+
+    expect(await chat.obtenerHistorial()).toEqual([]);
+    await new Promise((resolver) => setTimeout(resolver, 15));
+    expect(fetch.mock.calls[0][1].signal.aborted).toBe(false);
+  });
+
+  test('un fallo de red que no es la espera no se marca como tiempo agotado', async () => {
+    const fetch = jest.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    const error = await cliente({ fetch })
+      .obtenerHistorial()
+      .catch((e) => e);
+    expect(error.estado).toBe(0);
+    expect(error.tiempoAgotado).toBe(false);
+  });
+});
+
+// #506 — la clave vive en sesion.js, que la borra al cerrar sesión y al
+// entrar; el cliente la reexporta y la dependencia va en un solo sentido.
+test('el identificador de visitante se guarda en la clave que olvida la sesión', () => {
+  expect(CLAVE_SESION_ANONIMA).toBe('nexus.chatbot.sesionAnonima');
+  expect(CLAVE_SESION_ANONIMA).toBe(CLAVE_EN_SESION);
+  const almacen = almacenEnMemoria();
+  idDeSesionAnonima(almacen, () => 'abc');
+  expect(almacen.getItem(CLAVE_EN_SESION)).toBe('visitante-abc');
 });

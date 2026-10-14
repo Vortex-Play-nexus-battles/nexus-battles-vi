@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface TicketSoporteRepository extends JpaRepository<TicketSoporte, UUID> {
@@ -18,6 +19,9 @@ public interface TicketSoporteRepository extends JpaRepository<TicketSoporte, UU
 
     /** Para responder 409 TICKET_ABIERTO antes de chocar con el indice unico. */
     boolean existsByUidAndEstadoIn(String uid, Collection<EstadoTicket> estados);
+
+    // 1.12.0: la solicitud abierta de una persona (como mucho una, V6).
+    Optional<TicketSoporte> findFirstByUidAndEstadoInOrderByCreadoEnDesc(String uid, Collection<EstadoTicket> estados);
 
     /** 1.3.9: al reabrir un ticket, si el jugador ya tiene OTRO abierto (409). */
     boolean existsByUidAndEstadoInAndIdNot(String uid, Collection<EstadoTicket> estados, UUID id);

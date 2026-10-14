@@ -5,7 +5,7 @@
  * Los atributos que se pintan salen del contrato de productos: cada tipo
  * trae los suyos, no hay listas genericas de "habilidades" y "efectos".
  */
-import { construirFicha, ATRIBUTOS_POR_TIPO } from './ficha-producto.js';
+import { construirFicha, ATRIBUTOS_POR_TIPO, marcasDelCatalogo } from './ficha-producto.js';
 
 function producto(extra = {}) {
   return {
@@ -36,6 +36,19 @@ function atributos(ficha) {
 }
 
 describe('Ficha de detalle del producto', () => {
+  test('SA-13: un premium y una pieza única se identifican también en el inventario', () => {
+    const premium = construirFicha(producto({ premium: true }));
+    expect(textoDe(premium, '[data-zona="marcas-del-catalogo"] .producto-premium')).toBe(
+      'Premium: se paga en moneda real y no se puede subastar',
+    );
+    const unica = construirFicha(producto({ estado: 'UNICO' }));
+    expect(textoDe(unica, '[data-zona="marcas-del-catalogo"] .producto-unico')).toBe('Pieza única');
+    expect(
+      construirFicha(producto()).querySelector('[data-zona="marcas-del-catalogo"]'),
+    ).toBeNull();
+    expect(marcasDelCatalogo(null)).toBeNull();
+  });
+
   test('muestra nombre, descripción e imagen del producto', () => {
     const ficha = construirFicha(producto());
 

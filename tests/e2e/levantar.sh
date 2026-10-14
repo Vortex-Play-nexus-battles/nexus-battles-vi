@@ -42,6 +42,8 @@ if [ "${1:-}" != "--solo-levantar" ]; then
   (cd services/cuentas/ms-identidad && ./mvnw -B -DskipTests package)
   # R16 — la tienda. Su mvnw no tiene bit de ejecucion en git (ver e2e.yml).
   (cd services/cuentas/ms-ecommerce && chmod +x ./mvnw && ./mvnw -B -DskipTests package)
+  # SA-1 (7.3.5) — la auditoria, para las acciones administrativas fail-closed.
+  (cd services/cuentas/ms-cumplimiento && chmod +x ./mvnw && ./mvnw -B -DskipTests package)
 fi
 
 echo "== Levantando el entorno =="

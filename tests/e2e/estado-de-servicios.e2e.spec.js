@@ -4,10 +4,10 @@
  * servicios reales del banco.
  *
  *   1. cada servicio del catalogo tiene sonda: ninguno sale NO_OBSERVABLE, los
- *      que no estan en el banco (ms-chatbot, ms-cumplimiento) salen
- *      NO_DESPLEGADO y los que si estan contestan su salud de Actuator. Es la
- *      prueba de punta a punta de la sonda estricta: solo cuenta UP si recibe
- *      el JSON de Actuator con status UP en la raiz.
+ *      que no estan en el banco salen NO_DESPLEGADO (hoy ninguno: ms-chatbot
+ *      entro con la revision final del 7.4) y los que si estan contestan su
+ *      salud de Actuator. Es la prueba de punta a punta de la sonda estricta:
+ *      solo cuenta UP si recibe el JSON de Actuator con status UP en la raiz.
  *   2. la segunda consulta dentro de la vigencia reutiliza la ronda y lo dice
  *      (desdeCache, con la hora de esa ronda).
  *
@@ -36,6 +36,7 @@ const EN_EL_BANCO = [
   'metricas-plataforma',
   'admin-parametros',
   'ms-identidad',
+  'ms-cumplimiento',
   'ms-ecommerce',
   'ms-finanzas',
   'ms-subastas',
@@ -44,8 +45,10 @@ const EN_EL_BANCO = [
   'productos',
   'motor-combate',
   'misiones',
+  'ms-chatbot',
 ];
-const FUERA_DEL_BANCO = ['ms-chatbot', 'ms-cumplimiento'];
+/** Los del catalogo que no corren en el banco: ninguno desde la revision final del 7.4. */
+const FUERA_DEL_BANCO = [];
 
 test.describe('Estado de los servicios de la consola (RFINAL-08)', () => {
   test.describe.configure({ mode: 'serial' });

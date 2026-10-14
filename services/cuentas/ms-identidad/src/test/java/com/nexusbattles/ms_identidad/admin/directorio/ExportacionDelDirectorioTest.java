@@ -82,8 +82,25 @@ class ExportacionDelDirectorioTest {
         assertThat(csv).startsWith("\uFEFF");
         List<String> lineas = List.of(csv.substring(1).split("\r\n"));
         assertThat(lineas).containsExactly(
-                "Apodo,Correo,Rol,Estado,Registro,Última entrada",
+                "Apodo,Correo,Rol,Estado,Registro (hora de Colombia),Última entrada (hora de Colombia)",
                 "\"Ana\",\"ana@ejemplo.org\",\"JUGADOR\",\"ACTIVO\",2026-09-01 08:05,2026-10-04 21:15");
+    }
+
+    @Test
+    @DisplayName("SA-21: con el servidor en UTC, las horas salen en hora de Colombia, no cinco horas adelantadas")
+    void horasDeColombiaConElServidorEnUtc() {
+        Usuario ana = cuenta("Ana", "ana@ejemplo.org", "JUGADOR", "ACTIVO");
+        ana.setCreadoEn(LocalDateTime.of(2026, 9, 1, 17, 30));
+        ana.setUltimoAcceso(LocalDateTime.of(2026, 10, 5, 2, 15));
+        devolviendo(List.of(ana), 1);
+        ExportacionDelDirectorio enUtc = new ExportacionDelDirectorio(directorio, cuentasDePrueba,
+                Clock.fixed(Instant.parse("2026-10-05T20:07:00Z"), ZoneId.of("UTC")), 100);
+
+        String csv = texto(enUtc.exportar(FiltroDelDirectorio.de(null, false, null, null, null, null)));
+
+        // 17:30 UTC son las 12:30 en Colombia; las 02:15 UTC, las 21:15 del dia anterior.
+        assertThat(csv.substring(1).split("\r\n")[1])
+                .isEqualTo("\"Ana\",\"ana@ejemplo.org\",\"JUGADOR\",\"ACTIVO\",2026-09-01 12:30,2026-10-04 21:15");
     }
 
     @Test
@@ -167,7 +184,7 @@ class ExportacionDelDirectorioTest {
     }
 
     @Test
-    @DisplayName("el nombre del archivo lleva el dia y la hora del reloj del servicio")
+    @DisplayName("el nombre del archivo lleva el dia y la hora de Colombia")
     void nombreDelArchivo() {
         devolviendo(List.of(), 0);
 
@@ -175,7 +192,8 @@ class ExportacionDelDirectorioTest {
                 exportador(10).exportar(FiltroDelDirectorio.de(null, false, null, null, null, null));
 
         assertThat(exportacion.nombreArchivo()).isEqualTo("directorio-de-cuentas-20261005-1507.csv");
-        assertThat(texto(exportacion)).isEqualTo("\uFEFFApodo,Correo,Rol,Estado,Registro,Última entrada\r\n");
+        assertThat(texto(exportacion)).isEqualTo(
+                "\uFEFFApodo,Correo,Rol,Estado,Registro (hora de Colombia),Última entrada (hora de Colombia)\r\n");
         assertThat(exportacion.filas()).isZero();
     }
 

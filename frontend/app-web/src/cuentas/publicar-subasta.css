@@ -120,6 +120,29 @@
   color: var(--texto-2);
   font-size: var(--t-meta-tam);
 }
+
+/* PLAYER-07b (punto 27) — el catálogo no respondió: se dice una vez, junto al
+   selector, con la salida al lado. Tono de advertencia, no de error: se puede
+   seguir y el nombre que se ve es el del inventario, nunca un código. */
+.publicacion__aviso-catalogo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2) var(--e-3);
+  margin: var(--e-4) 0;
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--advertencia);
+  border-radius: var(--radio);
+  background: var(--advertencia-insignia);
+  color: var(--texto);
+}
+
+.publicacion__aviso-catalogo p {
+  flex: 1 1 16rem;
+  margin: 0;
+  font-size: var(--t-meta-tam);
+}
 .publicacion :focus-visible {
   outline: 3px solid var(--primaria);
   outline-offset: 3px;

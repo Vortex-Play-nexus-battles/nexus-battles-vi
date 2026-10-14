@@ -7,10 +7,11 @@
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/fondos.css" />
     <!-- HU-AUT-007 — la clave y los códigos del enrolamiento obligatorio. -->
     <link rel="stylesheet" href="./segundo-factor.css" />
   </head>
-  <body class="portal">
+  <body class="portal" data-fondo="entrada">
     <div data-cabecera-app></div>
 
     <main class="entrada">
@@ -277,6 +278,60 @@
               data-accion="volver-al-primer-paso"
             >
               Volver a empezar
+            </button>
+          </div>
+        </section>
+
+        <!-- SA-4 (§7.3.2) — apelar sin sesión: una cuenta suspendida o baneada
+             que escribió bien su contraseña ve aquí la sanción que le impide
+             entrar y presenta su apelación con el código de un solo uso que
+             le dio el login (apelacion-sin-sesion.js). El argumento nunca va
+             en la dirección: POST y botón apagado hasta que el guion escucha. -->
+        <section class="pila" data-zona="apelacion" aria-labelledby="tituloApelacion" hidden>
+          <div class="pila pila--ajustada">
+            <h2 class="entrada__titulo" id="tituloApelacion" tabindex="-1">Apelar la sanción</h2>
+            <p class="t-meta">
+              Un panel de moderadores y administradores revisa cada apelación y responde en un plazo
+              de 15 días hábiles.
+            </p>
+          </div>
+          <div class="pila pila--ajustada" data-zona="sancion-apelada"></div>
+          <div data-zona="aviso-apelacion" tabindex="-1" hidden></div>
+
+          <form id="formApelacion" class="pila" method="post" novalidate hidden>
+            <p class="t-meta" data-zona="plazo-apelacion"></p>
+            <div class="campo campo--area">
+              <label class="campo__etiqueta" for="argumentoApelacion">
+                Por qué crees que la sanción no corresponde
+              </label>
+              <textarea
+                class="campo__control"
+                id="argumentoApelacion"
+                name="argumento"
+                rows="6"
+                maxlength="2000"
+                required
+              ></textarea>
+              <p class="campo__pista" data-zona="contador-argumento" aria-live="polite"></p>
+            </div>
+            <button
+              type="submit"
+              class="boton boton--primario boton--grande"
+              data-accion="enviar-apelacion"
+              disabled
+              data-espera-guion
+            >
+              Enviar apelación
+            </button>
+          </form>
+
+          <div class="fila fila--envuelta">
+            <button
+              type="button"
+              class="boton boton--secundario"
+              data-accion="volver-desde-apelacion"
+            >
+              Volver a la entrada
             </button>
           </div>
         </section>

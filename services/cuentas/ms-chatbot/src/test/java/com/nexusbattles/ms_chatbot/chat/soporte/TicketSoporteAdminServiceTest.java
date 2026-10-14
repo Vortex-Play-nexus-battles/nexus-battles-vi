@@ -7,6 +7,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -41,12 +42,14 @@ class TicketSoporteAdminServiceTest {
 
     @Mock
     private TicketSoporteRepository tickets;
+    @Mock
+    private ApplicationEventPublisher eventos;
 
     private TicketSoporteAdminService servicio;
 
     @BeforeEach
     void configurar() {
-        servicio = new TicketSoporteAdminService(tickets, Clock.fixed(AHORA, ZoneOffset.UTC));
+        servicio = new TicketSoporteAdminService(tickets, Clock.fixed(AHORA, ZoneOffset.UTC), eventos);
     }
 
     private static TicketSoporte ticket() {
@@ -112,6 +115,22 @@ class TicketSoporteAdminServiceTest {
         assertThat(atendido.getActualizadoEn()).isEqualTo(AHORA);
     }
 
+    // 7.4.9 (ms-chatbot.yaml 1.9.0): el cambio guardado se publica para que el
+    // canal en tiempo real se lo lleve a su dueno despues del commit.
+    @Test
+    void atenderPublicaElTicketGuardadoParaAvisarASuDueno() {
+        UUID id = UUID.randomUUID();
+        when(tickets.findById(id)).thenReturn(Optional.of(ticket()));
+        when(tickets.saveAndFlush(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
+
+        TicketSoporte atendido = servicio.atender(id, EstadoTicket.RESUELTO, "Ya quedo", null, false);
+
+        ArgumentCaptor<TicketActualizado> publicado = ArgumentCaptor.forClass(TicketActualizado.class);
+        verify(eventos).publishEvent(publicado.capture());
+        assertThat(publicado.getValue().ticket()).isSameAs(atendido);
+        assertThat(publicado.getValue().ticket().getUid()).isEqualTo("uid-1");
+    }
+
     // 1.3.9: el jugador solo puede tener un ticket abierto (indice de V6).
     private static TicketSoporte resueltoConId(UUID id) {
         TicketSoporte resuelto = ticket();
@@ -132,6 +151,7 @@ class TicketSoporteAdminServiceTest {
 
         assertThat(resuelto.getEstado()).isEqualTo(EstadoTicket.RESUELTO);
         verify(tickets, never()).saveAndFlush(any());
+        verify(eventos, never()).publishEvent(any(TicketActualizado.class));
     }
 
     @Test

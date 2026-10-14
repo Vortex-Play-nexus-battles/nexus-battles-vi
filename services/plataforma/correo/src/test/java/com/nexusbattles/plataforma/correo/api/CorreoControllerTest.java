@@ -65,6 +65,7 @@ class CorreoControllerTest {
     private static final String CONFIRMACION_COMPRA = "/api/v1/correos/confirmacion-compra";
     private static final String SANCION = "/api/v1/correos/sancion";
     private static final String TORNEO = "/api/v1/correos/torneo";
+    private static final String CIERRE_CUENTA = "/api/v1/correos/cierre-cuenta";
 
     private static final EmisorDeTokensDePrueba EMISOR = EmisorDeTokensDePrueba.emisor();
 
@@ -282,6 +283,38 @@ class CorreoControllerTest {
         assertThat(pedido.destinatario()).isEqualTo("jugador@ejemplo.com");
         assertThat(pedido.asunto()).isEqualTo("Acceso desde un dispositivo no reconocido");
         assertThat(pedido.datos()).containsEntry("apodo", "ElGuerrero").containsEntry("ip", "190.85.12.44");
+    }
+
+    // SA-14 (1.7.0, §7.3.6): la confirmacion de que la cuenta se elimino.
+
+    @Test
+    void aceptaLaConfirmacionDeCierreYLaEncolaConLaFechaLegible() throws Exception {
+        mockMvc.perform(comoServicio(CIERRE_CUENTA).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero","fechaHora":"2026-10-14T09:30:00-05:00"}
+                """))
+                .andExpect(status().isAccepted());
+
+        CorreoPedido pedido = encolado();
+        assertThat(pedido.plantilla()).isEqualTo(Plantilla.CIERRE_CUENTA);
+        assertThat(pedido.destinatario()).isEqualTo("jugador@ejemplo.com");
+        assertThat(pedido.asunto()).isEqualTo("Tu cuenta de The Nexus Battles VI fue eliminada");
+        assertThat(pedido.datos())
+                .containsEntry("apodo", "ElGuerrero")
+                .containsEntry("fechaHora", "14/10/2026 a las 09:30 (GMT-05:00)");
+    }
+
+    @ParameterizedTest(name = "cierre rechazado: {0}")
+    @ValueSource(strings = {
+            "{\"apodo\":\"ElGuerrero\",\"fechaHora\":\"2026-10-14T09:30:00-05:00\"}",
+            "{\"email\":\"no-es-correo\",\"apodo\":\"ElGuerrero\",\"fechaHora\":\"2026-10-14T09:30:00-05:00\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"fechaHora\":\"2026-10-14T09:30:00-05:00\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\"}"
+    })
+    void rechazaUnaConfirmacionDeCierreIncompleta(String cuerpo) throws Exception {
+        mockMvc.perform(comoServicio(CIERRE_CUENTA).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isBadRequest());
+
+        nadaEncolado();
     }
 
     // HU-AUT-006 CA-01: aviso de cambio de contraseña, sobre la plantilla corporativa.
@@ -770,6 +803,22 @@ class CorreoControllerTest {
                 .containsEntry("hasta", "01/10/2026 a las 18:00 (GMT-05:00)")
                 .containsEntry("apelableHasta", "25/10/2026 a las 23:59 (GMT-05:00)")
                 .doesNotContainKey("resultadoApelacion");
+    }
+
+    @Test
+    void laCausalYLaPoliticaLleganAlCorreoSiVienen() throws Exception {
+        // 1.6.0 (SA-4): 7.3.7 «referencias a las politicas violadas».
+        mockMvc.perform(comoServicio(SANCION).contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero","tipo":"ADVERTENCIA",
+                 "motivo":"Insulto en el chat de la sala",
+                 "causal":"Uso de lenguaje ofensivo o abusivo en comentarios o chat",
+                 "politica":"  Normas de convivencia 2.1  "}
+                """))
+                .andExpect(status().isAccepted());
+
+        assertThat(encolado().datos())
+                .containsEntry("causal", "Uso de lenguaje ofensivo o abusivo en comentarios o chat")
+                .containsEntry("politica", "Normas de convivencia 2.1");
     }
 
     @Test

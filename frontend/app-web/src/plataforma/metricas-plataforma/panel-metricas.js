@@ -1,360 +1,720 @@
 /**
- * Panel de observabilidad — HU-REN-002 (CA-03) y HU-REN-003 (CP-01).
+ * Métricas de plataforma — HU-DIS-001, HU-REN-001/002/003, HU-DIS-003 sobre
+ * metricas-plataforma.yaml, con el kit de la consola (SA-8, puntos 23 y 24
+ * del informe de revisión).
  *
- * CA-03 pide que «las metricas separadas para carga de listados y propagacion
- * de pujas esten visibles, graficadas y listas para exportarse al informe».
- * Esta pantalla cubre la parte visible y la exportacion; la propagacion de
- * pujas no aparece porque todavia no existe (ver el README del modulo).
+ * Lo que pidió el informe y cómo queda:
+ *   - sin la explicación de trabajo («Latencia extremo a extremo medida por
+ *     shared/libs/…», «esta pantalla no recalcula nada»): la página dice qué
+ *     mide en palabras de producto;
+ *   - más dinámica: cifras arriba (disponibilidad del mes, servicios dentro
+ *     del objetivo, interrupciones y funciones limitadas), y se actualiza sola
+ *     diciendo de cuándo es lo que se ve (`actualizacionPeriodica`);
+ *   - tablas de la consola (`tablaDeDatos`) con los servicios por su nombre:
+ *     disponibilidad por servicio, tiempos de respuesta por servicio, el
+ *     detalle del percentil y las consultas a la base de datos. Cada sección
+ *     pinta su propio resultado: si una fuente no responde, lo dice esa
+ *     sección y el resto sigue.
  *
- * **No calcula nada.** Percentiles, desglose y veredicto vienen del backend.
- *
- * Sigue `shared/ui-kit/MAPEO-ERRORES.md`:
- * - §5.1 el fallo de la vista entera es `Estado de vista` con reintentar;
- * - §2 se decide por `type`, nunca por el texto.
+ * **No calcula métricas.** Porcentajes, percentiles, veredictos y alertas los
+ * publica el servicio; aquí solo se cuentan filas y se ordenan.
  *
  * @module plataforma/metricas-plataforma/panel-metricas
  */
 
-import { ErrorDeMetricas, obtenerInforme } from './cliente-metricas.js';
-import { h } from '../../comun/ui/dom.js';
-import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
+import { ErrorDeMetricas, pedirMetricas } from './cliente-metricas.js';
+import { actualizacionPeriodica } from '../../comun/ui/admin/actualizacion.js';
+import { distintivoDeEstado } from '../../comun/ui/admin/estado.js';
+import { rejillaDeIndicadores, tarjetaDeIndicador } from '../../comun/ui/admin/indicador.js';
+import { nombreDelServicio } from '../../comun/ui/admin/servicios.js';
+import { tablaDeDatos } from '../../comun/ui/admin/tabla-de-datos.js';
+import { h, vaciar } from '../../comun/ui/dom.js';
+import {
+  estadoDeCarga,
+  estadoDeError,
+  estadoVacio,
+  pintarEstado,
+} from '../../comun/ui/estado-vista.js';
+import { fechaHora, numero } from '../../comun/ui/formato.js';
+import { encabezadoDePagina } from '../../comun/ui/pagina.js';
+import { panel } from '../consola/panel.js';
+
+/** Cada cuánto se actualiza sola la página. */
+export const PERIODO_DE_METRICAS_MS = 60_000;
+
+/** Las fuentes de la página, todas de metricas-plataforma. */
+export const FUENTES = Object.freeze({
+  estado: '/disponibilidad',
+  disponibilidad: '/disponibilidad/informe',
+  tecnicas: '/tecnicas',
+  latencia: '/latencia/informe',
+  consultas: '/consultas/informe',
+  degradacion: '/degradacion',
+});
+
+/** El tipo de operación, en palabras (HU-REN-002). */
+const NOMBRE_DE_TIPO = Object.freeze({
+  lectura: 'Lecturas',
+  escritura: 'Escrituras',
+  otra: 'Otras',
+});
+
+/** El método HTTP de una operación, en palabras. */
+const VERBO = Object.freeze({
+  GET: 'Consulta',
+  HEAD: 'Consulta',
+  POST: 'Alta',
+  PUT: 'Cambio',
+  PATCH: 'Cambio',
+  DELETE: 'Baja',
+});
+
+/* =========================================================================
+   Presentación (pura, probada)
+   ========================================================================= */
+
+/** «99,92 %». */
+export function porciento(valor, decimales = 2) {
+  return typeof valor === 'number' && Number.isFinite(valor)
+    ? `${numero(valor, decimales)} %`
+    : null;
+}
+
+/** «320 ms», o `null` si no hay dato. */
+export function milisegundos(valor) {
+  return typeof valor === 'number' && Number.isFinite(valor)
+    ? `${numero(Math.round(valor))} ms`
+    : null;
+}
+
+/** Minutos sin servicio en palabras: «8 min», «2 h 5 min», «1 d 3 h». */
+export function duracion(minutos) {
+  const total = Math.max(0, Math.round(Number(minutos) || 0));
+  if (total < 60) {
+    return `${total} min`;
+  }
+  if (total < 1440) {
+    const horas = Math.floor(total / 60);
+    const resto = total % 60;
+    return resto ? `${horas} h ${resto} min` : `${horas} h`;
+  }
+  const dias = Math.floor(total / 1440);
+  const horas = Math.floor((total % 1440) / 60);
+  return horas ? `${dias} d ${horas} h` : `${dias} d`;
+}
 
 /**
- * Cabecera de tabla con celdas de verdad.
- *
- * Era `encabezado.innerHTML = '<tr><th…>' + percentil + …`. `percentil` es un
- * texto del informe del servicio, asi que iba al parser de HTML sin escapar.
- * No hay motivo: una fila de cabecera se construye con nodos.
- *
- * @param {string[]} titulos
- * @returns {HTMLTableSectionElement}
+ * Las operaciones del propio servicio de métricas (las que mide su informe de
+ * tiempos), dichas como las conoce la consola y no como su ruta.
  */
-function cabeceraDeTabla(titulos) {
-  const thead = document.createElement('thead');
-  thead.append(
-    h('tr', {
-      hijos: titulos.map((texto) => h('th', { texto, atributos: { scope: 'col' } })),
+const OPERACIONES_CONOCIDAS = Object.freeze({
+  '/disponibilidad': 'Disponibilidad actual',
+  '/disponibilidad/informe': 'Informe de disponibilidad',
+  '/latencia/informe': 'Informe de tiempos de respuesta',
+  '/latencia/informe/texto': 'Descarga del informe de tiempos',
+  '/consultas/informe': 'Informe de consultas',
+  '/consultas/lentas': 'Consultas lentas',
+  '/degradacion': 'Funciones limitadas',
+  '/tecnicas': 'Tablero técnico',
+  '/tecnicas/informe/texto': 'Descarga del informe técnico',
+  '/moderacion': 'Actividad de moderación',
+  '/admin/sistema/servicios': 'Estado de los servicios',
+});
+
+/** Una ruta que la consola no conoce, en palabras: «Subastas › pujas». */
+function rutaEnPalabras(ruta) {
+  const partes = String(ruta ?? '')
+    .replace(/^\/api\/v\d+/, '')
+    .split('/')
+    .filter((parte) => parte && !/^\{.*\}$/.test(parte) && parte !== 'admin')
+    .map((parte) => parte.replace(/-/g, ' '));
+  if (!partes.length) {
+    return '';
+  }
+  const texto = partes.join(' › ');
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+/** La operación más lenta en palabras: «Consulta · Tablero técnico». */
+export function operacionLegible(operacion) {
+  const verbo = VERBO[String(operacion?.metodo ?? '').toUpperCase()] ?? '';
+  const plantilla = String(operacion?.ruta ?? '').replace(/^\/api\/v\d+/, '');
+  const nombre = OPERACIONES_CONOCIDAS[plantilla] ?? rutaEnPalabras(operacion?.ruta);
+  return [verbo, nombre].filter(Boolean).join(' · ');
+}
+
+/** La interrupción más reciente de una línea del informe, o `null`. */
+export function ultimaInterrupcion(linea) {
+  const interrupciones = Array.isArray(linea?.interrupciones) ? linea.interrupciones : [];
+  return (
+    [...interrupciones]
+      .filter((i) => Number.isFinite(Date.parse(i?.inicio)))
+      .sort((a, b) => Date.parse(b.inicio) - Date.parse(a.inicio))[0] ?? null
+  );
+}
+
+/** El tono de una cifra: ninguno sin dato; éxito si va bien; el de alarma si no. */
+function tonoSegun(fuente, bien, alarma) {
+  if (!fuente) {
+    return null;
+  }
+  return bien ? 'exito' : alarma;
+}
+
+/** Qué funciones están limitadas, o que todo funciona. */
+function notaDeLimitadas(limitadas) {
+  if (!limitadas) {
+    return null;
+  }
+  return limitadas.length
+    ? limitadas.map((s) => s.seccion).join(', ')
+    : 'Todo funciona con normalidad';
+}
+
+/** Las cuatro cifras de arriba, de lo que haya respondido. */
+export function cifrasDeMetricas({ disponibilidad, degradacion }) {
+  const servicios = Array.isArray(disponibilidad?.servicios) ? disponibilidad.servicios : null;
+  const fuera = servicios ? servicios.filter((s) => s?.cumple === false) : [];
+  const interrupciones = servicios
+    ? servicios.flatMap((s) =>
+        (Array.isArray(s?.interrupciones) ? s.interrupciones : []).map((i) => ({
+          ...i,
+          servicio: s.servicio,
+        })),
+      )
+    : null;
+  const ultima = interrupciones
+    ? [...interrupciones]
+        .filter((i) => Number.isFinite(Date.parse(i.inicio)))
+        .sort((a, b) => Date.parse(b.inicio) - Date.parse(a.inicio))[0]
+    : null;
+  const limitadas = Array.isArray(degradacion?.seccionesLimitadas)
+    ? degradacion.seccionesLimitadas
+    : null;
+
+  return [
+    {
+      etiqueta: 'Disponibilidad del mes',
+      valor: porciento(disponibilidad?.porcentajeDelBloque),
+      tono: tonoSegun(disponibilidad, disponibilidad?.cumpleElUmbral, 'error'),
+      detalle:
+        typeof disponibilidad?.umbral === 'number'
+          ? `Objetivo: ${porciento(disponibilidad.umbral)}`
+          : null,
+    },
+    {
+      etiqueta: 'Servicios en el objetivo',
+      valor: servicios
+        ? `${numero(servicios.length - fuera.length)} de ${numero(servicios.length)}`
+        : null,
+      tono: tonoSegun(servicios, fuera.length === 0, 'advertencia'),
+      detalle: fuera.length
+        ? `Por debajo: ${fuera
+            .slice(0, 2)
+            .map((s) => nombreDelServicio(s.servicio))
+            .join(', ')}${fuera.length > 2 ? '…' : ''}`
+        : null,
+    },
+    {
+      etiqueta: 'Interrupciones del mes',
+      valor: interrupciones ? interrupciones.length : null,
+      detalle: ultima
+        ? `La última: ${nombreDelServicio(ultima.servicio)}, ${fechaHora(ultima.inicio)}`
+        : null,
+    },
+    {
+      etiqueta: 'Funciones limitadas ahora',
+      valor: limitadas ? limitadas.length : null,
+      tono: tonoSegun(limitadas, limitadas?.length === 0, 'error'),
+      detalle: notaDeLimitadas(limitadas),
+    },
+  ];
+}
+
+/* =========================================================================
+   Tablas
+   ========================================================================= */
+
+function celdaDoble(principal, secundaria) {
+  return h('span', {
+    clase: 'celda-doble',
+    hijos: [
+      typeof principal === 'string' ? h('span', { texto: principal }) : principal,
+      secundaria ? h('span', { clase: 't-meta', texto: secundaria }) : null,
+    ],
+  });
+}
+
+/** Disponibilidad por servicio del periodo, con su estado de ahora. */
+export function tablaDeDisponibilidad(informe, estado) {
+  const ahora = new Map(
+    (Array.isArray(estado?.servicios) ? estado.servicios : []).map((s) => [s.servicio, s]),
+  );
+  const filas = [...(informe?.servicios ?? [])].sort(
+    (a, b) => (Number(a.porcentaje) || 0) - (Number(b.porcentaje) || 0),
+  );
+  return tablaDeDatos({
+    titulo: 'Disponibilidad por servicio',
+    resumen: `${numero(filas.length)} ${filas.length === 1 ? 'servicio' : 'servicios'}, el más bajo primero`,
+    claveDeFila: (linea) => linea.servicio,
+    columnas: [
+      {
+        clave: 'servicio',
+        titulo: 'Servicio',
+        principal: true,
+        valor: (linea) => nombreDelServicio(linea.servicio),
+      },
+      {
+        clave: 'ahora',
+        titulo: 'Ahora',
+        tipo: 'estado',
+        valor: (linea) => {
+          const vivo = ahora.get(linea.servicio);
+          if (!vivo) {
+            return null;
+          }
+          return vivo.estado === 'DISPONIBLE'
+            ? distintivoDeEstado({ texto: 'En línea', tono: 'exito' })
+            : distintivoDeEstado({ texto: 'Sin respuesta', tono: 'error' });
+        },
+      },
+      {
+        clave: 'porcentaje',
+        titulo: 'Disponibilidad',
+        tipo: 'numero',
+        ordenable: true,
+        valor: (linea) =>
+          distintivoDeEstado({
+            texto: porciento(linea.porcentaje) ?? 'Sin dato',
+            tono: linea.cumple ? 'exito' : 'error',
+          }),
+        ordenarPor: (linea) => Number(linea.porcentaje) || 0,
+      },
+      {
+        clave: 'indisponibleMinutos',
+        titulo: 'Sin servicio',
+        tipo: 'numero',
+        ordenable: true,
+        valor: (linea) => duracion(linea.indisponibleMinutos),
+      },
+      {
+        clave: 'interrupciones',
+        titulo: 'Interrupciones',
+        tipo: 'numero',
+        ordenable: true,
+        valor: (linea) => {
+          const ultima = ultimaInterrupcion(linea);
+          const cuantas = Array.isArray(linea.interrupciones) ? linea.interrupciones.length : 0;
+          if (!ultima) {
+            return String(cuantas);
+          }
+          return celdaDoble(
+            String(cuantas),
+            ultima.fin
+              ? `La última, ${fechaHora(ultima.inicio)}`
+              : `En curso desde ${fechaHora(ultima.inicio)}`,
+          );
+        },
+        ordenarPor: (linea) =>
+          Array.isArray(linea.interrupciones) ? linea.interrupciones.length : 0,
+      },
+    ],
+    filas,
+    vacio: { titulo: 'Sin servicios medidos', detalle: 'Todavía no hay mediciones del periodo.' },
+  });
+}
+
+/** Tiempos de respuesta, tráfico y errores de cada servicio (`/tecnicas`). */
+export function tablaDeTiempos(tablero) {
+  const objetivo = tablero?.umbrales?.latenciaMs;
+  const filas = Array.isArray(tablero?.servicios) ? tablero.servicios : [];
+  const conDato = (servicio, valor) => (servicio.brecha ? null : valor);
+  return tablaDeDatos({
+    titulo: 'Tiempos de respuesta por servicio',
+    resumen: `${numero(filas.length)} ${filas.length === 1 ? 'servicio' : 'servicios'}`,
+    claveDeFila: (servicio) => servicio.servicio,
+    columnas: [
+      {
+        clave: 'servicio',
+        titulo: 'Servicio',
+        principal: true,
+        valor: (servicio) =>
+          servicio.brecha
+            ? celdaDoble(nombreDelServicio(servicio.servicio), 'No se pudo medir en esta ronda')
+            : nombreDelServicio(servicio.servicio),
+      },
+      {
+        clave: 'promedioMs',
+        titulo: 'Tiempo medio',
+        tipo: 'numero',
+        ordenable: true,
+        valor: (servicio) => conDato(servicio, milisegundos(servicio.promedioMs)),
+      },
+      {
+        clave: 'maximoMs',
+        titulo: 'Tiempo máximo',
+        tipo: 'numero',
+        ordenable: true,
+        valor: (servicio) => {
+          const texto = conDato(servicio, milisegundos(servicio.maximoMs));
+          if (!texto) {
+            return null;
+          }
+          return typeof objetivo === 'number' && servicio.maximoMs > objetivo
+            ? distintivoDeEstado({ texto, tono: 'advertencia' })
+            : texto;
+        },
+      },
+      {
+        clave: 'peticiones',
+        titulo: 'Peticiones',
+        tipo: 'numero',
+        ordenable: true,
+        valor: (servicio) => conDato(servicio, numero(Number(servicio.peticiones) || 0)),
+      },
+      {
+        clave: 'errores5xx',
+        titulo: 'Errores del servidor',
+        tipo: 'numero',
+        ordenable: true,
+        valor: (servicio) => {
+          if (servicio.brecha) {
+            return null;
+          }
+          const errores = Number(servicio.errores5xx) || 0;
+          const tasa =
+            typeof servicio.tasaDeError === 'number' ? porciento(servicio.tasaDeError * 100) : null;
+          return celdaDoble(numero(errores), errores && tasa ? `${tasa} de las peticiones` : null);
+        },
+      },
+    ],
+    filas,
+    vacio: { titulo: 'Sin servicios medidos', detalle: 'La recolección no devolvió servicios.' },
+  });
+}
+
+/** El detalle del percentil: por tipo de operación y las operaciones más lentas. */
+export function detalleDeLatencia(informe) {
+  if (!informe || informe.sinDatos) {
+    return [
+      estadoVacio({
+        titulo: 'Todavía no hay mediciones',
+        detalle: 'El servicio no ha atendido peticiones desde su último arranque.',
+      }),
+    ];
+  }
+  const nodos = [
+    rejillaDeIndicadores(
+      [
+        tarjetaDeIndicador({
+          etiqueta: `Tiempo de respuesta (${informe.percentil})`,
+          valor: milisegundos(informe.percentilMs),
+          tono: informe.cumple ? 'exito' : 'error',
+          detalle: `Objetivo: ${milisegundos(informe.objetivoMs)}`,
+        }),
+        tarjetaDeIndicador({ etiqueta: 'La más lenta', valor: milisegundos(informe.maximoMs) }),
+        tarjetaDeIndicador({ etiqueta: 'Peticiones medidas', valor: informe.muestras }),
+      ],
+      { zona: 'cifras-de-latencia' },
+    ),
+  ];
+  if (Array.isArray(informe.porTipo) && informe.porTipo.length > 0) {
+    nodos.push(
+      tablaDeDatos({
+        titulo: 'Por tipo de operación',
+        leyendaVisible: true,
+        claveDeFila: (fila) => fila.tipo,
+        columnas: [
+          {
+            clave: 'tipo',
+            titulo: 'Tipo',
+            principal: true,
+            valor: (fila) => NOMBRE_DE_TIPO[fila.tipo] ?? fila.tipo,
+          },
+          {
+            clave: 'percentilMs',
+            titulo: informe.percentil,
+            tipo: 'numero',
+            valor: (fila) => milisegundos(fila.percentilMs),
+          },
+          {
+            clave: 'maximoMs',
+            titulo: 'La más lenta',
+            tipo: 'numero',
+            valor: (fila) => milisegundos(fila.maximoMs),
+          },
+          {
+            clave: 'muestras',
+            titulo: 'Peticiones',
+            tipo: 'numero',
+            valor: (fila) => numero(fila.muestras),
+          },
+        ],
+        filas: informe.porTipo,
+      }),
+    );
+  }
+  if (Array.isArray(informe.operacionesMasLentas) && informe.operacionesMasLentas.length > 0) {
+    nodos.push(
+      tablaDeDatos({
+        titulo: 'Operaciones más lentas',
+        leyendaVisible: true,
+        claveDeFila: (fila) => `${fila.metodo} ${fila.ruta}`,
+        columnas: [
+          {
+            clave: 'operacion',
+            titulo: 'Operación',
+            principal: true,
+            valor: operacionLegible,
+          },
+          {
+            clave: 'percentilMs',
+            titulo: informe.percentil,
+            tipo: 'numero',
+            valor: (fila) => milisegundos(fila.percentilMs),
+          },
+          {
+            clave: 'muestras',
+            titulo: 'Peticiones',
+            tipo: 'numero',
+            valor: (fila) => numero(fila.muestras),
+          },
+        ],
+        filas: informe.operacionesMasLentas,
+      }),
+    );
+  }
+  return nodos;
+}
+
+/** Las consultas a la base de datos, en cifras (sin las sentencias). */
+export function cifrasDeConsultas(informe) {
+  if (!informe || informe.sinDatos) {
+    return estadoVacio({
+      titulo: 'Todavía no hay consultas medidas',
+      detalle: 'Aparecerán en cuanto el servicio atienda peticiones.',
+    });
+  }
+  return rejillaDeIndicadores(
+    [
+      tarjetaDeIndicador({
+        etiqueta: `Tiempo de consulta (${informe.percentil})`,
+        valor: milisegundos(informe.percentilMs),
+        tono: informe.cumple ? 'exito' : 'error',
+        detalle: `Objetivo: ${milisegundos(informe.objetivoMs)}`,
+      }),
+      tarjetaDeIndicador({ etiqueta: 'La más lenta', valor: milisegundos(informe.maximoMs) }),
+      tarjetaDeIndicador({ etiqueta: 'Consultas medidas', valor: informe.muestras }),
+      tarjetaDeIndicador({
+        etiqueta: 'Consultas lentas',
+        valor: informe.cuantasLentas,
+        tono: informe.cuantasLentas ? 'advertencia' : 'exito',
+        detalle: `Más de ${milisegundos(informe.umbralLentaMs)}`,
+      }),
+    ],
+    { zona: 'cifras-de-consultas' },
+  );
+}
+
+/** Qué funciones están limitadas ahora mismo (HU-DIS-003). */
+export function listaDeDegradacion(degradacion) {
+  const limitadas = Array.isArray(degradacion?.seccionesLimitadas)
+    ? degradacion.seccionesLimitadas
+    : [];
+  if (!limitadas.length) {
+    return estadoVacio({
+      titulo: 'Todo funciona con normalidad',
+      detalle: 'Ninguna función está limitada por la caída de otro servicio.',
+    });
+  }
+  return tablaDeDatos({
+    titulo: 'Funciones limitadas',
+    claveDeFila: (s) => `${s.seccion}-${s.desde}`,
+    columnas: [
+      { clave: 'seccion', titulo: 'Función limitada', principal: true, valor: (s) => s.seccion },
+      {
+        clave: 'dependencia',
+        titulo: 'Causa',
+        valor: (s) => `${nombreDelServicio(s.dependencia)} no responde`,
+      },
+      { clave: 'desde', titulo: 'Desde', tipo: 'fecha', valor: (s) => fechaHora(s.desde) },
+    ],
+    filas: limitadas,
+  });
+}
+
+/* =========================================================================
+   Vista
+   ========================================================================= */
+
+/** Pinta una sección con su resultado: datos, o el fallo de ESA fuente. */
+function pintarSeccion(seccion, resultado, pintar, { informe }) {
+  if (resultado.status === 'fulfilled') {
+    seccion.sello.dataset.estado = 'datos';
+    const contenido = pintar(resultado.value);
+    vaciar(seccion.zona).append(...(Array.isArray(contenido) ? contenido : [contenido]));
+    return true;
+  }
+  const error = resultado.reason;
+  const sinPermiso = error instanceof ErrorDeMetricas && error.esFaltaDePermiso();
+  seccion.sello.dataset.estado = sinPermiso ? 'sin-permiso' : 'error';
+  pintarEstado(
+    seccion.zona,
+    estadoDeError({
+      titulo: sinPermiso ? error.avisoDePermiso.titulo : `No pudimos cargar ${informe}`,
+      detalle: sinPermiso
+        ? error.avisoDePermiso.detalle
+        : 'El servicio de métricas no respondió. Se volverá a intentar en la próxima actualización.',
     }),
   );
-  return thead;
-}
-
-/** Etiquetas legibles de cada tipo. El backend manda el identificador. */
-const NOMBRES_DE_TIPO = {
-  lectura: 'Lecturas · listados',
-  escritura: 'Escrituras · pujas',
-  otra: 'Otras',
-};
-
-/**
- * @param {string} tipo
- * @returns {string}
- */
-function nombreDeTipo(tipo) {
-  return NOMBRES_DE_TIPO[tipo] ?? tipo;
+  return false;
 }
 
 /**
- * Pinta el estado de carga.
- * @param {HTMLElement} contenedor
+ * Monta la página sobre sus zonas: `encabezado`, `indicadores` y `paneles`.
+ *
+ * @param {ParentNode} raiz
+ * @param {{fetchImpl?: Function, descargar?: (nombre: string, contenido: string, tipo: string) => void,
+ *          actualizarSola?: boolean}} [opciones]
  */
-export function pintarCargando(contenedor) {
-  contenedor.replaceChildren();
-  const estado = document.createElement('div');
-  estado.className = 'estado-vista estado-vista--cargando';
-  estado.setAttribute('role', 'status');
-  estado.setAttribute('aria-live', 'polite');
-  estado.dataset.estado = 'cargando';
-
-  const titulo = document.createElement('p');
-  titulo.className = 'estado-vista__titulo';
-  titulo.textContent = 'Cargando el informe de latencia…';
-  estado.append(titulo);
-
-  for (let i = 0; i < 3; i++) {
-    const hueso = document.createElement('div');
-    hueso.className = i === 0 ? 'esqueleto esqueleto--largo' : 'esqueleto';
-    estado.append(hueso);
-  }
-
-  contenedor.append(estado);
-}
-
-/**
- * Pinta un fallo de la vista entera, con reintentar (MAPEO-ERRORES §5.1).
- * @param {HTMLElement} contenedor
- * @param {ErrorDeMetricas|Error} error
- * @param {() => void} alReintentar
- */
-export function pintarError(contenedor, error, alReintentar) {
-  contenedor.replaceChildren();
-
-  const esDecisionPendiente = error instanceof ErrorDeMetricas && error.esPercentilNoAcordado();
-
-  const estado = document.createElement('div');
-  estado.className = 'estado-vista';
-  estado.setAttribute('role', 'alert');
-  estado.dataset.estado = esDecisionPendiente ? 'sin-percentil' : 'error';
-
-  const titulo = document.createElement('p');
-  titulo.className = 'estado-vista__titulo';
-
-  const cuerpo = document.createElement('p');
-
-  if (esDecisionPendiente) {
-    // No es un fallo: es una decision de negocio pendiente. Pintarlo en rojo
-    // con "reintentar" mandaria a alguien a pulsar un boton que no arregla
-    // nada. Lo que hace falta es la aprobacion del Product Owner.
-    titulo.textContent = 'Falta acordar el percentil de evaluacion';
-    // `!== null` y no `!= null`: ErrorDeMetricas normaliza el campo ausente a
-    // null en su constructor, asi que nunca llega undefined y la comparacion
-    // estricta cubre exactamente los mismos casos.
-    cuerpo.textContent =
-      error.muestrasAcumuladas !== null
-        ? `La medicion sigue activa: ${error.muestrasAcumuladas} muestras acumuladas. ` +
-          'El informe se publica en cuanto el Product Owner apruebe p95 o p99.'
-        : 'La medicion sigue activa. El informe se publica en cuanto se apruebe el percentil.';
-    estado.append(titulo, cuerpo);
-    if (error.criterio) {
-      const criterio = document.createElement('p');
-      criterio.className = 'estado-vista__criterio';
-      criterio.textContent = `Criterio pendiente: ${error.criterio}`;
-      estado.append(criterio);
-    }
-  } else if (error instanceof ErrorDeMetricas && error.esFaltaDePermiso()) {
-    // #527: la observabilidad es de administracion. No es un fallo del
-    // servicio y no se ofrece reintentar: reintentar no cambia el rol.
-    estado.dataset.estado = 'sin-permiso';
-    const { titulo: t, detalle } = error.avisoDePermiso;
-    titulo.textContent = t;
-    cuerpo.textContent = detalle;
-    estado.append(titulo, cuerpo);
-  } else {
-    titulo.textContent = 'No se pudo cargar el informe de latencia';
-    cuerpo.textContent = textoDeError(error, 'Las métricas no respondieron. Vuelve a intentarlo.');
-    const boton = document.createElement('button');
-    boton.type = 'button';
-    boton.className = 'boton boton--secundario';
-    boton.dataset.accion = 'reintentar';
-    boton.textContent = 'Reintentar';
-    boton.addEventListener('click', () => {
-      if (typeof alReintentar === 'function') {
-        alReintentar();
-      }
+export function montarPanelMetricas(raiz, { fetchImpl, descargar, actualizarSola = true } = {}) {
+  const zonaEncabezado = raiz.querySelector('[data-zona="encabezado"]');
+  const zonaIndicadores = raiz.querySelector('[data-zona="indicadores"]');
+  const zonaPaneles = raiz.querySelector('[data-zona="paneles"]');
+  const guardar =
+    descargar ??
+    ((nombre, contenido, tipo) => {
+      const enlace = document.createElement('a');
+      enlace.href = URL.createObjectURL(new Blob([contenido], { type: tipo }));
+      enlace.download = nombre;
+      enlace.click();
+      URL.revokeObjectURL(enlace.href);
     });
-    estado.append(titulo, cuerpo, boton);
-  }
 
-  contenedor.append(estado);
-}
+  const pedir = (ruta, aceptar) => pedirMetricas(ruta, { fetch: fetchImpl, aceptar });
 
-/**
- * Construye la tabla del desglose por tipo de operacion.
- * @param {Array<{tipo: string, muestras: number, percentilMs: number, maximoMs: number}>} porTipo
- * @param {string} percentil
- * @returns {HTMLElement}
- */
-function tablaPorTipo(porTipo, percentil) {
-  const tabla = document.createElement('table');
-  tabla.className = 'tabla-metricas';
-  tabla.dataset.tabla = 'por-tipo';
+  const disponibilidad = panel({
+    id: 'disponibilidad',
+    titulo: 'Disponibilidad por servicio',
+    descripcion: 'Últimos 30 días, sin las ventanas de mantenimiento programado.',
+    ancho: 'completo',
+  });
+  const tiempos = panel({
+    id: 'tiempos',
+    titulo: 'Tiempos de respuesta por servicio',
+    ancho: 'completo',
+  });
+  const detalle = panel({
+    id: 'latencia',
+    titulo: 'Tiempo de respuesta en detalle',
+    ancho: 'completo',
+  });
+  const consultas = panel({
+    id: 'consultas',
+    titulo: 'Consultas a la base de datos',
+    ancho: 'completo',
+  });
+  const degradacion = panel({
+    id: 'degradacion',
+    titulo: 'Funciones limitadas',
+    ancho: 'completo',
+  });
 
-  const encabezado = cabeceraDeTabla(['Tipo de operación', percentil, 'Máximo', 'Muestras']);
+  const descarga = h('button', {
+    clase: 'boton boton--secundario',
+    texto: 'Descargar informe',
+    atributos: { type: 'button' },
+    datos: { accion: 'descargar-informe' },
+  });
+  descarga.addEventListener('click', async () => {
+    try {
+      guardar(
+        'informe-de-tiempos.txt',
+        await pedir('/latencia/informe/texto', 'text/plain'),
+        'text/plain',
+      );
+    } catch {
+      descarga.textContent = 'No se pudo descargar. Vuelve a intentarlo';
+    }
+  });
 
-  const cuerpo = document.createElement('tbody');
-  for (const fila of porTipo) {
-    const tr = document.createElement('tr');
-    tr.dataset.tipo = fila.tipo;
+  async function cargar() {
+    const [estado, informe, tablero, latencia, deConsultas, deDegradacion] =
+      await Promise.allSettled([
+        pedir(FUENTES.estado),
+        pedir(FUENTES.disponibilidad),
+        pedir(FUENTES.tecnicas),
+        pedir(FUENTES.latencia),
+        pedir(FUENTES.consultas),
+        pedir(FUENTES.degradacion),
+      ]);
+    const valor = (resultado) => (resultado.status === 'fulfilled' ? resultado.value : null);
 
-    const th = document.createElement('th');
-    th.scope = 'row';
-    const distintivo = document.createElement('span');
-    distintivo.className = 'distintivo';
-    distintivo.dataset.tipoOperacion = fila.tipo;
-    distintivo.textContent = nombreDeTipo(fila.tipo);
-    th.append(distintivo);
-
-    tr.append(
-      th,
-      celda(`${fila.percentilMs} ms`),
-      celda(`${fila.maximoMs} ms`),
-      celda(String(fila.muestras)),
+    zonaIndicadores?.replaceChildren(
+      rejillaDeIndicadores(
+        cifrasDeMetricas({
+          disponibilidad: valor(informe),
+          degradacion: valor(deDegradacion),
+        }).map((cifra) => tarjetaDeIndicador(cifra)),
+        { zona: 'cifras-de-metricas' },
+      ),
     );
-    cuerpo.append(tr);
+    const bien = [
+      pintarSeccion(
+        disponibilidad,
+        informe,
+        (datos) => tablaDeDisponibilidad(datos, valor(estado)),
+        { informe: 'la disponibilidad' },
+      ),
+      pintarSeccion(
+        tiempos,
+        tablero,
+        (datos) => [
+          h('p', {
+            clase: 't-meta',
+            datos: { zona: 'medicion' },
+            texto: `Medido el ${fechaHora(datos.generadoEn)}${
+              typeof datos?.umbrales?.latenciaMs === 'number'
+                ? ` · Objetivo de tiempo de respuesta: ${milisegundos(datos.umbrales.latenciaMs)}`
+                : ''
+            }`,
+          }),
+          tablaDeTiempos(datos),
+        ],
+        { informe: 'los tiempos de respuesta' },
+      ),
+      pintarSeccion(detalle, latencia, detalleDeLatencia, { informe: 'el detalle de tiempos' }),
+      pintarSeccion(consultas, deConsultas, cifrasDeConsultas, { informe: 'las consultas' }),
+      pintarSeccion(degradacion, deDegradacion, listaDeDegradacion, {
+        informe: 'las funciones limitadas',
+      }),
+    ];
+    return bien.some(Boolean);
   }
 
-  tabla.append(encabezado, cuerpo);
-  return tabla;
-}
+  const actualizacion = actualizacionPeriodica({
+    nombre: 'las métricas',
+    cadaMs: PERIODO_DE_METRICAS_MS,
+    automatica: actualizarSola,
+    cargar,
+  });
 
-/**
- * @param {string} texto
- * @returns {HTMLElement}
- */
-function celda(texto) {
-  const td = document.createElement('td');
-  td.textContent = texto;
-  return td;
-}
-
-/**
- * Construye la tabla de operaciones mas lentas.
- * @param {Array<{metodo: string, ruta: string, muestras: number, percentilMs: number}>} operaciones
- * @param {string} percentil
- * @returns {HTMLElement}
- */
-function tablaOperaciones(operaciones, percentil) {
-  const tabla = document.createElement('table');
-  tabla.className = 'tabla-metricas';
-  tabla.dataset.tabla = 'operaciones';
-
-  const encabezado = cabeceraDeTabla(['Operacion', percentil, 'Muestras']);
-
-  const cuerpo = document.createElement('tbody');
-  for (const operacion of operaciones) {
-    const tr = document.createElement('tr');
-    const th = document.createElement('th');
-    th.scope = 'row';
-    th.textContent = `${operacion.metodo} ${operacion.ruta}`;
-    tr.append(th, celda(`${operacion.percentilMs} ms`), celda(String(operacion.muestras)));
-    cuerpo.append(tr);
-  }
-
-  tabla.append(encabezado, cuerpo);
-  return tabla;
-}
-
-/**
- * Pinta el informe.
- * @param {HTMLElement} contenedor
- * @param {object} informe
- */
-export function pintarInforme(contenedor, informe) {
-  contenedor.replaceChildren();
-
-  const tarjeta = document.createElement('section');
-  tarjeta.className = 'tarjeta';
-  tarjeta.dataset.estado = informe.sinDatos ? 'sin-datos' : 'con-datos';
-
-  const titulo = document.createElement('h2');
-  titulo.textContent = `Latencia de ${informe.servicio}`;
-  tarjeta.append(titulo);
-
-  if (informe.sinDatos) {
-    // No medir no es lo mismo que cumplir. Si esto se pintara como un verde
-    // con ceros, un servicio que nunca se instrumento pareceria el mas rapido.
-    const vacio = document.createElement('p');
-    vacio.className = 'estado-vista__titulo';
-    vacio.textContent =
-      'Sin muestras todavía: el servicio no ha atendido peticiones desde el último arranque. ' +
-      'No se puede afirmar que cumpla, ni que incumpla.';
-    tarjeta.append(vacio);
-    contenedor.append(tarjeta);
-    return;
-  }
-
-  const resumen = document.createElement('p');
-  resumen.dataset.campo = 'resumen';
-  resumen.textContent =
-    `${informe.percentil}: ${informe.percentilMs} ms · ` +
-    `máximo ${informe.maximoMs} ms · ${informe.muestras} muestras`;
-
-  const veredicto = document.createElement('p');
-  veredicto.className = informe.cumple ? 'aviso aviso--exito' : 'aviso aviso--error';
-  veredicto.dataset.campo = 'veredicto';
-  veredicto.textContent = informe.cumple
-    ? `Dentro del objetivo configurado (${informe.objetivoMs} ms)`
-    : `Por encima del objetivo configurado (${informe.objetivoMs} ms)`;
-
-  // El objetivo se nombra "configurado" y no "umbral de HU-REN-002" a
-  // proposito: esa historia no define ningun numero propio. El que se muestra
-  // es el de RNF-REN-001, que es el unico que existe en los requisitos.
-  //
-  // UX-R3.1 — esa explicacion se queda AQUI. Antes se pintaba en la pantalla:
-  // quien opera el Nexo leia dos identificadores de requisito y ninguna
-  // respuesta a lo unico que se pregunta, que es de donde sale el numero.
-  const referencia = document.createElement('p');
-  referencia.className = 'campo__pista';
-  referencia.dataset.campo = 'referencia-objetivo';
-  referencia.textContent =
-    `Objetivo de referencia: ${informe.objetivoMs} ms. Lo fija la configuración del ` +
-    'servicio, no esta pantalla.';
-
-  tarjeta.append(resumen, veredicto, referencia);
-
-  if (Array.isArray(informe.porTipo) && informe.porTipo.length > 0) {
-    const subtitulo = document.createElement('h3');
-    subtitulo.textContent = 'Lecturas y escrituras por separado';
-    tarjeta.append(subtitulo, tablaPorTipo(informe.porTipo, informe.percentil));
-  }
-
-  if (Array.isArray(informe.operacionesMasLentas) && informe.operacionesMasLentas.length > 0) {
-    const subtitulo = document.createElement('h3');
-    subtitulo.textContent = 'Operaciones más lentas';
-    tarjeta.append(subtitulo, tablaOperaciones(informe.operacionesMasLentas, informe.percentil));
-  }
-
-  contenedor.append(tarjeta);
-}
-
-/**
- * El informe en texto plano, para pegarlo en el acta.
- *
- * Se arma con los mismos datos que ya se pintaron: no se vuelve a pedir nada
- * al servidor, asi que lo exportado es exactamente lo que la persona esta
- * viendo en pantalla.
- *
- * @param {object} informe
- * @returns {string}
- */
-export function informeComoTexto(informe) {
-  const lineas = [
-    `Informe de latencia — ${informe.servicio}`,
-    `Objetivo de referencia: ${informe.objetivoMs} ms`,
-    `Muestras: ${informe.muestras}`,
-  ];
-
-  if (informe.sinDatos) {
-    lineas.push('SIN DATOS: no se puede afirmar que cumpla ni que incumpla.');
-    return lineas.join('\n');
-  }
-
-  lineas.push(
-    `${informe.percentil}: ${informe.percentilMs} ms`,
-    `Máximo: ${informe.maximoMs} ms`,
-    `Resultado: ${informe.cumple ? 'CUMPLE' : 'NO CUMPLE'}`,
-    '',
-    'Por tipo de operación:',
+  zonaEncabezado?.replaceChildren(
+    encabezadoDePagina({
+      titulo: 'Métricas de plataforma',
+      descripcion: 'Disponibilidad y tiempos de respuesta de cada servicio, en vivo.',
+      acciones: [actualizacion.elemento, descarga],
+    }),
+  );
+  pintarEstado(zonaIndicadores, estadoDeCarga({ filas: 1, etiqueta: 'Cargando las métricas…' }));
+  zonaPaneles?.replaceChildren(
+    disponibilidad.elemento,
+    tiempos.elemento,
+    detalle.elemento,
+    consultas.elemento,
+    degradacion.elemento,
   );
 
-  for (const fila of informe.porTipo ?? []) {
-    lineas.push(
-      `  ${fila.tipo}: ${fila.percentilMs} ms (máximo ${fila.maximoMs} ms, ${fila.muestras} muestras)`,
-    );
-  }
-
-  return lineas.join('\n');
-}
-
-/**
- * Arranca el panel: pinta cargando, pide el informe y pinta el resultado.
- *
- * @param {HTMLElement} contenedor
- * @param {{obtener?: typeof obtenerInforme}} [opciones]
- * @returns {Promise<void>}
- */
-export async function iniciarPanel(contenedor, opciones = {}) {
-  if (!contenedor) {
-    throw new Error('panel-métricas: hace falta un contenedor donde pintar.');
-  }
-  const obtener = opciones.obtener ?? obtenerInforme;
-
-  pintarCargando(contenedor);
-  try {
-    const informe = await obtener();
-    pintarInforme(contenedor, informe);
-    contenedor.dataset.ultimoInforme = informeComoTexto(informe);
-  } catch (error) {
-    pintarError(contenedor, error, () => iniciarPanel(contenedor, opciones));
-  }
+  actualizacion.actualizar();
+  return { cargar, actualizacion };
 }

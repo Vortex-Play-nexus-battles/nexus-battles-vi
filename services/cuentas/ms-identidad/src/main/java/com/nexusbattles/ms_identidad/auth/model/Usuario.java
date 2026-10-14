@@ -102,6 +102,15 @@ public class Usuario {
     @Column
     private LocalDateTime bloqueadoHasta;
 
+    /**
+     * SA-20 (D-45, señal 1): cuando empezo el ultimo bloqueo por intentos
+     * fallidos. A diferencia de {@code bloqueadoHasta}, no se borra al volver a
+     * entrar: es lo que deja ver las cuentas bloqueadas en un periodo. Nulo =
+     * nunca se ha bloqueado desde que existe el campo (V9).
+     */
+    @Column(name = "ultimo_bloqueo_en")
+    private LocalDateTime ultimoBloqueoEn;
+
     @Column
     private LocalDateTime suspendidoHasta;
 
@@ -139,4 +148,17 @@ public class Usuario {
 
     @Column
     private LocalDateTime ultimoAcceso;
+
+    /**
+     * SA-3 (§7.3.4, filtro por historial de sanciones): el resumen que fija
+     * moderacion-sanciones, dueño de las sanciones, por la ruta interna. Cuantas
+     * se le han emitido a la cuenta (las revertidas tambien: es historial) y
+     * cuando fue la ultima. El directorio filtra y pagina con esto sin llamar
+     * a otro servicio por cada fila.
+     */
+    @Column(name = "sanciones_registradas", nullable = false)
+    private int sancionesRegistradas = 0;
+
+    @Column(name = "ultima_sancion_en")
+    private LocalDateTime ultimaSancionEn;
 }

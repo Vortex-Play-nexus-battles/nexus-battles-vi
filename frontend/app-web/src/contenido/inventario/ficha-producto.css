@@ -327,3 +327,38 @@
 .ficha:has(.ficha__complementos) {
   width: min(600px, 100%);
 }
+
+/* Revisión final del módulo (13-oct) — con la ficha pintada, el botón de
+   cerrar vive DENTRO del diálogo: se queda en su esquina mientras la ficha se
+   desplaza (pegajoso), en vez de quedarse en la esquina de la pantalla. */
+.ficha--con-cerrar .ficha__cerrar {
+  position: sticky;
+  top: 0;
+  float: right;
+  margin: -8px -8px 8px 8px;
+}
+
+/* «En tu inventario»: lo que es del jugador, separado de lo que dice el
+   catálogo. */
+.ficha__inventario {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--fondo);
+}
+
+.ficha__subtitulo {
+  margin: 0;
+  font-family: var(--fuente-titulo);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.ficha__nombre-propio {
+  margin: 0;
+  font-size: 0.9rem;
+}

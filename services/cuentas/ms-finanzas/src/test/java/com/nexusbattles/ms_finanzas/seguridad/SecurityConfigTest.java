@@ -107,6 +107,10 @@ class SecurityConfigTest {
         return "Bearer " + emisor.tokenDeJugador("Ana", UID_ANA);
     }
 
+    private String comoRol(String rol) {
+        return "Bearer " + emisor.tokenDeUsuario("ada", UUID.fromString("99999999-9999-9999-9999-999999999999"), rol);
+    }
+
     private String comoSalasPartidas() {
         return "Bearer " + emisor.tokenDeServicio("salas-partidas");
     }
@@ -273,6 +277,27 @@ class SecurityConfigTest {
         }
 
         @Test
+        void unModeradorNoMiraElSaldoNiLosMovimientosDeOtro() throws Exception {
+            // creditos.yaml 1.5.0: la ficha administrativa es de Administrador y
+            // Super Administrador. Moderar comentarios no da acceso al dinero.
+            mvc.perform(get("/creditos/" + UID_OTRO + "/saldo").header(HttpHeaders.AUTHORIZATION, comoRol("MODERADOR")))
+                    .andExpect(status().isForbidden());
+            mvc.perform(get("/creditos/" + UID_OTRO + "/movimientos")
+                            .header(HttpHeaders.AUTHORIZATION, comoRol("MODERADOR")))
+                    .andExpect(status().isForbidden());
+            verifyNoInteractions(creditoService);
+        }
+
+        @Test
+        void laAdministracionNoMueveSaldo() throws Exception {
+            // Leer no es mover: reservar sigue siendo solo de servicios.
+            mvc.perform(post("/creditos/reservar").header(HttpHeaders.AUTHORIZATION, comoRol("SUPER_ADMINISTRADOR"))
+                            .contentType(MediaType.APPLICATION_JSON).content(reservaDe(UID_OTRO)))
+                    .andExpect(status().isForbidden());
+            verifyNoInteractions(creditoService);
+        }
+
+        @Test
         void unServicioNoTieneHistorialNiCofresPropios() throws Exception {
             // El principal de un token de servicio es su client_id, no un uid:
             // dejarlo pasar consultaria el historial de un usuario inexistente
@@ -314,6 +339,61 @@ class SecurityConfigTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.content[0].concepto").value("apuesta-sala"))
                     .andExpect(jsonPath("$.content[0].signo").value("NEUTRO"));
+        }
+
+        @Test
+        void laAdministracionLeeElSaldoYLosMovimientosDeUnaCuenta() throws Exception {
+            // creditos.yaml 1.5.0 (§7.3.4): la ficha administrativa del usuario
+            // muestra su saldo y su historial de transacciones.
+            when(creditoService.obtenerSaldo(UID_OTRO.toString())).thenReturn(new SaldoResponse(
+                    UID_OTRO.toString(), new BigDecimal("900"), new BigDecimal("0"), new BigDecimal("900")));
+            when(creditoService.movimientos(eq(UID_OTRO.toString()), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of()));
+
+            for (String rol : List.of("ADMINISTRADOR", "SUPER_ADMINISTRADOR")) {
+                mvc.perform(get("/creditos/" + UID_OTRO + "/saldo").header(HttpHeaders.AUTHORIZATION, comoRol(rol)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.saldoDisponible").value(900));
+                mvc.perform(get("/creditos/" + UID_OTRO + "/movimientos")
+                                .header(HttpHeaders.AUTHORIZATION, comoRol(rol)))
+                        .andExpect(status().isOk());
+            }
+        }
+
+        @Test
+        @DisplayName("SA-15 (transacciones 1.1.0): la administracion lee los pagos en moneda real de una cuenta")
+        void laAdministracionLeeLosPagosDeUnaCuenta() throws Exception {
+            when(consultaService.listarPorUsuario(eq(UID_OTRO.toString()), any(Pageable.class)))
+                    .thenReturn(new PageImpl<>(List.of(new ResumenTransaccion(
+                            UUID.fromString("5f0c2b6e-1a2b-4c3d-8e9f-0a1b2c3d4e5f"), "orden-1",
+                            new BigDecimal("25000.00"), "COP", "Compra en la tienda: Hoja de diamante",
+                            ResultadoTransaccion.APROBADO, null, Instant.parse("2026-10-10T15:00:00Z")))));
+
+            for (String rol : List.of("ADMINISTRADOR", "SUPER_ADMINISTRADOR")) {
+                mvc.perform(get("/transacciones/usuarios/" + UID_OTRO).header(HttpHeaders.AUTHORIZATION, comoRol(rol)))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content[0].concepto").value("Compra en la tienda: Hoja de diamante"))
+                        .andExpect(jsonPath("$.content[0].resultado").value("APROBADO"))
+                        // La referencia de la pasarela no sale (ResumenTransaccion).
+                        .andExpect(jsonPath("$.content[0].pasarelaRefExterna").doesNotExist());
+            }
+        }
+
+        @Test
+        @DisplayName("SA-15: los pagos de una cuenta no los ve ni ella por esta ruta, ni un moderador, ni un servicio, ni nadie sin token")
+        void losPagosDeUnaCuentaSoloLosVeLaAdministracion() throws Exception {
+            mvc.perform(get("/transacciones/usuarios/" + UID_OTRO)).andExpect(status().isUnauthorized());
+            mvc.perform(get("/transacciones/usuarios/" + UID_OTRO).header(HttpHeaders.AUTHORIZATION, comoAna()))
+                    .andExpect(status().isForbidden());
+            // Ni la propia jugadora: lo suyo esta en /mi-historial.
+            mvc.perform(get("/transacciones/usuarios/" + UID_ANA).header(HttpHeaders.AUTHORIZATION, comoAna()))
+                    .andExpect(status().isForbidden());
+            mvc.perform(get("/transacciones/usuarios/" + UID_OTRO).header(HttpHeaders.AUTHORIZATION, comoRol("MODERADOR")))
+                    .andExpect(status().isForbidden());
+            mvc.perform(get("/transacciones/usuarios/" + UID_OTRO)
+                            .header(HttpHeaders.AUTHORIZATION, comoSalasPartidas()))
+                    .andExpect(status().isForbidden());
+            verifyNoInteractions(consultaService);
         }
 
         @Test

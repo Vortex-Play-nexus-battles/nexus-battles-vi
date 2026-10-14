@@ -105,9 +105,16 @@ comprobar GET  /api/v1/auth/segundo-factor \
                                            "identidad GET /api/v1/auth/segundo-factor"
 comprobar POST /api/v1/auth/login/segundo-factor \
                                            "identidad POST /api/v1/auth/login/segundo-factor"
+# SA-4 — la apelacion sin sesion de una cuenta suspendida o baneada, tambien
+# de ms-identidad por /auth.
+comprobar POST /api/v1/auth/apelacion/consulta \
+                                           "identidad POST /api/v1/auth/apelacion/consulta"
+comprobar POST /api/v1/auth/apelacion      "identidad POST /api/v1/auth/apelacion"
 comprobar GET  /api/v1/perfiles/yo         "identidad GET /api/v1/perfiles/yo"
 comprobar GET  /api/v1/rbac/roles          "identidad GET /api/v1/rbac/roles"
 comprobar GET  /api/v1/admin/usuarios      "identidad GET /api/v1/admin/usuarios"
+# SA-4 (ms-identidad-admin 1.9.0): titulares para la consola de moderacion.
+comprobar GET  /api/v1/admin/titulares     "identidad GET /api/v1/admin/titulares"
 # Auditoria de DEV del 30-sep: la foto de perfil la sirve ms-identidad fuera
 # de /api (devuelve `/avatares-subidos/<archivo>`) y por el borde solo se lee.
 comprobar GET  /avatares-subidos/a.png     "identidad GET /avatares-subidos/a.png"
@@ -138,6 +145,11 @@ enConfiguracion "ws-subastas tiene su location de prefijo (^~), con Upgrade como
 comprobar GET  /api/v1/chat/historial      "chatbot GET /api/v1/chat/historial"
 comprobar POST /api/v1/chat/mensajes       "chatbot POST /api/v1/chat/mensajes"
 comprobar GET  /api/v1/chatbot/admin/analiticas "chatbot GET /api/v1/chatbot/admin/analiticas"
+# 7.4.9 — el canal STOMP del asistente (chatbot.yaml 1.0.0). Sin location caia
+# en el 404 generico de /api/: la regex del chatbot exige /chat o /chatbot.
+comprobar GET  /api/v1/ws-chatbot          "chatbot GET /api/v1/ws-chatbot"
+enConfiguracion "ws-chatbot tiene su location de prefijo (^~), con Upgrade como /ws" \
+    'location \^~ /api/v1/ws-chatbot'
 
 echo
 echo "Carrito — ms-ecommerce vive bajo /ecommerce, el navegador no se entera"
@@ -379,8 +391,39 @@ for par in \
     inventario:contenido/inventario/inventario.html \
     jugar:plataforma/salas-partidas/batallas.html \
     torneos:plataforma/torneos/torneos.html \
+    ayuda:cuentas/ayuda.html \
     verificar:cuentas/verificar-cuenta.html \
-    restablecer:cuentas/restablecer-confirmar.html; do
+    restablecer:cuentas/restablecer-confirmar.html \
+    recuperar:cuentas/restablecer-solicitar.html \
+    misiones:contenido/misiones/misiones.html \
+    tienda:cuentas/tienda.html \
+    cofres:cuentas/mis-cofres.html \
+    cuenta/movimientos:cuentas/historial-transacciones.html \
+    cuenta/sanciones:plataforma/moderacion-sanciones/mis-sanciones.html \
+    notificaciones:plataforma/notificaciones/notificaciones.html \
+    chat:plataforma/salas-partidas/chat.html \
+    comentar:plataforma/comentarios/publicar-comentario.html \
+    jugar/nueva-sala:plataforma/salas-partidas/crear-sala.html \
+    jugar/sala:plataforma/salas-partidas/sala-batalla.html \
+    jugar/heroe:plataforma/salas-partidas/validacion-heroe.html \
+    subastas/publicar:cuentas/publicar-subasta.html \
+    subastas/pujar:cuentas/pujas.html \
+    consola:plataforma/consola/consola.html \
+    consola/control:plataforma/consola/control-integral.html \
+    consola/usuarios:cuentas/gestion-usuarios.html \
+    consola/usuarios/ficha:plataforma/moderacion-sanciones/ficha-usuario.html \
+    consola/usuarios/nueva-cuenta:cuentas/crear-cuenta-admin.html \
+    consola/productos:contenido/productos/panel-catalogo.html \
+    consola/productos/nuevo:contenido/productos/productos.html \
+    consola/productos/banners:contenido/productos/banners.html \
+    consola/comentarios:plataforma/comentarios/moderar-comentarios.html \
+    consola/sanciones:plataforma/moderacion-sanciones/sanciones-admin.html \
+    consola/lista-negra:plataforma/moderacion-sanciones/lista-negra-admin.html \
+    consola/parametros:plataforma/admin-parametros/parametros-admin.html \
+    consola/metricas:plataforma/metricas-plataforma/panel-metricas.html \
+    consola/tecnico:plataforma/metricas-plataforma/tablero-tecnico.html \
+    consola/asistente:cuentas/panel-chatbot.html \
+    consola/auditoria:cuentas/auditoria.html; do
     limpia="/${par%%:*}"
     fichero="${par#*:}"
     carpeta="/frontend/app-web/src/${fichero%/*}/"
@@ -397,13 +440,19 @@ redirige /jugar/                                      "/jugar"
 redirige "/frontend/app-web/src/cuentas/verificar-cuenta.html?motivo=registro" \
                                                       "/verificar?motivo=registro"
 redirige /restablecer/                                "/restablecer"
-# Una vista SIN direccion limpia se sigue sirviendo donde estaba, con la marca.
-sirve /frontend/app-web/src/plataforma/salas-partidas/crear-sala.html \
-    "marca de rutas limpias" '<meta name="nexus-rutas" content="limpias">'
-# Pedir el codigo de recuperacion no tiene direccion limpia: /restablecer es
-# la del canje, y la regex de /restablecer no se la puede llevar.
-sirve /frontend/app-web/src/cuentas/restablecer-solicitar.html \
-    "marca de rutas limpias" '<meta name="nexus-rutas" content="limpias">'
+# SA-7 (punto critico externo del informe de revision) — ya no queda vista sin
+# direccion limpia. Las de la sala y la consola llevan su consulta con ellas:
+# el enlace de una partida o de una ficha no se pierde al redirigir.
+redirige "/frontend/app-web/src/plataforma/salas-partidas/sala-batalla.html?sala=s1&partida=p1" \
+                                                      "/jugar/sala?sala=s1&partida=p1"
+redirige "/frontend/app-web/src/plataforma/moderacion-sanciones/ficha-usuario.html?usuario=7" \
+                                                      "/consola/usuarios/ficha?usuario=7"
+redirige /consola/usuarios/                           "/consola/usuarios"
+redirige /jugar/nueva-sala/                           "/jugar/nueva-sala"
+# 6-oct — pedir el codigo de recuperacion tiene la suya, /recuperar; la del
+# canje sigue siendo /restablecer y ninguna de las dos se lleva a la otra.
+redirige /recuperar/                                  "/recuperar"
+redirige /misiones/                                   "/misiones"
 
 echo
 echo "Cabeceras de seguridad y cache (R17)"
@@ -413,8 +462,8 @@ cabecera /login                   Cache-Control           '^no-store$'
 cabecera /login                   X-Content-Type-Options  '^nosniff$'
 cabecera /login                   X-Frame-Options         '^DENY$'
 cabecera /login                   Referrer-Policy         'strict-origin-when-cross-origin'
-cabecera /frontend/app-web/src/plataforma/salas-partidas/crear-sala.html \
-                                  Content-Security-Policy "nonce-[0-9a-f]{32}"
+cabecera /jugar/nueva-sala         Content-Security-Policy "nonce-[0-9a-f]{32}"
+cabecera /consola/usuarios        Cache-Control           '^no-store$'
 cabecera /frontend/app-web/src/cuentas/login.js \
                                   Cache-Control           '^no-cache$'
 cabecera /shared/ui-kit/css/tokens.css \
@@ -511,6 +560,16 @@ else
     printf '  FALLA el cliente de internet deberia llegar desde 203.0.113.0/24 y llega como "%s"\n' "$origenPublico"
     fallos=$((fallos + 1))
 fi
+# 7.4.9 — el canal del asistente declara sus propios proxy_set_header y tiene
+# que seguir mandando la direccion del cliente: con ella el servicio limita
+# por origen cada mensaje del canal (los frames no pasan por limit_req).
+origenDelCanal="$(origenVisto "$(desdeFuera -o /dev/null -D - "$BORDE_PUBLICO/api/v1/ws-chatbot")")"
+if printf '%s' "$origenDelCanal" | grep -Eq '^203\.0\.113\.'; then
+    printf '  ok    el canal del asistente recibe la direccion del cliente (%s)\n' "$origenDelCanal"
+else
+    printf '  FALLA el canal del asistente deberia recibir 203.0.113.x y recibe "%s"\n' "$origenDelCanal"
+    fallos=$((fallos + 1))
+fi
 # El reparto es el mismo para todo el mundo.
 comprobarFuera GET  /api/v1/salas          "salas GET /api/v1/salas"
 comprobarFuera POST /api/v1/auth/login     "identidad POST /api/v1/auth/login"
@@ -601,6 +660,7 @@ libre() {
 libre     GET  /api/v1/products/p-1/comments                  40
 libre     GET  "/api/v1/vitrina?page=0"                       40
 libre     POST /api/v1/salas                                  30
+libre     GET  /api/v1/chat/historial                         30
 # acceso: la primera rafaga llena el cupo; las demas rutas de la clase
 # comparten cupo (misma direccion, misma zona) y tienen que dar 429 igual.
 limitada  POST /api/v1/auth/login                             30 20 2
@@ -611,6 +671,9 @@ limitada  POST /api/v1/auth/restablecer/solicitar             25  0 2
 # login no lleva `$`): probar codigos de 6 cifras desde internet tiene el
 # mismo cupo que probar contrasenas, ademas del bloqueo de la cuenta.
 limitada  POST /api/v1/auth/login/segundo-factor              25  0 2
+# SA-4 — la apelacion sin sesion se abre con el codigo del login: mismo cupo.
+limitada  POST /api/v1/auth/apelacion/consulta                25  0 2
+limitada  POST /api/v1/auth/apelacion                         25  0 2
 # escritura: zona propia, asi que el login agotado no la toca.
 limitada  POST /api/v1/products/p-1/comments                  80 60 1
 limitada  POST /api/v1/products/p-1/rating                    25  0 1
@@ -620,6 +683,11 @@ limitada  POST /api/v1/subastas/s-1/pujas                     25  0 1
 limitada  POST /api/v1/mensajes-directos/conversaciones/u-1/mensajes 25 0 1
 # La compra (B5) se cuenta sobre la ruta ya reescrita, /ecommerce/api/v1/...
 limitada  POST /api/v1/checkout                               25  0 1
+# El chatbot (ms-chatbot.yaml 1.4.0): mensajes, sesiones, tickets y calificaciones.
+limitada  POST /api/v1/chat/mensajes                          25  0 1
+limitada  POST /api/v1/chat/sesiones                          25  0 1
+limitada  POST /api/v1/chat/tickets                           25  0 1
+limitada  POST /api/v1/chat/mensajes/m-1/calificacion         25  0 1
 
 # Desde el anfitrion (origen privado, como el banco E2E) el login no se
 # limita: 40 seguidas, las 40 llegan a identidad.

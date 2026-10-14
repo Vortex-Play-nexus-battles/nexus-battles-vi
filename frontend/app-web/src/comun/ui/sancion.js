@@ -23,6 +23,32 @@ export const NOMBRE_DE_SANCION = Object.freeze({
   BANEO: 'Baneo definitivo',
 });
 
+/**
+ * Las ocho causales de §7.3.2, en su orden y con el texto del documento
+ * oficial (enumerado `Causal` de `moderacion-sanciones-admin.yaml` 1.4.0).
+ */
+export const NOMBRE_DE_CAUSAL = Object.freeze({
+  LENGUAJE_OFENSIVO: 'Uso de lenguaje ofensivo o abusivo en comentarios o chat',
+  ACOSO: 'Acoso a otros jugadores',
+  FRAUDE: 'Intentos de fraude o manipulación del sistema',
+  SOFTWARE_NO_AUTORIZADO: 'Uso de software no autorizado o trampas',
+  SUPLANTACION_DE_IDENTIDAD: 'Suplantación de identidad',
+  VIOLACION_DE_PRIVACIDAD: 'Violación de políticas de privacidad',
+  INCUMPLIMIENTO_DE_TERMINOS: 'Incumplimiento de términos y condiciones del servicio',
+  TERMINACION_DE_RELACION_LEGAL: 'Terminación de la relación legal entre las partes',
+});
+
+/**
+ * La causal como se lee, o `null` si la sanción no la tiene (las emitidas
+ * antes de SA-4) o llega una que esta versión no conoce.
+ *
+ * @param {string|null|undefined} causal
+ * @returns {string|null}
+ */
+export function nombreDeCausal(causal) {
+  return (causal && NOMBRE_DE_CAUSAL[causal]) || null;
+}
+
 /** Quién la emitió, dicho como se dice: el rol, no su constante. */
 const QUIEN_EMITE = Object.freeze({
   MODERADOR: 'moderación',
@@ -96,7 +122,13 @@ export function hechosDeSanciones(sanciones = [], { ahora = Date.now() } = {}) {
       // como cuando el historial eran tarjetas.
       datos: s.id ? { sancionId: String(s.id) } : null,
       titulo: `${nombre} emitida`,
-      detalle: s.politica ? `Motivo: ${s.motivo} · Política: ${s.politica}` : `Motivo: ${s.motivo}`,
+      detalle: [
+        nombreDeCausal(s.causal) ? `Causal: ${nombreDeCausal(s.causal)}` : null,
+        `Motivo: ${s.motivo}`,
+        s.politica ? `Política: ${s.politica}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · '),
       actor: s.rolEmisor ? `Por ${QUIEN_EMITE[s.rolEmisor] ?? s.rolEmisor.toLowerCase()}` : null,
       tono: TONO_DE_TIPO[s.tipo] ?? 'neutro',
     });

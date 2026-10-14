@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_chatbot.chat.motor;
 
 import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
+import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.EstadoVersion;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
@@ -26,7 +27,7 @@ class MotorRespuestasTest {
     @BeforeEach
     void configurar() {
         temaConocimientoRepository = mock(TemaConocimientoRepository.class);
-        motorRespuestas = new MotorRespuestas(temaConocimientoRepository);
+        motorRespuestas = MotoresDePrueba.sobre(temaConocimientoRepository);
 
         when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
             .thenReturn(List.of(temaRegistro(0), temaSubasta()));
@@ -40,6 +41,8 @@ class MotorRespuestasTest {
         assertThat(resultado.categoria()).isEqualTo(Categoria.CUENTA_Y_REGISTRO);
         assertThat(resultado.texto()).contains("Para crear tu cuenta");
         assertThat(resultado.temaClave()).isEqualTo("clave-registro");
+        // 1.7.0: lo respondio un tema de la base.
+        assertThat(resultado.resultado()).isEqualTo(ResultadoDeRespuesta.TEMA);
     }
 
     @Test
@@ -59,6 +62,64 @@ class MotorRespuestasTest {
         assertThat(resultado.categoria()).isEqualTo(Categoria.CUENTA_Y_REGISTRO);
     }
 
+    // Segunda auditoria del 7.4 (7.4.2): una sola palabra mal escrita basta
+    // si es la de una variante («registor» es «registro» con dos letras
+    // cambiadas de sitio). Antes sumaba 2 y la pregunta escalaba.
+    @Test
+    void generarRespuesta_unaPalabraClaveMalEscrita_bastaParaResponder() {
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("como me registor");
+
+        assertThat(resultado.requiereEscalamiento()).isFalse();
+        assertThat(resultado.temaClave()).isEqualTo("clave-registro");
+    }
+
+    // Una palabra que ya es otra palabra de la base no es un error de tecleo:
+    // «formas» no es «normas» mal escrito.
+    @Test
+    void generarRespuesta_otraPalabraDeLaBase_noSeTomaPorUnaErrata() {
+        TemaConocimiento normas = new TemaConocimiento(null, "clave-normas", Categoria.POLITICAS_Y_TERMINOS,
+            TipoRespuesta.DIRECTA, "Normas de conducta", "normas, normas de conducta", null, "Las normas.", null, 0,
+            true);
+        TemaConocimiento modos = new TemaConocimiento(null, "clave-modos", Categoria.MODALIDAD_JUEGO,
+            TipoRespuesta.DIRECTA, "Modos de juego", "modos de juego, formas de jugar", null, "Los modos.", null, 0,
+            true);
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(normas, modos));
+
+        assertThat(motorRespuestas.generarRespuesta("¿de qué formas puedo jugar contra otros?").temaClave())
+            .isEqualTo("clave-modos");
+        ResultadoMotor soloFormas = motorRespuestas.generarRespuesta("formas");
+        assertThat(soloFormas.temaClave()).isNotEqualTo("clave-normas");
+    }
+
+    // Una palabra corta mal escrita no completa una frase: «duela» no es
+    // «duelo».
+    @Test
+    void generarRespuesta_unaPalabraCortaParecida_noBastaParaResponder() {
+        TemaConocimiento duelo = new TemaConocimiento(null, "clave-duelo", Categoria.MODALIDAD_JUEGO,
+            TipoRespuesta.DIRECTA, "Duelo", "duelo", null, "Un duelo es 1 contra 1.", null, 0, true);
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(duelo));
+
+        assertThat(motorRespuestas.generarRespuesta("me duela la cabeza").requiereEscalamiento()).isTrue();
+    }
+
+    // El plural de una palabra de la base sigue siendo esa palabra.
+    @Test
+    void generarRespuesta_elPluralDeUnaPalabraDeLaBase_cuenta() {
+        TemaConocimiento recompensas = new TemaConocimiento(null, "clave-recompensas", Categoria.MODALIDAD_JUEGO,
+            TipoRespuesta.DIRECTA, "Recompensas de las misiones", "recompensa de mision, recompensa", null,
+            "Las recompensas.", null, 0, true);
+        TemaConocimiento batalla = new TemaConocimiento(null, "clave-batalla", Categoria.MECANICA_JUEGO,
+            TipoRespuesta.DIRECTA, "Recompensas de batalla", "recompensas de batalla", null, "De batalla.", null, 0,
+            true);
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(recompensas, batalla));
+
+        assertThat(motorRespuestas.generarRespuesta("que recompensas da una mision").temaClave())
+            .isEqualTo("clave-recompensas");
+    }
+
     // 1.3.4: una respuesta de un tema trae su parte enriquecida.
     @Test
     void generarRespuesta_deUnTema_traeSuEnlaceYOtrasPreguntasDeSuCategoria() {
@@ -71,7 +132,8 @@ class MotorRespuestasTest {
         ResultadoMotor resultado = motorRespuestas.generarRespuesta("olvide mi contrasena");
 
         assertThat(resultado.enriquecido().pasos()).containsExactly("Ve al inicio.", "Responde las preguntas.");
-        assertThat(resultado.enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("login");
+        assertThat(resultado.enriquecido().enlaces()).extracting(e -> e.destino())
+            .containsExactly("restablecer-solicitar");
         assertThat(resultado.enriquecido().respuestasRapidas()).containsExactly("Cómo crear una cuenta");
     }
 
@@ -82,15 +144,17 @@ class MotorRespuestasTest {
         assertThat(resultado.requiereEscalamiento()).isTrue();
         assertThat(resultado.enriquecido().ofrecerSoporteHumano()).isTrue();
         assertThat(resultado.enriquecido().respuestasRapidas()).contains("Cómo publicar en subasta");
+        assertThat(resultado.resultado()).isEqualTo(ResultadoDeRespuesta.ESCALADO);
     }
 
     // Un saludo nunca sale como "pregunta relacionada" de un escalamiento.
     @Test
     void generarRespuesta_escalada_noSugiereTemasDeCortesia() {
         TemaConocimiento saludo = new TemaConocimiento(null, "clave-saludo", Categoria.FAQ_GENERAL,
-            TipoRespuesta.DIRECTA, "Saludo", "hola, inventarioz", null, "¡Hola!", null, 0, true);
-        // "inventarioz" se parece a "inventario" (+2): el saludo queda como
-        // candidato, pero por debajo del umbral, asi que la consulta se escala.
+            TipoRespuesta.DIRECTA, "Saludo", "hola, inventarioz amigo", null, "¡Hola!", null, 0, true);
+        // "inventarioz" se parece a "inventario" (+2), pero la frase entera no
+        // esta: el saludo queda como candidato, por debajo del umbral, asi que
+        // la consulta se escala.
         when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
             .thenReturn(List.of(saludo, temaRegistro(0)));
 
@@ -116,6 +180,31 @@ class MotorRespuestasTest {
             .isEqualTo("clave-compra-subasta");
         assertThat(motorRespuestas.generarRespuesta("quiero comprar algo", VistaDelChat.INICIO).temaClave())
             .isEqualTo("clave-tienda");
+    }
+
+    // 1.6.0 (7.4.10): un tema es de la vista tambien por una intencion
+    // adicional. En «Subastas», el tema de creditos que atiende ademas
+    // SUBASTA_Y_COMERCIO gana el empate al de la tienda, aunque su categoria
+    // principal sea otra y su prioridad, menor.
+    @Test
+    void generarRespuesta_conEmpate_cuentaLaIntencionAdicionalComoDeLaVista() {
+        TemaConocimiento tienda = new TemaConocimiento(null, "clave-tienda", Categoria.PRODUCTO,
+            TipoRespuesta.DIRECTA, "Comprar en la tienda", "comprar", null, "En la tienda.", null, 9, true);
+        TemaConocimiento creditos = new TemaConocimiento(null, "clave-creditos", Categoria.CUENTA_Y_REGISTRO,
+            TipoRespuesta.DIRECTA, "Créditos para comprar", "comprar", null, "Con tus créditos.", null, 0, true);
+        creditos.asignarIntencionesAdicionales(List.of(Categoria.SUBASTA_Y_COMERCIO));
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(tienda, creditos));
+
+        ResultadoMotor enSubastas = motorRespuestas.generarRespuesta("quiero comprar algo", VistaDelChat.SUBASTAS);
+
+        assertThat(enSubastas.temaClave()).isEqualTo("clave-creditos");
+        // Lo que se guarda para las analiticas sigue siendo su categoria principal.
+        assertThat(enSubastas.categoria()).isEqualTo(Categoria.CUENTA_Y_REGISTRO);
+        assertThat(motorRespuestas.generarRespuesta("quiero comprar algo", VistaDelChat.INVENTARIO).temaClave())
+            .as("PRODUCTO es la categoria principal de la tienda").isEqualTo("clave-tienda");
+        assertThat(motorRespuestas.generarRespuesta("quiero comprar algo").temaClave())
+            .as("sin vista decide la prioridad").isEqualTo("clave-tienda");
     }
 
     // 1.3.3: pulsar una sugerencia manda el titulo del tema tal cual.
@@ -145,7 +234,9 @@ class MotorRespuestasTest {
 
         assertThat(resultado.requiereEscalamiento()).isTrue();
         assertThat(resultado.categoria()).isNull();
-        assertThat(resultado.texto()).contains("soporte humano");
+        // 1.12.0: el contacto con soporte lo anade ChatService al abrir la solicitud.
+        assertThat(resultado.texto()).contains("quedó registrada");
+        assertThat(resultado.enriquecido().ofrecerSoporteHumano()).isTrue();
     }
 
     @Test
@@ -257,6 +348,118 @@ class MotorRespuestasTest {
     void generarRespuesta_conPreferenciasNulas_respondeComoSinPreferencias() {
         assertThat(motorRespuestas.generarRespuesta("how do i sign up for an account", null, null).texto())
             .isEqualTo(motorRespuestas.generarRespuesta("how do i sign up for an account").texto());
+    }
+
+    // 1.5.0 (7.4.2): el escalamiento tambien va en el idioma de la pregunta,
+    // salvo que la preferencia diga otro.
+    @Test
+    void generarRespuesta_escaladaEnIngles_respondeEnInglesSalvoPreferenciaEs() {
+        ResultadoMotor ingles = motorRespuestas.generarRespuesta("what is the meaning of life");
+        ResultadoMotor espanol = motorRespuestas.generarRespuesta("what is the meaning of life", null,
+            new PreferenciasDeRespuesta(IdiomaPreferido.ES, NivelDeDetalle.NORMAL));
+
+        assertThat(ingles.requiereEscalamiento()).isTrue();
+        assertThat(ingles.ingles()).isTrue();
+        assertThat(ingles.texto()).isEqualTo(MotorRespuestas.ESCALAMIENTO_EN);
+        assertThat(espanol.texto()).isEqualTo(MotorRespuestas.ESCALAMIENTO_ES);
+        assertThat(espanol.ingles()).isFalse();
+    }
+
+    // 1.5.0: el resultado dice en que idioma quedo, para que lo que se anada
+    // despues (preguntas relacionadas, avisos) vaya en el mismo.
+    @Test
+    void generarRespuesta_marcaElIdiomaEnQueQuedo() {
+        assertThat(motorRespuestas.generarRespuesta("how do i sign up for an account").ingles()).isTrue();
+        assertThat(motorRespuestas.generarRespuesta("como me registro").ingles()).isFalse();
+    }
+
+    // 1.5.0 (seguimiento): el tema anterior otra vez, con lo que se pide.
+    @Test
+    void responderTema_respondeElTemaConLasPreferenciasPedidas() {
+        PreferenciasDeRespuesta detallado = new PreferenciasDeRespuesta(IdiomaPreferido.AUTOMATICO,
+            NivelDeDetalle.DETALLADO);
+        PreferenciasDeRespuesta ingles = new PreferenciasDeRespuesta(IdiomaPreferido.EN, NivelDeDetalle.NORMAL);
+
+        assertThat(motorRespuestas.responderTema("clave-registro", ingles, false).orElseThrow().texto())
+            .contains("To create your account");
+        ResultadoMotor conDetalle = motorRespuestas.responderTema("clave-registro", detallado, false).orElseThrow();
+        assertThat(conDetalle.temaClave()).isEqualTo("clave-registro");
+        assertThat(conDetalle.texto()).contains("Para crear tu cuenta");
+        assertThat(motorRespuestas.responderTema("clave-subasta", null, true).orElseThrow().texto())
+            .contains("Choose the item");
+    }
+
+    @Test
+    void responderTema_conUnTemaQueYaNoEstaEnProduccion_noResponde() {
+        PreferenciasDeRespuesta normal = PreferenciasDeRespuesta.POR_DEFECTO;
+
+        assertThat(motorRespuestas.responderTema("clave-retirada", normal, false)).isEmpty();
+        assertThat(motorRespuestas.responderTema(null, normal, false)).isEmpty();
+    }
+
+    // 1.5.0 («no me sirvio»): se ofrece soporte y otras preguntas del tema; cuenta
+    // como escalamiento en las analiticas, sin tema que lo respondiera.
+    @Test
+    void relacionadosCon_ofreceSoporteYOtrasPreguntasDelTema() {
+        TemaConocimiento recuperar = new TemaConocimiento(null, "clave-recuperar", Categoria.CUENTA_Y_REGISTRO,
+            TipoRespuesta.PASO_A_PASO, "Recuperar mi contraseña", "olvide mi contrasena", null,
+            "Para recuperarla: 1) Ve al inicio. 2) Responde las preguntas.", null, 0, true);
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(temaRegistro(0), recuperar));
+
+        ResultadoMotor resultado = motorRespuestas.relacionadosCon("clave-registro", "Siento que no sirviera.", false)
+            .orElseThrow();
+
+        assertThat(resultado.texto()).isEqualTo("Siento que no sirviera.");
+        assertThat(resultado.requiereEscalamiento()).isTrue();
+        // 1.7.0: no es un escalamiento cualquiera: la respuesta no le sirvio.
+        assertThat(resultado.resultado()).isEqualTo(ResultadoDeRespuesta.NO_SIRVIO);
+        assertThat(resultado.temaClave()).isNull();
+        assertThat(resultado.temasSugeridos()).isEmpty();
+        assertThat(resultado.categoria()).isEqualTo(Categoria.CUENTA_Y_REGISTRO);
+        assertThat(resultado.enriquecido().ofrecerSoporteHumano()).isTrue();
+        assertThat(resultado.enriquecido().respuestasRapidas()).containsExactly("Recuperar mi contraseña");
+        // 1.8.0: y el centro de ayuda, abierto en la categoria del tema.
+        assertThat(resultado.enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("registro", "ayuda");
+        assertThat(resultado.enriquecido().enlaces().get(1).ancla()).isEqualTo("categoria-cuenta-y-registro");
+        assertThat(motorRespuestas.relacionadosCon("clave-retirada", "x", false)).isEmpty();
+        assertThat(motorRespuestas.relacionadosCon(null, "x", true)).isEmpty();
+    }
+
+    // 1.5.0: a igual puntaje y prioridad decide la clave, no el orden de las filas.
+    @Test
+    void responderCon_aIgualPuntajeYPrioridadDecideLaClave() {
+        TemaConocimiento b = new TemaConocimiento(null, "b-tienda", Categoria.PRODUCTO, TipoRespuesta.DIRECTA,
+            "Tienda B", "comprar", null, "B.", null, 0, true);
+        TemaConocimiento a = new TemaConocimiento(null, "a-tienda", Categoria.PRODUCTO, TipoRespuesta.DIRECTA,
+            "Tienda A", "comprar", null, "A.", null, 0, true);
+
+        assertThat(motorRespuestas.responderCon("quiero comprar", List.of(b, a)).temaClave()).isEqualTo("a-tienda");
+        assertThat(motorRespuestas.responderCon("quiero comprar", List.of(a, b)).temaClave()).isEqualTo("a-tienda");
+    }
+
+    // 1.5.0 (7.4.2 «errores ortograficos»): dos letras vecinas cambiadas son un
+    // solo error.
+    @Test
+    void generarRespuesta_conLetrasCambiadas_igualReconoceElTema() {
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("como subatsar un producto");
+
+        assertThat(resultado.requiereEscalamiento()).isFalse();
+        assertThat(resultado.temaClave()).isEqualTo("clave-subasta");
+    }
+
+    // Segunda auditoria del 7.4: el vocabulario de la base son las palabras de
+    // las variantes de los temas ACTIVOS, en los dos idiomas.
+    @Test
+    void elVocabularioSonLasPalabrasDeLasVariantesDeLosTemasActivos() {
+        TemaConocimiento inactivo = new TemaConocimiento(null, "clave-vieja", Categoria.FAQ_GENERAL,
+            TipoRespuesta.DIRECTA, "Retirado", "palabraretirada", "retiredword", "x", "x", 0, false);
+        TemaConocimiento sinVariantes = new TemaConocimiento(null, "clave-sin", Categoria.FAQ_GENERAL,
+            TipoRespuesta.DIRECTA, "Sin variantes", "  ", null, "x", null, 0, true);
+
+        assertThat(MotorRespuestas.vocabularioDe(List.of(temaSubasta(), inactivo, sinVariantes)))
+            .contains("subasta", "subastas", "subastar", "vender", "auction", "sell")
+            .doesNotContain("palabraretirada", "retiredword", "");
     }
 
     private static TemaConocimiento temaTorneoSoloEnEspanol() {

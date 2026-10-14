@@ -30,8 +30,8 @@
  *   - cambiar el #hash no cambiaba de pestaña → cambia;
  *   - misiones 504 y subastas 502 → cargan.
  *
- * Lo que no se recorre aquí, y por qué: el asistente (ms-chatbot no está en
- * este banco; en DEV lo cubre la prueba del profesor), la descarga de datos y
+ * Lo que no se recorre aquí, y por qué: el asistente (tiene sus propios
+ * recorridos en este banco, chatbot-*.e2e.spec.js), la descarga de datos y
  * el cierre de cuenta (el portal de privacidad es del Grupo 4, HU-PRV-004/005/006,
  * y todavía no existe: aquí se comprueba que la vista lo diga en vez de fallar),
  * y el pago en USD/EUR (D-32: la tasa la fija el PO en Parámetros).
@@ -189,7 +189,16 @@ test.describe('El recorrido de la auditoría del 30-sep, con un jugador limpio',
     });
     expect(alertas.status(), await alertas.text()).toBe(200);
 
-    // Punto de partida limpio: lo que traiga el alta se da por leído.
+    // Punto de partida limpio: lo que traiga el alta se da por leído. Los
+    // avisos que se incorporan al dar de alta una sesión (cambios del
+    // catálogo y, desde SA-11, de las políticas de uso de los últimos 30
+    // días) llegarían justo al abrir la vista: se traen aquí con una entrega
+    // de pendientes, igual que en foto-y-campana, y se leen con el resto.
+    const traidos = await api.post(
+      `/api/v1/users/${jugador.claims.uid}/sessions/limpieza-campana/pending`,
+      { headers: conToken(jugador.token) },
+    );
+    expect(traidos.status(), await traidos.text()).toBe(200);
     const bandeja = `/api/v1/users/${jugador.claims.uid}/notifications`;
     const previa = await api.get(bandeja, { headers: conToken(jugador.token) });
     expect(previa.status(), await previa.text()).toBe(200);

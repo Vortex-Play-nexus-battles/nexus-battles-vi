@@ -20,7 +20,11 @@ import java.util.Optional;
  * limites vigentes (admin-parametros), el mismo numero con el que
  * {@link SancionesService#apelar} decide.
  *
- * <p>El levantamiento no se envia por correo: {@code correo.yaml} 1.4.0 no
+ * <p>Desde SA-4 el correo de la emision lleva tambien la causal de 7.3.2 (con
+ * el texto del documento oficial) y la politica violada, como pide 7.3.7
+ * («motivo especifico» y «referencias a las politicas violadas»).
+ *
+ * <p>El levantamiento no se envia por correo: {@code correo.yaml} 1.6.0 no
  * tiene tipo para el ({@code ADVERTENCIA}, {@code SUSPENSION}, {@code BANEO},
  * {@code APELACION_RESUELTA}) y mandarlo como una apelacion revertida
  * contaria algo que no paso. {@link SalidasDeSancion} no lo encola; si una
@@ -70,7 +74,8 @@ public class CorreoDeSancion implements DestinoDeSalidas {
         Contenido c = contenido.get();
         try {
             correo.enviar(salida.clave(), new ClienteCorreo.CorreoSancion(contacto.email(), contacto.apodo(),
-                    c.tipo(), c.motivo(), c.hasta(), c.apelableHasta(), c.resultadoApelacion()));
+                    c.tipo(), c.motivo(), c.hasta(), c.apelableHasta(), c.resultadoApelacion(), c.causal(),
+                    c.politica()));
             return Resultado.ENTREGADO;
         } catch (HttpClientErrorException error) {
             return Respuestas.rechazoOReintento(error);
@@ -79,7 +84,13 @@ public class CorreoDeSancion implements DestinoDeSalidas {
 
     /** Lo que dice el correo, compuesto con el estado de la sancion y de la apelacion. */
     record Contenido(String tipo, String motivo, OffsetDateTime hasta, OffsetDateTime apelableHasta,
-                     String resultadoApelacion) {
+                     String resultadoApelacion, String causal, String politica) {
+
+        /** Sin causal ni politica. */
+        Contenido(String tipo, String motivo, OffsetDateTime hasta, OffsetDateTime apelableHasta,
+                  String resultadoApelacion) {
+            this(tipo, motivo, hasta, apelableHasta, resultadoApelacion, null, null);
+        }
     }
 
     Optional<Contenido> contenido(SalidaPendiente salida) {
@@ -91,7 +102,8 @@ public class CorreoDeSancion implements DestinoDeSalidas {
         return switch (salida.evento()) {
             case EMISION -> Optional.of(new Contenido(sancion.tipo().name(), sancion.motivo(),
                     sancion.tipo() == Sancion.Tipo.SUSPENSION ? sancion.vigenteHasta() : null,
-                    sancion.emitidaEn().plus(limites.plazoDeApelacion()), null));
+                    sancion.emitidaEn().plus(limites.plazoDeApelacion()), null,
+                    sancion.causal() == null ? null : sancion.causal().etiqueta(), sancion.politica()));
             case APELACION_RESUELTA -> Optional.ofNullable(salida.apelacionId()).flatMap(apelaciones::findById)
                     .filter(apelacion -> apelacion.estado() != Apelacion.Estado.PENDIENTE)
                     .map(apelacion -> new Contenido("APELACION_RESUELTA", apelacion.decisionMotivo(),
