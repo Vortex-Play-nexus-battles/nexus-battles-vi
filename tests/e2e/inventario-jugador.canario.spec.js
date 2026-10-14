@@ -393,7 +393,8 @@ test.describe('Mi inventario en AWS DEV (revisión final §7.1)', () => {
 
     // Opinión con imagen: apodo y fecha; después se retira (la propia).
     const texto = `Opinión de prueba del canario ${MARCA}`;
-    await dialogo.getByLabel('Tu opinión').fill(texto);
+    // `exact`: el formulario también se llama «Escribe tu opinión».
+    await dialogo.getByLabel('Tu opinión', { exact: true }).fill(texto);
     await dialogo
       .locator('.redactor-comentario__archivo')
       .setInputFiles({ name: 'prueba.png', mimeType: 'image/png', buffer: PNG });
