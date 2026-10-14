@@ -49,6 +49,28 @@ describe('preguntas rápidas', () => {
     expect([...botones].map((b) => b.textContent)).toEqual([TORNEO.titulo, SUBASTA.titulo]);
   });
 
+  test('es un desplegable que empieza cerrado, con el título a la vista', async () => {
+    const { el } = await montar();
+
+    expect(el.tagName).toBe('DETAILS');
+    expect(el.open).toBe(false);
+    const titulo = el.querySelector('summary');
+    expect(titulo.textContent).toBe(TEXTOS_SUGERENCIAS.titulo);
+    // La lista se anuncia con el mismo título que se ve.
+    const lista = el.querySelector('[role="group"]');
+    expect(lista.getAttribute('aria-labelledby')).toBe(titulo.id);
+  });
+
+  test('al elegir una pregunta se pliega para dejarle espacio a la conversación', async () => {
+    const { el, alElegir } = await montar();
+    el.open = true;
+
+    el.querySelector('[data-clave="k-torneo"]').click();
+
+    expect(el.open).toBe(false);
+    expect(alElegir).toHaveBeenCalledWith(TORNEO.pregunta);
+  });
+
   test('al pulsar una manda su pregunta', async () => {
     const { el, alElegir } = await montar();
 
