@@ -129,7 +129,7 @@ class ChatServiceTest {
         verify(moderacion).verificar("Hola");
         verify(registro).guardarIntercambio(eq(visitante), eq("Hola"), any(), any(), eq("Respuesta de prueba"), any(), anyInt());
         assertEquals(Remitente.BOT, respuesta.getRemitente());
-        verify(motorConsultasAsistidas, never()).generarRespuesta(any(), any(), any(), any());
+        verify(motorConsultasAsistidas, never()).generarRespuesta(any(), any(), any(), any(), any());
     }
 
     // 1.4.0 (7.4.8): la contrasena y la tarjeta no llegan a la lista negra, ni
@@ -219,7 +219,7 @@ class ChatServiceTest {
 
         chatService.enviarMensaje(visitante, "cual es mi inventario", null);
 
-        verify(motorConsultasAsistidas, never()).generarRespuesta(any(), any(), any(), any());
+        verify(motorConsultasAsistidas, never()).generarRespuesta(any(), any(), any(), any(), any());
         verify(motorRespuestas).generarRespuesta("cual es mi inventario");
     }
 
@@ -241,7 +241,7 @@ class ChatServiceTest {
             .containsExactly("login", "registro");
         assertThat(guardado.enriquecido().ofrecerSoporteHumano()).isFalse();
         assertThat(guardado.requiereEscalamiento()).isFalse();
-        verify(motorConsultasAsistidas, never()).generarRespuesta(any(), any(), any(), any());
+        verify(motorConsultasAsistidas, never()).generarRespuesta(any(), any(), any(), any(), any());
         verifyNoInteractions(motorRespuestas, brechaConocimientoService, consultaDeCatalogo, navegacionPublica);
     }
 
@@ -284,7 +284,7 @@ class ChatServiceTest {
     void usuarioAutenticadoConRespuestaDelMotorAsistido_noConsultaMotorRespuestas() {
         registroDevuelveLaRespuesta();
         when(motorConsultasAsistidas.generarRespuesta("cual es mi inventario", "token-de-prueba", UID.toString(),
-            IdiomaPreferido.AUTOMATICO))
+            IdiomaPreferido.AUTOMATICO, null))
             .thenReturn(Optional.of(ResultadoMotor.deTema("Tienes 3 elementos en tu inventario.", null, TipoRespuesta.CONTEXTUAL)));
 
         Mensaje respuesta = chatService.enviarMensaje(usuario, "cual es mi inventario", null);
@@ -293,10 +293,25 @@ class ChatServiceTest {
         assertTrue(respuesta.getContenido().contains("Tienes 3 elementos en tu inventario."));
     }
 
+    // 1.18.0 (observacion de RF-CHA-008): la direccion del cliente llega al
+    // motor asistido, para el asiento de auditoria de la consulta a sus datos.
+    @Test
+    void laDireccionDelClienteLlegaAlMotorAsistido() {
+        registroDevuelveLaRespuesta();
+        when(motorConsultasAsistidas.generarRespuesta("cual es mi inventario", "token-de-prueba", UID.toString(),
+            IdiomaPreferido.AUTOMATICO, "203.0.113.7"))
+            .thenReturn(Optional.of(ResultadoMotor.deTema("Tienes 3 elementos.", null, TipoRespuesta.CONTEXTUAL)));
+
+        Mensaje respuesta = chatService.enviarMensaje(usuario, "cual es mi inventario", null, null, "203.0.113.7");
+
+        assertTrue(respuesta.getContenido().contains("Tienes 3 elementos."));
+        verifyNoInteractions(motorRespuestas);
+    }
+
     @Test
     void usuarioAutenticadoSinIntencionDeCuenta_caeEnLaBaseDeConocimiento() {
         registroDevuelveLaRespuesta();
-        when(motorConsultasAsistidas.generarRespuesta(anyString(), anyString(), anyString(), any()))
+        when(motorConsultasAsistidas.generarRespuesta(anyString(), anyString(), anyString(), any(), any()))
             .thenReturn(Optional.empty());
         when(motorRespuestas.generarRespuesta(anyString()))
             .thenReturn(ResultadoMotor.deTema("Respuesta de prueba", Categoria.FAQ_GENERAL, TipoRespuesta.DIRECTA));
@@ -316,7 +331,7 @@ class ChatServiceTest {
 
         chatService.enviarMensaje(IdentidadDelChat.usuario(UID, null), "hola", null);
 
-        verify(motorConsultasAsistidas, never()).generarRespuesta(any(), any(), any(), any());
+        verify(motorConsultasAsistidas, never()).generarRespuesta(any(), any(), any(), any(), any());
     }
 
     // Dos primeros mensajes simultaneos: el segundo choca con el indice unico
@@ -682,7 +697,7 @@ class ChatServiceTest {
         when(preferenciasService.efectivasDe(usuario))
             .thenReturn(new PreferenciasDeRespuesta(IdiomaPreferido.EN, NivelDeDetalle.NORMAL));
         when(motorConsultasAsistidas.generarRespuesta("que tengo en mi inventario", "token-de-prueba", UID.toString(),
-            IdiomaPreferido.EN))
+            IdiomaPreferido.EN, null))
             .thenReturn(Optional.empty());
         when(motorRespuestas.generarRespuesta(eq("que tengo en mi inventario"), any(), any()))
             .thenReturn(ResultadoMotor.deTema("Inventory.", Categoria.FAQ_GENERAL, TipoRespuesta.DIRECTA));
@@ -889,7 +904,7 @@ class ChatServiceTest {
         verify(motorRespuestas, never()).generarRespuesta(anyString());
 
         when(motorConsultasAsistidas.generarRespuesta("busca orbe en mi inventario", "token-de-prueba", UID.toString(),
-            IdiomaPreferido.AUTOMATICO))
+            IdiomaPreferido.AUTOMATICO, null))
             .thenReturn(Optional.of(ResultadoMotor.deTema("1 resultado.", null, TipoRespuesta.CONTEXTUAL)));
         chatService.enviarMensaje(usuario, "busca orbe en mi inventario", null);
         verify(consultaDeCatalogo, never()).responder(eq("busca orbe en mi inventario"), any());
@@ -910,7 +925,7 @@ class ChatServiceTest {
         verifyNoInteractions(motorRespuestas, consultaDeCatalogo, brechaConocimientoService);
 
         when(motorConsultasAsistidas.generarRespuesta("como van mis subastas", "token-de-prueba", UID.toString(),
-            IdiomaPreferido.AUTOMATICO))
+            IdiomaPreferido.AUTOMATICO, null))
             .thenReturn(Optional.of(ResultadoMotor.deTema("Vas ganando 1 subasta(s).", null,
                 TipoRespuesta.CONTEXTUAL)));
         chatService.enviarMensaje(usuario, "como van mis subastas", null);

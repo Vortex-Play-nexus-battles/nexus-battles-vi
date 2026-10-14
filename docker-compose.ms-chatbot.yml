@@ -120,6 +120,19 @@ services:
       # el host de contenido (8103), igual que lo lee ms-identidad.
       PRODUCTOS_BASE_URL: ${PRODUCTOS_BASE_URL:-http://34.193.90.11:8103}
       LISTA_NEGRA_VERIFICAR_URL: ${LISTA_NEGRA_VERIFICAR_URL:-http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar}
+      # ms-chatbot.yaml 1.18.0 (observacion de RF-CHA-008: «el acceso del
+      # chatbot a datos personales debe ... quedar auditado»): cada consulta del
+      # asistente a los datos de una persona deja un asiento en la bitacora
+      # central de ms-cumplimiento, como los hitos de cuenta de ms-identidad.
+      # Credencial de servicio (ADR-005): desplegar.sh genera y persiste
+      # SECRETO_SERVICIO_MS_CHATBOT en el host y se la da al emisor en
+      # AUTH_CLIENTES_SERVICIO. Sin la URL del emisor el servicio no arranca
+      # (comprobar-catalogo-servicios.sh, punto 6). Si la bitacora no responde,
+      # la consulta sigue (fail-open) y el asiento queda en la bitacora JSON.
+      AUDITORIA_URL: ${AUDITORIA_URL:-http://srv-ms-cumplimiento:8091/api/v1/admin/auditoria/eventos}
+      DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
+      DIRECTORIO_ACTIVO_CLIENT_ID: ms-chatbot
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_MS_CHATBOT:-}
 
 volumes:
   chatbot-db-datos:

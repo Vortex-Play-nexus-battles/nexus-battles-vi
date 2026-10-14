@@ -152,7 +152,7 @@ class RespuestasEnCacheTest {
     @Test
     void unaConsultaEnVivoDelJugadorNuncaEntraEnLaCache() {
         when(motorConsultasAsistidas.generarRespuesta(anyString(), eq("token-del-jugador"), eq(UID.toString()),
-            eq(IdiomaPreferido.AUTOMATICO)))
+            eq(IdiomaPreferido.AUTOMATICO), any()))
             .thenReturn(Optional.of(ResultadoMotor.deTema("Tienes 3 pociones y la Espada del Alba.",
                 Categoria.PRODUCTO, TipoRespuesta.DIRECTA)));
 
@@ -162,7 +162,7 @@ class RespuestasEnCacheTest {
         assertThat(cache.tamano()).isZero();
         assertThat(aciertos()).isZero();
         assertThat(metricas.counter("chatbot.cache.respuestas.fallos").count()).isZero();
-        verify(motorConsultasAsistidas, times(2)).generarRespuesta(anyString(), anyString(), anyString(), any());
+        verify(motorConsultasAsistidas, times(2)).generarRespuesta(anyString(), anyString(), anyString(), any(), any());
     }
 
     // «mas detalle» responde otra vez el tema anterior: es un seguimiento, no una pregunta a la base.

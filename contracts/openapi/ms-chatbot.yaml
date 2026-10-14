@@ -68,6 +68,8 @@ openapi: 3.1.0
 #   7.4.2 (1.17.0) preguntas relacionadas en ingles: cada tema puede tener
 #               su titulo en ingles, que es el que ve quien conversa en
 #               ingles, y pulsarlo sigue la conversacion en ingles
+#   7.4.4 (1.18.0) el acceso del asistente a los datos de una persona queda
+#               auditado en la bitacora central (observacion de RF-CHA-008)
 #   7.4 (1.3.0) lo que faltaba del modulo 7.4: tickets y soporte humano
 #               (RF-CHA-007, RF-ADM-004), sugerencias y autocompletado,
 #               respuestas enriquecidas sin imagenes, vista del jugador y
@@ -152,6 +154,13 @@ openapi: 3.1.0
 # reenviando el MISMO token del jugador: esos servicios derivan el dueno del
 # claim `uid`. El
 # chatbot NUNCA usa una credencial de servicio para leer datos de un jugador.
+# Desde 1.18.0 (observacion de RF-CHA-008, «quedar auditado») cada una de esas
+# lecturas deja un asiento en la bitacora central
+# (`ms-cumplimiento-auditoria.yaml` 1.3.0, `POST /api/v1/admin/auditoria/eventos`):
+# es lo UNICO para lo que ms-chatbot tiene credencial de servicio (ADR-005,
+# cliente `ms-chatbot`), y solo escribe ahi. El asiento no lleva la pregunta
+# ni lo que respondio el otro servicio; si la bitacora no responde, la
+# consulta sigue (fail-open) y queda la linea de la bitacora JSON.
 # Los torneos se consultan como dato publico (`torneos.yaml`, `GET /torneos`),
 # y desde 1.10.0, para visitantes y jugadores, el catalogo de productos
 # (`productos.yaml`, `GET /api/v1/productos`, sin credencial), y desde 1.16.0
@@ -166,7 +175,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.17.0
+  version: 1.18.0
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -176,6 +185,35 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.18.0 — 7.4.4: el acceso del asistente a los datos de una persona queda auditado
+
+    Compatible: ninguna operacion ni forma cambia, ni lo que se responde.
+
+    * La ficha de RF-CHA-008 (HU-CHA-008) observa: «el acceso del chatbot a
+      datos personales debe respetar el modelo de autorizacion y quedar
+      auditado». Lo primero ya se cumplia (el token del propio jugador, el
+      `uid` solo del claim). Ahora cada lectura de sus datos con su token
+      —inventario, una busqueda en el, sus subastas y pujas, sus avisos, sus
+      movimientos de creditos, sus misiones y el informe de actividad— deja
+      un asiento en la bitacora central de ms-cumplimiento
+      (`ms-cumplimiento-auditoria.yaml` 1.3.0), como los hitos de cuenta de
+      ms-identidad: `tipoAccion` OTRO, `administradorId` y `afectado` el
+      `uid` del token, `valorNuevo` `dato=<dato>;resultado=<consultado|no-disponible>`,
+      `motivo` CONSULTA_DEL_ASISTENTE, `ipOrigen` la direccion del cliente
+      (o DESCONOCIDA), `ocurridoEn` y una `referencia` unica
+      `ms-chatbot:consulta-<uuid>`. **Nunca la pregunta ni lo que respondio
+      el otro servicio.**
+    * Lo que no lee datos de nadie no deja asiento: los temas de la base, ir
+      a una seccion, una busqueda demasiado corta, los torneos, el catalogo y
+      lo que hay en la subasta (listados publicos, sin su token), y un
+      visitante (no se consulta nada).
+    * Lo lee un superadministrador con segundo factor, en la consola de
+      auditoria y en la ficha de la persona. No es parte de la conversacion:
+      borrar el historial (§7.4.8) no lo borra (la bitacora es inmutable).
+    * Fail-open y en segundo plano: si la bitacora no responde, la consulta
+      sigue y queda la linea de la bitacora JSON (regla 6), con la misma
+      forma y sin el contenido.
 
     ### 1.17.0 — 7.4.2: las preguntas relacionadas, tambien en ingles
 

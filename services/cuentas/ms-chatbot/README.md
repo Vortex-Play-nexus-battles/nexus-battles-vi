@@ -1,6 +1,6 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
-**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.17.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.2.0 (canal en tiempo real, 7.4.9)
+**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.18.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.2.0 (canal en tiempo real, 7.4.9)
 **Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V21) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
@@ -574,6 +574,24 @@ contrato del inventario). El **informe de actividad** pide sus cinco partes a la
 virtuales) y espera como mucho 1,7 s en total: la parte que no llega se dice «no disponible»
 y el resto se entrega (7.4.11, menos de 2 s).
 
+**El acceso queda auditado (1.18.0, observación de RF-CHA-008: «el acceso del chatbot a datos
+personales debe respetar el modelo de autorización y quedar auditado»).** Cada lectura de los datos
+de una persona con su token —inventario, una búsqueda en él, sus subastas y pujas, sus avisos, sus
+movimientos de créditos, sus misiones y el informe de actividad— deja un asiento en la bitácora
+central de ms-cumplimiento (`AuditoriaDeAccesos`, `POST /api/v1/admin/auditoria/eventos`), como los
+hitos de cuenta de ms-identidad: `tipoAccion` OTRO, quien lo pidió y de quién son los datos (el
+mismo `uid`, del token), `dato=<dato>;resultado=<consultado|no-disponible>`, el motivo
+`CONSULTA_DEL_ASISTENTE`, la dirección del cliente y una referencia única. **Nunca la pregunta ni lo
+que respondió el otro servicio.** Lo que no lee datos de nadie no deja asiento: un tema de la base,
+ir a una sección, una búsqueda demasiado corta, los torneos, el catálogo y lo que hay en la subasta
+(listados públicos) y cualquier visitante. Lo lee un superadministrador con segundo factor (consola
+de auditoría y ficha de la persona); borrar la conversación no lo borra. Es lo único para lo que
+ms-chatbot tiene credencial de servicio (cliente `ms-chatbot`, ADR-005: `desplegar.sh` genera
+`SECRETO_SERVICIO_MS_CHATBOT` en el host y lo registra en el emisor); nunca la usa para leer datos
+de un jugador. **Fail-open y en segundo plano**: si la bitácora no responde, la consulta sigue y el
+asiento queda en la bitácora JSON (logger `AUDITORIA_ASISTENTE`, misma forma, sin contenido). Sin
+`AUDITORIA_URL` o sin credencial, solo esa línea.
+
 ## Catálogo en vivo (7.4.1, 7.4.2 y 7.4.5, 1.10.0)
 
 Para visitantes y jugadores: los productos que se venden hoy, sus precios y su ficha salen del
@@ -711,6 +729,13 @@ En DEV desde #775 (29-sep, host de plataforma en `c7i-flex.large`): `desplegable
 comprueba `/api/v1/chat/historial` por el borde. Una sola instancia: el límite de frecuencia, la
 caché, el broker del canal en tiempo real y lo que guarde en memoria son por instancia.
 
+Desde 1.18.0 el compose le pasa también `AUDITORIA_URL` (la bitácora central de
+ms-cumplimiento) y su credencial de servicio: `DIRECTORIO_ACTIVO_URL` (el emisor),
+`DIRECTORIO_ACTIVO_CLIENT_ID: ms-chatbot` y `DIRECTORIO_ACTIVO_CLIENT_SECRET:
+${SECRETO_SERVICIO_MS_CHATBOT}`, que `desplegar.sh` genera una vez en el host
+(`CLIENTES_DE_SERVICIO`) y registra en el emisor; el primer despliegue con el cliente nuevo recrea
+`srv-ms-identidad` con su misma imagen y su clave de firma (`sanar_emisor`, B5), sin cerrar sesiones.
+
 ## Frontend
 
 `frontend/app-web/src/comun/cliente-chatbot.js` (PR #708, equipo de Cuentas) declara su propio
@@ -765,4 +790,5 @@ de 7.4.9; `CatalogoEnVivoIT`: el catálogo de 1.10.0; `RedactarLaPuntuacionDeLos
 1.12.0; `CapturasDeSoporteIT`: V19 y las capturas de 1.14.0; `NivelDeDetalleAutomaticoIT` y
 `SugerenciasYExperienciaIT`: V20, el nivel por experiencia y las sugerencias para ti de
 1.15.0; `TituloEnInglesIT` y `PreguntasRelacionadasEnInglesIT`: V21 y las preguntas
-relacionadas en inglés de 1.17.0). JaCoCo ≥ 80 %.
+relacionadas en inglés de 1.17.0; `AccesosAuditadosIT`: el asiento de 1.18.0 en una bitácora y un
+emisor de prueba). JaCoCo ≥ 80 %.

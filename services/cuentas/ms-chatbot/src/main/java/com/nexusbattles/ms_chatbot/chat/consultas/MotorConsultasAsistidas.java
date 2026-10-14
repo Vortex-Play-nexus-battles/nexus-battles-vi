@@ -1,5 +1,7 @@
 package com.nexusbattles.ms_chatbot.chat.consultas;
 
+import com.nexusbattles.ms_chatbot.chat.auditoria.AuditoriaDeAccesos;
+import com.nexusbattles.ms_chatbot.chat.auditoria.DatoConsultado;
 import com.nexusbattles.ms_chatbot.chat.consultas.IntencionDeConsulta.Dominio;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.AvisoDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.BandejaResponseDto;
@@ -21,9 +23,11 @@ import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
 import com.nexusbattles.ms_chatbot.chat.texto.DistanciaDeEdicion;
 import com.nexusbattles.ms_chatbot.chat.texto.IdiomaDelTexto;
 import com.nexusbattles.ms_chatbot.chat.texto.NormalizadorTexto;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -172,16 +176,28 @@ public class MotorConsultasAsistidas {
     private final TorneosClient torneosClient;
     private final FinanzasClient finanzasClient;
     private final MisionesClient misionesClient;
+    private final AuditoriaDeAccesos auditoria;
 
+    /** Sin bitácora central (pruebas): cada acceso queda solo en la bitácora JSON. */
     public MotorConsultasAsistidas(InventarioClient inventarioClient, SubastasClient subastasClient,
                                    NotificacionesClient notificacionesClient, TorneosClient torneosClient,
                                    FinanzasClient finanzasClient, MisionesClient misionesClient) {
+        this(inventarioClient, subastasClient, notificacionesClient, torneosClient, finanzasClient, misionesClient,
+            AuditoriaDeAccesos.soloEnLaBitacora(Clock.systemUTC()));
+    }
+
+    @Autowired
+    public MotorConsultasAsistidas(InventarioClient inventarioClient, SubastasClient subastasClient,
+                                   NotificacionesClient notificacionesClient, TorneosClient torneosClient,
+                                   FinanzasClient finanzasClient, MisionesClient misionesClient,
+                                   AuditoriaDeAccesos auditoria) {
         this.inventarioClient = inventarioClient;
         this.subastasClient = subastasClient;
         this.notificacionesClient = notificacionesClient;
         this.torneosClient = torneosClient;
         this.finanzasClient = finanzasClient;
         this.misionesClient = misionesClient;
+        this.auditoria = auditoria;
     }
 
     public Optional<ResultadoMotor> generarRespuesta(String mensajeUsuario, String tokenBearer, String uid) {
@@ -194,6 +210,15 @@ public class MotorConsultasAsistidas {
      */
     public Optional<ResultadoMotor> generarRespuesta(String mensajeUsuario, String tokenBearer, String uid,
                                                      IdiomaPreferido idioma) {
+        return generarRespuesta(mensajeUsuario, tokenBearer, uid, idioma, null);
+    }
+
+    /**
+     * 1.18.0 (observación de RF-CHA-008): con la dirección del cliente, para
+     * el asiento de auditoría de cada consulta a sus datos.
+     */
+    public Optional<ResultadoMotor> generarRespuesta(String mensajeUsuario, String tokenBearer, String uid,
+                                                     IdiomaPreferido idioma, String origen) {
         String mensaje = corregirPalabras(NormalizadorTexto.normalizar(mensajeUsuario), PALABRAS_INVENTARIO);
         TextosDeConsultas t = TextosDeConsultas.en(enIngles(mensaje, idioma));
 
@@ -202,26 +227,43 @@ public class MotorConsultasAsistidas {
             return navegacion;
         }
         if (contieneAlguna(mensaje, PALABRAS_INFORME_ACTIVIDAD)) {
-            return Optional.of(generarInformeActividad(tokenBearer, uid, t));
+            return Optional.of(auditado(generarInformeActividad(tokenBearer, uid, t),
+                DatoConsultado.INFORME_DE_ACTIVIDAD, uid, origen));
         }
         Optional<String> criterio = criterioDeBusqueda(mensaje);
         if (criterio.isPresent()) {
-            return Optional.of(buscarEnInventario(tokenBearer, criterio.get(), t));
+            return Optional.of(auditado(buscarEnInventario(tokenBearer, criterio.get(), t),
+                DatoConsultado.BUSQUEDA_EN_INVENTARIO, uid, origen));
         }
         Optional<Dominio> dominio = dominioPedido(mensaje);
         if (dominio.isPresent()) {
             return Optional.of(switch (dominio.get()) {
-                case INVENTARIO -> consultarInventario(tokenBearer, t);
-                case SUBASTAS -> consultarSubastas(tokenBearer, t);
-                case NOTIFICACIONES -> consultarNotificaciones(tokenBearer, uid, t);
-                case MOVIMIENTOS -> consultarMovimientos(tokenBearer, uid, t);
-                case MISIONES -> consultarMisiones(tokenBearer, t);
+                case INVENTARIO -> auditado(consultarInventario(tokenBearer, t), DatoConsultado.INVENTARIO, uid,
+                    origen);
+                case SUBASTAS -> auditado(consultarSubastas(tokenBearer, t), DatoConsultado.SUBASTAS, uid, origen);
+                case NOTIFICACIONES -> auditado(consultarNotificaciones(tokenBearer, uid, t),
+                    DatoConsultado.NOTIFICACIONES, uid, origen);
+                case MOVIMIENTOS -> auditado(consultarMovimientos(tokenBearer, uid, t), DatoConsultado.MOVIMIENTOS,
+                    uid, origen);
+                case MISIONES -> auditado(consultarMisiones(tokenBearer, t), DatoConsultado.MISIONES, uid, origen);
             });
         }
+        // Los torneos se leen del listado publico, sin su token: no es un
+        // acceso a sus datos y no se audita.
         if (contieneAlguna(mensaje, PALABRAS_TORNEOS)) {
             return Optional.of(consultarTorneos(uid, t));
         }
         return Optional.empty();
+    }
+
+    // 1.18.0: lo que se leyo (o se intento leer) con su token queda en la
+    // bitacora central. Una busqueda demasiado corta no llega a consultar nada.
+    private ResultadoMotor auditado(ResultadoMotor resultado, DatoConsultado dato, String uid, String origen) {
+        ResultadoDeRespuesta como = resultado.resultado();
+        if (como == ResultadoDeRespuesta.CONSULTA_EN_VIVO || como == ResultadoDeRespuesta.NO_DISPONIBLE) {
+            auditoria.registrar(uid, dato, como, origen);
+        }
+        return resultado;
     }
 
     /**

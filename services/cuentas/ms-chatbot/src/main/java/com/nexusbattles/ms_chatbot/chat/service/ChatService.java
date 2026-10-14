@@ -195,7 +195,7 @@ public class ChatService {
         Instant recibido = Instant.now();
         long inicio = System.nanoTime();
 
-        Generada generada = generarRespuesta(identidad, pregunta, vista);
+        Generada generada = generarRespuesta(identidad, pregunta, vista, origen);
         ResultadoMotor resultado = generada.resultado();
         // «no me sirvio» se cuenta como escalamiento (se ofrece soporte), pero
         // no es una pregunta sin cubrir: no va a las brechas de conocimiento.
@@ -275,7 +275,9 @@ public class ChatService {
     // 1.5.0: antes que nada, un seguimiento de la respuesta anterior («mas
     // detalle», «en ingles», «no me sirvio»), para visitantes y jugadores. Las
     // preferencias se leen una sola vez por mensaje.
-    private Generada generarRespuesta(IdentidadDelChat identidad, String contenido, VistaDelChat vista) {
+    // 1.18.0: `origen` va al asiento de auditoria de cada consulta a sus datos.
+    private Generada generarRespuesta(IdentidadDelChat identidad, String contenido, VistaDelChat vista,
+                                      String origen) {
         PreferenciasDeRespuesta preferencias = preferenciasDe(identidad);
         Optional<ResultadoMotor> seguimiento = Seguimiento.de(contenido)
             .flatMap(tipo -> responderSeguimiento(identidad, contenido, tipo, preferencias));
@@ -285,7 +287,7 @@ public class ChatService {
         boolean conSesion = identidad.autenticado() && identidad.tokenCrudo() != null;
         if (conSesion) {
             Optional<ResultadoMotor> enVivo = motorConsultasAsistidas.generarRespuesta(contenido,
-                identidad.tokenCrudo(), identidad.uid(), preferencias.idioma());
+                identidad.tokenCrudo(), identidad.uid(), preferencias.idioma(), origen);
             if (enVivo.isPresent()) {
                 return new Generada(enVivo.get(), false);
             }

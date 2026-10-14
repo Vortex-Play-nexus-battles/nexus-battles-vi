@@ -1,5 +1,7 @@
 package com.nexusbattles.ms_chatbot.chat.consultas;
 
+import com.nexusbattles.ms_chatbot.chat.auditoria.AuditoriaDeAccesos;
+import com.nexusbattles.ms_chatbot.chat.auditoria.DatoConsultado;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.AvisoDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.BandejaResponseDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.ElementoInventarioDto;
@@ -32,7 +34,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -856,5 +861,83 @@ class MotorConsultasAsistidasTest {
     @Test
     void sinMensajeNoPideNada() {
         assertThat(motor.pideDatosDeSuCuenta(null)).isFalse();
+    }
+
+    // ---- 1.18.0: cada consulta a sus datos queda auditada (RF-CHA-008) ------
+
+    private static final String ORIGEN = "203.0.113.7";
+
+    private MotorConsultasAsistidas motorAuditado(AuditoriaDeAccesos auditoria) {
+        return new MotorConsultasAsistidas(inventarioClient, subastasClient, notificacionesClient, torneosClient,
+            finanzasClient, misionesClient, auditoria);
+    }
+
+    @Test
+    void cadaConsultaASusDatosQuedaAuditadaConSuUidYSuOrigen() {
+        AuditoriaDeAccesos auditoria = mock(AuditoriaDeAccesos.class);
+        MotorConsultasAsistidas auditado = motorAuditado(auditoria);
+        when(inventarioClient.consultarInventario(TOKEN, 0)).thenReturn(new PaginaInventarioDto(List.of(), 0));
+        when(inventarioClient.buscar(TOKEN, "espada")).thenReturn(new PaginaInventarioDto(List.of(), 0));
+        when(subastasClient.consultarMiResumen(TOKEN)).thenThrow(new ResourceAccessException("caido"));
+        when(misionesClient.enCurso(TOKEN)).thenReturn(List.of());
+
+        auditado.generarRespuesta("que tengo en mi inventario", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+        auditado.generarRespuesta("busca la espada en mi inventario", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+        auditado.generarRespuesta("como van mis subastas", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+        auditado.generarRespuesta("mis misiones activas", TOKEN, UID, IdiomaPreferido.AUTOMATICO, null);
+
+        verify(auditoria).registrar(UID, DatoConsultado.INVENTARIO, ResultadoDeRespuesta.CONSULTA_EN_VIVO, ORIGEN);
+        verify(auditoria).registrar(UID, DatoConsultado.BUSQUEDA_EN_INVENTARIO, ResultadoDeRespuesta.CONSULTA_EN_VIVO,
+            ORIGEN);
+        // Tambien lo que se intento y no llego: el acceso se pidio con su token.
+        verify(auditoria).registrar(UID, DatoConsultado.SUBASTAS, ResultadoDeRespuesta.NO_DISPONIBLE, ORIGEN);
+        verify(auditoria).registrar(UID, DatoConsultado.MISIONES, ResultadoDeRespuesta.CONSULTA_EN_VIVO, null);
+        verifyNoMoreInteractions(auditoria);
+    }
+
+    @Test
+    void avisosMovimientosEInformeTambienQuedanAuditados() {
+        AuditoriaDeAccesos auditoria = mock(AuditoriaDeAccesos.class);
+        MotorConsultasAsistidas auditado = motorAuditado(auditoria);
+        when(notificacionesClient.consultarBandeja(TOKEN, UID)).thenThrow(new ResourceAccessException("caido"));
+        when(finanzasClient.movimientos(TOKEN, UID, 5)).thenThrow(new ResourceAccessException("caido"));
+        when(inventarioClient.consultarInventario(TOKEN, 0)).thenThrow(new ResourceAccessException("caido"));
+        when(subastasClient.consultarMiResumen(TOKEN)).thenThrow(new ResourceAccessException("caido"));
+        when(misionesClient.enCurso(TOKEN)).thenReturn(List.of());
+
+        auditado.generarRespuesta("mis notificaciones", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+        auditado.generarRespuesta("mis ultimas transacciones", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+        auditado.generarRespuesta("dame un informe de mi actividad", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+
+        verify(auditoria).registrar(UID, DatoConsultado.NOTIFICACIONES, ResultadoDeRespuesta.NO_DISPONIBLE, ORIGEN);
+        verify(auditoria).registrar(UID, DatoConsultado.MOVIMIENTOS, ResultadoDeRespuesta.NO_DISPONIBLE, ORIGEN);
+        verify(auditoria).registrar(UID, DatoConsultado.INFORME_DE_ACTIVIDAD, ResultadoDeRespuesta.CONSULTA_EN_VIVO,
+            ORIGEN);
+        verifyNoMoreInteractions(auditoria);
+    }
+
+    // Ir a una seccion, una busqueda demasiado corta y los torneos (listado
+    // publico, sin su token) no leen nada suyo: no hay asiento.
+    @Test
+    void loQueNoLeeSusDatosNoSeAudita() {
+        AuditoriaDeAccesos auditoria = mock(AuditoriaDeAccesos.class);
+        MotorConsultasAsistidas auditado = motorAuditado(auditoria);
+        when(torneosClient.listar()).thenThrow(new ResourceAccessException("caido"));
+
+        auditado.generarRespuesta("llevame a mi inventario", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+        auditado.generarRespuesta("busca as en mi inventario", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+        auditado.generarRespuesta("hay torneos en curso", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+        auditado.generarRespuesta("hola", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+
+        verify(auditoria, never()).registrar(any(), any(), any(), any());
+    }
+
+    // Sin bitacora central (el constructor de las pruebas) no se rompe nada.
+    @Test
+    void sinBitacoraCentralLaConsultaSigueIgual() {
+        when(inventarioClient.consultarInventario(TOKEN, 0)).thenReturn(new PaginaInventarioDto(List.of(), 0));
+
+        assertThat(motor.generarRespuesta("que tengo en mi inventario", TOKEN, UID, IdiomaPreferido.AUTOMATICO,
+            ORIGEN).orElseThrow().resultado()).isEqualTo(ResultadoDeRespuesta.CONSULTA_EN_VIVO);
     }
 }
