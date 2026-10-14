@@ -1,6 +1,5 @@
 package db.migration;
 
-import com.nexusbattles.ms_chatbot.chat.conocimiento.VariantesDePregunta;
 import org.flywaydb.core.api.migration.BaseJavaMigration;
 import org.flywaydb.core.api.migration.Context;
 import tools.jackson.databind.JsonNode;
@@ -114,10 +113,22 @@ public class V11__base_de_conocimiento_fiel_al_juego extends BaseJavaMigration {
 
     private static Tema tema(JsonNode nodo) {
         return new Tema(texto(nodo, "clave"), texto(nodo, "categoria"), texto(nodo, "tipoRespuesta"),
-            texto(nodo, "titulo"), VariantesDePregunta.unir(lista(nodo.path("variantesEs"))),
-            VariantesDePregunta.unir(lista(nodo.path("variantesEn"))), texto(nodo, "respuestaEs"),
+            texto(nodo, "titulo"), unir(lista(nodo.path("variantesEs"))),
+            unir(lista(nodo.path("variantesEn"))), texto(nodo, "respuestaEs"),
             texto(nodo, "respuestaEn"), nodo.path("prioridad").asInt(0), !nodo.has("activo")
             || nodo.path("activo").asBoolean(true));
+    }
+
+    // Las variantes se guardan como un solo texto separado por «, », igual que
+    // VariantesDePregunta.unir en la fecha de esta migracion. Va copiado aqui
+    // a proposito: una migracion aplicada no puede depender de codigo de la
+    // aplicacion que cambie despues, o una base nueva quedaria distinta.
+    private static String unir(List<String> variantes) {
+        List<String> limpias = variantes.stream()
+            .filter(v -> v != null && !v.isBlank())
+            .map(String::trim)
+            .toList();
+        return limpias.isEmpty() ? null : String.join(", ", limpias);
     }
 
     private static List<String> lista(JsonNode nodo) {
