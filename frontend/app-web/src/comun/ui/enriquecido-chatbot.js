@@ -10,11 +10,18 @@
  * como una URL: se convierten con `urlDeVista`, y uno que no existe no se
  * pinta. Así el asistente no puede mandar a nadie fuera del sitio.
  *
+ * #506 — tampoco se pinta un enlace (suelto o de tarjeta) a una vista que la
+ * sesión actual no puede ver (`destinoVisible`, la misma pregunta que hace
+ * la barra de navegación). Es defensa en profundidad: el servidor no debería
+ * mandarlo, y si lo manda, la vista lo negaría igual; así no se ofrece una
+ * puerta cerrada.
+ *
  * @module comun/ui/enriquecido-chatbot
  */
 
-import { urlDeVista } from '../acceso.js';
+import { destinoVisible, urlDeVista } from '../acceso.js';
 import { vistaDeRuta } from '../matriz-acceso.js';
+import { leerSesion } from '../sesion.js';
 import { h } from './dom.js';
 
 export const TEXTOS_ENRIQUECIDO = Object.freeze({
@@ -26,17 +33,38 @@ export const TEXTOS_ENRIQUECIDO = Object.freeze({
 /**
  * La sección del sitio (vista de la matriz) → la `vista` del contrato. Las
  * que no están aquí no se mandan: el asistente responde igual sin ella.
+ *
+ * #506 — toda vista de la matriz que pertenece a una de las seis secciones
+ * del contrato. Quedan fuera, a propósito: las de jugar en línea (batallas,
+ * salas, chat), que no tienen sección en el contrato; la tienda, las
+ * notificaciones y los comentarios, que no son de ninguna de las seis; y la
+ * consola de operación entera (administración y moderación).
  */
 export const VISTA_DEL_CHAT = Object.freeze({
+  // El inicio del jugador y la portada pública.
   home: 'INICIO',
+  portada: 'INICIO',
+  // Inventario y lo que se guarda en él.
   inventario: 'INVENTARIO',
   'mis-cofres': 'INVENTARIO',
   misiones: 'MISIONES',
   torneos: 'TORNEOS',
+  // El listado, el detalle con sus pujas y publicar una subasta.
   subastas: 'SUBASTAS',
   pujas: 'SUBASTAS',
+  'publicar-subasta': 'SUBASTAS',
+  // La cuenta: perfil, historial y sanciones, y entrar, crearla, recuperarla
+  // o confirmarla (RF-INV-008: a quien no ha entrado, «Mi Cuenta» le ofrece
+  // el registro).
   perfil: 'CUENTA',
   'historial-transacciones': 'CUENTA',
+  'mis-sanciones': 'CUENTA',
+  login: 'CUENTA',
+  registro: 'CUENTA',
+  'restablecer-solicitar': 'CUENTA',
+  'restablecer-confirmar': 'CUENTA',
+  'verificar-cuenta': 'CUENTA',
+  preparando: 'CUENTA',
 });
 
 /**
@@ -69,13 +97,24 @@ export function introAntesDePasos(contenido) {
  *          tarjetas?: Array<{titulo: string, texto: string, enlace?: {texto: string, destino: string}|null}>,
  *          respuestasRapidas?: string[], ofrecerSoporteHumano?: boolean}|null} enriquecido
  * @param {{alPreguntar: (pregunta: string) => void, alPedirSoporte: () => void,
- *          url?: (destino: string) => string|null}} acciones
+ *          url?: (destino: string) => string|null,
+ *          visible?: (destino: string) => boolean}} acciones `visible`: si la
+ *          sesión actual puede ver ese destino (inyectable en pruebas)
  * @returns {HTMLElement|null} null si no hay nada que pintar
  */
-export function pintarEnriquecido(enriquecido, { alPreguntar, alPedirSoporte, url = urlDeVista }) {
+export function pintarEnriquecido(
+  enriquecido,
+  {
+    alPreguntar,
+    alPedirSoporte,
+    url = urlDeVista,
+    visible = (destino) => destinoVisible(destino, leerSesion()),
+  },
+) {
   if (!enriquecido) {
     return null;
   }
+  const enlaceA = (enlace) => enlaceInterno(enlace, url, visible);
   const caja = h('div', { clase: 'chatbot-enriquecido', datos: { enriquecido: '' } });
 
   const pasos = enriquecido.pasos ?? [];
@@ -94,14 +133,14 @@ export function pintarEnriquecido(enriquecido, { alPreguntar, alPedirSoporte, ur
       h('p', { clase: 'chatbot-enriquecido__tarjeta-titulo', texto: tarjeta.titulo }),
       h('p', { clase: 'chatbot-enriquecido__tarjeta-texto', texto: tarjeta.texto }),
     ];
-    const enlace = enlaceInterno(tarjeta.enlace, url);
+    const enlace = enlaceA(tarjeta.enlace);
     if (enlace) {
       cuerpo.push(enlace);
     }
     caja.append(h('div', { clase: 'chatbot-enriquecido__tarjeta', hijos: cuerpo }));
   }
 
-  const enlaces = (enriquecido.enlaces ?? []).map((e) => enlaceInterno(e, url)).filter(Boolean);
+  const enlaces = (enriquecido.enlaces ?? []).map(enlaceA).filter(Boolean);
   if (enlaces.length > 0) {
     caja.append(h('div', { clase: 'chatbot-enriquecido__enlaces', hijos: enlaces }));
   }
@@ -139,8 +178,8 @@ export function pintarEnriquecido(enriquecido, { alPreguntar, alPedirSoporte, ur
   return caja.childElementCount > 0 ? caja : null;
 }
 
-function enlaceInterno(enlace, url) {
-  if (!enlace?.destino) {
+function enlaceInterno(enlace, url, visible) {
+  if (!enlace?.destino || !visible(enlace.destino)) {
     return null;
   }
   const destino = url(enlace.destino);

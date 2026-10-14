@@ -3,8 +3,13 @@
  *
  * Cuando el asistente no resuelve algo, el jugador con sesión abre una
  * solicitud de soporte (un ticket en el servidor) y ve aquí las suyas, con su
- * estado y la respuesta de soporte cuando llega. Un visitante no abre
- * solicitudes: se le ofrece iniciar sesión o el chat general.
+ * estado y la respuesta de soporte cuando llega.
+ *
+ * Un visitante no abre solicitudes (el servidor le responde 401). #506 — en
+ * vez de un callejón sin salida se le explica que hablar con una persona del
+ * equipo pide una cuenta, y se le ofrece iniciar sesión (volviendo después a
+ * la página donde estaba) o crear una. Ya no se le ofrece el chat general:
+ * también pide sesión, así que era otra puerta al mismo login.
  *
  * El texto que se pinta sale del servidor, así que entra con `textContent`
  * (`h()`), nunca como HTML. Los errores se deciden por el `motivo` del
@@ -47,9 +52,10 @@ export const TEXTOS_SOPORTE = Object.freeze({
   titulo: 'Hablar con soporte',
   intro: 'Cuéntanos qué pasa y una persona del equipo te responderá aquí.',
   volver: 'Volver al chat',
-  visitante: 'Para hablar con soporte necesitas iniciar sesión.',
+  visitante:
+    'Para hablar con una persona del equipo necesitas una cuenta: inicia sesión o crea una.',
   iniciarSesion: 'Iniciar sesión',
-  chatGeneral: 'Ir al chat general',
+  crearCuenta: 'Crear cuenta',
   categoria: 'Tema',
   asunto: 'Asunto',
   mensaje: 'Qué pasa',
@@ -73,8 +79,12 @@ export const TEXTOS_SOPORTE = Object.freeze({
   sinSesionDetalle: 'Inicia sesión de nuevo para hablar con soporte.',
   bloqueado: 'Tu mensaje tiene palabras que no están permitidas.',
   bloqueadoDetalle: 'Revísalo y vuelve a intentarlo.',
+  // #506 — contrato 1.4.0: el servidor también rechaza el código incrustado.
+  conCodigo: 'Tu mensaje parece contener código o instrucciones del sistema.',
+  conCodigoDetalle: 'Escríbelo con palabras y vuelve a intentarlo.',
   muchas: 'Enviaste muchas solicitudes seguidas.',
   muchasDetalle: 'Espera un momento y vuelve a intentarlo.',
+  muchasDetalleCon: (segundos) => `Espera ${segundos} s y vuelve a intentarlo.`,
   noDisponible: 'Soporte no está disponible en este momento.',
   noDisponibleDetalle: 'Inténtalo de nuevo en unos minutos.',
   invalido: 'Revisa los datos de la solicitud.',
@@ -86,11 +96,16 @@ export const TEXTOS_SOPORTE = Object.freeze({
 /**
  * Aviso para un error al abrir una solicitud. Por el `motivo`, luego por el estado.
  *
- * @param {{estado?: number, noDisponible?: boolean, problema?: {motivo?: string}|null}} error
+ * #506 — también la inyección de código (422 INYECCION_DETECTADA, contrato
+ * 1.4.0) y cualquier 429, traiga `motivo` o no (el del borde no lo trae), con
+ * los segundos de `Retry-After` si llegaron.
+ *
+ * @param {{estado?: number, noDisponible?: boolean, motivo?: string|null,
+ *          reintentarEn?: number|null, problema?: {motivo?: string}|null}} error
  * @returns {{tono: string, titulo: string, detalle: string}}
  */
 export function avisoDeError(error) {
-  const motivo = error?.problema?.motivo ?? null;
+  const motivo = error?.motivo ?? error?.problema?.motivo ?? null;
   const t = TEXTOS_SOPORTE;
   if (motivo === 'TICKET_ABIERTO') {
     return { tono: 'advertencia', titulo: t.yaAbierta, detalle: t.yaAbiertaDetalle };
@@ -101,8 +116,16 @@ export function avisoDeError(error) {
   if (motivo === 'CONTENIDO_BLOQUEADO') {
     return { tono: 'advertencia', titulo: t.bloqueado, detalle: t.bloqueadoDetalle };
   }
-  if (motivo === 'LIMITE_DE_FRECUENCIA') {
-    return { tono: 'advertencia', titulo: t.muchas, detalle: t.muchasDetalle };
+  if (motivo === 'INYECCION_DETECTADA') {
+    return { tono: 'advertencia', titulo: t.conCodigo, detalle: t.conCodigoDetalle };
+  }
+  if (motivo === 'LIMITE_DE_FRECUENCIA' || error?.estado === 429) {
+    const segundos = error?.reintentarEn;
+    return {
+      tono: 'advertencia',
+      titulo: t.muchas,
+      detalle: segundos > 0 ? t.muchasDetalleCon(segundos) : t.muchasDetalle,
+    };
   }
   if (motivo === 'MODERACION_NO_DISPONIBLE' || error?.noDisponible) {
     return { tono: 'error', titulo: t.noDisponible, detalle: t.noDisponibleDetalle };
@@ -115,11 +138,15 @@ export function avisoDeError(error) {
 
 /**
  * @param {{cliente: {abrirTicket: Function, misTickets: Function},
- *          sesion: () => {autenticado?: boolean}, login: string|null,
- *          chatGeneral: string, alVolver: () => void}} opciones
+ *          sesion: () => {autenticado?: boolean},
+ *          login: string|(() => string|null)|null,
+ *          registro?: string|(() => string|null)|null,
+ *          alVolver: () => void}} opciones `login` y `registro`: la URL, o una
+ *          función que la da al abrir el panel (así la vuelta tras entrar es
+ *          la página de ese momento)
  * @returns {{elemento: HTMLElement, abrir: () => void, enfocar: () => void}}
  */
-export function crearPanelSoporte({ cliente, sesion, login, chatGeneral, alVolver }) {
+export function crearPanelSoporte({ cliente, sesion, login, registro = null, alVolver }) {
   let enviando = false;
 
   const botonVolver = h('button', {
@@ -154,19 +181,27 @@ export function crearPanelSoporte({ cliente, sesion, login, chatGeneral, alVolve
 
   function pintarVisitante() {
     const acciones = h('div', { clase: 'chatbot-soporte__acciones' });
-    if (login) {
+    const destinoLogin = typeof login === 'function' ? login() : login;
+    const destinoRegistro = typeof registro === 'function' ? registro() : registro;
+    if (destinoLogin) {
       acciones.append(
-        boton({ texto: TEXTOS_SOPORTE.iniciarSesion, href: login, nombre: 'iniciar-sesion' }),
+        boton({
+          texto: TEXTOS_SOPORTE.iniciarSesion,
+          href: destinoLogin,
+          nombre: 'iniciar-sesion',
+        }),
       );
     }
-    acciones.append(
-      boton({
-        texto: TEXTOS_SOPORTE.chatGeneral,
-        variante: 'secundario',
-        href: chatGeneral,
-        nombre: 'chat-general',
-      }),
-    );
+    if (destinoRegistro) {
+      acciones.append(
+        boton({
+          texto: TEXTOS_SOPORTE.crearCuenta,
+          variante: 'secundario',
+          href: destinoRegistro,
+          nombre: 'crear-cuenta',
+        }),
+      );
+    }
     contenido.append(
       h('p', { clase: 'chatbot-soporte__texto', texto: TEXTOS_SOPORTE.visitante }),
       acciones,

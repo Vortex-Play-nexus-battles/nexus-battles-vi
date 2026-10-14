@@ -4,6 +4,8 @@
 
 import { jest } from '@jest/globals';
 
+import { MATRIZ } from '../matriz-acceso.js';
+import { CLAVES } from '../sesion.js';
 import {
   VISTA_DEL_CHAT,
   introAntesDePasos,
@@ -13,12 +15,21 @@ import {
 
 const url = (destino) => (destino === 'no-existe' ? null : `/vistas/${destino}.html`);
 
-function pintar(enriquecido) {
+function pintar(enriquecido, { visible } = {}) {
   const alPreguntar = jest.fn();
   const alPedirSoporte = jest.fn();
-  const el = pintarEnriquecido(enriquecido, { alPreguntar, alPedirSoporte, url });
+  const el = pintarEnriquecido(enriquecido, {
+    alPreguntar,
+    alPedirSoporte,
+    url,
+    ...(visible ? { visible } : {}),
+  });
   return { el, alPreguntar, alPedirSoporte };
 }
+
+beforeEach(() => {
+  sessionStorage.clear();
+});
 
 test('pinta los pasos numerados', () => {
   const { el } = pintar({ pasos: ['Elige el ítem.', 'Confirma.'] });
@@ -104,4 +115,97 @@ test('vistaDelChat traduce la vista de la matriz a la del contrato', () => {
   expect(Object.values(VISTA_DEL_CHAT)).toEqual(
     expect.arrayContaining(['INICIO', 'INVENTARIO', 'MISIONES', 'TORNEOS', 'SUBASTAS', 'CUENTA']),
   );
+});
+
+// #506 — más vistas mandan la sección donde está el jugador.
+describe('VISTA_DEL_CHAT (#506)', () => {
+  const SEIS = ['INICIO', 'INVENTARIO', 'MISIONES', 'TORNEOS', 'SUBASTAS', 'CUENTA'];
+
+  test.each([
+    ['portada', 'INICIO'],
+    ['home', 'INICIO'],
+    ['publicar-subasta', 'SUBASTAS'],
+    ['mis-sanciones', 'CUENTA'],
+    ['login', 'CUENTA'],
+    ['registro', 'CUENTA'],
+    ['restablecer-solicitar', 'CUENTA'],
+    ['restablecer-confirmar', 'CUENTA'],
+    ['verificar-cuenta', 'CUENTA'],
+    ['preparando', 'CUENTA'],
+    ['mis-cofres', 'INVENTARIO'],
+    ['misiones', 'MISIONES'],
+    ['torneos', 'TORNEOS'],
+  ])('%s → %s', (vista, seccion) => {
+    expect(vistaDelChat(vista)).toBe(seccion);
+  });
+
+  test('solo usa los seis valores del contrato y solo vistas que existen', () => {
+    for (const [vista, seccion] of Object.entries(VISTA_DEL_CHAT)) {
+      expect(SEIS).toContain(seccion);
+      expect(MATRIZ[vista]).toBeDefined();
+    }
+  });
+
+  test('ninguna vista de la consola de operación manda sección', () => {
+    const deLaConsola = Object.entries(MATRIZ)
+      .filter(([, entrada]) => entrada.armazon === 'admin')
+      .map(([id]) => id);
+    expect(deLaConsola.length).toBeGreaterThan(0);
+    for (const vista of deLaConsola) {
+      expect(vistaDelChat(vista)).toBeNull();
+    }
+  });
+});
+
+// #506 — defensa en profundidad: ni un enlace suelto ni el de una tarjeta a
+// una vista que la sesión actual no puede ver.
+describe('enlaces según quién mira (#506)', () => {
+  const RICO = {
+    enlaces: [
+      { texto: 'Ir a Catálogo', destino: 'productos' },
+      { texto: 'Ir a Subastas', destino: 'subastas' },
+    ],
+    tarjetas: [{ titulo: 'Usuarios', texto: 'x', enlace: { texto: 'Ver', destino: 'auditoria' } }],
+  };
+
+  function sesionDe(rol) {
+    const cuerpo = btoa(JSON.stringify({ uid: 'u-1', sub: 'Ana', rol, exp: 4102444800 }))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    sessionStorage.setItem(CLAVES.token, `e.${cuerpo}.f`);
+    sessionStorage.setItem(CLAVES.rol, rol);
+  }
+
+  test('con la comprobación inyectada, lo que no se ve no se pinta', () => {
+    const visible = jest.fn((destino) => destino === 'subastas');
+    const { el } = pintar(RICO, { visible });
+
+    expect(
+      [...el.querySelectorAll('.chatbot-enriquecido__enlace')].map((a) => a.dataset.destino),
+    ).toEqual(['subastas']);
+    expect(el.querySelector('.chatbot-enriquecido__tarjeta a')).toBeNull();
+    expect(el.querySelector('.chatbot-enriquecido__tarjeta').textContent).toContain('Usuarios');
+    expect(visible).toHaveBeenCalledWith('productos');
+    expect(visible).toHaveBeenCalledWith('auditoria');
+  });
+
+  test('por omisión pregunta a la sesión: a un jugador no le enseña la consola', () => {
+    sesionDe('JUGADOR');
+    const { el } = pintar(RICO);
+
+    expect(
+      [...el.querySelectorAll('.chatbot-enriquecido__enlace')].map((a) => a.dataset.destino),
+    ).toEqual(['subastas']);
+  });
+
+  test('por omisión, al super administrador sí se los enseña', () => {
+    sesionDe('SUPER_ADMINISTRADOR');
+    const { el } = pintar(RICO);
+
+    // Primero la tarjeta (con su enlace), luego los enlaces sueltos.
+    expect(
+      [...el.querySelectorAll('.chatbot-enriquecido__enlace')].map((a) => a.dataset.destino),
+    ).toEqual(['auditoria', 'productos', 'subastas']);
+  });
 });

@@ -10,6 +10,7 @@ import { jest } from '@jest/globals';
 
 import {
   CLAVES,
+  CLAVE_SESION_ANONIMA,
   DESFASE_DESPRECIABLE_MS,
   MOTIVOS,
   MOTIVOS_DE_VERIFICACION,
@@ -241,6 +242,48 @@ describe('cerrar y olvidar', () => {
     cerrarSesion({ almacen: sessionStorage, navegar, base: BASE, avisar, difundir: jest.fn() });
     expect(avisar).toHaveBeenCalledWith(null);
     expect(navegar).toHaveBeenCalledTimes(1);
+  });
+});
+
+// #506 — privacidad: la conversación de visitante del asistente se guarda en
+// el servidor con este identificador. Si sobrevivía al cierre de sesión, la
+// siguiente persona en esa pestaña abría el asistente y la leía.
+describe('el identificador de visitante del asistente (#506)', () => {
+  const VISITANTE = 'visitante-de-antes';
+
+  test('olvidarSesion lo borra', () => {
+    conSesion();
+    sessionStorage.setItem(CLAVE_SESION_ANONIMA, VISITANTE);
+    olvidarSesion(sessionStorage);
+    expect(sessionStorage.getItem(CLAVE_SESION_ANONIMA)).toBeNull();
+  });
+
+  test('cerrarSesion lo borra antes de ir al login', () => {
+    conSesion();
+    sessionStorage.setItem(CLAVE_SESION_ANONIMA, VISITANTE);
+    const navegar = jest.fn(() => {
+      expect(sessionStorage.getItem(CLAVE_SESION_ANONIMA)).toBeNull();
+    });
+    cerrarSesion({
+      almacen: sessionStorage,
+      navegar,
+      base: BASE,
+      avisar: jest.fn(),
+      difundir: jest.fn(),
+    });
+    expect(navegar).toHaveBeenCalledTimes(1);
+  });
+
+  test('entrar también lo borra: un cierre posterior no resucita lo de antes de entrar', () => {
+    sessionStorage.setItem(CLAVE_SESION_ANONIMA, VISITANTE);
+    const token = tokenCon({ uid: UID, sub: 'Ana', exp: Math.floor(Date.now() / 1000) + 60 });
+    guardarSesion({ token, apodo: 'Ana', rol: 'JUGADOR', uid: UID }, sessionStorage);
+    expect(sessionStorage.getItem(CLAVE_SESION_ANONIMA)).toBeNull();
+    expect(leerSesion(sessionStorage).autenticado).toBe(true);
+  });
+
+  test('es la clave que usa el asistente', () => {
+    expect(CLAVE_SESION_ANONIMA).toBe('nexus.chatbot.sesionAnonima');
   });
 });
 

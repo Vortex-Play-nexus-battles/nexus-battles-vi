@@ -2672,13 +2672,17 @@ button.tarjeta--partida:disabled {
    HU-CHA-001: chat para visitantes y jugadores · HU-CHA-011: calificar
    -----------------------------------------------------------------------
    Panel flotante NO modal, anclado sobre el botón `.chatbot-flotante`.
-   Sin z-index a propósito: se cuelga al final del <body>, así que queda
-   sobre el contenido de la vista, y el `.velo` de una confirmación (que se
-   cuelga después) queda sobre él.
+   #506 — con capa propia (`--capa-asistente`, tokens.css), la misma que el
+   botón: sobre el contenido y los avisos de cualquier vista, bajo los menús
+   de la cabecera, el desenlace y los modales (el `.velo` de una
+   confirmación queda sobre ella). Antes no tenía, y una pieza de la vista con
+   `z-index: 1` (la tarjeta de una misión, el pie de los filtros) se le ponía
+   encima.
    ----------------------------------------------------------------------- */
 
 .chatbot-ventana {
   position: fixed;
+  z-index: var(--capa-asistente);
   right: var(--e-6);
   bottom: calc(56px + var(--e-6) + var(--e-3));
   width: min(380px, calc(100vw - var(--e-8)));
@@ -2689,12 +2693,33 @@ button.tarjeta--partida:disabled {
   border: 1px solid var(--borde);
   border-radius: var(--radio);
   box-shadow: var(--sombra-3);
-  overflow: hidden;
+  /* #506 — nunca a lo ancho; a lo alto, solo si no cabe. En una pantalla
+     baja (un teléfono de 667 px con un aviso abierto) la suma de la cabecera,
+     el mínimo de la conversación, el aviso y el formulario pasa del alto
+     máximo: antes se cortaba la caja de texto, ahora la ventana se desplaza
+     (la cabecera se queda arriba y, tras cada envío, la ventana trae la caja
+     a la vista: `terminarEnvio` en ventana-chatbot.js). */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
+/* #506 — dos filas: el título con minimizar y cerrar, y debajo las acciones
+   de texto, que se parten en otra fila si no caben. Con las cinco en la fila
+   del título, a 1366 px el título se quedaba sin sitio y a 320–375 px
+   «Preferencias» salía cortado. El orden del DOM (el del tabulador) no
+   cambia: lo coloca la rejilla. */
 .chatbot-ventana__cabecera {
+  /* Si la ventana llega a desplazarse (ver arriba), minimizar y cerrar
+     siguen a mano. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'titulo controles'
+    'acciones acciones'
+    'estado estado';
   align-items: center;
   column-gap: var(--e-3);
   padding: var(--e-3) var(--e-4);
@@ -2703,24 +2728,36 @@ button.tarjeta--partida:disabled {
 }
 
 .chatbot-ventana__titulo {
+  grid-area: titulo;
+  min-width: 0;
   margin: 0;
   font-family: var(--t-etiqueta-familia);
   font-size: var(--t-cuerpo-tam);
   font-weight: var(--t-etiqueta-peso);
+  overflow-wrap: anywhere;
 }
 
 .chatbot-ventana__estado {
-  grid-column: 1 / -1;
+  grid-area: estado;
   margin: 0;
   font-size: var(--t-meta-tam);
   color: var(--texto-2);
 }
 
 .chatbot-ventana__acciones {
+  grid-area: acciones;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--e-2);
+  min-width: 0;
+}
+
+.chatbot-ventana__controles {
+  grid-area: controles;
   display: flex;
   align-items: center;
-  gap: var(--e-2);
-  flex: 0 0 auto;
+  gap: var(--e-1);
 }
 
 /* Acciones secundarias (borrar, adjuntar): texto, no botón sólido, para
@@ -2757,6 +2794,16 @@ button.tarjeta--partida:disabled {
 .chatbot-ventana__cerrar:hover {
   background: var(--superficie-2);
   color: var(--texto);
+}
+
+/* #506 — la región `role="log"` que envuelve la lista de mensajes. Hace de
+   hueco flexible de la ventana; la lista, dentro, sigue siendo la que se
+   desplaza. */
+.chatbot-ventana__conversacion {
+  flex: 1 1 auto;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
 }
 
 .chatbot-ventana__registro {
@@ -3188,10 +3235,15 @@ button.tarjeta--partida:disabled {
   height: auto !important;
 }
 
+/* #506 — minimizada queda solo la barra de título (título, restaurar y
+   cerrar): las acciones de texto, que ahora van en su propia fila, también se
+   ocultan, porque abrirían paneles que la ventana minimizada no enseña. */
+.chatbot-ventana--minimizada .chatbot-ventana__conversacion,
 .chatbot-ventana--minimizada .chatbot-ventana__registro,
 .chatbot-ventana--minimizada .chatbot-soporte,
 .chatbot-ventana--minimizada .chatbot-ventana__aviso,
 .chatbot-ventana--minimizada .chatbot-ventana__formulario,
+.chatbot-ventana--minimizada .chatbot-ventana__acciones,
 .chatbot-ventana--minimizada .chatbot-ventana__estado,
 .chatbot-ventana--minimizada .chatbot-ventana__asa {
   display: none;
@@ -3204,7 +3256,8 @@ button.tarjeta--partida:disabled {
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 1;
+  /* Sobre la cabecera, que desde #506 es pegajosa (z-index 1). */
+  z-index: 2;
   width: 24px;
   height: 24px;
   padding: 0;
@@ -3965,9 +4018,12 @@ button.tarjeta--partida:disabled {
    genérico»: el emblema del Nexo sobre el cromo, con un halo de energía que
    gira despacio, una señal y el rótulo «Asistente Nexus» al pasar o al llegar
    con el teclado. Mismo tamaño que antes (56 px): la ventana y los huecos que
-   las vistas le reservan siguen midiendo lo mismo. */
+   las vistas le reservan siguen midiendo lo mismo.
+   #506 — en la capa del asistente (tokens.css): sobre los avisos de una
+   vista, bajo los modales. */
 .chatbot-flotante {
   position: fixed;
+  z-index: var(--capa-asistente);
   right: var(--e-6);
   bottom: var(--e-6);
   width: 56px;
