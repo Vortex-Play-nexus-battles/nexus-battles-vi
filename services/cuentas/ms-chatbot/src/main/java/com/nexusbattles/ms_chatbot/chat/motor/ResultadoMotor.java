@@ -22,6 +22,9 @@ import java.util.List;
  * @param enriquecido           ms-chatbot.yaml 1.3.4: pasos, enlaces, tarjetas, respuestas
  *                              rápidas y oferta de soporte humano; null si no hay nada que
  *                              pintar
+ * @param ingles                ms-chatbot.yaml 1.5.0: la respuesta está en inglés; lo que
+ *                              {@code ChatService} añada (preguntas relacionadas, el aviso de
+ *                              un dato tapado) va en el mismo idioma
  */
 public record ResultadoMotor(
     String texto,
@@ -30,7 +33,8 @@ public record ResultadoMotor(
     boolean requiereEscalamiento,
     List<String> temasSugeridos,
     String temaClave,
-    RespuestaEnriquecida enriquecido
+    RespuestaEnriquecida enriquecido,
+    boolean ingles
 ) {
 
     public static ResultadoMotor deTema(String texto, Categoria categoria, TipoRespuesta tipoRespuesta) {
@@ -39,16 +43,22 @@ public record ResultadoMotor(
 
     public static ResultadoMotor deTema(String texto, Categoria categoria, TipoRespuesta tipoRespuesta,
                                         String temaClave) {
-        return new ResultadoMotor(texto, categoria, tipoRespuesta, false, List.of(), temaClave, null);
+        return new ResultadoMotor(texto, categoria, tipoRespuesta, false, List.of(), temaClave, null, false);
     }
 
     public static ResultadoMotor escalado(String texto, List<String> temasSugeridos) {
-        return new ResultadoMotor(texto, null, null, true, temasSugeridos, null, null);
+        return new ResultadoMotor(texto, null, null, true, temasSugeridos, null, null, false);
     }
 
     /** Copia con la respuesta enriquecida (1.3.4). */
     public ResultadoMotor conEnriquecido(RespuestaEnriquecida nuevo) {
         return new ResultadoMotor(texto, categoria, tipoRespuesta, requiereEscalamiento, temasSugeridos, temaClave,
-            nuevo);
+            nuevo, ingles);
+    }
+
+    /** Copia que dice en qué idioma quedó la respuesta (1.5.0). */
+    public ResultadoMotor enIngles(boolean enIngles) {
+        return new ResultadoMotor(texto, categoria, tipoRespuesta, requiereEscalamiento, temasSugeridos, temaClave,
+            enriquecido, enIngles);
     }
 }

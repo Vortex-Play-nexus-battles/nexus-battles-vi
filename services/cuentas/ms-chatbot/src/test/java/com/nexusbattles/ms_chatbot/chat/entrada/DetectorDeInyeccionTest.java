@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class DetectorDeInyeccionTest {
 
     private static final Path BASE = Path.of("src/main/resources/db/migration/V2__crear_base_de_conocimiento.sql");
-    private static final Path TEMAS_7_4_2 = Path.of("contenido/temas-7-4-2.json");
+    private static final Path BASE_COMPLETA = Path.of("contenido/base-de-conocimiento.json");
 
     @ParameterizedTest(name = "HTML: {0}")
     @ValueSource(strings = {
@@ -187,7 +187,7 @@ class DetectorDeInyeccionTest {
                 }
             }
         }
-        JsonNode temas = JsonMapper.builder().build().readTree(TEMAS_7_4_2.toFile());
+        JsonNode temas = JsonMapper.builder().build().readTree(BASE_COMPLETA.toFile());
         for (JsonNode tema : temas.path("temas")) {
             textos.add(tema.path("titulo").asText());
             textos.add(tema.path("respuestaEs").asText());
