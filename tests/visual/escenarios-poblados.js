@@ -2082,6 +2082,80 @@ export const ESCENARIOS = [
     exige: ['[data-comentario], .cola__entrada, article'],
   },
   {
+    // SA-16 (§7.3.8): el detalle de un comentario reportado, con su producto
+    // por el nombre y la conversación en la que estaba (comentarios 1.17.0).
+    id: 'moderacion-detalle-en-contexto',
+    titulo: 'detalle de moderación con el comentario en su contexto (SA-16, §7.3.8)',
+    ruta: 'plataforma/comentarios/moderar-comentarios.html',
+    sesion: () => sesionDe('qa_moderador', 'MODERADOR'),
+    rutas: [
+      [
+        '**/api/v1/comentarios/moderacion*',
+        json({ entradas: [comentarioReportado(1)], total: 1, pagina: 0, tamano: 16 }),
+      ],
+      [
+        `**/api/v1/comentarios/moderacion/${comentarioReportado(1).comentario.id}`,
+        json({
+          comentario: comentarioReportado(1).comentario,
+          reportes: [
+            {
+              id: 'rep-lab-1',
+              categoria: 'CONTENIDO_OFENSIVO',
+              descripcion: 'Insulta a quien lo compró.',
+              fecha: new Date(Date.now() - 3_000_000).toISOString(),
+            },
+          ],
+          historial: [],
+        }),
+      ],
+      [
+        '**/api/v1/comentarios/moderacion/*/contexto*',
+        json({
+          comentarioId: comentarioReportado(1).comentario.id,
+          productoId: comentarioReportado(1).comentario.productoId,
+          anteriores: [
+            ['kira_del_sur', 'PUBLICADO', '¿Alguien lo probó contra el Mago de Hielo?', 4],
+            ['thar_vex', 'OCULTO', 'Esto es una estafa, igual que quien lo vende.', 3],
+          ].map(([apodoAutor, estado, texto, horas], n) => ({
+            id: `44444444-2222-4222-8222-${String(n).padStart(12, '0')}`,
+            apodoAutor,
+            texto,
+            fechaPublicacion: new Date(Date.now() - horas * 3_600_000).toISOString(),
+            estado,
+            editado: false,
+          })),
+          posteriores: [
+            {
+              id: '44444444-2222-4222-8222-000000000009',
+              apodoAutor: 'nyx_valiente',
+              texto: 'A mí me llegó bien, sin problemas.',
+              fechaPublicacion: new Date(Date.now() - 3_600_000).toISOString(),
+              estado: 'PUBLICADO',
+              editado: false,
+            },
+          ],
+          totalEnElHilo: 12,
+        }),
+      ],
+      [
+        `**/api/v1/productos/${comentarioReportado(1).comentario.productoId}`,
+        json({
+          id: comentarioReportado(1).comentario.productoId,
+          nombre: 'Yelmo del Centinela',
+          tipo: 'ARMADURA',
+        }),
+      ],
+    ],
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-accion="revisar"]').first().click();
+    },
+    exige: [
+      '[data-zona="contexto"] [data-campo="producto"]',
+      '[data-zona="contexto-hilo"] li[aria-current="true"]',
+      '[data-zona="contexto-hilo"] li [data-campo="estado"]',
+    ],
+  },
+  {
     // UX-GAME-5 — el árbol de doble eliminación con la primera ronda jugada.
     id: 'torneo-en-curso',
     titulo: 'torneo en curso con el árbol de doble eliminación',
