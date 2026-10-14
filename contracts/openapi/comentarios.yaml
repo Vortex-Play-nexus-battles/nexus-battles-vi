@@ -139,7 +139,17 @@ info:
     1.10.1 (HU-COM-005, #519): solo se quitan las marcas `x-implementacion` y `x-fase` de
     `resolverEnLote`, porque el servicio ya la implementa. No cambia ninguna
     ruta, campo, respuesta ni error. Es un parche.
-  version: 1.10.1
+
+    1.11.0 (revision final del modulo Jugador / Inventario, 13-oct; decision
+    del Product Owner sobre el issue 34): el texto de un comentario tiene como
+    mucho 2000 caracteres (`maxLength: 2000` en
+    `PublicacionComentarioRequest.texto`, el mismo maximo que ya tenia
+    `textoNuevo` al editar). Se cuentan caracteres, no bytes: un emoji cuenta
+    uno. Pasarse responde 400 con `type`
+    `https://nexusbattles.local/errores/texto-demasiado-largo`. Hasta aqui el
+    largo no se limitaba porque la decision estaba pendiente. Ningun campo ni
+    respuesta cambia de forma: es menor.
+  version: 1.11.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -273,8 +283,10 @@ paths:
                 $ref: "#/components/schemas/ComentarioResponse"
         "400":
           description: >
-            Datos de la solicitud invalidos o incompletos: sin texto, estrellas
-            fuera de 1..5, o imagenes que no se pueden adjuntar (`type`
+            Datos de la solicitud invalidos o incompletos: sin texto, un texto
+            de mas de 2000 caracteres (`type`
+            `https://nexusbattles.local/errores/texto-demasiado-largo`, 1.11.0),
+            estrellas fuera de 1..5, o imagenes que no se pueden adjuntar (`type`
             `https://nexusbattles.local/errores/imagenes-no-validas`): mas de
             tres, repetidas, un nombre de archivo en vez de un id, o el id de
             una imagen ajena, ya usada o inexistente.
@@ -1148,9 +1160,11 @@ components:
             Obsoleto desde la 1.1.0: se ignora. El apodo sale del token.
         texto:
           type: string
+          maxLength: 2000
           description: >
-            Contenido escrito. El largo maximo esta pendiente de definir con el
-            Product Owner (issue 34), por eso todavia no se limita aqui.
+            Contenido escrito, obligatorio. 1.11.0 — como mucho 2000
+            caracteres (decision del Product Owner, issue 34); se cuentan
+            caracteres, no bytes. Pasarse es 400 `texto-demasiado-largo`.
         imagenes:
           type: array
           items:
