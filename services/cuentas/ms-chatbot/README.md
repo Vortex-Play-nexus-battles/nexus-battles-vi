@@ -1,6 +1,6 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
-**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.6.0 (compatible con 1.1.0)
+**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.9.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.0.0 (canal en tiempo real, 7.4.9)
 **Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V12) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
@@ -223,19 +223,92 @@ contrato del inventario). El **informe de actividad** pide sus cinco partes a la
 virtuales) y espera como mucho 1,7 s en total: la parte que no llega se dice «no disponible»
 y el resto se entrega (7.4.11, menos de 2 s).
 
+## Tiempo real (7.4.9, `contracts/websocket/chatbot.yaml` 1.0.0)
+
+«WebSocket para comunicación en tiempo real». STOMP sobre WebSocket nativo (sin SockJS), como
+ms-subastas, en `/api/v1/ws-chatbot` (`chat.tiemporeal`). No sustituye a la API: es la misma
+conversación por otro transporte, y cada pregunta pasa por `ChatService.enviarMensaje`, el
+mismo camino que `POST /chat/mensajes` (límites por identidad y por la dirección del
+handshake, revisión de la entrada, lista negra, motores, caché, guardado). Nada se duplica.
+
+| Destino | Quién | Qué |
+|---|---|---|
+| `SEND /app/chat/mensajes` | cliente | `{contenido, vista?, idCorrelacion?}` (`EnviarMensaje` de la API más la correlación) |
+| `/user/queue/chat/estado` | servidor | `{estado: "ESCRIBIENDO"}` en cuanto acepta la pregunta |
+| `/user/queue/chat/respuestas` | servidor | el `Mensaje` de la API, solo a la conexión que preguntó |
+| `/user/queue/chat/errores` | servidor | problem details plano con `motivo` y, en un 429, `reintentarEn` |
+| `/user/queue/soporte/tickets` | servidor | lo que el dueño ve de su solicitud al atenderla un administrador |
+
+- **Handshake**: solo los orígenes de CORS (`CORS_ORIGENES`), sin identidad (el navegador no
+  puede mandar cabeceras). `SecurityConfig` deja pasar `/ws-chatbot`; la identidad va en el
+  CONNECT.
+- **CONNECT, con las reglas de la API** (`PoliticaDelCanal` + `ResolutorDeIdentidad.enElCanal`):
+  `Authorization: Bearer` válido con `uid` → jugador; uno inválido, vencido o sin `uid` degrada
+  a visitante; un visitante necesita `X-Id-Sesion-Anonima` (emitida vigente o declarada). Sin
+  ninguna, frame `ERROR`. El nombre de la conexión lo pone el servidor: el `uid` o `anonimo:` +
+  la huella de la sesión; nunca algo del cliente.
+- **Interceptor**: `SUBSCRIBE` solo a los cuatro `/user/queue/...` de la tabla y `SEND` solo a
+  `/app/chat/mensajes`. Lo demás (`/user/<uid>/...`, `/queue/...` directo, `/topic`, comodines)
+  recibe `ERROR` con su motivo (`ErroresDelProtocolo`) y la conexión se cierra.
+- **En cada mensaje** la identidad se vuelve a resolver con lo que trajo el CONNECT (un token que
+  vence deja de ser un jugador, como en la API). La respuesta lleva `id-correlacion` y
+  `traceparent` (regla 5: cada pregunta abre su traza). Se responde en un hilo virtual por
+  pregunta, con **2 en vuelo por conexión** como mucho (la siguiente, 429).
+- **Soporte en vivo**: `TicketSoporteAdminService.atender` publica `TicketActualizado` y, tras el
+  commit, `AvisosDeSoporte` lo manda al `uid` del dueño (todas sus conexiones, nadie más).
+- **Una sola instancia.** El broker es el simple de Spring, en memoria: conexiones,
+  suscripciones y avisos son de la instancia. Escalar horizontalmente exigiría un broker externo
+  (relay STOMP), que no está desplegado; el contrato no promete más. Efecto sabido: el
+  planificador del broker es el único `TaskScheduler`, así que las tareas `@Scheduled` corren en
+  él (un hilo por procesador), como en ms-subastas.
+
+| Variable | Por omisión | Qué fija |
+|---|---|---|
+| `CHATBOT_WS_LATIDO_MS` | 10000 | latido STOMP en cada sentido (D-CHA-09) |
+| `CHATBOT_WS_MENSAJES_EN_VUELO` | 2 | preguntas sin responder por conexión (D-CHA-09) |
+
+Pruebas: `PoliticaDelCanalTest`, `ConversacionEnVivoTest`, `PiezasDelCanalTest` y
+`CanalDelChatbotIT` (`WebSocketStompClient` contra el puerto real, PostgreSQL de Testcontainers
+y JWT RS256 firmados de verdad): B nunca recibe la respuesta ni el ticket de A, un visitante no
+se suscribe a `/user/<uid>/...`, y el 429 por identidad llega con `reintentarEn`.
+
+## Caché de respuestas frecuentes (7.4.9, `ms-chatbot.yaml` 1.9.0)
+
+- **Qué se guarda**: solo el `ResultadoMotor` de la base de conocimiento
+  (`MotorRespuestas.generarRespuesta`). Clave: versión en producción + huella SHA-256 de la
+  pregunta normalizada + idioma + nivel de detalle + `vista` (`CacheDeRespuestas.Clave`). No
+  depende de quién pregunta. **Nunca** pasan por ella las consultas en vivo
+  (`MotorConsultasAsistidas`, privadas de cada jugador), los seguimientos (`Seguimiento`) ni el
+  aviso de un dato tapado. La brecha de una pregunta escalada se registra igual aunque la
+  respuesta salga de la caché.
+- **Cuánto**: LRU acotada con vigencia, propia (sin dependencias nuevas): 500 respuestas, 30 min
+  cada una (D-CHA-08); unos 3 KB por respuesta, ~1,5 MB del montón de 128 MiB.
+- **Versiones**: en cada mensaje se consulta solo el id de la versión en producción (una fila);
+  los temas se leen una vez por versión (`TemasEnProduccion`, unos cientos de KB). Un despliegue,
+  una reversión o la publicación programada —en esta instancia o en otra— cambian ese id: lo
+  guardado con la anterior se descarta y una respuesta calculada con la vieja no se guarda.
+- **Métricas** (Actuator): `chatbot.cache.respuestas.aciertos`, `.fallos`,
+  `.desalojos{causa=capacidad|caducidad|version}`, `.tamano`; `chatbot.cache.temas.cargas` y
+  `.tamano`.
+
+| Variable | Por omisión | Qué fija |
+|---|---|---|
+| `CHATBOT_CACHE_RESPUESTAS_MAXIMO` | 500 | respuestas guardadas (0 la apaga) |
+| `CHATBOT_CACHE_RESPUESTAS_MINUTOS` | 30 | minutos que vale cada una |
+
+Pruebas: `CacheDeRespuestasTest`, `TemasEnProduccionTest`, `RespuestasEnCacheTest` y
+`RespuestasFrecuentesIT` (una pregunta repetida no vuelve al repositorio de temas: lo cuentan el
+repositorio espiado y las estadísticas de Hibernate; desplegar y revertir leen los temas
+nuevos).
+
 ## Despliegue
 
 En DEV desde #775 (29-sep, host de plataforma en `c7i-flex.large`): `desplegableDev: true` en
 `infrastructure/despliegue/servicios.json`, JVM de 256 MiB y `chatbot-db` de 128 MiB
-(`docker-compose.ms-chatbot.yml`), ruta `/api/v1/(chat|chatbot)` en `borde-dev.conf`. El CD lo
-reconstruye cuando un commit toca el servicio y comprueba `/api/v1/chat/historial` por el
-borde. Una sola instancia: el límite de frecuencia y lo que guarde en memoria son por instancia.
-
-## Lo que falta del 7.4 (brechas declaradas)
-
-- **WebSocket** (7.4.9): el chat es REST; no hay canal STOMP del chatbot ni contrato en
-  `contracts/websocket/`.
-- **Caché de respuestas frecuentes** (7.4.9): no implementada.
+(`docker-compose.ms-chatbot.yml`), rutas `/api/v1/(chat|chatbot)` y `/api/v1/ws-chatbot` (con
+`Upgrade`, 7.4.9) en `borde-dev.conf`. El CD lo reconstruye cuando un commit toca el servicio y
+comprueba `/api/v1/chat/historial` por el borde. Una sola instancia: el límite de frecuencia, la
+caché, el broker del canal en tiempo real y lo que guarde en memoria son por instancia.
 
 ## Frontend
 
@@ -246,6 +319,14 @@ tal cual con 1.2.0, sin cambios. Recomendación para su dueño, no requisito: fu
 adivinar; pedir la sesión con `POST /chat/sesiones` la haría de 256 bits. CORS ya expone
 `X-Id-Sesion-Anonima` y `Retry-After` para desarrollo local.
 
+7.4.9: `frontend/app-web/src/comun/canal-chatbot.js` abre el canal (con
+`transporte-stomp.js` y la reconexión de `canal-reconectable.js`) cuando la ventana ya cargó
+la conversación. Mientras está abierto las preguntas van por STOMP y «escribiendo…» sale del
+`ESCRIBIENDO`; si no abre, se cae o no acusa una pregunta a tiempo (5 s; 30 s para la
+respuesta), esa pregunta va por HTTP y el canal se rehace (degradación controlada, riesgo #7;
+en el peor caso la pregunta queda dos veces en el historial, nunca se pierde). El estado se ve
+en la píldora del kit en modo discreto, y «Tus solicitudes» se actualiza sola.
+
 ## Pruebas
 
 `./gradlew :services:cuentas:ms-chatbot:check` — unitarias (`ChatServiceTest`,
@@ -255,4 +336,5 @@ adivinar; pedir la sesión con `POST /chat/sesiones` la haría de 256 bits. CORS
 bloqueado, restricción de espacios de claves; `BaseDeConocimientoFielAlJuegoIT`: V10 → V11
 con producción, candidata y respuestas guardadas; `BaseDeConocimientoEnProduccionIT`: los
 139 casos de evaluación contra la base publicada; `GestionDeLaBaseDeConocimientoIT` y
-`TransicionesDeVersionIT`: V12 y la gestión de la base de 1.6.0). JaCoCo ≥ 80 %.
+`TransicionesDeVersionIT`: V12 y la gestión de la base de 1.6.0; `CanalDelChatbotIT` y
+`RespuestasFrecuentesIT`: el canal en tiempo real y la caché de 7.4.9). JaCoCo ≥ 80 %.
