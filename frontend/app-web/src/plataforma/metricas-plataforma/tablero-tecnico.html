@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Tablero técnico y de moderación · The Nexus Battles VI</title>
+    <title>Tablero técnico · The Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
@@ -12,22 +12,17 @@
   <body>
     <div data-cabecera-app></div>
     <main class="pagina consola pila" data-vista="tablero-tecnico">
-      <h1>Tablero técnico y de moderación</h1>
-      <p class="t-meta">
-        Salud de los servicios, y actividad de usuarios y moderación. Los umbrales y las alertas los
-        decide el servicio de métricas; esta pantalla no recalcula nada.
-        <a href="./panel-metricas.html">Panel de latencia y consultas</a>.
-      </p>
+      <div data-zona="encabezado"></div>
 
-      <section class="tarjeta pila pila--compacta">
-        <h2>Métricas técnicas</h2>
-        <div class="fila">
-          <button type="button" class="boton boton--secundario" data-accion="recargar-tecnicas">
-            Recolectar de nuevo
-          </button>
-          <button type="button" class="boton boton--secundario" data-accion="exportar-tecnicas">
-            Exportar informe (texto)
-          </button>
+      <section class="tarjeta pila pila--compacta" aria-labelledby="titulo-tecnicas">
+        <div class="encabezado-seccion">
+          <h2 id="titulo-tecnicas">Consumo y errores por servicio</h2>
+          <div class="encabezado-seccion__acciones">
+            <div data-zona="control-tecnicas"></div>
+            <button type="button" class="boton boton--secundario" data-accion="exportar-tecnicas">
+              Descargar informe
+            </button>
+          </div>
         </div>
         <div class="pila pila--compacta" data-zona="tecnicas"></div>
       </section>
@@ -45,7 +40,7 @@
           </label>
           <button type="submit" class="boton boton--primario">Consultar periodo</button>
           <button type="button" class="boton boton--secundario" data-accion="exportar-moderacion">
-            Exportar (JSON)
+            Descargar datos del periodo
           </button>
         </form>
         <div class="pila pila--compacta" data-zona="moderacion"></div>

@@ -43,6 +43,16 @@ export const ESTADOS_DE_CUENTA_ADMIN = Object.freeze({
   BLOQUEADA: { texto: 'Bloqueada', tono: 'bloqueado' },
 });
 
+/**
+ * El resultado de un cobro en moneda real (transacciones.yaml,
+ * `ResultadoTransaccion`): lo que pasó con el pago, no la constante.
+ */
+export const ESTADOS_DE_PAGO = Object.freeze({
+  APROBADO: { texto: 'Aprobado', tono: 'exito' },
+  RECHAZADO: { texto: 'Rechazado', tono: 'error' },
+  INDETERMINADO: { texto: 'Sin confirmar', tono: 'advertencia' },
+});
+
 /** El estado de una sala de batalla (salas-partidas, `EstadoSala`). */
 export const ESTADOS_DE_SALA = Object.freeze({
   ABIERTA: { texto: 'Abierta', tono: 'exito' },

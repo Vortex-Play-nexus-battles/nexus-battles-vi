@@ -1,7 +1,7 @@
 package com.nexusbattles.ms_chatbot.chat.conocimiento;
 
 import com.nexusbattles.ms_chatbot.chat.conocimiento.ResultadoEvaluacion.FalloDeCaso;
-import com.nexusbattles.ms_chatbot.chat.motor.MotorRespuestas;
+import com.nexusbattles.ms_chatbot.chat.motor.MotoresDePrueba;
 import com.nexusbattles.ms_chatbot.chat.motor.model.CasoEvaluacion;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.EstadoVersion;
@@ -69,7 +69,7 @@ class EvaluacionBaseConocimientoServiceTest {
     @BeforeEach
     void configurar() {
         servicio = new EvaluacionBaseConocimientoService(versionRepository, temaRepository, casoRepository,
-            evaluacionRepository, new MotorRespuestas(temaRepository));
+            evaluacionRepository, MotoresDePrueba.sobre(temaRepository));
 
         produccion = versionConId(1);
         produccion.ponerEnProduccion(ANTES);

@@ -45,3 +45,4 @@ asyncapi:
   mensajes-directos.yaml: services/plataforma/salas-partidas
   notificaciones.yaml: services/plataforma/notificaciones
   subastas.yaml: services/cuentas/ms-subastas
+  chatbot.yaml: services/cuentas/ms-chatbot

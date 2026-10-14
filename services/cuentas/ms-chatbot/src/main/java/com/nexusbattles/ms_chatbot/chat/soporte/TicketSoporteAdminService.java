@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_chatbot.chat.soporte;
 
 import org.hibernate.Hibernate;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -18,6 +19,9 @@ import java.util.UUID;
 // ms-chatbot.yaml 1.3.0 (RF-ADM-004): el administrador lista, lee y atiende
 // los tickets de soporte. La ruta (/chatbot/admin/**) ya exige rol
 // ADMINISTRADOR o SUPER_ADMINISTRADOR en SecurityConfig.
+//
+// 7.4.9 (ms-chatbot.yaml 1.9.0): atender publica TicketActualizado; despues
+// del commit, el canal en tiempo real se lo lleva a su dueno (AvisosDeSoporte).
 @Service
 public class TicketSoporteAdminService {
 
@@ -27,10 +31,12 @@ public class TicketSoporteAdminService {
 
     private final TicketSoporteRepository tickets;
     private final Clock reloj;
+    private final ApplicationEventPublisher eventos;
 
-    public TicketSoporteAdminService(TicketSoporteRepository tickets, Clock reloj) {
+    public TicketSoporteAdminService(TicketSoporteRepository tickets, Clock reloj, ApplicationEventPublisher eventos) {
         this.tickets = tickets;
         this.reloj = reloj;
+        this.eventos = eventos;
     }
 
     /** Una pagina, los mas recientes primero; con {@code estado} null, todos. */
@@ -55,6 +61,9 @@ public class TicketSoporteAdminService {
      * @throws TransicionNoPermitidaException 409 si el estado no lo permite.
      * @throws OtroTicketAbiertoException 409 si se reabre un ticket y el
      *         jugador ya tiene otro abierto (solo puede haber uno, V6).
+     *
+     * <p>7.4.9: con el cambio guardado publica {@link TicketActualizado}; se
+     * anuncia al jugador solo si la transaccion termina bien.
      */
     @Transactional
     public TicketSoporte atender(UUID ticketId, EstadoTicket estado, String respuesta, String asignadoA,
@@ -81,6 +90,7 @@ public class TicketSoporteAdminService {
             throw error;
         }
         Hibernate.initialize(guardado.getContexto());
+        eventos.publishEvent(new TicketActualizado(guardado));
         return guardado;
     }
 

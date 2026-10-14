@@ -41,9 +41,20 @@ public class ClienteAuditoria {
      *         o responde 5xx: la entrega se reintenta
      */
     public Resultado entregar(Version v) {
+        return enviar(eventoDe(v));
+    }
+
+    /**
+     * Un asiento ya armado: lo usa la entrega de los cambios en las politicas
+     * de uso (SA-11), que arma el suyo sin que este paquete la conozca.
+     *
+     * @throws org.springframework.web.client.RestClientException si no responde
+     *         o responde 5xx: la entrega se reintenta
+     */
+    public Resultado enviar(Evento evento) {
         HttpStatusCode estado = http.post()
                 .uri(url)
-                .body(eventoDe(v))
+                .body(Objects.requireNonNull(evento))
                 .exchange((peticion, respuesta) -> respuesta.getStatusCode());
         if (estado.is2xxSuccessful()) {
             return Resultado.REGISTRADO;
@@ -72,6 +83,7 @@ public class ClienteAuditoria {
                 REFERENCIA + v.id());
     }
 
-    record Evento(String tipoAccion, String administradorId, String afectado, String valorAnterior,
-                  String valorNuevo, String motivo, String ipOrigen, String ocurridoEn, String referencia) { }
+    /** El cuerpo de {@code RegistrarAuditoriaRequest} (ms-cumplimiento-auditoria.yaml 1.3.0). */
+    public record Evento(String tipoAccion, String administradorId, String afectado, String valorAnterior,
+                         String valorNuevo, String motivo, String ipOrigen, String ocurridoEn, String referencia) { }
 }

@@ -64,7 +64,16 @@ info:
     sancion incluya el «motivo especifico» y las «referencias a las politicas
     violadas». El correo las muestra junto al motivo cuando llegan; sin ellas
     sale como antes.
-  version: 1.6.0
+
+    1.7.0 (SA-14, aditivo): `POST /correos/cierre-cuenta` (plantilla
+    `cierre-cuenta`). 7.3.6 pide una «notificacion de confirmacion al
+    completar la eliminacion» de la cuenta: lo dispara ms-identidad justo
+    despues de anonimizarla, a la direccion y con el apodo que tenia (los
+    toma antes de borrarlos). El correo dice que la cuenta se elimino, cuando,
+    y que se conservan los registros financieros y de auditoria sin datos que
+    identifiquen. Misma cola persistente, `Idempotency-Key` y credencial de
+    servicio que el resto de rutas.
+  version: 1.7.0
 servers:
   - url: http://localhost:8082/api/v1
     description: Entorno local de desarrollo
@@ -107,6 +116,31 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CorreoAvisoAccesoRequest'
+      responses:
+        '202':
+          description: Correo guardado en la cola persistente (1.4.0); lo entrega el trabajador con reintentos.
+        '400':
+          $ref: '#/components/responses/SolicitudInvalida'
+
+  /correos/cierre-cuenta:
+    post:
+      summary: Confirmar que la eliminacion de la cuenta se completo
+      description: |
+        Soporta 7.3.6 («notificacion de confirmacion al completar la
+        eliminacion»), SA-14. Lo dispara ms-identidad al terminar de
+        anonimizar una cuenta cuyo periodo de gracia vencio, con la direccion
+        y el apodo que la cuenta tenia antes de anonimizarse: es lo ultimo
+        que el sistema envia a esa direccion.
+      operationId: enviarCorreoCierreCuenta
+      parameters:
+        - $ref: '#/components/parameters/TraceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorreoCierreCuentaRequest'
       responses:
         '202':
           description: Correo guardado en la cola persistente (1.4.0); lo entrega el trabajador con reintentos.
@@ -442,6 +476,28 @@ components:
           format: date-time
           description: Momento del acceso en ISO-8601 con zona horaria
           examples: ['2026-08-30T14:23:11-05:00']
+
+    CorreoCierreCuentaRequest:
+      type: object
+      description: >
+        1.7.0 (SA-14). La direccion y el apodo que la cuenta tenia antes de
+        anonimizarse; nunca lleva otros datos personales.
+      required:
+        - email
+        - apodo
+        - fechaHora
+      properties:
+        email:
+          type: string
+          format: email
+        apodo:
+          type: string
+          minLength: 1
+        fechaHora:
+          type: string
+          format: date-time
+          description: Momento en que se completo la eliminacion, en ISO-8601 con zona horaria
+          examples: ['2026-10-14T09:30:00-05:00']
 
     CorreoCambioClaveRequest:
       type: object

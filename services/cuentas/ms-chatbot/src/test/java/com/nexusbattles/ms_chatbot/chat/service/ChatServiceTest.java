@@ -80,6 +80,8 @@ class ChatServiceTest {
     private RegistroDeConversaciones registro;
     @Mock
     private PreferenciasService preferenciasService;
+    @Mock
+    private com.nexusbattles.ms_chatbot.chat.catalogo.ConsultaDeCatalogo consultaDeCatalogo;
 
     private ChatService chatService;
 
@@ -92,7 +94,7 @@ class ChatServiceTest {
     void configurar() {
         chatService = new ChatService(conversacionRepository, mensajeRepository, motorRespuestas,
             motorConsultasAsistidas, brechaConocimientoService, limitador, moderacion, registro, preferenciasService,
-            new RevisionDeEntrada(new RedactorDeDatosSensibles(), new SimpleMeterRegistry()));
+            new RevisionDeEntrada(new RedactorDeDatosSensibles(), new SimpleMeterRegistry()), consultaDeCatalogo);
     }
 
     private void registroDevuelveLaRespuesta() {
@@ -651,6 +653,26 @@ class ChatServiceTest {
 
         verify(mensajeRepository, never())
             .findFirstByConversacionIdentificadorSesionAndRemitenteOrderByFechaEnvioDesc(anyString(), any());
+    }
+
+    // 1.10.0: el catalogo de hoy responde antes que la base, para visitantes y
+    // jugadores; la consulta en vivo de la propia cuenta va antes que el catalogo.
+    @Test
+    void elCatalogoRespondeAntesQueLaBaseYDespuesDeLaCuentaPropia() {
+        registroDevuelveLaRespuesta();
+        when(consultaDeCatalogo.responder("cuanto cuesta el orbe", IdiomaPreferido.AUTOMATICO))
+            .thenReturn(Optional.of(ResultadoMotor.deTema("«Orbe» cuesta 90 créditos.", Categoria.PRODUCTO,
+                TipoRespuesta.CONTEXTUAL)));
+
+        assertEquals("«Orbe» cuesta 90 créditos.",
+            chatService.enviarMensaje(visitante, "cuanto cuesta el orbe", null).getContenido());
+        verify(motorRespuestas, never()).generarRespuesta(anyString());
+
+        when(motorConsultasAsistidas.generarRespuesta("busca orbe en mi inventario", "token-de-prueba", UID.toString(),
+            IdiomaPreferido.AUTOMATICO))
+            .thenReturn(Optional.of(ResultadoMotor.deTema("1 resultado.", null, TipoRespuesta.CONTEXTUAL)));
+        chatService.enviarMensaje(usuario, "busca orbe en mi inventario", null);
+        verify(consultaDeCatalogo, never()).responder(eq("busca orbe en mi inventario"), any());
     }
 
     // Si la lectura falla, se responde igual, con las de por defecto.
