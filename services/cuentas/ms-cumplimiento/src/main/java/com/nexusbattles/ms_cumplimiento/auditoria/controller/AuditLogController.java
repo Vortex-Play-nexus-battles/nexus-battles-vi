@@ -19,6 +19,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.util.List;
 import java.time.format.DateTimeFormatter;
 
 @RestController
@@ -39,13 +40,14 @@ public class AuditLogController {
     @RequireSuperAdmin2FA
     public Page<AuditLogResponse> consultar(
         @RequestParam(required = false) String administradorId,
+        @RequestParam(required = false) List<String> afectado,
         @RequestParam(required = false) AuditActionType tipoAccion,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant desde,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant hasta,
         Pageable pageable) {
 
         Page<AuditLog> resultado = auditLogService.consultar(
-            administradorId, tipoAccion, desde, hasta, pageable);
+            administradorId, conValores(afectado), tipoAccion, desde, hasta, pageable);
         return resultado.map(AuditLogResponse::from);
     }
 
@@ -67,6 +69,7 @@ public class AuditLogController {
     @RequireSuperAdmin2FA
     public ResponseEntity<byte[]> exportar(
         @RequestParam(required = false) String administradorId,
+        @RequestParam(required = false) List<String> afectado,
         @RequestParam(required = false) AuditActionType tipoAccion,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant desde,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant hasta,
@@ -77,7 +80,7 @@ public class AuditLogController {
         String ipOrigen = ipDeOrigen(request);
 
         byte[] pdf = auditLogService.exportarPdf(
-            administradorId, tipoAccion, desde, hasta, administradorQueExporta, ipOrigen);
+            administradorId, conValores(afectado), tipoAccion, desde, hasta, administradorQueExporta, ipOrigen);
 
         String nombreArchivo = "auditoria-" + FORMATO_NOMBRE_ARCHIVO.format(Instant.now()
             .atZone(java.time.ZoneOffset.UTC)) + ".pdf";
@@ -107,5 +110,14 @@ public class AuditLogController {
     public AuditLogResponse registrarEvento(@RequestBody RegistrarAuditoriaRequest solicitud) {
         AuditLog registrado = auditLogService.registrarDesdeSolicitud(solicitud);
         return AuditLogResponse.from(registrado);
+    }
+
+    /** {@code afectado} sin repetir ni valores vacios; sin el parametro, ninguno. */
+    static List<String> conValores(List<String> afectado) {
+        return afectado == null ? List.of() : afectado.stream()
+            .filter(v -> v != null && !v.isBlank())
+            .map(String::strip)
+            .distinct()
+            .toList();
     }
 }

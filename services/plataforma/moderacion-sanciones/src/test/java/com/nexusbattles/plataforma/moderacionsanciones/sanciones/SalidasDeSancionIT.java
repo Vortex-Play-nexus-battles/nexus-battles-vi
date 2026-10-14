@@ -121,6 +121,12 @@ class SalidasDeSancionIT {
 
         assertThat(entregador.ejecutar()).isGreaterThanOrEqualTo(3);
 
+        // SA-3: el historial de la cuenta, con el total de ahora y credencial de servicio.
+        Peticion historial = recibidas("PUT", "/api/v1/internal/usuarios/" + jugador + "/historial-sanciones").get(0);
+        assertThat(historial.autorizacion()).isEqualTo("Bearer token-de-moderacion");
+        assertThat(json.readTree(historial.cuerpo()).path("total").asInt()).isEqualTo(1);
+        assertThat(json.readTree(historial.cuerpo()).path("ultimaEn").asString()).isNotBlank();
+
         Peticion proyeccion = recibidas("PUT", "/api/v1/internal/usuarios/" + jugador + "/estado-sancion").get(0);
         JsonNode cuerpo = json.readTree(proyeccion.cuerpo());
         assertThat(proyeccion.autorizacion()).isEqualTo("Bearer token-de-moderacion");
@@ -161,7 +167,7 @@ class SalidasDeSancionIT {
         List<SalidaPendiente> pendientes = salidas.findBySancionIdOrderByCreadoEnAsc(baneo.id()).stream()
                 .filter(s -> s.entregadoEn() == null).toList();
         assertThat(pendientes).extracting(SalidaPendiente::canal)
-                .containsExactlyInAnyOrder(CanalDeSalida.PROYECCION, CanalDeSalida.CORREO);
+                .containsExactlyInAnyOrder(CanalDeSalida.PROYECCION, CanalDeSalida.CORREO, CanalDeSalida.HISTORIAL);
         assertThat(pendientes).allSatisfy(s -> {
             assertThat(s.intentos()).isEqualTo(1);
             assertThat(s.ultimoError()).isNotBlank();

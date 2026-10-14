@@ -96,4 +96,18 @@ class EspecificacionesDelDirectorioTest {
         assertSame(resultado, BusquedaDelDirectorio.buscando("").toPredicate(raiz, consulta, cb));
         verify(cb, never()).like(any(Expression.class), anyString());
     }
+
+    @Test
+    @DisplayName("historial de sanciones: CON es mayor que cero, SIN es igual a cero (1.7.0)")
+    void historialDeSancionesComparaElResumen() {
+        Path<Object> sanciones = mock(Path.class);
+        when(raiz.get("sancionesRegistradas")).thenReturn(sanciones);
+        Predicate mayor = mock(Predicate.class);
+        Predicate igual = mock(Predicate.class);
+        when(cb.greaterThan((Expression<Integer>) (Expression<?>) sanciones, 0)).thenReturn(mayor);
+        when(cb.equal(sanciones, 0)).thenReturn(igual);
+
+        assertSame(mayor, FiltroDelDirectorio.conHistorialDeSanciones(true).toPredicate(raiz, consulta, cb));
+        assertSame(igual, FiltroDelDirectorio.conHistorialDeSanciones(false).toPredicate(raiz, consulta, cb));
+    }
 }

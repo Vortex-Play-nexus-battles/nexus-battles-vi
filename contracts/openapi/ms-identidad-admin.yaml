@@ -19,8 +19,24 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Administracion de cuentas (ms-identidad)
-  version: 1.6.0
+  version: 1.7.0
   description: |
+    ### Cambios en 1.7.0 (§7.3.4, ficha y directorio — SA-3, implementado, aditivo)
+
+    - **Filtro por historial de sanciones (7.3.4, RF-USR-009).** `GET
+      /admin/jugadores` y su exportacion admiten `historialSanciones`: `CON`
+      (cuentas a las que se les ha emitido alguna sancion, aunque se revirtiera)
+      o `SIN`. Cada fila de `EntradaDeDirectorio` trae `sancionesRegistradas`.
+      Sale de un resumen que fija moderacion-sanciones, dueño de las
+      sanciones, por la ruta interna nueva `PUT
+      /internal/usuarios/{uid}/historial-sanciones` (total y fecha de la
+      ultima, valores absolutos, idempotente): el directorio filtra y pagina en
+      su base sin consultar otro servicio por cada fila.
+    - **Cuentas de pruebas.** `ocultarPruebas` excluye por omision solo las del
+      dominio reservado `nexus.test`: la lista de prefijos de apodo nace vacia.
+      Un apodo lo elige la persona y no se esconde a nadie por parecerse a una
+      cuenta de pruebas.
+
     ### Cambios en 1.6.0 (7.3.1, 7.3.5 y 7.3.9 — implementado, aditivo)
 
     - **Jerarquia (7.3.1).** La matriz RBAC dice QUE puede hacer cada rol; ahora
@@ -221,6 +237,7 @@ paths:
         - $ref: '#/components/parameters/FiltroEstado'
         - $ref: '#/components/parameters/RegistradoDesde'
         - $ref: '#/components/parameters/RegistradoHasta'
+        - $ref: '#/components/parameters/HistorialSanciones'
         - name: ocultarPruebas
           in: query
           required: false
@@ -231,8 +248,8 @@ paths:
             dominio reservado para pruebas o si su apodo empieza por un prefijo
             de pruebas. Las dos listas son configuracion del servicio, no de
             este contrato: `IDENTIDAD_DIRECTORIO_PRUEBAS_DOMINIOS` (por
-            omision `nexus.test`) e `IDENTIDAD_DIRECTORIO_PRUEBAS_PREFIJOS` (por
-            omision `qa_,smoke_,canario_`), sin distinguir mayusculas. Se
+            omision `nexus.test`) e `IDENTIDAD_DIRECTORIO_PRUEBAS_PREFIJOS` (desde
+            1.7.0, vacia por omision), sin distinguir mayusculas. Se
             excluyen en la consulta, antes de paginar: `total` y
             `totalPaginas` cuentan solo las que quedan. No borra ni marca nada.
           schema:
@@ -312,6 +329,7 @@ paths:
         - $ref: '#/components/parameters/FiltroEstado'
         - $ref: '#/components/parameters/RegistradoDesde'
         - $ref: '#/components/parameters/RegistradoHasta'
+        - $ref: '#/components/parameters/HistorialSanciones'
       responses:
         '200':
           description: El listado en CSV.
@@ -881,6 +899,70 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
 
+  /api/v1/internal/usuarios/{uid}/historial-sanciones:
+    put:
+      tags: [interno]
+      operationId: fijarHistorialDeSanciones
+      summary: El resumen del historial de sanciones de una cuenta (1.7.0)
+      description: |
+        Solo token de servicio con `azp` `moderacion-sanciones`, dueño de las
+        sanciones. Fija cuantas se le han emitido a la cuenta y cuando fue la
+        ultima, con valores absolutos: repetir la llamada o reconciliar no
+        cuenta dos veces. Lo manda al emitir una sancion y en su reconciliacion
+        periodica. Es lo que deja filtrar el directorio por historial de
+        sanciones (§7.3.4) sin consultar otro servicio por cada fila.
+      security:
+        - tokenDeServicio: []
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HistorialDeSanciones'
+      responses:
+        '200':
+          description: Lo que quedo guardado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [uid, total]
+                properties:
+                  uid:
+                    type: string
+                    format: uuid
+                  total:
+                    type: integer
+                    minimum: 0
+                  ultimaEn:
+                    type: [string, 'null']
+                    format: date-time
+        '400':
+          description: |
+            `total` falta o es negativo, o hay sanciones y falta `ultimaEn`.
+            `type` `.../errors/datos-invalidos`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+        '404':
+          description: |
+            No existe una cuenta con ese uid (o el uid no es un UUID).
+            `type` `.../errors/cuenta-no-encontrada`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
   /api/v1/internal/usuarios/{uid}/rol:
     get:
       tags: [interno]
@@ -1007,6 +1089,17 @@ components:
       schema:
         type: string
         format: date
+    HistorialSanciones:
+      name: historialSanciones
+      in: query
+      required: false
+      description: |
+        1.7.0 — `CON`: solo las cuentas a las que se les ha emitido alguna
+        sancion (tambien las revertidas: es historial); `SIN`: solo las que
+        nunca. Sin distinguir mayusculas. Otro valor es 400 `datos-invalidos`.
+      schema:
+        type: string
+        enum: [CON, SIN]
 
   responses:
     Prohibido:
@@ -1172,6 +1265,28 @@ components:
         bloqueada:
           type: boolean
           description: Bloqueo temporal por intentos fallidos de login (no es una sancion).
+        sancionesRegistradas:
+          type: integer
+          minimum: 0
+          description: |
+            1.7.0 — cuantas sanciones se le han emitido a la cuenta, segun el
+            resumen que fija moderacion-sanciones (las revertidas tambien).
+
+    HistorialDeSanciones:
+      type: object
+      description: |
+        1.7.0 — el resumen del historial de sanciones de una cuenta que fija
+        moderacion-sanciones.
+      required: [total]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+          description: Cuantas sanciones se le han emitido (las revertidas tambien).
+        ultimaEn:
+          type: [string, 'null']
+          format: date-time
+          description: Cuando se emitio la mas reciente. Obligatoria si `total` es mayor que 0.
 
     IndicadoresDeCuentas:
       type: object

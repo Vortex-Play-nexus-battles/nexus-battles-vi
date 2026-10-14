@@ -15,6 +15,23 @@ public final class AuditLogSpecifications {
         return (root, query, cb) -> cb.equal(root.get("administradorId"), administradorId);
     }
 
+    /**
+     * La cuenta o el comentario afectado (contrato 1.2.0). Admite varios
+     * valores porque {@code afectado} guarda a veces el {@code uid} y a veces
+     * la clave numerica de la misma cuenta: la ficha administrativa pide los
+     * dos a la vez. Coincidencia exacta.
+     */
+    public static Specification<AuditLog> conAfectado(java.util.Collection<String> afectados) {
+        if (afectados == null) return null;
+        java.util.List<String> valores = afectados.stream()
+            .filter(v -> v != null && !v.isBlank())
+            .map(String::strip)
+            .distinct()
+            .toList();
+        if (valores.isEmpty()) return null;
+        return (root, query, cb) -> root.get("afectado").in(valores);
+    }
+
     public static Specification<AuditLog> conTipoAccion(AuditActionType tipoAccion) {
         if (tipoAccion == null) return null;
         return (root, query, cb) -> cb.equal(root.get("tipoAccion"), tipoAccion);

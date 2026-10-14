@@ -18,8 +18,11 @@ import java.util.UUID;
  * Historial de partidas del jugador — {@code GET /partidas/mias} (1.7.0).
  *
  * <p>Las partidas en las que jugo quien firma el token, de la mas reciente a la
- * mas antigua, con el resultado desde SU punto de vista. El jugador sale del
- * token, nunca de la ruta: no hay forma de pedir el historial de otro.
+ * mas antigua, con el resultado desde SU punto de vista. En {@code /mias} el
+ * jugador sale del token, nunca de la ruta: un jugador no pide el historial de
+ * otro. La administracion lo pide por {@code uid} en
+ * {@code /partidas/jugadores/{idJugador}} (1.11.0), una ruta que solo abren
+ * Administrador y Super Administrador.
  */
 public class MisPartidas {
 

@@ -89,7 +89,8 @@ class AuditLogControllerTest {
         @Test
         @DisplayName("un SUPER_ADMINISTRADOR con su token real la consulta: el rol se llama asi, no SUPER_ADMIN")
         void superAdministrador() throws Exception {
-            when(auditLogService.consultar(eq("admin-1"), eq(AuditActionType.CAMBIO_ROL), any(), any(), any()))
+            when(auditLogService.consultar(eq("admin-1"), eq(List.of()), eq(AuditActionType.CAMBIO_ROL), any(), any(),
+                any()))
                 .thenReturn(new PageImpl<>(List.of(registro(AuditActionType.CAMBIO_ROL))));
 
             mvc.perform(get(BITACORA)
@@ -99,6 +100,21 @@ class AuditLogControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].tipoAccion").value("CAMBIO_ROL"))
                 .andExpect(jsonPath("$.totalElements").value(1));
+        }
+
+        @Test
+        @DisplayName("1.2.0: filtra por la cuenta afectada, con varios valores (uid y clave) y sin repetidos ni vacios")
+        void porAfectado() throws Exception {
+            when(auditLogService.consultar(any(), eq(List.of("7a1e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55", "42")), any(),
+                any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(registro(AuditActionType.SUSPENSION))));
+
+            mvc.perform(get(BITACORA)
+                    .param("afectado", "7a1e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55", " 42 ", "", "42")
+                    .header(HttpHeaders.AUTHORIZATION,
+                        "Bearer " + TokensDePrueba.deUsuario("root", UUID.randomUUID(), "SUPER_ADMINISTRADOR")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].tipoAccion").value("SUSPENSION"));
         }
 
         @Test
@@ -144,7 +160,7 @@ class AuditLogControllerTest {
         @DisplayName("un SUPER_ADMINISTRADOR exporta: 200, PDF")
         void superAdministradorExporta() throws Exception {
             byte[] pdfSimulado = "contenido-pdf-simulado".getBytes();
-            when(auditLogService.exportarPdf(any(), any(), any(), any(), any(), any()))
+            when(auditLogService.exportarPdf(any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(pdfSimulado);
 
             mvc.perform(get(EXPORTAR).header(HttpHeaders.AUTHORIZATION,
@@ -172,7 +188,7 @@ class AuditLogControllerTest {
         @Test
         @DisplayName("si el filtro excede el maximo, 422 con las dos cifras en la raiz del JSON")
         void excedeMaximo() throws Exception {
-            when(auditLogService.exportarPdf(any(), any(), any(), any(), any(), any()))
+            when(auditLogService.exportarPdf(any(), any(), any(), any(), any(), any(), any()))
                 .thenThrow(new ExportacionExcedeMaximoException(15000, 10000));
 
             mvc.perform(get(EXPORTAR).header(HttpHeaders.AUTHORIZATION,

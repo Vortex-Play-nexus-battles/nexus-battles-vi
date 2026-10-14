@@ -141,6 +141,20 @@ public class ConfiguracionDeSanciones {
         return new ProyeccionEnIdentidad(identidad, sanciones, repositorio);
     }
 
+    /** SA-3: el historial de sanciones de la cuenta en identidad (canal HISTORIAL). */
+    @Bean
+    public HistorialEnIdentidad historialEnIdentidad(ClienteIdentidad identidad, SancionRepository repositorio) {
+        return new HistorialEnIdentidad(identidad, repositorio);
+    }
+
+    /** SA-3: sube el historial de las sanciones anteriores al canal y corrige diferencias. */
+    @Bean
+    public ReconciliacionDelHistorial reconciliacionDelHistorial(HistorialEnIdentidad historial,
+                                                                 ClienteIdentidad identidad,
+                                                                 SancionRepository repositorio) {
+        return new ReconciliacionDelHistorial(historial, identidad, repositorio);
+    }
+
     @Bean
     public CorreoDeSancion correoDeSancion(ClienteIdentidad identidad, ClienteCorreo correo,
                                            SancionRepository sanciones, ApelacionRepository apelaciones,

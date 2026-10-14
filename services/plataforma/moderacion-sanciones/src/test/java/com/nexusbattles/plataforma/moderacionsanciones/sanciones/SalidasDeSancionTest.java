@@ -49,7 +49,7 @@ class SalidasDeSancionTest {
     }
 
     @Test
-    @DisplayName("advertencia: aviso y correo; ninguna proyeccion (no restringe el acceso)")
+    @DisplayName("advertencia: aviso, correo e historial; ninguna proyeccion (no restringe el acceso)")
     void advertencia() {
         Sancion s = sancion(Sancion.Tipo.ADVERTENCIA);
 
@@ -58,11 +58,13 @@ class SalidasDeSancionTest {
         assertThat(guardadas()).extracting(SalidaPendiente::canal, SalidaPendiente::tipo, SalidaPendiente::clave)
                 .containsExactly(
                         tuple(CanalDeSalida.AVISO, "SANCION_ADVERTENCIA", "sancion-" + s.id() + "-emision-aviso"),
-                        tuple(CanalDeSalida.CORREO, "EMISION", "sancion-" + s.id() + "-emision"));
+                        tuple(CanalDeSalida.CORREO, "EMISION", "sancion-" + s.id() + "-emision"),
+                        // SA-3: tambien la advertencia entra en el historial de la cuenta.
+                        tuple(CanalDeSalida.HISTORIAL, "EMISION", "sancion-" + s.id() + "-emision-historial"));
     }
 
     @Test
-    @DisplayName("suspension y baneo: aviso, proyeccion y correo, todos con la sancion y el jugador")
+    @DisplayName("suspension y baneo: aviso, proyeccion, correo e historial, todos con la sancion y el jugador")
     void suspensionYBaneo() {
         Sancion s = sancion(Sancion.Tipo.SUSPENSION);
 
@@ -70,7 +72,8 @@ class SalidasDeSancionTest {
 
         List<SalidaPendiente> guardadas = guardadas();
         assertThat(guardadas).extracting(SalidaPendiente::canal)
-                .containsExactly(CanalDeSalida.AVISO, CanalDeSalida.PROYECCION, CanalDeSalida.CORREO);
+                .containsExactly(CanalDeSalida.AVISO, CanalDeSalida.PROYECCION, CanalDeSalida.CORREO,
+                        CanalDeSalida.HISTORIAL);
         assertThat(guardadas).allSatisfy(salida -> {
             assertThat(salida.usuarioId()).isEqualTo(JUGADOR);
             assertThat(salida.sancionId()).isEqualTo(s.id());

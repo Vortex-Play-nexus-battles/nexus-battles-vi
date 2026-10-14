@@ -19,9 +19,9 @@ import java.util.UUID;
  *
  * <table>
  *   <caption>Salidas por evento</caption>
- *   <tr><th>evento</th><th>aviso</th><th>proyeccion</th><th>correo</th></tr>
- *   <tr><td>emision de advertencia</td><td>si</td><td>no (no restringe)</td><td>ADVERTENCIA</td></tr>
- *   <tr><td>emision de suspension o baneo</td><td>si</td><td>si</td><td>SUSPENSION / BANEO</td></tr>
+ *   <tr><th>evento</th><th>aviso</th><th>proyeccion</th><th>correo</th><th>historial (SA-3)</th></tr>
+ *   <tr><td>emision de advertencia</td><td>si</td><td>no (no restringe)</td><td>ADVERTENCIA</td><td>si</td></tr>
+ *   <tr><td>emision de suspension o baneo</td><td>si</td><td>si</td><td>SUSPENSION / BANEO</td><td>si</td></tr>
  *   <tr><td>apelacion revertida o reducida</td><td>si</td><td>si, si la sancion restringia</td>
  *       <td>APELACION_RESUELTA</td></tr>
  *   <tr><td>apelacion mantenida</td><td>si</td><td>no (nada cambia)</td><td>APELACION_RESUELTA</td></tr>
@@ -53,6 +53,10 @@ public class SalidasDeSancion {
         }
         salidas.save(SalidaPendiente.de(CanalDeSalida.CORREO, EventoDeSancion.EMISION, sancion.usuarioId(),
                 sancion.id(), null, clave, ahora));
+        // SA-3: toda emision, tambien la advertencia, cambia el historial de la
+        // cuenta, y el directorio de identidad filtra por el.
+        salidas.save(SalidaPendiente.de(CanalDeSalida.HISTORIAL, EventoDeSancion.EMISION, sancion.usuarioId(),
+                sancion.id(), null, clave + "-historial", ahora));
     }
 
     /** Decision del panel sobre una apelacion. */

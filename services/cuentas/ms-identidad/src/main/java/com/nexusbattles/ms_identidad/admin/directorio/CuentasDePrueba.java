@@ -33,13 +33,14 @@ import java.util.Locale;
  *       laboratorio visual ({@code tests/visual/identidad.js},
  *       {@code personas.js}). {@code .test} es un dominio reservado
  *       (RFC 6761): una persona no puede recibir correo en el.</li>
- *   <li><b>Prefijos de apodo {@code qa_}, {@code smoke_} y {@code canario_}.</b>
- *       Los de las tres familias que corren contra DEV: {@code smoke_<marca>}
- *       (smoke-aws), {@code canario_<marca>} (canarios-jugador) y
- *       {@code qa_prof_…}, {@code qa_fb…}, {@code qa_visual_…},
- *       {@code qa_jugador_…}, {@code qa_moderador_…} (profesor,
- *       regresion-feedback, laboratorio visual). Son los que vio el super
- *       administrador en DEV.</li>
+ *   <li><b>Prefijos de apodo</b> ({@code qa_}, {@code smoke_},
+ *       {@code canario_}…), <b>vacios por omision desde SA-3</b>. Un apodo lo
+ *       elige la persona: un jugador real que se llame «qa_gamer» desaparecia
+ *       del directorio por parecerse a una cuenta de pruebas, y el informe de
+ *       revision del super administrador pidio no esconder usuarios por una
+ *       heuristica de nombre. Las cuentas de las pruebas usan todas el dominio
+ *       reservado, asi que basta con el. La lista sigue siendo configurable
+ *       para un entorno que la necesite.</li>
  * </ul>
  * Una cuenta es de pruebas si cumple cualquiera de las dos cosas, sin
  * distinguir mayusculas. Lo de las pruebas que creen otro tipo de cuenta se
@@ -70,7 +71,7 @@ public class CuentasDePrueba {
 
     public CuentasDePrueba(
             @Value("${identidad.directorio.pruebas.dominios:nexus.test}") String dominios,
-            @Value("${identidad.directorio.pruebas.prefijos-apodo:qa_,smoke_,canario_}") String prefijos) {
+            @Value("${identidad.directorio.pruebas.prefijos-apodo:}") String prefijos) {
         this.dominios = lista(dominios).stream()
                 .map(dominio -> dominio.startsWith("@") ? dominio.substring(1) : dominio)
                 .filter(dominio -> !dominio.isEmpty())
