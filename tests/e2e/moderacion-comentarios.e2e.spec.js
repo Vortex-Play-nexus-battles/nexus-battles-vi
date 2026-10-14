@@ -359,11 +359,15 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
     );
 
     // La consola lleva a la cola de comentarios: antes solo se llegaba
-    // escribiendo la direccion.
+    // escribiendo la direccion. SA-7 — el resumen la cuenta («Comentarios por
+    // revisar») y su enlace abre la moderación.
     await page.goto(`${BORDE}/frontend/app-web/src/plataforma/consola/consola.html`);
-    const herramienta = page.locator('[data-herramienta="comentarios"]');
+    const herramienta = page.locator('[data-indicador="Comentarios por revisar"] a');
     await expect(herramienta).toBeVisible({ timeout: 20_000 });
-    await expect(herramienta).toHaveAttribute('href', /moderar-comentarios\.html$/);
+    await expect(herramienta).toHaveAttribute(
+      'href',
+      /(moderar-comentarios\.html|\/consola\/comentarios)$/,
+    );
 
     await page.goto(
       `${BORDE}/frontend/app-web/src/plataforma/comentarios/moderar-comentarios.html?producto=${producto}`,

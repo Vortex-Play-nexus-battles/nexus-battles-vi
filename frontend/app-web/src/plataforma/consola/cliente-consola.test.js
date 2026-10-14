@@ -211,6 +211,8 @@ describe('totalDe: un guion no es un cero', () => {
   test('lee el total de una pagina propia y de una de Spring', () => {
     expect(totalDe({ contenido: [1], total: 42 })).toBe(42);
     expect(totalDe({ content: [1], totalElements: 7 })).toBe(7);
+    // SA-7 — la página de salas y subastas: el total, no las filas de la página.
+    expect(totalDe({ contenido: [1], totalElementos: 40, totalPaginas: 3 })).toBe(40);
   });
 
   test('cuenta los elementos de una lista suelta', () => {

@@ -59,6 +59,7 @@ import { h } from './ui/dom.js';
 import { vigilarSesion } from './vigilante-sesion.js';
 import { vigilarInactividad } from './inactividad-administrativa.js';
 import { vigilarRed } from './ui/aviso-de-red.js';
+import { vigilarEnlaces } from './enlaces-limpios.js';
 import { montarAvisosDeCabecera } from './avisos-de-cabecera.js';
 
 const BASE_RUTAS = import.meta.url;
@@ -956,6 +957,10 @@ export function montarArmazon(
   }
   // UXC-9 — el aviso de red transversal: en todas las vistas, una vez.
   vigilarRed({ documento });
+  // SA-7 (punto crítico externo del informe de revisión) — detrás del borde,
+  // ningún enlace enseña la carpeta ni el `.html` de una vista: los que una
+  // vista escribe con la ruta de su fichero se ven con su dirección limpia.
+  vigilarEnlaces({ documento });
 
   if (elegido === 'publico') {
     return montarArmazonPublico(raiz, { vista: vista ?? 'login', base, almacen, navegar });

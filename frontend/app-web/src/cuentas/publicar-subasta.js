@@ -1,5 +1,6 @@
 import { montarCabecera, leerSesion } from '../comun/cabecera-app.js';
 import { cuerpoDelToken } from '../comun/identidad.js';
+import { urlDeLogin } from '../comun/sesion.js';
 import { baseDeApi, rutaDeApi } from '../comun/base-api.js';
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
 import { consultarPagina } from '../contenido/inventario/cliente-inventario.js';
@@ -259,12 +260,11 @@ export async function montarPublicacion(
     sinSesion = true;
     avisar('Debes iniciar sesión con una sesión válida para publicar una subasta.', true);
     $('[data-sesion]').hidden = false;
-    const login = new URL('./login.html', globalThis.location.href);
-    login.searchParams.set(
-      'volver',
-      `${globalThis.location.pathname}${globalThis.location.search}`,
-    );
-    $('[data-sesion] a').href = login.href;
+    // SA-7 — por la ruta del login, no relativa a la página: servida en su
+    // dirección limpia (/subastas/publicar) «./login.html» ya no es el login.
+    $('[data-sesion] a').href = urlDeLogin({
+      volver: `${globalThis.location.pathname}${globalThis.location.search}`,
+    });
     actualizar();
   }
   function datos() {
