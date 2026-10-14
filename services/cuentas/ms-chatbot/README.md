@@ -1,6 +1,6 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
-**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.9.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.0.0 (canal en tiempo real, 7.4.9)
+**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.10.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.0.0 (canal en tiempo real, 7.4.9)
 **Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V13) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
@@ -352,12 +352,36 @@ propio token; el chatbot no tiene credencial de servicio.
 | Movimientos de créditos (B11) | ms-finanzas `GET /creditos/{uid}/movimientos` | token del jugador |
 | Torneos en curso y mi equipo (B11) | torneos `GET /torneos`, `GET /torneos/{id}` | ninguna (dato público) |
 | Misiones en curso (1.3.0) | misiones `GET /api/v1/misiones/en-curso` | token del jugador |
+| Catálogo de productos (1.10.0, también visitantes) | productos `GET /api/v1/productos` | ninguna (dato público) |
 
 «Busca espada en mi inventario», «¿tengo alguna poción en mi inventario?» o «search my
 inventory for a sword» usan la búsqueda real (criterio de 4 letras o más, como pide el
 contrato del inventario). El **informe de actividad** pide sus cinco partes a la vez (hilos
 virtuales) y espera como mucho 1,7 s en total: la parte que no llega se dice «no disponible»
 y el resto se entrega (7.4.11, menos de 2 s).
+
+## Catálogo en vivo (7.4.1, 7.4.2 y 7.4.5, 1.10.0)
+
+Para visitantes y jugadores: los productos que se venden hoy, sus precios y su ficha salen del
+catálogo público de productos (`productos.yaml`, `GET /api/v1/productos`, **sin credencial**:
+la proyección que ve cualquier visitante, sin campos internos ni suspendidos), no de un texto
+copiado en la base. Un producto nuevo, un precio cambiado o uno retirado se ven en el chat sin
+editar ningún tema: es la «actualización automática de la base de conocimiento con nueva
+información del sistema» de 7.4.5.
+
+- «¿Qué productos hay en la tienda?», «¿qué armas venden?», «what can I buy?»: cuántos hay
+  por tipo y algunos con su precio.
+- «¿Cuánto cuesta la espada de una mano?», «precio del orbe»: el precio del producto que se
+  nombra (nombre completo, o sus palabras distintivas con un error de tecleo como mucho). Si
+  hay varios, hasta tres con su precio; si hay más, pide el nombre completo.
+- «¿Qué hace la espada de dos manos?»: su descripción y su precio.
+- Lo que no nombra ningún producto («¿cuánto cuesta publicar una subasta?») o pregunta cómo
+  hacer algo («¿cómo compro en la tienda?») lo responde la base, como antes.
+
+`CatalogoEnVivo` guarda una sola copia para todo el servicio (es dato público, igual para
+todos) durante 5 minutos y, si el catálogo no responde, sigue usando la última hasta 30
+minutos (D-CHA-10). `PRODUCTOS_BASE_URL` es la raíz del servicio de productos, la misma que
+usa ms-identidad (host de contenido, 8103).
 
 ## Tiempo real (7.4.9, `contracts/websocket/chatbot.yaml` 1.0.0)
 

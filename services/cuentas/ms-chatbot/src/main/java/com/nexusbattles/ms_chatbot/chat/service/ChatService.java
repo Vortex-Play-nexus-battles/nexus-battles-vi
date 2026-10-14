@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_chatbot.chat.service;
 
+import com.nexusbattles.ms_chatbot.chat.catalogo.ConsultaDeCatalogo;
 import com.nexusbattles.ms_chatbot.chat.consultas.MotorConsultasAsistidas;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.Enriquecedor;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
@@ -90,6 +91,7 @@ public class ChatService {
     private final MensajeRepository mensajeRepository;
     private final MotorRespuestas motorRespuestas;
     private final MotorConsultasAsistidas motorConsultasAsistidas;
+    private final ConsultaDeCatalogo consultaDeCatalogo;
     private final BrechaConocimientoService brechaConocimientoService;
     private final LimitadorDeFrecuencia limitador;
     private final ModeracionDeContenido moderacion;
@@ -101,7 +103,8 @@ public class ChatService {
                        MotorRespuestas motorRespuestas, MotorConsultasAsistidas motorConsultasAsistidas,
                        BrechaConocimientoService brechaConocimientoService, LimitadorDeFrecuencia limitador,
                        ModeracionDeContenido moderacion, RegistroDeConversaciones registro,
-                       PreferenciasService preferenciasService, RevisionDeEntrada revision) {
+                       PreferenciasService preferenciasService, RevisionDeEntrada revision,
+                       ConsultaDeCatalogo consultaDeCatalogo) {
         this.conversacionRepository = conversacionRepository;
         this.mensajeRepository = mensajeRepository;
         this.motorRespuestas = motorRespuestas;
@@ -112,6 +115,7 @@ public class ChatService {
         this.registro = registro;
         this.preferenciasService = preferenciasService;
         this.revision = revision;
+        this.consultaDeCatalogo = consultaDeCatalogo;
     }
 
     public Mensaje enviarMensaje(IdentidadDelChat identidad, String contenido, String adjuntoUrl) {
@@ -196,6 +200,11 @@ public class ChatService {
             if (enVivo.isPresent()) {
                 return new Generada(enVivo.get(), false);
             }
+        }
+        // 1.10.0: el catalogo de hoy (dato publico), para visitantes y jugadores.
+        Optional<ResultadoMotor> catalogo = consultaDeCatalogo.responder(contenido, preferencias.idioma());
+        if (catalogo.isPresent()) {
+            return new Generada(catalogo.get(), false);
         }
         return new Generada(responderConLaBase(contenido, vista, preferencias), false);
     }

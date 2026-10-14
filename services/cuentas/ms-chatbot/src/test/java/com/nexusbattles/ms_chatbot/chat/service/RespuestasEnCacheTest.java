@@ -76,6 +76,8 @@ class RespuestasEnCacheTest {
     private RegistroDeConversaciones registro;
     @Mock
     private PreferenciasService preferenciasService;
+    @Mock
+    private com.nexusbattles.ms_chatbot.chat.catalogo.ConsultaDeCatalogo consultaDeCatalogo;
 
     private final SimpleMeterRegistry metricas = new SimpleMeterRegistry();
     private CacheDeRespuestas cache;
@@ -102,7 +104,7 @@ class RespuestasEnCacheTest {
         MotorRespuestas motor = new MotorRespuestas(() -> new BaseEnProduccion(PRODUCCION, temas), cache);
         chatService = new ChatService(conversacionRepository, mensajeRepository, motor, motorConsultasAsistidas,
             brechaConocimientoService, limitador, moderacion, registro, preferenciasService,
-            new RevisionDeEntrada(new RedactorDeDatosSensibles(), metricas));
+            new RevisionDeEntrada(new RedactorDeDatosSensibles(), metricas), consultaDeCatalogo);
         lenient().when(preferenciasService.de(any())).thenReturn(PreferenciasDeRespuesta.POR_DEFECTO);
         lenient().when(registro.guardarIntercambio(any(), anyString(), any(), any(), anyString(), any(), anyInt()))
             .thenAnswer(inv -> {
