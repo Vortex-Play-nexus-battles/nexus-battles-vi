@@ -157,6 +157,43 @@ export function distintivoDePropiedad(unidades) {
 }
 
 /**
+ * SA-13 (§7.2.2): un producto de pago en moneda real, identificado como tal.
+ * El texto corto va a la vista; lo que significa, en el título y en el nombre
+ * accesible.
+ *
+ * @returns {HTMLElement}
+ */
+export function distintivoPremium() {
+  return h('span', {
+    clase: 'distintivo distintivo--epica producto-premium',
+    atributos: { title: 'Se paga en moneda real y no se puede subastar' },
+    hijos: [
+      icono('moneda', { clase: 'icono producto-propio__icono', etiqueta: null }),
+      h('span', { texto: 'Premium' }),
+      h('span', {
+        clase: 'solo-lectores',
+        texto: ': se paga en moneda real y no se puede subastar',
+      }),
+    ],
+  });
+}
+
+/**
+ * SA-13 (§7.2.1): un producto en estado único del catálogo.
+ *
+ * @returns {HTMLElement}
+ */
+export function distintivoUnico() {
+  return h('span', {
+    clase: 'distintivo distintivo--maestro-juego producto-unico',
+    hijos: [
+      icono('estrella-llena', { clase: 'icono producto-propio__icono', etiqueta: null }),
+      h('span', { texto: 'Pieza única' }),
+    ],
+  });
+}
+
+/**
  * «En tu lista de deseos»: solo si el servicio lo dice (`enListaDeseos`).
  *
  * @returns {HTMLElement}
@@ -323,6 +360,8 @@ export function tarjetaDeProducto(
   }
 
   const distintivos = [
+    producto.premium ? distintivoPremium() : null,
+    producto.unico ? distintivoUnico() : null,
     unidadesPropias > 0 || producto.esPropio
       ? distintivoDePropiedad(Math.max(unidadesPropias, 1))
       : null,

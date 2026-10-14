@@ -31,7 +31,25 @@ public record ProductoEnVentaDto(
         Integer porcentajeDescuento,
         Boolean esPropio,
         Boolean enListaDeseos,
-        Long precioCreditos) {
+        Long precioCreditos,
+        Boolean premium,
+        Boolean unico) {
+
+    /**
+     * Sin las marcas del catalogo: la forma de antes de 1.8.0.
+     *
+     * <p>{@code premium} y {@code unico} (SA-13, contrato 1.8.0, §7.2.1 y
+     * §7.2.2): un producto de pago en moneda real se identifica como tal en la
+     * tienda, y uno en estado UNICO tambien. Null cuando quien construye no los
+     * sabe (las pruebas y las formas anteriores).
+     */
+    public ProductoEnVentaDto(String id, String nombre, String imagenUrl, String descripcion, String habilidades,
+                              String tipo, BigDecimal precioFinal, BigDecimal precioOriginal, String moneda,
+                              Boolean enPromocion, Integer porcentajeDescuento, Boolean esPropio,
+                              Boolean enListaDeseos, Long precioCreditos) {
+        this(id, nombre, imagenUrl, descripcion, habilidades, tipo, precioFinal, precioOriginal, moneda, enPromocion,
+                porcentajeDescuento, esPropio, enListaDeseos, precioCreditos, null, null);
+    }
 
     /**
      * Sin precio en creditos: la forma de antes de 1.6.0.
