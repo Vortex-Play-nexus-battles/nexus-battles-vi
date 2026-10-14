@@ -47,8 +47,8 @@ public class ConfiguracionDeParametros {
                 Duration.ofMillis(reintentoMs), Duration.ofMillis(esperaMaximaMs));
     }
 
-    /** El cliente HTTP de la bitacora central, o nulo sin URL. */
-    static ClienteAuditoria clienteAuditoria(String url, long conexionMs, long respuestaMs,
+    /** El cliente HTTP de la bitacora central, o nulo sin URL; tambien lo usan las politicas (SA-11). */
+    public static ClienteAuditoria clienteAuditoria(String url, long conexionMs, long respuestaMs,
                                              ObjectProvider<InterceptorDePortadorDeServicio> credencial) {
         if (url == null || url.isBlank()) {
             return null;
