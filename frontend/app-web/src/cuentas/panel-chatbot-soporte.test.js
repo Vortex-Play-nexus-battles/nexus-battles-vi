@@ -8,6 +8,7 @@ import { ErrorDelChatbot } from '../comun/cliente-chatbot.js';
 import {
   POR_PAGINA,
   SIGUIENTES,
+  TEXTO_VISITANTE,
   atenderEnDialogo,
   montarSoporte,
   nombreDeCategoria,
@@ -169,6 +170,22 @@ describe('detalle de una solicitud', () => {
     expect(cuerpo.textContent).toContain('Asistente');
   });
 
+  // ms-chatbot.yaml 1.12.0 (RF-CHA-007): la abrió un visitante, sin cuenta.
+  test('si la abrió un visitante lo dice, sin enseñar la clave de su sesión', async () => {
+    const visitante = {
+      ...DETALLE,
+      uid: 'anonimo:7c9e6679-7425-40de-944b-e07fc1f90ae7',
+      deVisitante: true,
+    };
+    const { cuerpo } = await abrir(clienteFalso({ obtenerTicket: jest.fn(async () => visitante) }));
+
+    expect(cuerpo.textContent).toContain(TEXTO_VISITANTE);
+    expect(cuerpo.textContent).not.toContain('anonimo:');
+    expect(cuerpo.textContent).toContain('Mensaje del visitante');
+    expect(cuerpo.textContent).toContain('Visitante ·');
+    expect(cuerpo.textContent).toContain('Respuesta para el visitante');
+  });
+
   test('responder y marcar como respondida manda solo lo que cambió', async () => {
     const { resultado, cliente } = await abrir();
     document.querySelector('select[name="estado"]').value = 'RESUELTO';
@@ -252,6 +269,76 @@ describe('detalle de una solicitud', () => {
     );
 
     expect(document.body.textContent).toContain('no responde');
+  });
+});
+
+// ms-chatbot.yaml 1.14.0 (§7.4.6): las capturas que adjuntó, para atenderla.
+describe('capturas de la solicitud', () => {
+  beforeEach(() => document.body.replaceChildren());
+
+  const CAPTURA = {
+    capturaId: 'c-1',
+    tipo: 'image/jpeg',
+    tamano: 204_800,
+    ancho: 1600,
+    alto: 900,
+    subidaEn: '2026-10-14T15:00:00Z',
+  };
+
+  function registroFalso() {
+    const liberadas = [];
+    let n = 0;
+    return {
+      liberadas,
+      crear: () => {
+        n += 1;
+        return `blob:${n}`;
+      },
+      liberar: () => liberadas.push(n),
+    };
+  }
+
+  test('las enseña plegadas y «Ver captura» la pide con el token del panel', async () => {
+    const imagenes = registroFalso();
+    const cliente = clienteFalso({
+      obtenerTicket: jest.fn(async () => ({ ...DETALLE, capturas: [CAPTURA] })),
+      leerCaptura: jest.fn(async () => new Blob(['x'], { type: 'image/jpeg' })),
+    });
+    atenderEnDialogo({ cliente, ticketId: 't-1', imagenes });
+    await esperar();
+
+    const cuerpo = document.querySelector('.panel-chatbot__ticket');
+    expect(cuerpo.textContent).toContain('Capturas de pantalla');
+    expect(cuerpo.textContent).toContain('JPEG · 1600 × 900 · 200 KB');
+    expect(cliente.leerCaptura).not.toHaveBeenCalled();
+
+    cuerpo.querySelector('[data-accion="ver-captura"]').click();
+    await esperar();
+
+    expect(cliente.leerCaptura).toHaveBeenCalledWith('t-1', 'c-1');
+    const imagen = cuerpo.querySelector('img');
+    expect(imagen.getAttribute('src')).toBe('blob:1');
+    expect(imagen.getAttribute('alt')).toBe('Captura 1 de la solicitud «No carga mi inventario»');
+  });
+
+  test('sin capturas lo dice', async () => {
+    atenderEnDialogo({ cliente: clienteFalso(), ticketId: 't-1' });
+    await esperar();
+
+    expect(document.querySelector('.panel-chatbot__ticket').textContent).toContain(
+      'El jugador no adjuntó capturas.',
+    );
+  });
+
+  test('al cerrar el detalle, cierre quien cierre, se liberan sus imágenes', async () => {
+    const imagenes = registroFalso();
+    const resultado = atenderEnDialogo({ cliente: clienteFalso(), ticketId: 't-1', imagenes });
+    await esperar();
+
+    document.querySelector('[data-accion="cerrar-detalle"]').click();
+
+    await expect(resultado).resolves.toBe(false);
+    expect(imagenes.liberadas).toHaveLength(1);
   });
 });
 

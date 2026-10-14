@@ -4,10 +4,12 @@ import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.identidad.ResolutorDeIdentidad;
 import com.nexusbattles.ms_chatbot.chat.identidad.SesionAnonima;
 import com.nexusbattles.ms_chatbot.chat.identidad.SesionesAnonimas;
+import com.nexusbattles.ms_chatbot.chat.preferencias.ExperienciaDelChat;
 import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
 import com.nexusbattles.ms_chatbot.chat.preferencias.NivelDeDetalle;
 import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasService;
+import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
 import com.nexusbattles.ms_chatbot.config.SecurityConfig;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -37,8 +39,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 // ms-chatbot.yaml 1.3.6: GET y PUT /chat/preferencias, con la identidad de B11.
+// 1.15.0 (D-CHA-13): con el nivel con el que se responde hoy.
 @WebMvcTest(PreferenciasController.class)
-@Import({SecurityConfig.class, ResolutorDeIdentidad.class, ManejadorErroresDelChat.class})
+@Import({SecurityConfig.class, ResolutorDeIdentidad.class, ManejadorErroresDelChat.class, ExperienciaDelChat.class})
 class PreferenciasControllerTest {
 
     private static final String CABECERA = "X-Id-Sesion-Anonima";
@@ -53,6 +56,10 @@ class PreferenciasControllerTest {
     @MockitoBean
     private SesionesAnonimas sesiones;
 
+    // La experiencia se cuenta en los mensajes: sin stub, cero (quien empieza).
+    @MockitoBean
+    private MensajeRepository mensajes;
+
     private static SesionAnonima sesion() {
         return new SesionAnonima("huella", Instant.parse("2026-10-01T10:00:00Z"), Duration.ofHours(24));
     }
@@ -65,9 +72,24 @@ class PreferenciasControllerTest {
         mockMvc.perform(get("/chat/preferencias").header(CABECERA, UID.toString()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.idioma").value("AUTOMATICO"))
-            .andExpect(jsonPath("$.nivelDetalle").value("NORMAL"));
+            .andExpect(jsonPath("$.nivelDetalle").value("AUTOMATICO"))
+            // Sin identidad, como quien empieza (D-CHA-13).
+            .andExpect(jsonPath("$.nivelDetalleEfectivo").value("DETALLADO"));
 
-        verifyNoInteractions(servicio);
+        verifyNoInteractions(servicio, mensajes);
+    }
+
+    // 1.15.0: con el nivel automatico, el efectivo sale de su experiencia.
+    @Test
+    void obtener_conNivelAutomatico_diceElDeSuExperiencia() throws Exception {
+        when(servicio.de(any())).thenReturn(PreferenciasDeRespuesta.SIN_ELEGIR);
+        when(mensajes.countByConversacionIdentificadorSesionAndRemitenteAndResultadoIn(eq(UID.toString()), any(),
+            any())).thenReturn(31L);
+
+        mockMvc.perform(get("/chat/preferencias").with(jwt().jwt(j -> j.claim("uid", UID.toString()))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.nivelDetalle").value("AUTOMATICO"))
+            .andExpect(jsonPath("$.nivelDetalleEfectivo").value("BREVE"));
     }
 
     @Test
@@ -77,7 +99,8 @@ class PreferenciasControllerTest {
         mockMvc.perform(get("/chat/preferencias").with(jwt().jwt(j -> j.claim("uid", UID.toString()))))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.idioma").value("EN"))
-            .andExpect(jsonPath("$.nivelDetalle").value("BREVE"));
+            .andExpect(jsonPath("$.nivelDetalle").value("BREVE"))
+            .andExpect(jsonPath("$.nivelDetalleEfectivo").value("BREVE"));
 
         ArgumentCaptor<IdentidadDelChat> identidad = ArgumentCaptor.forClass(IdentidadDelChat.class);
         verify(servicio).de(identidad.capture());
@@ -95,7 +118,8 @@ class PreferenciasControllerTest {
             .andExpect(status().isOk())
             .andExpect(header().doesNotExist(CABECERA))
             .andExpect(jsonPath("$.idioma").value("ES"))
-            .andExpect(jsonPath("$.nivelDetalle").value("DETALLADO"));
+            .andExpect(jsonPath("$.nivelDetalle").value("DETALLADO"))
+            .andExpect(jsonPath("$.nivelDetalleEfectivo").value("DETALLADO"));
 
         ArgumentCaptor<IdentidadDelChat> identidad = ArgumentCaptor.forClass(IdentidadDelChat.class);
         verify(servicio).guardar(identidad.capture(), eq(nuevas));

@@ -1,23 +1,35 @@
 package com.nexusbattles.ms_chatbot.chat.soporte;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface TicketSoporteRepository extends JpaRepository<TicketSoporte, UUID> {
+
+    // 1.14.0: la solicitud bloqueada mientras se le adjunta una captura, para
+    // que dos a la vez no pasen de las tres que admite.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM TicketSoporte t WHERE t.id = :id")
+    Optional<TicketSoporte> bloquear(@Param("id") UUID id);
 
     /** "Mis tickets" (GET /chat/tickets). */
     List<TicketSoporte> findByUidOrderByCreadoEnDesc(String uid);
 
     /** Para responder 409 TICKET_ABIERTO antes de chocar con el indice unico. */
     boolean existsByUidAndEstadoIn(String uid, Collection<EstadoTicket> estados);
+
+    // 1.12.0: la solicitud abierta de una persona (como mucho una, V6).
+    Optional<TicketSoporte> findFirstByUidAndEstadoInOrderByCreadoEnDesc(String uid, Collection<EstadoTicket> estados);
 
     /** 1.3.9: al reabrir un ticket, si el jugador ya tiene OTRO abierto (409). */
     boolean existsByUidAndEstadoInAndIdNot(String uid, Collection<EstadoTicket> estados, UUID id);

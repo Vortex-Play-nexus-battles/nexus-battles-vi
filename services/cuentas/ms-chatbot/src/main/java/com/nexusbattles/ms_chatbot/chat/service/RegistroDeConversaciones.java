@@ -52,6 +52,17 @@ public class RegistroDeConversaciones {
         return respuestaBot;
     }
 
+    // 1.12.0 (RF-CHA-007): la respuesta ya guardada, con lo que se le dice
+    // sobre la solicitud de soporte que se abrio por ella. Transaccion corta y
+    // propia: la solicitud se abrio entre medias, fuera de esta.
+    @Transactional
+    public Mensaje completarRespuesta(Mensaje respuesta, String contenidoCompleto,
+                                      com.nexusbattles.ms_chatbot.chat.enriquecido.RespuestaEnriquecida enriquecido) {
+        Mensaje guardada = mensajeRepository.findById(respuesta.getId()).orElse(respuesta);
+        guardada.completarRespuesta(contenidoCompleto, enriquecido);
+        return mensajeRepository.save(guardada);
+    }
+
     // La conversacion de esta identidad, o una nueva. Defensa en profundidad:
     // una clave de usuario nunca puede devolver la conversacion de un
     // visitante ni al reves (ademas de los espacios de claves separados y la

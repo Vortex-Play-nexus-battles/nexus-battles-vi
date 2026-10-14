@@ -1,15 +1,25 @@
 /**
  * «Hablar con soporte» dentro de la ventana del asistente.
  *
- * Cuando el asistente no resuelve algo, el jugador con sesión abre una
- * solicitud de soporte (un ticket en el servidor) y ve aquí las suyas, con su
- * estado y la respuesta de soporte cuando llega.
+ * Cuando el asistente no resuelve algo, se abre una solicitud de soporte (un
+ * ticket en el servidor) y aquí se ven las propias, con su estado y la
+ * respuesta de soporte cuando llega. Desde ms-chatbot.yaml 1.12.0
+ * (RF-CHA-007) el asistente la abre solo al no resolver una pregunta; este
+ * panel sirve para verla, para abrir una con la conversación si eso falló, o
+ * para escribirla con otras palabras.
  *
- * Un visitante no abre solicitudes (el servidor le responde 401). #506 — en
- * vez de un callejón sin salida se le explica que hablar con una persona del
- * equipo pide una cuenta, y se le ofrece iniciar sesión (volviendo después a
- * la página donde estaba) o crear una. Ya no se le ofrece el chat general:
- * también pide sesión, así que era otra puerta al mismo login.
+ * 1.12.0 — el visitante también (RF-CHA-007 nombra al Visitante): sus
+ * solicitudes son de su sesión de visitante, así que una nota le dice que
+ * verá la respuesta aquí mientras siga en ella y le ofrece iniciar sesión
+ * (volviendo después a la página donde estaba) o crear una cuenta. Antes
+ * (#506) solo se le ofrecía la cuenta, porque el servidor le respondía 401.
+ *
+ * 1.14.0 (§7.4.6 «Opción de adjuntar capturas de pantalla para soporte
+ * técnico») — a una solicitud abierta se le adjuntan hasta tres capturas,
+ * al escribirla (opcional) o después, desde «Tus solicitudes», donde también
+ * se ven. Antes de elegirla, la pista dice que no se vean contraseñas,
+ * códigos ni tarjetas: a una imagen no se le puede aplicar la redacción de
+ * los textos.
  *
  * El texto que se pinta sale del servidor, así que entra con `textContent`
  * (`h()`), nunca como HTML. Los errores se deciden por el `motivo` del
@@ -21,6 +31,14 @@
 import { pintarAviso, limpiarAviso } from './aviso.js';
 import { boton, conCarga } from './boton.js';
 import { campo } from './campo.js';
+import {
+  MAXIMO_DE_CAPTURAS,
+  crearRegistroDeImagenes,
+  listaDeCapturas,
+  pesoLegible,
+  rechazoDeCaptura,
+  selectorDeCaptura,
+} from './capturas-chatbot.js';
 import { distintivo } from './distintivo.js';
 import { h, vaciar } from './dom.js';
 import { fechaHora } from './formato.js';
@@ -40,6 +58,9 @@ export const CATEGORIAS = Object.freeze([
   { valor: 'FAQ_GENERAL', texto: 'Otra consulta' },
 ]);
 
+/** 1.14.0 — los estados en los que una solicitud admite capturas. */
+const ADMITEN_CAPTURAS = new Set(['ABIERTO', 'EN_PROCESO']);
+
 /** Estado de una solicitud: texto y variante del distintivo del kit. */
 export const ESTADOS = Object.freeze({
   ABIERTO: { texto: 'Abierta', variante: 'activo' },
@@ -52,8 +73,9 @@ export const TEXTOS_SOPORTE = Object.freeze({
   titulo: 'Hablar con soporte',
   intro: 'Cuéntanos qué pasa y una persona del equipo te responderá aquí.',
   volver: 'Volver al chat',
+  // 1.12.0 — el visitante también abre solicitudes, ligadas a su sesión.
   visitante:
-    'Para hablar con una persona del equipo necesitas una cuenta: inicia sesión o crea una.',
+    'Estás como visitante: verás la respuesta aquí, en «Tus solicitudes», mientras sigas en esta sesión del navegador. Con una cuenta, tus solicitudes quedan guardadas.',
   iniciarSesion: 'Iniciar sesión',
   crearCuenta: 'Crear cuenta',
   categoria: 'Tema',
@@ -106,7 +128,103 @@ export const TEXTOS_SOPORTE = Object.freeze({
   oEscribela: 'O cuéntalo con tus palabras:',
   sinConversacion: 'Todavía no hay una pregunta que enviar.',
   sinConversacionDetalle: 'Escribe tu solicitud en el formulario.',
+  // ms-chatbot.yaml 1.14.0 (§7.4.6) — capturas de pantalla.
+  capturaOpcional: 'Adjuntar una captura (opcional)',
+  adjuntarCaptura: 'Adjuntar captura',
+  pistaCaptura:
+    'PNG o JPEG de hasta 2 MB. Antes de elegirla, revisa que no se vean contraseñas, códigos ni datos de tarjetas: soporte la verá tal cual.',
+  subiendoCaptura: 'Subiendo captura…',
+  capturaElegida: (peso) => `Captura lista para enviar (${peso}).`,
+  quitarCaptura: 'Quitar',
+  capturaAdjunta: 'Adjuntamos tu captura.',
+  capturaAdjuntaDetalle: 'Soporte la verá con tu solicitud.',
+  conCaptura: 'Le adjuntamos tu captura.',
+  enviadaSinCaptura: 'Abrimos tu solicitud, pero no pudimos adjuntar la captura.',
+  enviadaSinCapturaDetalle: (motivo) => `${motivo} Puedes adjuntarla desde «Tus solicitudes».`,
+  capturaVacia: 'Ese archivo está vacío.',
+  capturaVaciaDetalle: 'Elige una captura PNG o JPEG.',
+  capturaNoAdmitida: 'Esa imagen no se puede adjuntar.',
+  capturaNoAdmitidaDetalle: 'Elige una captura PNG o JPEG.',
+  capturaGrande: 'La captura es demasiado grande.',
+  capturaGrandeDetalle: 'Puede pesar hasta 2 MB y medir hasta 4096 píxeles por lado.',
+  capturasCompletas: `Esta solicitud ya tiene ${MAXIMO_DE_CAPTURAS} capturas.`,
+  capturasCompletasDetalle: 'No caben más; soporte ya puede verlas.',
+  solicitudCerrada: 'Esta solicitud ya no admite capturas.',
+  solicitudCerradaDetalle: 'Soporte ya la respondió o la cerró.',
+  solicitudNoEncontrada: 'No encontramos esa solicitud.',
+  solicitudNoEncontradaDetalle: 'Cierra «Hablar con soporte» y vuelve a abrirlo.',
+  muchasCapturas: 'Subiste muchas capturas seguidas.',
+  capturaError: 'No se pudo adjuntar la captura.',
+  capturaErrorDetalle: 'Inténtalo de nuevo.',
 });
+
+/**
+ * 1.14.0 — aviso para una captura que no vale la pena subir: vacía, de otro
+ * tipo o de más de 2 MB (`rechazoDeCaptura`).
+ *
+ * @param {'vacia'|'tipo'|'tamano'} rechazo
+ * @returns {{tono: string, titulo: string, detalle: string}}
+ */
+export function avisoDeRechazo(rechazo) {
+  const t = TEXTOS_SOPORTE;
+  if (rechazo === 'tamano') {
+    return { tono: 'advertencia', titulo: t.capturaGrande, detalle: t.capturaGrandeDetalle };
+  }
+  if (rechazo === 'tipo') {
+    return {
+      tono: 'advertencia',
+      titulo: t.capturaNoAdmitida,
+      detalle: t.capturaNoAdmitidaDetalle,
+    };
+  }
+  return { tono: 'advertencia', titulo: t.capturaVacia, detalle: t.capturaVaciaDetalle };
+}
+
+/**
+ * 1.14.0 — aviso para un fallo al adjuntar una captura. Por el `motivo`; un
+ * 413 o un 415 sin él (el del borde no lo trae) se entienden igual.
+ *
+ * @param {{estado?: number, noDisponible?: boolean, motivo?: string|null,
+ *          reintentarEn?: number|null, problema?: {motivo?: string}|null}} error
+ * @returns {{tono: string, titulo: string, detalle: string}}
+ */
+export function avisoDeCaptura(error) {
+  const motivo = error?.motivo ?? error?.problema?.motivo ?? null;
+  const t = TEXTOS_SOPORTE;
+  if (motivo === 'CAPTURA_DEMASIADO_GRANDE' || error?.estado === 413) {
+    return avisoDeRechazo('tamano');
+  }
+  if (motivo === 'CAPTURA_NO_ADMITIDA' || error?.estado === 415) {
+    return avisoDeRechazo('tipo');
+  }
+  if (motivo === 'CAPTURA_AUSENTE') {
+    return avisoDeRechazo('vacia');
+  }
+  if (motivo === 'CAPTURAS_COMPLETAS') {
+    return {
+      tono: 'advertencia',
+      titulo: t.capturasCompletas,
+      detalle: t.capturasCompletasDetalle,
+    };
+  }
+  if (motivo === 'SOLICITUD_CERRADA') {
+    return { tono: 'advertencia', titulo: t.solicitudCerrada, detalle: t.solicitudCerradaDetalle };
+  }
+  if (motivo === 'SOLICITUD_NO_ENCONTRADA') {
+    return {
+      tono: 'advertencia',
+      titulo: t.solicitudNoEncontrada,
+      detalle: t.solicitudNoEncontradaDetalle,
+    };
+  }
+  if (motivo === 'LIMITE_DE_FRECUENCIA' || error?.estado === 429) {
+    return { ...avisoDeError(error), titulo: t.muchasCapturas };
+  }
+  if (motivo === 'SESION_REQUERIDA' || error?.sinPermiso || error?.noDisponible) {
+    return avisoDeError(error);
+  }
+  return { tono: 'error', titulo: t.capturaError, detalle: t.capturaErrorDetalle };
+}
 
 /**
  * Aviso para un error al abrir una solicitud. Por el `motivo`, luego por el estado.
@@ -155,18 +273,30 @@ export function avisoDeError(error) {
 }
 
 /**
- * @param {{cliente: {abrirTicket: Function, misTickets: Function},
+ * @param {{cliente: {abrirTicket: Function, misTickets: Function,
+ *                    subirCaptura?: Function, leerCaptura?: Function},
  *          sesion: () => {autenticado?: boolean},
  *          login: string|(() => string|null)|null,
  *          registro?: string|(() => string|null)|null,
- *          alVolver: () => void}} opciones `login` y `registro`: la URL, o una
- *          función que la da al abrir el panel (así la vuelta tras entrar es
- *          la página de ese momento)
+ *          alVolver: () => void,
+ *          imagenes?: {crear: (contenido: Blob) => string, liberar: () => void}}} opciones
+ *          `login` y `registro`: la URL, o una función que la da al abrir el
+ *          panel (así la vuelta tras entrar es la página de ese momento).
+ *          `imagenes`: los enlaces de objeto de las capturas (1.14.0)
  * @returns {{elemento: HTMLElement, abrir: () => void, enfocar: () => void,
+ *            enfocarCaptura: () => Promise<void>,
  *            actualizarTicket: (ticket: object) => void, recargarLista: () => void}}
  */
-export function crearPanelSoporte({ cliente, sesion, login, registro = null, alVolver }) {
+export function crearPanelSoporte({
+  cliente,
+  sesion,
+  login,
+  registro = null,
+  alVolver,
+  imagenes = crearRegistroDeImagenes(),
+}) {
   let enviando = false;
+  let subiendo = false;
 
   const botonVolver = h('button', {
     clase: 'chatbot-ventana__accion',
@@ -198,7 +328,9 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
 
   // --------------------------------------------------------- visitante
 
-  function pintarVisitante() {
+  // 1.12.0 — hasta cuándo verá la respuesta y, si quiere, una cuenta. Las
+  // salidas son secundarias: lo principal del panel es pedir ayuda.
+  function notaDeVisitante() {
     const acciones = h('div', { clase: 'chatbot-soporte__acciones' });
     const destinoLogin = typeof login === 'function' ? login() : login;
     const destinoRegistro = typeof registro === 'function' ? registro() : registro;
@@ -206,6 +338,8 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
       acciones.append(
         boton({
           texto: TEXTOS_SOPORTE.iniciarSesion,
+          variante: 'secundario',
+          tamano: 'pequeno',
           href: destinoLogin,
           nombre: 'iniciar-sesion',
         }),
@@ -216,18 +350,23 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
         boton({
           texto: TEXTOS_SOPORTE.crearCuenta,
           variante: 'secundario',
+          tamano: 'pequeno',
           href: destinoRegistro,
           nombre: 'crear-cuenta',
         }),
       );
     }
-    contenido.append(
-      h('p', { clase: 'chatbot-soporte__texto', texto: TEXTOS_SOPORTE.visitante }),
-      acciones,
-    );
+    return h('div', {
+      clase: 'chatbot-soporte__visitante',
+      datos: { zona: 'visitante' },
+      hijos: [
+        h('p', { clase: 'chatbot-soporte__texto', texto: TEXTOS_SOPORTE.visitante }),
+        acciones.childElementCount > 0 ? acciones : null,
+      ],
+    });
   }
 
-  // ------------------------------------------------------------ jugador
+  // ---------------------------------------------------- jugador y visitante
 
   const categoria = campo({
     nombre: 'categoria',
@@ -246,6 +385,51 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
     pista: TEXTOS_SOPORTE.pistaMensaje,
     atributos: { maxlength: LIMITES_SOPORTE.mensaje },
   });
+  // 1.14.0 — una captura opcional, que se adjunta en cuanto la solicitud
+  // queda abierta. Elegirla no sube nada todavía.
+  let capturaElegida = null;
+  const elegida = h('p', {
+    clase: 'chatbot-soporte__elegida',
+    datos: { zona: 'captura-elegida' },
+    atributos: { hidden: true },
+  });
+  const selectorDelFormulario = selectorDeCaptura({
+    texto: TEXTOS_SOPORTE.capturaOpcional,
+    pista: TEXTOS_SOPORTE.pistaCaptura,
+    alElegir: elegirCaptura,
+  });
+
+  function elegirCaptura(archivo) {
+    const rechazo = rechazoDeCaptura(archivo);
+    if (rechazo) {
+      pintarAviso(zonaAviso, avisoDeRechazo(rechazo));
+      return;
+    }
+    limpiarAviso(zonaAviso);
+    capturaElegida = archivo;
+    const quitar = boton({
+      texto: TEXTOS_SOPORTE.quitarCaptura,
+      variante: 'secundario',
+      tamano: 'pequeno',
+      nombre: 'quitar-captura',
+    });
+    quitar.addEventListener('click', () => {
+      quitarCapturaElegida();
+      selectorDelFormulario.entrada.focus();
+    });
+    elegida.replaceChildren(
+      h('span', { texto: TEXTOS_SOPORTE.capturaElegida(pesoLegible(archivo.size)) }),
+      quitar,
+    );
+    elegida.hidden = false;
+  }
+
+  function quitarCapturaElegida() {
+    capturaElegida = null;
+    elegida.replaceChildren();
+    elegida.hidden = true;
+  }
+
   const botonEnviar = boton({
     texto: TEXTOS_SOPORTE.enviar,
     tipo: 'submit',
@@ -254,7 +438,14 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
   const formulario = h('form', {
     clase: 'chatbot-soporte__formulario',
     atributos: { novalidate: true },
-    hijos: [categoria.elemento, asunto.elemento, mensaje.elemento, botonEnviar],
+    hijos: [
+      categoria.elemento,
+      asunto.elemento,
+      mensaje.elemento,
+      selectorDelFormulario.elemento,
+      elegida,
+      botonEnviar,
+    ],
   });
   formulario.addEventListener('submit', (evento) => {
     evento.preventDefault();
@@ -296,11 +487,13 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
       return;
     }
     enviando = true;
+    // 1.14.0 — si ya eligió una captura en el formulario, va con esta.
+    const captura = capturaElegida;
     limpiarAviso(zonaAviso);
     conCarga(crear, true, TEXTOS_SOPORTE.creandoDesdeConversacion);
     try {
-      await cliente.abrirTicketDesdeConversacion({ vista: vistaDeApertura });
-      alCrearDesdeConversacion();
+      const ticket = await cliente.abrirTicketDesdeConversacion({ vista: vistaDeApertura });
+      await alCrearDesdeConversacion(ticket, captura);
     } catch (error) {
       pintarAviso(zonaAviso, avisoDesdeConversacion(error));
     } finally {
@@ -308,13 +501,16 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
     }
   }
 
-  function alCrearDesdeConversacion() {
+  async function alCrearDesdeConversacion(ticket, captura) {
     quitarDesdeConversacion();
-    pintarAviso(zonaAviso, {
-      tono: 'exito',
-      titulo: TEXTOS_SOPORTE.creadaDesdeConversacion,
-      detalle: TEXTOS_SOPORTE.creadaDesdeConversacionDetalle,
-    });
+    pintarAviso(
+      zonaAviso,
+      await conLaCaptura(ticket, captura, {
+        tono: 'exito',
+        titulo: TEXTOS_SOPORTE.creadaDesdeConversacion,
+        detalle: TEXTOS_SOPORTE.creadaDesdeConversacionDetalle,
+      }),
+    );
     cargarLista();
   }
 
@@ -323,9 +519,10 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
     conCarga(crear, false);
   }
 
-  function pintarJugador() {
+  function pintarSolicitudes({ visitante }) {
     contenido.append(
       h('p', { clase: 'chatbot-soporte__texto', texto: TEXTOS_SOPORTE.intro }),
+      ...(visitante ? [notaDeVisitante()] : []),
       zonaDesdeConversacion,
       formulario,
       h('h4', { clase: 'chatbot-soporte__subtitulo', texto: TEXTOS_SOPORTE.tuyas }),
@@ -336,7 +533,7 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
     } else {
       quitarDesdeConversacion();
     }
-    cargarLista();
+    cargaDeLaLista = cargarLista();
   }
 
   async function cargarLista() {
@@ -355,6 +552,7 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
 
   function pintarLista(tickets) {
     vaciar(lista);
+    imagenes.liberar();
     if (tickets.length === 0) {
       lista.append(h('li', { clase: 'chatbot-soporte__vacio', texto: TEXTOS_SOPORTE.ninguna }));
       return;
@@ -395,7 +593,107 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
         }),
       );
     }
+    const capturas = zonaDeCapturas(ticket);
+    if (capturas) {
+      item.append(capturas);
+    }
     return item;
+  }
+
+  // 1.14.0 — las capturas de la solicitud y, si aún admite, el selector.
+  function zonaDeCapturas(ticket) {
+    const capturas = Array.isArray(ticket.capturas) ? ticket.capturas : [];
+    const admite =
+      Boolean(ticket.ticketId) &&
+      ADMITEN_CAPTURAS.has(ticket.estado) &&
+      capturas.length < MAXIMO_DE_CAPTURAS;
+    if (capturas.length === 0 && !admite) {
+      return null;
+    }
+    const zona = h('div', { clase: 'chatbot-soporte__capturas', datos: { zona: 'capturas' } });
+    if (capturas.length > 0) {
+      zona.append(
+        listaDeCapturas({
+          capturas,
+          asunto: ticket.asunto,
+          leer: (capturaId) => cliente.leerCaptura(ticket.ticketId, capturaId),
+          registro: imagenes,
+        }),
+      );
+    }
+    const zonaDeAviso = h('div', {
+      clase: 'chatbot-soporte__aviso-captura',
+      datos: { zona: 'aviso-captura' },
+      atributos: { hidden: true },
+    });
+    if (admite) {
+      const selector = selectorDeCaptura({
+        texto: TEXTOS_SOPORTE.adjuntarCaptura,
+        pista: TEXTOS_SOPORTE.pistaCaptura,
+        alElegir: (archivo) => adjuntar(ticket, archivo, selector, zonaDeAviso),
+      });
+      zona.append(selector.elemento);
+    }
+    zona.append(zonaDeAviso);
+    return zona;
+  }
+
+  async function adjuntar(ticket, archivo, selector, zonaDeAviso) {
+    const rechazo = rechazoDeCaptura(archivo);
+    if (rechazo) {
+      pintarAviso(zonaDeAviso, avisoDeRechazo(rechazo));
+      return;
+    }
+    if (subiendo) {
+      return;
+    }
+    subiendo = true;
+    limpiarAviso(zonaDeAviso);
+    selector.ocupado(true, TEXTOS_SOPORTE.subiendoCaptura);
+    try {
+      const captura = await cliente.subirCaptura(ticket.ticketId, archivo);
+      alAdjuntar(ticket, captura);
+    } catch (error) {
+      selector.ocupado(false);
+      pintarAviso(zonaDeAviso, avisoDeCaptura(error));
+    } finally {
+      terminarSubida();
+    }
+  }
+
+  function terminarSubida() {
+    subiendo = false;
+  }
+
+  // La solicitud se repinta con su captura nueva, sin releer la lista; el
+  // foco va a «Ver captura» de la que se acaba de subir.
+  function alAdjuntar(ticket, captura) {
+    const nuevo = reemplazarTicket({ ...ticket, capturas: [...(ticket.capturas ?? []), captura] });
+    if (!nuevo) {
+      cargarLista();
+      return;
+    }
+    const zonaDeAviso = nuevo.querySelector('[data-zona="aviso-captura"]');
+    pintarAviso(zonaDeAviso, {
+      tono: 'exito',
+      titulo: TEXTOS_SOPORTE.capturaAdjunta,
+      detalle: TEXTOS_SOPORTE.capturaAdjuntaDetalle,
+    });
+    const ver = nuevo.querySelectorAll('[data-accion="ver-captura"]');
+    ver[ver.length - 1]?.focus();
+  }
+
+  /** Cambia en la lista la solicitud con ese id; null si no la tiene. */
+  function reemplazarTicket(ticket) {
+    const actual = [...lista.querySelectorAll('[data-ticket-id]')].find(
+      (item) => item.dataset.ticketId === ticket.ticketId,
+    );
+    if (!actual) {
+      return null;
+    }
+    const nuevo = elementoDeTicket(ticket);
+    actual.replaceWith(nuevo);
+    return nuevo;
   }
 
   async function enviar() {
@@ -412,15 +710,16 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
     }
 
     enviando = true;
+    const captura = capturaElegida;
     limpiarAviso(zonaAviso);
     conCarga(botonEnviar, true, TEXTOS_SOPORTE.enviando);
     try {
-      await cliente.abrirTicket({
+      const ticket = await cliente.abrirTicket({
         categoria: categoria.control.value,
         asunto: textoAsunto,
         mensaje: textoMensaje,
       });
-      alEnviar();
+      await alEnviar(ticket, captura);
     } catch (error) {
       pintarAviso(zonaAviso, avisoDeError(error));
     } finally {
@@ -430,15 +729,38 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
 
   // Fuera de `enviar` a propósito: lo que se toca después de un `await` vive
   // en funciones aparte (regla require-atomic-updates de ESLint).
-  function alEnviar() {
+  async function alEnviar(ticket, captura) {
     asunto.control.value = '';
     mensaje.control.value = '';
-    pintarAviso(zonaAviso, {
-      tono: 'exito',
-      titulo: TEXTOS_SOPORTE.enviada,
-      detalle: TEXTOS_SOPORTE.enviadaDetalle,
-    });
+    pintarAviso(
+      zonaAviso,
+      await conLaCaptura(ticket, captura, {
+        tono: 'exito',
+        titulo: TEXTOS_SOPORTE.enviada,
+        detalle: TEXTOS_SOPORTE.enviadaDetalle,
+      }),
+    );
     cargarLista();
+  }
+
+  // 1.14.0 — la solicitud ya está abierta. Con una captura elegida, se le
+  // adjunta; si no entra, se dice por qué y dónde adjuntarla después, sin dar
+  // la solicitud por fallida.
+  async function conLaCaptura(ticket, captura, exito) {
+    if (!captura || !ticket?.ticketId) {
+      return exito;
+    }
+    quitarCapturaElegida();
+    try {
+      await cliente.subirCaptura(ticket.ticketId, captura);
+      return { ...exito, detalle: `${TEXTOS_SOPORTE.conCaptura} ${exito.detalle}` };
+    } catch (error) {
+      return {
+        tono: 'advertencia',
+        titulo: TEXTOS_SOPORTE.enviadaSinCaptura,
+        detalle: TEXTOS_SOPORTE.enviadaSinCapturaDetalle(avisoDeCaptura(error).titulo),
+      };
+    }
   }
 
   function terminarEnvio() {
@@ -452,6 +774,9 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
   // pregunta sin resolver, y en qué sección está el jugador.
   let conConversacion = false;
   let vistaDeApertura = null;
+  // 1.14.0 — la carga de «Tus solicitudes» al abrir, para enfocar después
+  // el sitio donde se adjunta una captura.
+  let cargaDeLaLista = Promise.resolve();
 
   /**
    * @param {{conConversacion?: boolean, vista?: string|null}} [opciones]
@@ -462,27 +787,35 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
     conConversacion = Boolean(ofrecer);
     vistaDeApertura = vista;
     limpiarAviso(zonaAviso);
+    imagenes.liberar();
     vaciar(contenido);
-    if (sesion()?.autenticado) {
-      pintarJugador();
-    } else {
-      pintarVisitante();
-    }
+    pintarSolicitudes({ visitante: !sesion()?.autenticado });
     panel.hidden = false;
   }
 
-  // El primero en el orden de la página: «Crear solicitud con esta
-  // conversación» si está, luego el formulario o el botón del visitante.
+  // Lo principal del panel: «Crear solicitud con esta conversación» si está
+  // y, si no, el formulario. La nota del visitante va antes, pero sus
+  // enlaces son una salida secundaria y no se llevan el foco.
   function enfocar() {
     const destino =
-      panel.querySelector('[data-accion="crear-solicitud-desde-conversacion"], select, a.boton') ??
+      panel.querySelector('[data-accion="crear-solicitud-desde-conversacion"]') ??
+      panel.querySelector('select') ??
       botonVolver;
+    destino.focus();
+  }
+
+  // 1.14.0 — desde el clip de la ventana: el foco va a donde se adjunta, la
+  // solicitud abierta que aún tiene sitio o, si no la hay, el formulario.
+  async function enfocarCaptura() {
+    await cargaDeLaLista;
+    const destino =
+      lista.querySelector('[data-accion="elegir-captura"]') ?? selectorDelFormulario.entrada;
     destino.focus();
   }
 
   // ---------------------------------------------------- 7.4.9, en vivo
 
-  /** Si «Tus solicitudes» está a la vista (panel abierto, con sesión). */
+  /** Si «Tus solicitudes» está a la vista (panel abierto). */
   function listaALaVista() {
     return !panel.hidden && contenido.contains(lista);
   }
@@ -499,12 +832,7 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
     if (!listaALaVista() || !ticket?.ticketId) {
       return;
     }
-    const actual = [...lista.querySelectorAll('[data-ticket-id]')].find(
-      (item) => item.dataset.ticketId === ticket.ticketId,
-    );
-    if (actual) {
-      actual.replaceWith(elementoDeTicket(ticket));
-    } else {
+    if (!reemplazarTicket(ticket)) {
       cargarLista();
     }
   }
@@ -516,7 +844,7 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
     }
   }
 
-  return { elemento: panel, abrir, enfocar, actualizarTicket, recargarLista };
+  return { elemento: panel, abrir, enfocar, enfocarCaptura, actualizarTicket, recargarLista };
 }
 
 /**

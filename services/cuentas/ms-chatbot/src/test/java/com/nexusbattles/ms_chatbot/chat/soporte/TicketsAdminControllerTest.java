@@ -11,24 +11,33 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.web.server.ResponseStatusException;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -39,6 +48,8 @@ class TicketsAdminControllerTest {
 
     private static final String RUTA = "/chatbot/admin/tickets";
     private static final Instant AL_ABRIR = Instant.parse("2026-09-28T18:00:00Z");
+    private static final UUID SOLICITUD = UUID.fromString("3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f");
+    private static final UUID CAPTURA = UUID.fromString("9e8d7c6b-5a49-4382-9716-05f4e3d2c1b0");
 
     @Autowired
     private MockMvc mockMvc;
@@ -46,13 +57,18 @@ class TicketsAdminControllerTest {
     @MockitoBean
     private TicketSoporteAdminService servicio;
 
+    @MockitoBean
+    private CapturasDeSoporteService capturas;
+
     private static RequestPostProcessor administrador() {
         return jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMINISTRADOR"));
     }
 
     private static TicketSoporte ticket() {
-        return TicketSoporte.abrir("uid-1", Categoria.SOPORTE_TECNICO, "No carga", "Se queda cargando",
-            List.of(new MensajeDeContexto("USUARIO", "hola", AL_ABRIR)), AL_ABRIR);
+        TicketSoporte ticket = TicketSoporte.abrir("uid-1", Categoria.SOPORTE_TECNICO, "No carga",
+            "Se queda cargando", List.of(new MensajeDeContexto("USUARIO", "hola", AL_ABRIR)), AL_ABRIR);
+        ReflectionTestUtils.setField(ticket, "id", SOLICITUD);
+        return ticket;
     }
 
     @Test
@@ -184,5 +200,89 @@ class TicketsAdminControllerTest {
         mockMvc.perform(get(RUTA))
             .andExpect(status().isUnauthorized());
         verifyNoInteractions(servicio);
+    }
+
+    // --- ms-chatbot.yaml 1.14.0 (§7.4.6): las capturas de la solicitud ------
+
+    private static CapturaDeSoporte captura() throws IOException {
+        ByteArrayOutputStream salida = new ByteArrayOutputStream();
+        ImageIO.write(new BufferedImage(8, 6, BufferedImage.TYPE_INT_RGB), "png", salida);
+        CapturaDeSoporte captura = new CapturaDeSoporte(SOLICITUD,
+            new ExaminadorDeCapturas().examinar(salida.toByteArray()), AL_ABRIR);
+        ReflectionTestUtils.setField(captura, "id", CAPTURA);
+        return captura;
+    }
+
+    @Test
+    void obtenerYAtenderTraenSusCapturasSinElContenido() throws Exception {
+        CapturaDeSoporte.Resumen resumen = mock(CapturaDeSoporte.Resumen.class);
+        when(resumen.getId()).thenReturn(CAPTURA);
+        when(resumen.getTipo()).thenReturn("image/png");
+        when(resumen.getTamano()).thenReturn(1234);
+        when(resumen.getAncho()).thenReturn(800);
+        when(resumen.getAlto()).thenReturn(600);
+        when(resumen.getSubidaEn()).thenReturn(AL_ABRIR);
+        when(capturas.deLasSolicitudes(List.of(SOLICITUD))).thenReturn(Map.of(SOLICITUD, List.of(resumen)));
+        when(servicio.obtener(SOLICITUD)).thenReturn(ticket());
+        when(servicio.atender(eq(SOLICITUD), eq(EstadoTicket.EN_PROCESO), isNull(), isNull(), eq(false)))
+            .thenReturn(ticket());
+
+        mockMvc.perform(get(RUTA + "/" + SOLICITUD).with(administrador()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.capturas.length()").value(1))
+            .andExpect(jsonPath("$.capturas[0].capturaId").value(CAPTURA.toString()))
+            .andExpect(jsonPath("$.capturas[0].tipo").value("image/png"))
+            .andExpect(jsonPath("$.capturas[0].tamano").value(1234))
+            .andExpect(jsonPath("$.capturas[0].ancho").value(800))
+            .andExpect(jsonPath("$.capturas[0].alto").value(600))
+            .andExpect(jsonPath("$.capturas[0].contenido").doesNotExist());
+        mockMvc.perform(patch(RUTA + "/" + SOLICITUD).with(administrador())
+                .contentType("application/json")
+                .content("{\"estado\":\"EN_PROCESO\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.capturas[0].capturaId").value(CAPTURA.toString()));
+    }
+
+    @Test
+    void sinCapturasLaListaVaVacia() throws Exception {
+        when(servicio.obtener(SOLICITUD)).thenReturn(ticket());
+
+        mockMvc.perform(get(RUTA + "/" + SOLICITUD).with(administrador()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.capturas.length()").value(0));
+    }
+
+    @Test
+    void elAdministradorLeeLaCapturaSinQueSeEjecuteNiSeGuarde() throws Exception {
+        CapturaDeSoporte captura = captura();
+        when(capturas.deCualquiera(SOLICITUD, CAPTURA)).thenReturn(captura);
+
+        mockMvc.perform(get(RUTA + "/" + SOLICITUD + "/capturas/" + CAPTURA).with(administrador()))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType("image/png"))
+            .andExpect(content().bytes(captura.getContenido()))
+            .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+            .andExpect(header().string("Content-Security-Policy", "default-src 'none'; sandbox"))
+            .andExpect(header().string("Cache-Control", "no-store, private"))
+            .andExpect(header().string("Cross-Origin-Resource-Policy", "same-origin"))
+            .andExpect(header().string("Content-Disposition", "inline; filename=\"captura-" + CAPTURA + ".png\""));
+    }
+
+    @Test
+    void unaCapturaQueNoEsDeEsaSolicitudEs404() throws Exception {
+        when(capturas.deCualquiera(any(), any())).thenThrow(new TicketNoEncontradoException());
+
+        mockMvc.perform(get(RUTA + "/" + SOLICITUD + "/capturas/" + CAPTURA).with(administrador()))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void unJugadorNoLeeCapturasDelPanelYSinTokenTampoco() throws Exception {
+        String ruta = RUTA + "/" + SOLICITUD + "/capturas/" + CAPTURA;
+        mockMvc.perform(get(ruta).with(jwt().authorities(new SimpleGrantedAuthority("ROLE_JUGADOR"))))
+            .andExpect(status().isForbidden());
+        mockMvc.perform(get(ruta))
+            .andExpect(status().isUnauthorized());
+        verifyNoInteractions(capturas);
     }
 }

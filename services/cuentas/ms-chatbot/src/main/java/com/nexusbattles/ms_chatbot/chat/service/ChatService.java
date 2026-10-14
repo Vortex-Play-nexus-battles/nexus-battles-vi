@@ -1,10 +1,12 @@
 package com.nexusbattles.ms_chatbot.chat.service;
 
 import com.nexusbattles.ms_chatbot.chat.catalogo.ConsultaDeCatalogo;
+import com.nexusbattles.ms_chatbot.chat.consultas.ConsultaDeSubastas;
 import com.nexusbattles.ms_chatbot.chat.consultas.MotorConsultasAsistidas;
 import com.nexusbattles.ms_chatbot.chat.consultas.NavegacionPublica;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.Enriquecedor;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.RespuestaEnriquecida;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.SolicitudAbierta;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
 import com.nexusbattles.ms_chatbot.chat.entrada.RevisionDeEntrada;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
@@ -23,6 +25,8 @@ import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasService;
 import com.nexusbattles.ms_chatbot.chat.repository.ConversacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
+import com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporte;
+import com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporteService;
 import com.nexusbattles.ms_chatbot.chat.texto.IdiomaDelTexto;
 import com.nexusbattles.ms_chatbot.chat.texto.NormalizadorTexto;
 import org.slf4j.Logger;
@@ -76,11 +80,32 @@ public class ChatService {
     static final String RELACIONADAS = " Preguntas relacionadas que podrían ayudarte: ";
     static final String RELACIONADAS_EN = " Related questions that might help: ";
 
-    // 1.5.0 — «no me sirvio» (Seguimiento.NO_SIRVIO): se ofrece soporte humano.
-    static final String NO_SIRVIO = "Siento que mi respuesta no te haya servido. Puedes preguntarme de otra forma "
-        + "o hablar con una persona del equipo con «Hablar con soporte».";
-    static final String NO_SIRVIO_EN = "I'm sorry my answer didn't help. You can ask me in another way "
-        + "or talk to a person from the team with «Hablar con soporte» (Talk to support).";
+    // 1.5.0 — «no me sirvio» (Seguimiento.NO_SIRVIO). Desde 1.12.0 la
+    // solicitud de soporte se abre sola (RF-CHA-007) y se dice despues.
+    static final String NO_SIRVIO = "Siento que mi respuesta no te haya servido. Puedes preguntarme de otra forma.";
+    static final String NO_SIRVIO_EN = "I'm sorry my answer didn't help. You can ask me in another way.";
+
+    // 1.12.0 (7.4.3, RF-CHA-007 «generar automaticamente un ticket de
+    // soporte»): lo que se anade a una respuesta que no resolvio nada.
+    static final String SOLICITUD_ABIERTA = " Abrí una solicitud de soporte con esta conversación: una persona del "
+        + "equipo te responderá aquí, en «Soporte» › «Tus solicitudes».";
+    static final String SOLICITUD_ABIERTA_EN = " I opened a support request with this conversation: a person from "
+        + "the team will reply here, in «Soporte» › «Tus solicitudes» (Support › Your requests).";
+    static final String SOLICITUD_ABIERTA_VISITANTE = " Abrí una solicitud de soporte con esta conversación: una "
+        + "persona del equipo te responderá aquí, en «Soporte» › «Tus solicitudes», mientras sigas en esta sesión de "
+        + "visitante.";
+    static final String SOLICITUD_ABIERTA_VISITANTE_EN = " I opened a support request with this conversation: a "
+        + "person from the team will reply here, in «Soporte» › «Tus solicitudes» (Support › Your requests), while "
+        + "you stay in this visitor session.";
+    static final String SOLICITUD_SUMADA = " Sumé esta pregunta a tu solicitud abierta en «Soporte»: soporte la verá "
+        + "con el resto de la conversación.";
+    static final String SOLICITUD_SUMADA_EN = " I added this question to your open request in «Soporte» (Support): "
+        + "support will see it with the rest of the conversation.";
+    // RF-CHA-007, excepciones: si no se puede crear, se dice y se ofrece otro canal.
+    static final String SOLICITUD_FALLIDA = " No pude abrir la solicitud de soporte ahora: pídela en unos minutos "
+        + "desde «Soporte» o busca tu duda en el centro de ayuda.";
+    static final String SOLICITUD_FALLIDA_EN = " I couldn't open the support request right now: ask for it in a few "
+        + "minutes from «Soporte» (Support) or look your question up in the help center.";
 
     // 1.5.0 — un seguimiento («mas detalle», «en ingles») cuando la respuesta
     // anterior no salio de un tema de la base (una consulta en vivo, un
@@ -104,6 +129,7 @@ public class ChatService {
     private final MotorRespuestas motorRespuestas;
     private final MotorConsultasAsistidas motorConsultasAsistidas;
     private final ConsultaDeCatalogo consultaDeCatalogo;
+    private final ConsultaDeSubastas consultaDeSubastas;
     private final NavegacionPublica navegacionPublica;
     private final BrechaConocimientoService brechaConocimientoService;
     private final LimitadorDeFrecuencia limitador;
@@ -111,13 +137,15 @@ public class ChatService {
     private final RegistroDeConversaciones registro;
     private final PreferenciasService preferenciasService;
     private final RevisionDeEntrada revision;
+    private final TicketSoporteService soporte;
 
     public ChatService(ConversacionRepository conversacionRepository, MensajeRepository mensajeRepository,
                        MotorRespuestas motorRespuestas, MotorConsultasAsistidas motorConsultasAsistidas,
                        BrechaConocimientoService brechaConocimientoService, LimitadorDeFrecuencia limitador,
                        ModeracionDeContenido moderacion, RegistroDeConversaciones registro,
                        PreferenciasService preferenciasService, RevisionDeEntrada revision,
-                       ConsultaDeCatalogo consultaDeCatalogo, NavegacionPublica navegacionPublica) {
+                       ConsultaDeCatalogo consultaDeCatalogo, ConsultaDeSubastas consultaDeSubastas,
+                       NavegacionPublica navegacionPublica, TicketSoporteService soporte) {
         this.conversacionRepository = conversacionRepository;
         this.mensajeRepository = mensajeRepository;
         this.motorRespuestas = motorRespuestas;
@@ -129,7 +157,9 @@ public class ChatService {
         this.preferenciasService = preferenciasService;
         this.revision = revision;
         this.consultaDeCatalogo = consultaDeCatalogo;
+        this.consultaDeSubastas = consultaDeSubastas;
         this.navegacionPublica = navegacionPublica;
+        this.soporte = soporte;
     }
 
     public Mensaje enviarMensaje(IdentidadDelChat identidad, String contenido, String adjuntoUrl) {
@@ -177,14 +207,58 @@ public class ChatService {
             textoRespuesta = (resultado.ingles() ? AVISO_DATO_TAPADO_EN : AVISO_DATO_TAPADO) + textoRespuesta;
         }
         int tiempo = milisegundosDesde(inicio);
+        Mensaje guardada;
         try {
-            return registro.guardarIntercambio(identidad, pregunta, adjuntoUrl, recibido, textoRespuesta, resultado, tiempo);
+            guardada = registro.guardarIntercambio(identidad, pregunta, adjuntoUrl, recibido, textoRespuesta, resultado,
+                tiempo);
         } catch (DataIntegrityViolationException carrera) {
             // Dos primeros mensajes simultaneos de la misma identidad crean la
             // conversacion a la vez y uno choca con el indice unico: se guarda
             // de nuevo en la conversacion que gano.
-            return registro.guardarIntercambio(identidad, pregunta, adjuntoUrl, recibido, textoRespuesta, resultado, tiempo);
+            guardada = registro.guardarIntercambio(identidad, pregunta, adjuntoUrl, recibido, textoRespuesta, resultado,
+                tiempo);
         }
+        return resultado.requiereEscalamiento() ? conSolicitud(identidad, vista, guardada, resultado.ingles()) : guardada;
+    }
+
+    // 1.12.0 (7.4.3, RF-CHA-007, segunda auditoria del 7.4): cuando no pudo
+    // responder, el asistente abre la solicitud de soporte con la
+    // conversacion, o suma la pregunta a la que ya estaba abierta, y lo dice
+    // al final de su respuesta (con la solicitud en lo enriquecido, para que
+    // la ventana enseñe un boton a ella). Va despues de guardar el
+    // intercambio: la solicitud lleva esta pregunta en su contexto. Si no se
+    // puede abrir, la respuesta lo dice y ofrece otro camino; nunca falla la
+    // respuesta por eso.
+    private Mensaje conSolicitud(IdentidadDelChat identidad, VistaDelChat vista, Mensaje respuesta, boolean ingles) {
+        String anadido;
+        RespuestaEnriquecida enriquecido = respuesta.getEnriquecido();
+        try {
+            Optional<TicketSoporteService.SolicitudAutomatica> solicitud = soporte.alNoResolver(identidad, vista);
+            if (solicitud.isEmpty()) {
+                return respuesta;
+            }
+            TicketSoporte ticket = solicitud.get().ticket();
+            boolean nueva = solicitud.get().nueva();
+            anadido = nueva
+                ? textoDeSolicitudAbierta(identidad.autenticado(), ingles)
+                : (ingles ? SOLICITUD_SUMADA_EN : SOLICITUD_SUMADA);
+            SolicitudAbierta abierta = new SolicitudAbierta(ticket.getId(), ticket.getAsunto(),
+                ticket.getEstado().name(), nueva);
+            enriquecido = (enriquecido == null
+                ? new RespuestaEnriquecida(List.of(), List.of(), List.of(), List.of(), true)
+                : enriquecido).conSolicitud(abierta);
+        } catch (RuntimeException noSePudo) {
+            log.warn("No se pudo abrir la solicitud de soporte de una pregunta sin respuesta", noSePudo);
+            anadido = ingles ? SOLICITUD_FALLIDA_EN : SOLICITUD_FALLIDA;
+        }
+        return registro.completarRespuesta(respuesta, respuesta.getContenido() + anadido, enriquecido);
+    }
+
+    private static String textoDeSolicitudAbierta(boolean jugador, boolean ingles) {
+        if (jugador) {
+            return ingles ? SOLICITUD_ABIERTA_EN : SOLICITUD_ABIERTA;
+        }
+        return ingles ? SOLICITUD_ABIERTA_VISITANTE_EN : SOLICITUD_ABIERTA_VISITANTE;
     }
 
     // Lo que respondio el bot y si fue un seguimiento de la respuesta anterior.
@@ -225,6 +299,12 @@ public class ChatService {
         Optional<ResultadoMotor> navegacion = navegacionPublica.responder(contenido, conSesion, preferencias.idioma());
         if (navegacion.isPresent()) {
             return new Generada(navegacion.get(), false);
+        }
+        // 1.16.0 (7.4.4): lo que hay ahora en la subasta (dato publico), para
+        // visitantes y jugadores. Lo suyo ya lo respondio el motor de arriba.
+        Optional<ResultadoMotor> subasta = consultaDeSubastas.responder(contenido, preferencias.idioma());
+        if (subasta.isPresent()) {
+            return new Generada(subasta.get(), false);
         }
         // 1.10.0: el catalogo de hoy (dato publico), para visitantes y jugadores.
         Optional<ResultadoMotor> catalogo = consultaDeCatalogo.responder(contenido, preferencias.idioma());
@@ -307,9 +387,11 @@ public class ChatService {
 
     // Si no se pueden leer las preferencias, se responde con las de por
     // defecto: contestar importa mas que el formato de la respuesta.
+    // 1.15.0: las efectivas, con el nivel automatico ya traducido al de su
+    // experiencia (D-CHA-13): el motor nunca recibe AUTOMATICO.
     private PreferenciasDeRespuesta preferenciasDe(IdentidadDelChat identidad) {
         try {
-            PreferenciasDeRespuesta guardadas = preferenciasService.de(identidad);
+            PreferenciasDeRespuesta guardadas = preferenciasService.efectivasDe(identidad);
             return guardadas == null ? PreferenciasDeRespuesta.POR_DEFECTO : guardadas;
         } catch (RuntimeException excepcion) {
             log.warn("No se pudieron leer las preferencias del chat; se responde con las de por defecto", excepcion);

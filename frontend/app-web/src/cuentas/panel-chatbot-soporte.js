@@ -7,11 +7,20 @@
  * atiende: la pone en revisión, la responde o la cierra. La respuesta es lo
  * que el jugador lee en la ventana del asistente.
  *
+ * ms-chatbot.yaml 1.12.0 (RF-CHA-007) — también las abre un visitante
+ * (`deVisitante`): no tiene cuenta, así que en vez de un uid se dice que es
+ * un visitante, que verá la respuesta mientras dure su sesión.
+ *
+ * 1.14.0 (§7.4.6) — las capturas de pantalla que adjuntó, para verlas al
+ * atenderla. Se piden con el token del administrador al pulsar «Ver
+ * captura» y sus enlaces de objeto se liberan al cerrar el detalle.
+ *
  * @module cuentas/panel-chatbot-soporte
  */
 
 import { conCarga } from '../comun/ui/boton.js';
 import { campo } from '../comun/ui/campo.js';
+import { crearRegistroDeImagenes, listaDeCapturas } from '../comun/ui/capturas-chatbot.js';
 import { abrirDialogo } from '../comun/ui/dialogo.js';
 import { distintivo } from '../comun/ui/distintivo.js';
 import { h, vaciar } from '../comun/ui/dom.js';
@@ -28,6 +37,10 @@ import { fraseDeErrorDelPanel, textoDeErrorDelPanel } from './panel-chatbot-erro
 
 /** Cuántas solicitudes por página. */
 export const POR_PAGINA = 20;
+
+/** 1.12.0 — quién abrió la solicitud cuando no es una cuenta. */
+export const TEXTO_VISITANTE =
+  'Un visitante sin cuenta (verá la respuesta mientras dure su sesión)';
 
 /** Transiciones del contrato: a qué estados puede pasar cada uno. */
 export const SIGUIENTES = Object.freeze({
@@ -75,10 +88,13 @@ export function textoDeFalloAlAtender(error) {
 /**
  * Diálogo con el detalle de una solicitud y el formulario para atenderla.
  *
- * @param {{cliente: object, ticketId: string}} opciones
+ * @param {{cliente: object, ticketId: string,
+ *          imagenes?: {crear: (contenido: Blob) => string, liberar: () => void}}} opciones
+ *   `imagenes`: los enlaces de objeto de las capturas (1.14.0), que se
+ *   liberan al cerrar el diálogo
  * @returns {Promise<boolean>} true si se guardó un cambio
  */
-export function atenderEnDialogo({ cliente, ticketId }) {
+export function atenderEnDialogo({ cliente, ticketId, imagenes = crearRegistroDeImagenes() }) {
   return new Promise((resolver) => {
     const cuerpo = h('div', { clase: 'pila panel-chatbot__ticket' });
     pintarEstado(cuerpo, estadoDeCarga({ filas: 3, etiqueta: 'Cargando la solicitud…' }));
@@ -100,6 +116,7 @@ export function atenderEnDialogo({ cliente, ticketId }) {
       cuerpo,
       acciones: [cerrarBoton, guardar],
       cerrableFuera: false,
+      alCerrar: () => imagenes.liberar(),
     });
     cerrarBoton.addEventListener('click', () => {
       cerrar();
@@ -111,7 +128,10 @@ export function atenderEnDialogo({ cliente, ticketId }) {
     cliente
       .obtenerTicket(ticketId)
       .then((ticket) => {
-        formulario = pintarDetalle(cuerpo, ticket);
+        formulario = pintarDetalle(cuerpo, ticket, {
+          leer: (capturaId) => cliente.leerCaptura(ticketId, capturaId),
+          registro: imagenes,
+        });
         guardar.disabled = formulario === null;
       })
       .catch((error) => {
@@ -146,15 +166,20 @@ export function atenderEnDialogo({ cliente, ticketId }) {
 /**
  * Pinta el detalle y, si la solicitud se puede cambiar, el formulario.
  *
+ * @param {HTMLElement} cuerpo
+ * @param {object} ticket `TicketDeSoporteAdmin`
+ * @param {{leer: (capturaId: string) => Promise<Blob>,
+ *          registro: {crear: (contenido: Blob) => string}}} capturas
  * @returns {{datos: () => object|null, avisar: (texto: string|null) => void}|null}
  */
-function pintarDetalle(cuerpo, ticket) {
+function pintarDetalle(cuerpo, ticket, { leer, registro }) {
+  const visitante = ticket.deVisitante === true;
   const datosDelTicket = h('dl', {
     clase: 'panel-chatbot__datos',
     hijos: [
       ['Asunto', ticket.asunto],
       ['Tema', nombreDeCategoria(ticket.categoria)],
-      ['Jugador', ticket.uid],
+      visitante ? ['Quién', TEXTO_VISITANTE] : ['Jugador', ticket.uid],
       ['Abierta', fechaHora(ticket.creadoEn)],
     ].flatMap(([termino, valor]) => [h('dt', { texto: termino }), h('dd', { texto: valor ?? '' })]),
   });
@@ -163,13 +188,15 @@ function pintarDetalle(cuerpo, ticket) {
     hijos: ['Estado: ', distintivoDeEstado(ticket.estado)],
   });
 
+  const quienPregunta = visitante ? 'Visitante' : 'Jugador';
+  const capturas = Array.isArray(ticket.capturas) ? ticket.capturas : [];
   const conversacion = (ticket.contexto ?? []).map((m) =>
     h('li', {
       clase: `panel-chatbot__contexto panel-chatbot__contexto--${m.remitente === 'BOT' ? 'bot' : 'jugador'}`,
       hijos: [
         h('p', {
           clase: 't-meta',
-          texto: `${m.remitente === 'BOT' ? 'Asistente' : 'Jugador'} · ${fechaHora(m.fechaEnvio)}`,
+          texto: `${m.remitente === 'BOT' ? 'Asistente' : quienPregunta} · ${fechaHora(m.fechaEnvio)}`,
         }),
         h('p', { texto: m.contenido }),
       ],
@@ -179,12 +206,19 @@ function pintarDetalle(cuerpo, ticket) {
   vaciar(cuerpo).append(
     datosDelTicket,
     estadoActual,
-    h('p', { clase: 't-etiqueta', texto: 'Mensaje del jugador' }),
+    h('p', { clase: 't-etiqueta', texto: `Mensaje del ${quienPregunta.toLowerCase()}` }),
     h('p', { clase: 'panel-chatbot__mensaje-ticket', texto: ticket.mensaje }),
     h('p', { clase: 't-etiqueta', texto: 'Conversación con el asistente' }),
     conversacion.length > 0
       ? h('ol', { clase: 'panel-chatbot__conversacion', hijos: conversacion })
       : h('p', { clase: 't-meta', texto: 'No había conversación al abrir la solicitud.' }),
+    h('p', { clase: 't-etiqueta', texto: 'Capturas de pantalla' }),
+    capturas.length > 0
+      ? listaDeCapturas({ capturas, asunto: ticket.asunto, leer, registro })
+      : h('p', {
+          clase: 't-meta',
+          texto: `El ${quienPregunta.toLowerCase()} no adjuntó capturas.`,
+        }),
   );
 
   const siguientes = SIGUIENTES[ticket.estado] ?? [];
@@ -210,8 +244,10 @@ function pintarDetalle(cuerpo, ticket) {
   });
   const respuesta = campo({
     nombre: 'respuesta',
-    etiqueta: 'Respuesta para el jugador',
-    pista: 'Es lo que el jugador leerá en la ventana del asistente.',
+    etiqueta: `Respuesta para el ${quienPregunta.toLowerCase()}`,
+    pista: visitante
+      ? 'La leerá en la ventana del asistente mientras siga en su sesión de visitante.'
+      : 'Es lo que el jugador leerá en la ventana del asistente.',
     multilinea: true,
     valor: ticket.respuesta ?? '',
     atributos: { maxlength: 2000 },
@@ -224,7 +260,9 @@ function pintarDetalle(cuerpo, ticket) {
       const nuevoEstado = estado.control.value;
       const texto = respuesta.control.value.trim();
       const falta = nuevoEstado === 'RESUELTO' && !texto;
-      respuesta.marcarError(falta ? 'Escribe la respuesta para el jugador.' : null);
+      respuesta.marcarError(
+        falta ? `Escribe la respuesta para el ${quienPregunta.toLowerCase()}.` : null,
+      );
       if (falta) {
         return null;
       }

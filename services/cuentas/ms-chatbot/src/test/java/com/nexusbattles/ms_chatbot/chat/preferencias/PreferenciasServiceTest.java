@@ -1,6 +1,9 @@
 package com.nexusbattles.ms_chatbot.chat.preferencias;
 
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
+import com.nexusbattles.ms_chatbot.chat.model.Remitente;
+import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
+import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,6 +19,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -30,19 +34,42 @@ class PreferenciasServiceTest {
     @Mock
     private PreferenciasDelChatRepository repositorio;
 
+    @Mock
+    private MensajeRepository mensajes;
+
     private PreferenciasService servicio;
 
     @BeforeEach
     void preparar() {
-        servicio = new PreferenciasService(repositorio, Clock.fixed(AHORA, ZoneOffset.UTC));
+        servicio = new PreferenciasService(repositorio, new ExperienciaDelChat(mensajes),
+            Clock.fixed(AHORA, ZoneOffset.UTC));
     }
 
+    // 1.15.0: quien nunca eligio tiene idioma y nivel de detalle automaticos.
     @Test
-    void de_sinPreferenciasGuardadas_devuelveLasDePorDefecto() {
+    void de_sinPreferenciasGuardadas_devuelveLasDeQuienNuncaEligio() {
         when(repositorio.findById(JUGADOR.claveDeConversacion())).thenReturn(Optional.empty());
 
-        assertThat(servicio.de(JUGADOR)).isEqualTo(PreferenciasDeRespuesta.POR_DEFECTO);
+        assertThat(servicio.de(JUGADOR)).isEqualTo(PreferenciasDeRespuesta.SIN_ELEGIR);
         assertThat(PreferenciasDeRespuesta.POR_DEFECTO.sonPorDefecto()).isTrue();
+        assertThat(PreferenciasDeRespuesta.SIN_ELEGIR.sonPorDefecto()).isFalse();
+    }
+
+    // 1.15.0 (D-CHA-13): con el nivel automatico, el de su experiencia.
+    @Test
+    void efectivasDe_traduceElNivelAutomaticoConSuExperienciaYRespetaElElegido() {
+        when(repositorio.findById(JUGADOR.claveDeConversacion())).thenReturn(Optional.empty());
+        when(mensajes.countByConversacionIdentificadorSesionAndRemitenteAndResultadoIn(
+            eq(JUGADOR.claveDeConversacion()), eq(Remitente.BOT), eq(ResultadoDeRespuesta.queResuelven())))
+            .thenReturn(40L);
+
+        assertThat(servicio.efectivasDe(JUGADOR))
+            .isEqualTo(new PreferenciasDeRespuesta(IdiomaPreferido.AUTOMATICO, NivelDeDetalle.BREVE));
+
+        PreferenciasDeRespuesta elegidas = new PreferenciasDeRespuesta(IdiomaPreferido.ES, NivelDeDetalle.NORMAL);
+        when(repositorio.findById(JUGADOR.claveDeConversacion()))
+            .thenReturn(Optional.of(new PreferenciasDelChat(JUGADOR.claveDeConversacion(), elegidas, AHORA)));
+        assertThat(servicio.efectivasDe(JUGADOR)).isEqualTo(elegidas);
     }
 
     @Test

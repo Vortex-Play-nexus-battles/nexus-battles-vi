@@ -186,6 +186,27 @@ public final class Enriquecedor {
         return new RespuestaEnriquecida(pasos, enlaces, List.of(), relacionadosCon(tema, temas), false);
     }
 
+    /** 1.15.0: el boton que pide la respuesta entera; «más detalle» es un seguimiento (1.5.0). */
+    public static final String MAS_DETALLE_ES = "Más detalle";
+    public static final String MAS_DETALLE_EN = "More detail";
+
+    /**
+     * 1.15.0 (7.4.5, D-CHA-13): una respuesta recortada (nivel BREVE) lleva
+     * delante el boton «Más detalle», que la da entera en un clic; detras, las
+     * relacionadas que quepan.
+     */
+    public static RespuestaEnriquecida conMasDetalle(RespuestaEnriquecida respuesta, boolean ingles) {
+        String boton = ingles ? MAS_DETALLE_EN : MAS_DETALLE_ES;
+        List<String> rapidas = new ArrayList<>(MAXIMO_DE_RAPIDAS);
+        rapidas.add(boton);
+        respuesta.respuestasRapidas().stream()
+            .filter(rapida -> !boton.equals(rapida))
+            .limit(MAXIMO_DE_RAPIDAS - 1L)
+            .forEach(rapidas::add);
+        return new RespuestaEnriquecida(respuesta.pasos(), respuesta.enlaces(), respuesta.tarjetas(), rapidas,
+            respuesta.ofrecerSoporteHumano(), respuesta.solicitud());
+    }
+
     /**
      * Respuesta enriquecida de una consulta escalada: los temas relacionados
      * y, si faltan, los de la vista donde esta el jugador; y la oferta de

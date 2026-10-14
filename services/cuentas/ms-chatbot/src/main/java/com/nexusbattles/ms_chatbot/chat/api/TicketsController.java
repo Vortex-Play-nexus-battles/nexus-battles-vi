@@ -2,44 +2,69 @@ package com.nexusbattles.ms_chatbot.chat.api;
 
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.identidad.ResolutorDeIdentidad;
+import com.nexusbattles.ms_chatbot.chat.identidad.SesionesAnonimas;
+import com.nexusbattles.ms_chatbot.chat.soporte.CapturaDeSoporte;
+import com.nexusbattles.ms_chatbot.chat.soporte.CapturaNoAdmitidaException;
+import com.nexusbattles.ms_chatbot.chat.soporte.CapturaResponse;
+import com.nexusbattles.ms_chatbot.chat.soporte.CapturasDeSoporteService;
+import com.nexusbattles.ms_chatbot.chat.soporte.RespuestaDeCaptura;
 import com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporte;
 import com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporteService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 // ms-chatbot.yaml 1.3.0 (7.4.3, RF-CHA-007): tickets de soporte del jugador.
 // Vive en chat.api para que ManejadorErroresDelChat traduzca sus errores
 // (401, 409, 422, 429, 503) con `motivo`, igual que los del chat.
 //
-// Solo con token: la identidad sale del uid del token (ResolutorDeIdentidad).
-// X-Id-Sesion-Anonima no se lee aqui: un visitante no abre tickets, y asi
-// ninguna cabecera puede hacerse pasar por un jugador.
+// La identidad la resuelve el servidor (ResolutorDeIdentidad): un jugador por
+// el uid de su token y, desde 1.12.0 (RF-CHA-007, actores Visitante y
+// Jugador), un visitante por su sesion vigente. Con un token valido la
+// cabecera X-Id-Sesion-Anonima se ignora, y una sesion nunca abre las
+// solicitudes de un jugador: son de otro espacio de claves (V5). Sin ninguna
+// de las dos, 401 SESION_REQUERIDA; al listar, una sesion con forma que aun
+// no esta registrada o ya vencio no tiene solicitudes (lista vacia).
 @RestController
 @RequestMapping("/chat/tickets")
 public class TicketsController {
 
     private final TicketSoporteService servicio;
+    private final CapturasDeSoporteService capturas;
     private final ResolutorDeIdentidad resolutor;
 
-    public TicketsController(TicketSoporteService servicio, ResolutorDeIdentidad resolutor) {
+    public TicketsController(TicketSoporteService servicio, CapturasDeSoporteService capturas,
+                             ResolutorDeIdentidad resolutor) {
         this.servicio = servicio;
+        this.capturas = capturas;
         this.resolutor = resolutor;
     }
 
     @PostMapping
     public ResponseEntity<TicketResponse> abrir(@RequestBody @Valid AbrirTicketRequest request,
-                                                Authentication authentication) {
-        TicketSoporte ticket = servicio.abrir(jugador(authentication), request.categoria(), request.asunto(),
-            request.mensaje());
+                                                Authentication authentication,
+                                                @RequestHeader(value = ChatController.CABECERA_SESION_ANONIMA,
+                                                    required = false) String sesion,
+                                                HttpServletRequest peticion) {
+        TicketSoporte ticket = servicio.abrir(paraAbrir(authentication, sesion, peticion), request.categoria(),
+            request.asunto(), request.mensaje());
         return ResponseEntity.status(HttpStatus.CREATED).body(TicketResponse.desde(ticket));
     }
 
@@ -48,25 +73,72 @@ public class TicketsController {
     @PostMapping("/desde-conversacion")
     public ResponseEntity<TicketResponse> abrirDesdeConversacion(
         @RequestBody(required = false) @Valid AbrirTicketDesdeConversacionRequest request,
-        Authentication authentication) {
+        Authentication authentication,
+        @RequestHeader(value = ChatController.CABECERA_SESION_ANONIMA, required = false) String sesion,
+        HttpServletRequest peticion) {
         AbrirTicketDesdeConversacionRequest datos = request == null ? AbrirTicketDesdeConversacionRequest.VACIA : request;
-        TicketSoporte ticket = servicio.abrirDesdeConversacion(jugador(authentication), datos.vista(),
-            datos.comentario());
+        TicketSoporte ticket = servicio.abrirDesdeConversacion(paraAbrir(authentication, sesion, peticion),
+            datos.vista(), datos.comentario());
         return ResponseEntity.status(HttpStatus.CREATED).body(TicketResponse.desde(ticket));
     }
 
     @GetMapping
-    public ResponseEntity<List<TicketResponse>> misTickets(Authentication authentication) {
-        List<TicketResponse> mios = servicio.misTickets(jugador(authentication)).stream()
-            .map(TicketResponse::desde)
+    public ResponseEntity<List<TicketResponse>> misTickets(Authentication authentication,
+                                                           @RequestHeader(value = ChatController.CABECERA_SESION_ANONIMA,
+                                                               required = false) String sesion) {
+        IdentidadDelChat quien = identidad(authentication, sesion);
+        if (quien == null && (SesionesAnonimas.esEmitida(sesion) || SesionesAnonimas.esDeclarada(sesion))) {
+            // Un visitante cuya sesion aun no esta registrada (no ha escrito
+            // ni pedido nada) o ya vencio: no tiene solicitudes que ver.
+            return ResponseEntity.ok(List.of());
+        }
+        List<TicketSoporte> suyos = servicio.misTickets(quien);
+        // 1.14.0: con sus capturas (sin el contenido), en una sola consulta.
+        Map<UUID, List<CapturaDeSoporte.Resumen>> adjuntas =
+            capturas.deLasSolicitudes(suyos.stream().map(TicketSoporte::getId).toList());
+        List<TicketResponse> mios = suyos.stream()
+            .map(ticket -> TicketResponse.desde(ticket, adjuntas.getOrDefault(ticket.getId(), List.of())))
             .toList();
         return ResponseEntity.ok(mios);
     }
 
-    // null si no hay token valido; el servicio responde entonces 401.
-    private IdentidadDelChat jugador(Authentication authentication) {
-        return resolutor.resolver(authentication, null)
-            .filter(IdentidadDelChat::autenticado)
-            .orElse(null);
+    // ms-chatbot.yaml 1.14.0 (§7.4.6 «adjuntar capturas de pantalla para
+    // soporte tecnico»): una captura a una solicitud propia y abierta. Quien
+    // es, como al abrirla: el jugador del token o el visitante de su sesion.
+    @PostMapping(path = "/{ticketId}/capturas", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<CapturaResponse> adjuntarCaptura(@PathVariable UUID ticketId,
+                                                           @RequestPart("archivo") MultipartFile archivo,
+                                                           Authentication authentication,
+                                                           @RequestHeader(value = ChatController.CABECERA_SESION_ANONIMA,
+                                                               required = false) String sesion) {
+        byte[] contenido;
+        try {
+            contenido = archivo.getBytes();
+        } catch (IOException ilegible) {
+            throw new CapturaNoAdmitidaException("No se pudo leer el archivo.");
+        }
+        CapturaDeSoporte guardada = capturas.adjuntar(identidad(authentication, sesion), ticketId, contenido);
+        return ResponseEntity.status(HttpStatus.CREATED).body(CapturaResponse.desde(guardada));
+    }
+
+    // El contenido de una captura propia (404 si no existe o no es suya).
+    @GetMapping("/{ticketId}/capturas/{capturaId}")
+    public ResponseEntity<byte[]> captura(@PathVariable UUID ticketId, @PathVariable UUID capturaId,
+                                          Authentication authentication,
+                                          @RequestHeader(value = ChatController.CABECERA_SESION_ANONIMA,
+                                              required = false) String sesion) {
+        return RespuestaDeCaptura.de(capturas.propiaDe(identidad(authentication, sesion), ticketId, capturaId));
+    }
+
+    // El jugador del token o el visitante de una sesion vigente; null si no
+    // hay ninguno y el servicio responde entonces 401.
+    private IdentidadDelChat identidad(Authentication authentication, String sesion) {
+        return resolutor.resolver(authentication, sesion).orElse(null);
+    }
+
+    // Para abrir: ademas, un visitante que aun no escribio al asistente
+    // registra la sesion que declara su navegador (nunca se emite una).
+    private IdentidadDelChat paraAbrir(Authentication authentication, String sesion, HttpServletRequest peticion) {
+        return resolutor.resolverODeclarar(authentication, sesion, ChatController.origenDe(peticion)).orElse(null);
     }
 }
