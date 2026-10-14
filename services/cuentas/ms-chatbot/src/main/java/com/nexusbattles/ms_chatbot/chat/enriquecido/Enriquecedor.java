@@ -132,7 +132,10 @@ public final class Enriquecedor {
         Map.entry("comprar-en-la-tienda", "tienda"),
         Map.entry("comentarios-y-calificaciones", "tienda"),
         Map.entry("mensajes-privados", "chat"),
-        Map.entry("notificaciones", "notificaciones")
+        Map.entry("notificaciones", "notificaciones"),
+        // V15 (1.11.0): el resumen de las reglas lleva al centro de ayuda,
+        // donde estan todas, y que tambien ve un visitante.
+        Map.entry("reglas-del-juego", DESTINO_AYUDA)
     );
 
     // Palabra del titulo (normalizado) -> destino, para los temas que crea un
