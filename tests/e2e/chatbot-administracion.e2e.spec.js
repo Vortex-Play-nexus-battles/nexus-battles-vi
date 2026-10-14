@@ -23,7 +23,8 @@ const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const CLAVE = 'Contrasena-E2E-2026';
 const ADMIN = process.env.E2E_ADMIN ?? 'admin_e2e';
 const SUFIJO = Date.now().toString(36);
-const VISTA_PANEL = '/frontend/app-web/src/cuentas/panel-chatbot.html';
+// SA-7: la consola del asistente por su dirección limpia (la ruta del fichero redirige aquí).
+const VISTA_PANEL = '/consola/asistente';
 
 const TEMA = {
   titulo: `Torneo relámpago Ópalo ${SUFIJO}`,

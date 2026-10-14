@@ -28,7 +28,8 @@ const PREGUNTA = `mi contraseña es ${SECRETO} y la constelación Quetzal ${SUFI
 /** Como queda guardada: la contraseña entera tapada, también su «!» final (1.11.0). */
 const PREGUNTA_REDACTADA = `mi contraseña es *** y la constelación Quetzal ${SUFIJO} desapareció`;
 const RESPUESTA_DE_SOPORTE = `Revisamos tu cuenta (${SUFIJO}): tu héroe está en «Mi inventario».`;
-const VISTA_PANEL = '/frontend/app-web/src/cuentas/panel-chatbot.html';
+// SA-7: la consola del asistente por su dirección limpia (la ruta del fichero redirige aquí).
+const VISTA_PANEL = '/consola/asistente';
 
 function conToken(token) {
   return { Authorization: `Bearer ${token}` };
