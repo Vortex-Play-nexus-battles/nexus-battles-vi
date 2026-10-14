@@ -27,8 +27,8 @@ import org.springframework.stereotype.Service;
  * de heroe. Las Tablas 8 a 19 asocian cada arma, armadura e item a un tipo de
  * heroe, pero el documento no enuncia una regla que impida equipar los de otro
  * tipo (la unica afinidad con efecto que define es la de las epicas, Tabla 20).
- * No se inventa: queda como decision del PO, y la asociacion ya esta en
- * {@code contracts/esquemas/catalogo-oficial.yaml} para cuando se decida.
+ * Decision del PO (Simon Perez, 13-oct-2026, #85): no se aplica. La asociacion
+ * sigue en {@code contracts/esquemas/catalogo-oficial.yaml} por si cambia.
  */
 @Service
 public class GestionarEquipamiento {

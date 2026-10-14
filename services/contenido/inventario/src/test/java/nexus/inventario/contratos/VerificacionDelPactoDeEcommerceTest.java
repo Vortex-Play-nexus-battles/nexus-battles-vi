@@ -231,11 +231,6 @@ class VerificacionDelPactoDeEcommerceTest {
         public List<Inventario> buscarTodosPorElementoId(String elementoId) {
             return actual.buscarTodosPorElementoId(elementoId);
         }
-
-        @Override
-        public List<ElementoInventario> buscarElementos(String propietarioId, String criterio) {
-            return actual.buscarElementos(propietarioId, criterio);
-        }
     }
 
     /** {@link RepositorioDeEntregasEnMemoria} (una entrega por clave), reiniciable entre estados. */
