@@ -438,7 +438,7 @@ public final class DependenciasFalsas implements AutoCloseable {
                     "origen", cuerpo.get("origen"), "referencia", cuerpo.get("referencia"), "elementos", List.of(),
                     "entregadaEn", "2026-09-25T12:00:00Z"));
             if (!epicasQueYaTiene.isEmpty()) {
-                // inventario 1.7.0: lo que ya tenia el jugador va en yaTenia; sin epicas repetidas no hay campo
+                // inventario 1.9.0: lo que ya tenia el jugador va en yaTenia; sin epicas repetidas no hay campo
                 // (un inventario anterior tampoco lo trae).
                 entrega.put("yaTenia", ((List<?>) cuerpo.get("productos")).stream()
                         .map(l -> (String) ((Map<?, ?>) l).get("productoId"))

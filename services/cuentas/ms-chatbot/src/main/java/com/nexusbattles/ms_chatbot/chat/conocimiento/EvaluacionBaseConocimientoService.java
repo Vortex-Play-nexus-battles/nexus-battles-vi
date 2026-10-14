@@ -40,6 +40,13 @@ import java.util.Optional;
 //
 // El motor lee la version en produccion en cada mensaje, asi que un
 // despliegue o una reversion rigen desde el mensaje siguiente.
+//
+// ms-chatbot.yaml 1.6.0: desplegar, revertir, programar y la publicacion
+// programada se hacen en fila (BloqueoDeVersiones: primero produccion, despues
+// la candidata). Nunca quedan dos versiones en produccion ni ninguna; la
+// operacion que llega con un estado que otra ya cambio responde 409
+// CAMBIO_CONCURRENTE, y la publicacion programada simplemente no hace nada y
+// vuelve a mirar en la siguiente vuelta.
 @Service
 public class EvaluacionBaseConocimientoService {
 
@@ -61,6 +68,7 @@ public class EvaluacionBaseConocimientoService {
     private final CasoEvaluacionRepository casoRepository;
     private final EvaluacionVersionRepository evaluacionRepository;
     private final MotorRespuestas motorRespuestas;
+    private final BloqueoDeVersiones bloqueo;
 
     public EvaluacionBaseConocimientoService(VersionBaseConocimientoRepository versionRepository,
                                              TemaConocimientoRepository temaRepository,
@@ -72,29 +80,26 @@ public class EvaluacionBaseConocimientoService {
         this.casoRepository = casoRepository;
         this.evaluacionRepository = evaluacionRepository;
         this.motorRespuestas = motorRespuestas;
+        this.bloqueo = new BloqueoDeVersiones(versionRepository);
     }
 
     // Vista previa: evalua sin desplegar nada.
+    // 1.6.0: con la candidata bloqueada, para que nadie la descarte ni la
+    // edite a mitad de la evaluacion (las evaluaciones guardadas apuntan a ella).
     @Transactional
     public ComparacionEvaluacion evaluarCandidata() {
-        return comparar(requerirCandidata(), requerirProduccion(), requerirCasos(), Instant.now());
+        VersionBaseConocimiento candidata = bloquearCandidata();
+        return comparar(candidata, requerirProduccion(), requerirCasos(), Instant.now());
     }
 
     // noRollbackFor: si la candidata se rechaza, las dos evaluaciones igual
     // quedan guardadas como registro de lo que se intento.
+    // 1.6.0: produccion y candidata bloqueadas, en ese orden.
     @Transactional(noRollbackFor = DespliegueRechazadoException.class)
     public VersionBaseConocimiento desplegarCandidata() {
-        VersionBaseConocimiento candidata = requerirCandidata();
-        VersionBaseConocimiento produccion = requerirProduccion();
-        Instant ahora = Instant.now();
-
-        ComparacionEvaluacion comparacion = comparar(candidata, produccion, requerirCasos(), ahora);
-        if (!comparacion.candidataApta()) {
-            throw new DespliegueRechazadoException(comparacion);
-        }
-
-        cambiarProduccion(produccion, candidata, ahora);
-        return candidata;
+        VersionBaseConocimiento produccion = bloquearProduccion();
+        VersionBaseConocimiento candidata = bloquearCandidata();
+        return desplegar(candidata, produccion, Instant.now());
     }
 
     // 1.3.8: programar (o reprogramar) la publicacion de la candidata.
@@ -107,54 +112,72 @@ public class EvaluacionBaseConocimientoService {
         if (cuando.isAfter(ahora.plus(ANTICIPACION_MAXIMA))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, MUY_LEJOS);
         }
-        VersionBaseConocimiento candidata = requerirCandidata();
+        VersionBaseConocimiento candidata = bloquearCandidata();
         candidata.programarDespliegue(cuando);
         return versionRepository.save(candidata);
     }
 
     @Transactional
     public VersionBaseConocimiento cancelarProgramacion() {
-        VersionBaseConocimiento candidata = requerirCandidata();
+        VersionBaseConocimiento candidata = bloquearCandidata();
         candidata.cancelarProgramacion();
         return versionRepository.save(candidata);
     }
 
     // 1.3.8: lo llama DespliegueProgramadoTarea. Si la candidata tiene una
-    // publicacion vencida, la reclama (una sola instancia lo logra) y la
-    // despliega con la misma evaluacion que el boton del panel. Si no pasa
-    // la evaluacion, o faltan casos o produccion, queda sin programar y con
-    // la marca de rechazo. Vacio si no habia nada que hacer.
+    // publicacion vencida, la despliega con la misma evaluacion que el boton
+    // del panel. Si no pasa la evaluacion, o faltan casos o produccion, queda
+    // sin programar y con la marca de rechazo. Vacio si no habia nada que
+    // hacer.
+    //
+    // 1.6.0: con produccion y candidata bloqueadas, como el boton. Con varias
+    // instancias, o si un administrador la despliega en ese mismo momento, la
+    // que llega despues espera, encuentra la candidata ya publicada (o la
+    // produccion cambiada) y no hace nada: la siguiente vuelta vuelve a mirar.
+    // Esto reemplaza la reclamacion con un UPDATE suelto de 1.3.8, que ademas
+    // se saltaba la `revision`.
     @Transactional(noRollbackFor = DespliegueRechazadoException.class)
     public Optional<DespliegueProgramado> desplegarSiCorresponde(Instant ahora) {
-        Optional<VersionBaseConocimiento> candidata = versionRepository.findByEstado(EstadoVersion.BORRADOR);
+        if (!versionRepository.existsByEstadoAndDespliegueProgramadoEnLessThanEqual(EstadoVersion.BORRADOR, ahora)) {
+            return Optional.empty();
+        }
+        Optional<VersionBaseConocimiento> produccion;
+        Optional<VersionBaseConocimiento> candidata;
+        try {
+            produccion = bloqueo.bloquear(EstadoVersion.PRODUCCION);
+            candidata = bloqueo.bloquear(EstadoVersion.BORRADOR);
+        } catch (CambioConcurrenteException otraTransicion) {
+            return Optional.empty();
+        }
         if (candidata.isEmpty() || !candidata.get().despliegueVencido(ahora)) {
             return Optional.empty();
         }
-        int numero = candidata.get().getNumero();
-        if (versionRepository.reclamarDespliegueProgramado(candidata.get().getId(), ahora) == 0) {
-            return Optional.empty();
-        }
+        VersionBaseConocimiento programada = candidata.get();
+        int numero = programada.getNumero();
         try {
-            return Optional.of(DespliegueProgramado.desplegada(desplegarCandidata().getNumero()));
+            VersionBaseConocimiento enProduccion = produccion
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, SIN_PRODUCCION));
+            return Optional.of(DespliegueProgramado.desplegada(desplegar(programada, enProduccion, ahora).getNumero()));
         } catch (DespliegueRechazadoException rechazo) {
-            marcarProgramacionRechazada(ahora);
+            marcarProgramacionRechazada(programada, ahora);
             return Optional.of(DespliegueProgramado.rechazada(numero, rechazo.getBody().getDetail()));
         } catch (ResponseStatusException sinCondiciones) {
-            marcarProgramacionRechazada(ahora);
+            marcarProgramacionRechazada(programada, ahora);
             return Optional.of(DespliegueProgramado.rechazada(numero, sinCondiciones.getReason()));
         }
     }
 
-    private void marcarProgramacionRechazada(Instant ahora) {
-        versionRepository.findByEstado(EstadoVersion.BORRADOR).ifPresent(candidata -> {
-            candidata.rechazarProgramacion(ahora);
-            versionRepository.save(candidata);
-        });
+    private void marcarProgramacionRechazada(VersionBaseConocimiento candidata, Instant ahora) {
+        candidata.rechazarProgramacion(ahora);
+        versionRepository.save(candidata);
     }
 
+    // 1.6.0: con produccion bloqueada. Si otro despliegue u otra reversion la
+    // cambio mientras esta esperaba, 409 CAMBIO_CONCURRENTE: no se revierte
+    // una version que el administrador no estaba viendo.
     @Transactional
     public VersionBaseConocimiento revertir() {
-        VersionBaseConocimiento actual = requerirProduccion();
+        VersionBaseConocimiento actual = bloquearProduccion();
         VersionBaseConocimiento anterior = versionRepository
             .findFirstByEstadoOrderByFechaDespliegueDesc(EstadoVersion.RETIRADA)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, SIN_ANTERIOR));
@@ -190,6 +213,18 @@ public class EvaluacionBaseConocimientoService {
             return resultado.requiereEscalamiento();
         }
         return !resultado.requiereEscalamiento() && caso.getTemaClaveEsperada().equals(resultado.temaClave());
+    }
+
+    // Evalua la candidata contra produccion y, solo si no acierta menos, la
+    // pone en produccion. Las dos ya vienen bloqueadas.
+    private VersionBaseConocimiento desplegar(VersionBaseConocimiento candidata, VersionBaseConocimiento produccion,
+                                              Instant ahora) {
+        ComparacionEvaluacion comparacion = comparar(candidata, produccion, requerirCasos(), ahora);
+        if (!comparacion.candidataApta()) {
+            throw new DespliegueRechazadoException(comparacion);
+        }
+        cambiarProduccion(produccion, candidata, ahora);
+        return candidata;
     }
 
     private ComparacionEvaluacion comparar(VersionBaseConocimiento candidata, VersionBaseConocimiento produccion,
@@ -229,11 +264,17 @@ public class EvaluacionBaseConocimientoService {
         versionRepository.saveAndFlush(entrante);
     }
 
-    private VersionBaseConocimiento requerirCandidata() {
-        return versionRepository.findByEstado(EstadoVersion.BORRADOR)
+    private VersionBaseConocimiento bloquearCandidata() {
+        return bloqueo.bloquear(EstadoVersion.BORRADOR)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, SIN_CANDIDATA));
     }
 
+    private VersionBaseConocimiento bloquearProduccion() {
+        return bloqueo.bloquear(EstadoVersion.PRODUCCION)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, SIN_PRODUCCION));
+    }
+
+    // Sin bloqueo: para evaluar (la vista previa y la vigilancia) basta leerla.
     private VersionBaseConocimiento requerirProduccion() {
         return versionRepository.findByEstado(EstadoVersion.PRODUCCION)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, SIN_PRODUCCION));

@@ -229,6 +229,15 @@ public class SegundoFactorService {
      */
     @Transactional
     public void desactivar(Usuario usuario, DesactivarSegundoFactorRequest datos, String ip) {
+        if (politica.esObligatorioPara(rolDe(usuario))) {
+            // 7.3.9: obligatorio para los administradores. Quitarselo a uno mismo
+            // dejaria la cuenta entrando solo con la contrasena hasta el
+            // siguiente login (que volveria a pedir el enrolamiento): una
+            // ventana que el requisito no admite.
+            throw new SegundoFactorRechazadoException(Motivo.OBLIGATORIO,
+                    "La verificación en dos pasos es obligatoria para tu rol y no se puede desactivar. Si perdiste "
+                            + "tu aplicación y tus códigos, pide a un Super Administrador que la restablezca.");
+        }
         exigirExactamenteUno(datos.codigo(), datos.codigoRecuperacion());
         SegundoFactor guardado = segundos.findById(usuario.getId()).filter(SegundoFactor::isActivo)
                 .orElseThrow(() -> new SegundoFactorRechazadoException(Motivo.NO_ACTIVO,
@@ -251,6 +260,26 @@ public class SegundoFactorService {
         desafios.borrarDe(usuario.getId());
         log.info("SEGUNDO_FACTOR_DESACTIVADO usuarioId={}", usuario.getId());
         eventos.publishEvent(new CambioDeSegundoFactor(afectado(usuario), Cambio.DESACTIVADO, null, ip));
+    }
+
+    /**
+     * 7.3.9 — un Super Administrador quita el segundo factor de otra cuenta
+     * (perdio la aplicacion y los codigos de recuperacion). Borra el secreto,
+     * los codigos y los desafios pendientes; quien llama cierra las sesiones y
+     * deja la auditoria.
+     *
+     * @return si la cuenta tenia el segundo factor activo
+     */
+    @Transactional
+    public boolean restablecerPorAdministracion(Usuario usuario, String ip) {
+        boolean activo = segundos.existsByUsuarioIdAndActivoTrue(usuario.getId());
+        segundos.borrarDe(usuario.getId());
+        codigos.borrarDe(usuario.getId());
+        desafios.borrarDe(usuario.getId());
+        log.info("SEGUNDO_FACTOR_RESTABLECIDO usuarioId={} teniaActivo={}", usuario.getId(), activo);
+        eventos.publishEvent(new CambioDeSegundoFactor(afectado(usuario), Cambio.RESTABLECIDO_POR_ADMINISTRACION,
+                null, ip));
+        return activo;
     }
 
     // ------------------------------------------------------ en el acceso (login)

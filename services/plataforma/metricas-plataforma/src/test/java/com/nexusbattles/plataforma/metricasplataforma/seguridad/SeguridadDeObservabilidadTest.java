@@ -4,6 +4,10 @@ import com.nexusbattles.comun.seguridad.pruebas.DecodificadorDePrueba;
 import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
 import com.nexusbattles.plataforma.metricasplataforma.moderacion.FuenteDeModeracion;
 import com.nexusbattles.plataforma.metricasplataforma.moderacion.FuenteDeUsuarios;
+import com.nexusbattles.plataforma.metricasplataforma.moderacion.CausaDeIndisponibilidad;
+import com.nexusbattles.plataforma.metricasplataforma.moderacion.FuenteDeReportes;
+import com.nexusbattles.plataforma.metricasplataforma.moderacion.UmbralesDeModeracion;
+import com.nexusbattles.plataforma.resiliencia.parametros.LectorDeParametros;
 import com.nexusbattles.plataforma.metricasplataforma.moderacion.ModeracionController;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -55,6 +59,12 @@ class SeguridadDeObservabilidadTest {
         Clock relojDePrueba() {
             return Clock.fixed(Instant.parse("2026-09-22T10:00:00Z"), ZoneOffset.UTC);
         }
+
+        /** Sin catalogo y sin respaldo: ningun umbral (lo que aqui se prueba es quien entra). */
+        @Bean
+        UmbralesDeModeracion umbralesDePrueba() {
+            return new UmbralesDeModeracion(LectorDeParametros.soloRespaldo(), null, null);
+        }
     }
 
     @Autowired
@@ -66,6 +76,9 @@ class SeguridadDeObservabilidadTest {
     @MockitoBean
     private FuenteDeUsuarios usuarios;
 
+    @MockitoBean
+    private FuenteDeReportes reportes;
+
     private final EmisorDeTokensDePrueba emisor = EmisorDeTokensDePrueba.emisor();
 
     private void conAgregadosVacios() {
@@ -74,6 +87,8 @@ class SeguridadDeObservabilidadTest {
                 hasta.minusDays(30), hasta, 0, Map.of(), List.of(), Map.of(), 0, 0));
         when(usuarios.consultar(any(), any(), any()))
                 .thenThrow(new FuenteDeUsuarios.NoDisponible("ms-identidad no responde"));
+        when(reportes.consultar(any(), any(), any())).thenThrow(new FuenteDeReportes.NoDisponible(
+                CausaDeIndisponibilidad.NO_RESPONDE, "comentarios no responde"));
     }
 
     @Test

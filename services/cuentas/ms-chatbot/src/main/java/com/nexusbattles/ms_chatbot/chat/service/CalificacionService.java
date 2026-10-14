@@ -1,8 +1,10 @@
 package com.nexusbattles.ms_chatbot.chat.service;
 
+import com.nexusbattles.ms_chatbot.chat.entrada.RevisionDeEntrada;
 import com.nexusbattles.ms_chatbot.chat.model.Calificacion;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
 import com.nexusbattles.ms_chatbot.chat.model.Remitente;
+import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionDeContenido;
 import com.nexusbattles.ms_chatbot.chat.repository.CalificacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
 import org.slf4j.Logger;
@@ -26,6 +28,11 @@ import java.util.UUID;
 //   - Una sola calificacion por respuesta (409 si ya fue calificada).
 //   - Si es "no util", la pregunta del usuario que origino esa respuesta se
 //     registra como brecha de conocimiento.
+//   - 1.4.0 (7.4.8): el comentario es texto del usuario como cualquier otro:
+//     pasa por RevisionDeEntrada (sin inyeccion de codigo, datos sensibles
+//     tapados) y por la lista negra antes de guardarse. Se revisa DESPUES de
+//     comprobar que la respuesta es suya, para que un mensaje ajeno siga
+//     respondiendo 404 sin revelar nada.
 @Service
 public class CalificacionService {
 
@@ -41,12 +48,17 @@ public class CalificacionService {
     private final MensajeRepository mensajeRepository;
     private final CalificacionRepository calificacionRepository;
     private final BrechaConocimientoService brechaConocimientoService;
+    private final RevisionDeEntrada revision;
+    private final ModeracionDeContenido moderacion;
 
     public CalificacionService(MensajeRepository mensajeRepository, CalificacionRepository calificacionRepository,
-                               BrechaConocimientoService brechaConocimientoService) {
+                               BrechaConocimientoService brechaConocimientoService, RevisionDeEntrada revision,
+                               ModeracionDeContenido moderacion) {
         this.mensajeRepository = mensajeRepository;
         this.calificacionRepository = calificacionRepository;
         this.brechaConocimientoService = brechaConocimientoService;
+        this.revision = revision;
+        this.moderacion = moderacion;
     }
 
     @Transactional
@@ -60,6 +72,10 @@ public class CalificacionService {
         if (calificacionRepository.existsByMensajeId(mensajeId)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, MENSAJE_YA_CALIFICADO);
         }
+        String comentarioRevisado = limpiarComentario(revision.textoRevisado(comentario));
+        if (comentarioRevisado != null) {
+            moderacion.verificar(comentarioRevisado);
+        }
 
         Calificacion calificacion;
         try {
@@ -67,7 +83,7 @@ public class CalificacionService {
             // ocurra AQUI y se pueda traducir a 409. Cubre el caso de dos
             // peticiones simultaneas que pasan ambas el existsByMensajeId.
             calificacion = calificacionRepository.saveAndFlush(
-                new Calificacion(mensaje, util, limpiarComentario(comentario)));
+                new Calificacion(mensaje, util, comentarioRevisado));
         } catch (DataIntegrityViolationException excepcion) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, MENSAJE_YA_CALIFICADO);
         }

@@ -3,14 +3,16 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Vitrina del inventario · The Nexus Battles VI</title>
+    <title>Mi inventario · The Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/fondos.css" />
     <link rel="stylesheet" href="./vitrina.css" />
     <link rel="stylesheet" href="./ficha-producto.css" />
+    <link rel="stylesheet" href="./inventario-jugador.css" />
   </head>
-  <body class="vitrina-pagina">
+  <body class="vitrina-pagina" data-fondo="inventario">
     <div id="contenedor-barra"></div>
     <main id="inventario-app"></main>
 
@@ -30,7 +32,16 @@
       const parametros = new URLSearchParams(location.search);
       const contenedor = document.getElementById('inventario-app');
       const identidad = parametros.get('jugador') ?? sessionStorage.getItem('nexus.apodoActual');
-      const numeroPagina = Number(parametros.get('pagina') ?? 0);
+      // Revisión final (13-oct): `?pagina=abc` ya no deja un «no tienes
+      // objetos» falso; un valor que no es una página válida vale la primera.
+      // Acotada al entero de 32 bits del servicio: más allá, el servidor no la
+      // entiende (400); hasta ahí, una página que no existe lleva a la última.
+      const paginaPedida = Number(parametros.get('pagina') ?? 0);
+      const numeroPagina =
+        Number.isInteger(paginaPedida) && paginaPedida >= 0
+          ? Math.min(paginaPedida, 2147483647)
+          : 0;
+      const busquedaInicial = parametros.get('busqueda') ?? '';
 
       // Vista privada (HU-UX-001): sin sesion se va al login con vuelta aqui.
       if (!exigirAcceso('inventario')) {
@@ -41,7 +52,7 @@
         seccionActiva: 'inventario',
       });
 
-      montarInventario(contenedor, identidad, numeroPagina);
+      montarInventario(contenedor, identidad, numeroPagina, { busquedaInicial });
     </script>
   </body>
 </html>

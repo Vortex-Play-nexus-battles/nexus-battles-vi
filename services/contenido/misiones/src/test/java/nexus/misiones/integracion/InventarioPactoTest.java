@@ -315,7 +315,7 @@ class InventarioPactoTest {
     }
 
     /**
-     * Epica unica (inventario 1.7.0): si el jugador ya la tiene, el inventario
+     * Epica unica (inventario 1.9.0): si el jugador ya la tiene, el inventario
      * contesta igual 201, sin crear otra copia, y la nombra en {@code yaTenia}.
      * Misiones lo lee para decirle al jugador que ya la tenia.
      */

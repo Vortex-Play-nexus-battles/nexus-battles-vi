@@ -75,6 +75,7 @@ public class LoginService {
     // al microservicio de auditoría (ms-cumplimiento, Juan Diego) cuando
     // publique su contrato. Por ahora queda registrado localmente.
     private static final Logger auditLog = LoggerFactory.getLogger("AUDITORIA_LOGIN");
+    private static final Logger log = LoggerFactory.getLogger(LoginService.class);
 
     private final UsuarioRepository usuarioRepository;
     private final DispositivoConocidoRepository dispositivoConocidoRepository;
@@ -146,7 +147,13 @@ public class LoginService {
 
         // --- Verificación de contraseña (antes que el estado: B1) ---
         if (!passwordEncoder.matches(datos.getPassword(), usuario.getPassword())) {
-            intentosFallidosService.registrarIntentoFallido(usuario.getId());
+            if (intentosFallidosService.registrarIntentoFallido(usuario.getId())) {
+                // 7.3.9 — el bloqueo temporal queda en la auditoria, una vez.
+                auditLog.info("CUENTA_BLOQUEADA usuarioId={} ip={}", usuario.getId(), direccionIp);
+                auditoriaLoginClient.registrarBloqueo(
+                    usuario.getPublicId() != null ? usuario.getPublicId().toString() : "usuario-" + usuario.getId(),
+                    direccionIp);
+            }
             throw credencialesInvalidas(datos.getEmail(), direccionIp);
         }
 
@@ -254,7 +261,8 @@ public class LoginService {
         String estado = usuario.getEstado();
         if (EstadoCuenta.esBaneado(estado)) {
             rechazo(usuario, direccionIp, "BANEADA");
-            throw new CuentaBaneadaException("Esta cuenta ha sido baneada permanentemente.");
+            throw new CuentaBaneadaException("Esta cuenta ha sido baneada permanentemente.",
+                codigoDeApelacion(usuario));
         }
         if (EstadoCuenta.esSuspendido(estado)) {
             // El fin se guarda como hora local del servidor; se compara como
@@ -269,7 +277,7 @@ public class LoginService {
                 rechazo(usuario, direccionIp, "SUSPENDIDA");
                 throw new CuentaSuspendidaException(
                     "Cuenta suspendida. Tiempo restante: " + minutosRestantes + " minutos.",
-                    hasta.toOffsetDateTime());
+                    hasta.toOffsetDateTime(), codigoDeApelacion(usuario));
             }
             estado = proyecciones.levantarSiVencida(usuario);
         }
@@ -281,6 +289,27 @@ public class LoginService {
             rechazo(usuario, direccionIp, "INACTIVO");
             throw new CuentaInactivaException(
                 "Esta cuenta aún no ha sido activada. Revisa tu correo para completar el proceso.");
+        }
+    }
+
+    /**
+     * SA-4 (§7.3.2: «Los usuarios sancionados deben tener derecho a apelar»)
+     * — el codigo con el que la cuenta, que ya dio su contrasena, ve la
+     * sancion que le impide entrar y la apela sin sesion. Solo las cuentas
+     * con {@code uid}: las sanciones viven en moderacion-sanciones por ese
+     * identificador. Si no se puede emitir, el 403 sale igual, sin codigo:
+     * apelar nunca puede romper el aviso de la sancion.
+     */
+    private DesafioEmitido codigoDeApelacion(Usuario usuario) {
+        if (usuario.getPublicId() == null) {
+            return null;
+        }
+        try {
+            return desafios.paraApelar(usuario).orElse(null);
+        } catch (RuntimeException sinCodigo) {
+            log.warn("No se pudo emitir el codigo de apelacion de la cuenta {}: {}", usuario.getId(),
+                sinCodigo.getMessage());
+            return null;
         }
     }
 

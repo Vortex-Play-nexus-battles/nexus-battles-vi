@@ -189,11 +189,17 @@ describe('la lista del catálogo', () => {
 });
 
 describe('la ficha de gestión (ProductAdminSheet)', () => {
+  const titulares = {
+    de: (uid) => (uid === 'admin-uid' ? { apodo: 'Raíz' } : null),
+    nombrar: jest.fn(async () => true),
+  };
+  const abrir = (producto, opciones = {}) =>
+    abrirHojaDeProducto(producto, { titulares, ...opciones });
   const ficha = () => document.querySelector('[role="dialog"]');
   const campo = (nombre) => ficha().querySelector(`[name="${nombre}"]`);
 
   test('abre con los datos del producto, su tipo y su estado; el tipo no se edita', () => {
-    abrirHojaDeProducto(YELMO, { fetchImpl: jest.fn() });
+    abrir(YELMO, { fetchImpl: jest.fn() });
 
     expect(ficha().querySelector('h2').textContent).toBe('Yelmo del Alba');
     expect(ficha().textContent).toContain('Versión 3');
@@ -204,8 +210,129 @@ describe('la ficha de gestión (ProductAdminSheet)', () => {
     expect(campo('precioMonedaReal').disabled).toBe(true);
   });
 
+  test('HU-PRD-007 consulta el historial y revierte el último cambio con su motivo', async () => {
+    const alCambiar = jest.fn();
+    const pedirMotivo = jest.fn(async () => 'Precio mal puesto');
+    const cambio = {
+      id: 'respaldo-1',
+      productoId: YELMO.id,
+      tipo: 'MODIFICACION',
+      campos: ['nombre', 'defensa'],
+      autor: 'admin-uid',
+      fecha: '2026-10-05T10:00:00Z',
+      versionAnterior: 2,
+      versionAplicada: 3,
+      revertible: true,
+    };
+    const fetchImpl = jest.fn(async (url, opciones = {}) => {
+      if (url.endsWith('/historial')) {
+        return respuesta([cambio]);
+      }
+      if (url.endsWith('/reversiones') && opciones.method === 'POST') {
+        return respuesta({ ...YELMO, nombre: 'Yelmo anterior', version: 4 });
+      }
+      throw new Error(`Petición inesperada: ${url}`);
+    });
+
+    abrir(YELMO, { fetchImpl, pedirMotivo, alCambiar });
+    ficha().querySelector('[data-accion="consultar-historial"]').click();
+    await esperar();
+
+    const revertir = ficha().querySelector('[data-accion="revertir-producto"]');
+    const entrada = ficha().querySelector('[data-cambio="respaldo-1"]');
+    expect(entrada.textContent).toContain('Modificación');
+    expect(entrada.textContent).toContain('Raíz');
+    expect(entrada.textContent).toContain('Cambió: nombre, defensa.');
+    expect(ficha().textContent).not.toContain('admin-uid');
+    revertir.click();
+    await esperar();
+
+    expect(pedirMotivo).toHaveBeenCalledWith(
+      expect.objectContaining({
+        titulo: '¿Revertir «Yelmo del Alba»?',
+        etiquetaMotivo: 'Motivo de la reversión',
+        textoConfirmar: 'Revertir',
+      }),
+    );
+    expect(fetchImpl).toHaveBeenCalledWith(`/api/v1/productos/${YELMO.id}/reversiones`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ respaldoId: 'respaldo-1', motivo: 'Precio mal puesto' }),
+    });
+    expect(ficha().querySelector('.aviso--exito').textContent).toContain('Producto restaurado');
+    expect(alCambiar).toHaveBeenCalledWith(
+      expect.objectContaining({ nombre: 'Yelmo anterior', version: 4 }),
+    );
+  });
+
+  test('HU-PRD-011 lista versiones e importa una plantilla sin cambiar los demás datos', async () => {
+    const confirmarAccion = jest.fn(async () => true);
+    const alCambiar = jest.fn();
+    const plantilla = {
+      formato: 'nexus-producto-diseno',
+      versionFormato: 1,
+      productoOrigenId: 'producto-origen',
+      versionProducto: 5,
+      imagen: 'productos/diseno-importado.webp',
+      descripcion: 'Diseño importado',
+      exportadaEn: '2026-10-11T15:00:00Z',
+    };
+    const fetchImpl = jest.fn(async (url, opciones = {}) => {
+      if (url.endsWith('/diseno/versiones')) {
+        return respuesta([
+          {
+            version: 3,
+            fecha: '2026-10-11T14:00:00Z',
+            autor: 'admin-uid',
+            imagen: YELMO.imagen,
+            descripcion: YELMO.descripcion,
+            actual: true,
+          },
+        ]);
+      }
+      if (url.endsWith('/diseno/importaciones') && opciones.method === 'POST') {
+        return respuesta({
+          ...YELMO,
+          imagen: plantilla.imagen,
+          descripcion: plantilla.descripcion,
+          version: 4,
+        });
+      }
+      throw new Error(`Petición inesperada: ${url}`);
+    });
+
+    abrir(YELMO, { fetchImpl, confirmarAccion, alCambiar });
+    ficha().querySelector('[data-accion="consultar-versiones-diseno"]').click();
+    await esperar();
+
+    expect(ficha().querySelector('[data-version="3"]').textContent).toContain('Raíz');
+    expect(ficha().querySelector('[data-version="3"]').textContent).toContain('Publicada');
+    expect(ficha().querySelector('[data-version="3"] img').getAttribute('src')).toBe(YELMO.imagen);
+
+    const archivo = ficha().querySelector('[data-accion="archivo-plantilla-diseno"]');
+    Object.defineProperty(archivo, 'files', {
+      configurable: true,
+      value: [{ text: async () => JSON.stringify(plantilla) }],
+    });
+    archivo.dispatchEvent(new Event('change'));
+    await esperar();
+    await esperar();
+
+    expect(confirmarAccion).toHaveBeenCalledWith(
+      expect.objectContaining({ textoConfirmar: 'Importar' }),
+    );
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `/api/v1/productos/${YELMO.id}/diseno/importaciones`,
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(plantilla) }),
+    );
+    expect(alCambiar).toHaveBeenCalledWith(
+      expect.objectContaining({ imagen: plantilla.imagen, descripcion: plantilla.descripcion }),
+    );
+    expect(ficha().querySelector('.aviso--exito').textContent).toContain('Diseño importado');
+  });
+
   test('RFINAL-07: sin promoción el resumen no escribe «null» (revisión de DEV del 4-oct)', () => {
-    abrirHojaDeProducto({ ...YELMO, promocion: null }, { fetchImpl: jest.fn() });
+    abrir({ ...YELMO, promocion: null }, { fetchImpl: jest.fn() });
 
     const resumen = ficha().querySelector('.hoja-producto__resumen');
     expect(resumen.textContent).not.toContain('null');
@@ -214,12 +341,13 @@ describe('la ficha de gestión (ProductAdminSheet)', () => {
     expect([...resumen.childNodes].every((nodo) => nodo.nodeType === Node.ELEMENT_NODE)).toBe(true);
   });
 
-  test('guardar manda solo lo que cambió y pinta la versión nueva', async () => {
+  test('publicar confirma lo que cambia, manda solo eso y pinta la versión nueva', async () => {
     const alCambiar = jest.fn();
+    const confirmarAccion = jest.fn(async () => true);
     const fetchImpl = jest.fn(async (_url, opciones) =>
       respuesta({ ...YELMO, ...JSON.parse(opciones.body), version: 4 }),
     );
-    abrirHojaDeProducto(YELMO, { fetchImpl, alCambiar });
+    abrir(YELMO, { fetchImpl, alCambiar, confirmarAccion });
 
     campo('defensa').value = '6';
     ficha()
@@ -227,6 +355,13 @@ describe('la ficha de gestión (ProductAdminSheet)', () => {
       .dispatchEvent(new Event('submit', { cancelable: true }));
     await esperar();
 
+    expect(confirmarAccion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        titulo: '¿Publicar los cambios de «Yelmo del Alba»?',
+        textoConfirmar: 'Publicar',
+      }),
+    );
+    expect(confirmarAccion.mock.calls[0][0].mensaje).toMatch(/^Se publicará: defensa\./);
     const [url, opciones] = fetchImpl.mock.calls[0];
     expect(url).toBe(`/api/v1/productos/${YELMO.id}`);
     expect(opciones.method).toBe('PATCH');
@@ -237,13 +372,13 @@ describe('la ficha de gestión (ProductAdminSheet)', () => {
 
   test('sin cambios no se llama al servicio; un dato inválido se marca en su campo', async () => {
     const fetchImpl = jest.fn();
-    abrirHojaDeProducto(YELMO, { fetchImpl });
+    abrir(YELMO, { fetchImpl });
     const formulario = ficha().querySelector('form');
 
     formulario.dispatchEvent(new Event('submit', { cancelable: true }));
     await esperar();
     expect(fetchImpl).not.toHaveBeenCalled();
-    expect(ficha().querySelector('.aviso--info').textContent).toContain('No hay nada que guardar');
+    expect(ficha().querySelector('.aviso--info').textContent).toContain('No hay nada que publicar');
 
     campo('tasaDeCaida').value = '140';
     formulario.dispatchEvent(new Event('submit', { cancelable: true }));
@@ -265,7 +400,7 @@ describe('la ficha de gestión (ProductAdminSheet)', () => {
     const fetchImpl = jest.fn(async (_url, opciones) =>
       respuesta({ ...conPromocion, ...JSON.parse(opciones.body), version: 4 }),
     );
-    abrirHojaDeProducto(conPromocion, { fetchImpl });
+    abrir(conPromocion, { fetchImpl, confirmarAccion: async () => true });
 
     expect(ficha().querySelector('[data-zona="promocion-actual"]').textContent).toMatch(
       /^Promoción: 20 % de descuento, vigente hasta el /,
@@ -298,7 +433,7 @@ describe('la ficha de gestión (ProductAdminSheet)', () => {
         400,
       ),
     );
-    abrirHojaDeProducto(YELMO, { fetchImpl });
+    abrir(YELMO, { fetchImpl, confirmarAccion: async () => true });
     campo('nombre').value = 'Yelmo del Ocaso';
     ficha()
       .querySelector('form')
@@ -309,26 +444,29 @@ describe('la ficha de gestión (ProductAdminSheet)', () => {
     expect(aviso.textContent).toContain('Un producto premium no puede tener precio en créditos.');
   });
 
-  test('suspender pide confirmación, llama al servicio y cambia a «Reactivar»', async () => {
-    const confirmarAccion = jest.fn(async () => true);
+  test('suspender pide confirmación con motivo, llama al servicio y cambia a «Reactivar»', async () => {
+    const pedirMotivo = jest.fn(async () => 'Error de balance');
     const alCambiar = jest.fn();
     const fetchImpl = jest.fn(async () =>
       respuesta({ productoId: YELMO.id, estado: 'SUSPENDIDO', tiraje: 40 }),
     );
-    abrirHojaDeProducto(YELMO, { fetchImpl, confirmarAccion, alCambiar });
+    abrir(YELMO, { fetchImpl, pedirMotivo, alCambiar });
 
     ficha().querySelector('[data-accion="suspender"]').click();
     await esperar();
 
-    expect(confirmarAccion).toHaveBeenCalledWith(
+    expect(pedirMotivo).toHaveBeenCalledWith(
       expect.objectContaining({
         titulo: '¿Suspender «Yelmo del Alba»?',
+        etiquetaMotivo: 'Motivo de la suspensión',
         textoConfirmar: 'Suspender',
+        consecuencias: expect.arrayContaining(['Desaparece de la tienda.']),
       }),
     );
-    expect(fetchImpl).toHaveBeenCalledWith(`/api/v1/productos/${YELMO.id}/suspender`, {
-      method: 'PUT',
-    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `/api/v1/productos/${YELMO.id}/suspender?motivo=Error+de+balance`,
+      { method: 'PUT' },
+    );
     expect(ficha().querySelector('[data-accion="reactivar"]')).not.toBeNull();
     expect(ficha().textContent).toContain('Suspendido');
     expect(alCambiar).toHaveBeenCalledWith(expect.objectContaining({ estado: 'SUSPENDIDO' }));
@@ -336,7 +474,7 @@ describe('la ficha de gestión (ProductAdminSheet)', () => {
 
   test('cancelar la confirmación no toca el producto', async () => {
     const fetchImpl = jest.fn();
-    abrirHojaDeProducto(YELMO, { fetchImpl, confirmarAccion: async () => false });
+    abrir(YELMO, { fetchImpl, pedirMotivo: async () => null });
     ficha().querySelector('[data-accion="suspender"]').click();
     await esperar();
     expect(fetchImpl).not.toHaveBeenCalled();
@@ -344,15 +482,132 @@ describe('la ficha de gestión (ProductAdminSheet)', () => {
 
   test('un 403 habla del rol, no de un error genérico', async () => {
     const fetchImpl = jest.fn(async () => respuesta({ status: 403 }, 403));
-    abrirHojaDeProducto(
+    abrir(
       { ...YELMO, estado: 'SUSPENDIDO' },
       {
         fetchImpl,
-        confirmarAccion: async () => true,
+        pedirMotivo: async () => 'Vuelve a la venta',
       },
     );
     ficha().querySelector('[data-accion="reactivar"]').click();
     await esperar();
     expect(ficha().querySelector('.aviso').textContent).toContain('Tu rol no puede hacer esto');
+  });
+
+  test('SA-6: la imagen se sube o se elige; no hay rutas, UUID ni identificadores a la vista', () => {
+    abrir(YELMO, { fetchImpl: jest.fn() });
+    expect(ficha().querySelector('.selector-recurso')).not.toBeNull();
+    expect(campo('imagen').type).toBe('hidden');
+    expect(campo('imagen').value).toBe(YELMO.imagen);
+    expect(ficha().querySelector('.selector-recurso img').getAttribute('src')).toBe(YELMO.imagen);
+    expect(ficha().textContent).not.toMatch(/Referencia de imagen|Identificador|UUID/);
+  });
+
+  test('HU-PRD-010: la vista previa sigue lo escrito; descartar deja lo publicado', async () => {
+    const fetchImpl = jest.fn();
+    abrir(YELMO, { fetchImpl });
+    const previa = () => ficha().querySelector('[data-zona="vista-previa-hoja"]');
+    expect(previa().querySelector('.product-card__nombre').textContent).toBe('Yelmo del Alba');
+    expect(ficha().querySelector('.hoja-producto__pendientes').textContent).toBe(
+      'Es lo que hoy ven los jugadores.',
+    );
+    expect(ficha().querySelector('[data-accion="guardar-producto"]').disabled).toBe(true);
+
+    campo('nombre').value = 'Yelmo del Ocaso';
+    ficha()
+      .querySelector('form')
+      .dispatchEvent(new Event('input', { bubbles: true }));
+    expect(previa().querySelector('.product-card__nombre').textContent).toBe('Yelmo del Ocaso');
+    expect(ficha().querySelector('.hoja-producto__pendientes').textContent).toBe(
+      'Cambios sin publicar: nombre.',
+    );
+    expect(ficha().querySelector('[data-accion="guardar-producto"]').disabled).toBe(false);
+
+    ficha().querySelector('[data-accion="descartar-cambios"]').click();
+    expect(campo('nombre').value).toBe('Yelmo del Alba');
+    expect(previa().querySelector('.product-card__nombre').textContent).toBe('Yelmo del Alba');
+    expect(ficha().querySelector('.aviso--info').textContent).toContain('Cambios descartados');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test('HU-PRD-011: restaurar una versión anterior trae su imagen y descripción', async () => {
+    const confirmarAccion = jest.fn(async () => true);
+    const fetchImpl = jest.fn(async (url, opciones = {}) => {
+      if (url.endsWith('/diseno/versiones')) {
+        return respuesta([
+          {
+            version: 3,
+            fecha: '2026-10-11T14:00:00Z',
+            autor: 'admin-uid',
+            imagen: YELMO.imagen,
+            descripcion: YELMO.descripcion,
+            actual: true,
+          },
+          {
+            version: 2,
+            fecha: '2026-10-01T14:00:00Z',
+            autor: null,
+            imagen: 'data:image/png;base64,AA==',
+            descripcion: 'Antes',
+            actual: false,
+          },
+        ]);
+      }
+      if (url.endsWith('/diseno/importaciones') && opciones.method === 'POST') {
+        const cuerpo = JSON.parse(opciones.body);
+        return respuesta({
+          ...YELMO,
+          imagen: cuerpo.imagen,
+          descripcion: cuerpo.descripcion,
+          version: 4,
+        });
+      }
+      throw new Error(`Petición inesperada: ${url}`);
+    });
+    abrir(YELMO, { fetchImpl, confirmarAccion });
+    ficha().querySelector('[data-accion="consultar-versiones-diseno"]').click();
+    await esperar();
+
+    expect(ficha().querySelector('[data-version="2"]').textContent).toContain('Catálogo inicial');
+    expect(ficha().querySelector('[data-version="3"] [data-accion="restaurar-diseno"]')).toBeNull();
+    ficha().querySelector('[data-version="2"] [data-accion="restaurar-diseno"]').click();
+    await esperar();
+    await esperar();
+
+    expect(confirmarAccion).toHaveBeenCalledWith(
+      expect.objectContaining({ titulo: '¿Restaurar el diseño de la versión 2?' }),
+    );
+    const llamada = fetchImpl.mock.calls.find(([url]) => url.endsWith('/diseno/importaciones'));
+    expect(JSON.parse(llamada[1].body)).toMatchObject({
+      formato: 'nexus-producto-diseno',
+      versionFormato: 1,
+      productoOrigenId: YELMO.id,
+      versionProducto: 2,
+      imagen: 'data:image/png;base64,AA==',
+      descripcion: 'Antes',
+    });
+    expect(ficha().querySelector('.aviso--exito').textContent).toContain('Diseño restaurado');
+    expect(campo('descripcion').value).toBe('Antes');
+  });
+
+  test('el héroe de una habilidad se elige por su nombre', async () => {
+    const HEROE = '0a1b2c3d-4e5f-3a1b-9c2d-0123456789ab';
+    const listarHeroes = jest.fn(async () => ({ content: [{ id: HEROE, nombre: 'Mago Fuego' }] }));
+    abrir(
+      {
+        ...YELMO,
+        tipo: 'HABILIDAD',
+        heroe: HEROE,
+        costoPoder: 2,
+        multiplicadorNivel: 1.5,
+        turnosCarga: 1,
+      },
+      { fetchImpl: jest.fn(), listarHeroes },
+    );
+    await esperar();
+    const selector = campo('heroe');
+    expect(selector.tagName).toBe('SELECT');
+    expect([...selector.options].map((o) => o.text)).toEqual(['Elige el héroe', 'Mago Fuego']);
+    expect(selector.value).toBe(HEROE);
   });
 });

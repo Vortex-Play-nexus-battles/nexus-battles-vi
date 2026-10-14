@@ -57,6 +57,54 @@ export function enlaceDeInvitacion(aviso, destino = resolver(RUTAS.batallas, imp
 }
 
 /**
+ * De qué trata un aviso, en una palabra, para el distintivo de la tarjeta.
+ * El `tipo` lo pone el servicio que avisa (notificaciones.yaml lo deja
+ * abierto) y es un código: «CAMBIO_POLITICA» no le dice nada a quien juega
+ * (SA-11). Los de un mismo tema comparten prefijo: las sanciones, las
+ * apelaciones y los de subastas.
+ */
+const CATEGORIA_POR_TIPO = Object.freeze({
+  CAMBIO_POLITICA: 'Políticas de uso',
+  CAMBIO_CATALOGO: 'Catálogo',
+  CUENTA: 'Cuenta',
+  TORNEO: 'Torneo',
+  MISION: 'Misión',
+  MENSAJE_PRIVADO: 'Mensaje',
+  INVITACION_SALA: 'Invitación',
+  MODERACION_COMENTARIO: 'Comentarios',
+  NUEVA_PUJA: 'Subasta',
+  LIMITE_AUTOMATICO_ALCANZADO: 'Subasta',
+  AUTOMATICA_SIN_SALDO: 'Subasta',
+  RECORDATORIO_CIERRE: 'Subasta',
+  CAMBIO_EN_SUBASTA_SEGUIDA: 'Subasta',
+  PRODUCTO_RECOGIDO: 'Subasta',
+  PRODUCTO_DEVUELTO: 'Subasta',
+  PENDIENTE_VENCIDO: 'Subasta',
+  CREDITOS_RECIBIDOS: 'Créditos',
+});
+
+const CATEGORIA_POR_PREFIJO = Object.freeze([
+  ['SANCION_', 'Sanción'],
+  ['APELACION_', 'Apelación'],
+  ['SUBASTA_', 'Subasta'],
+  ['PUJA_', 'Subasta'],
+  ['COMPRA_INMEDIATA_', 'Subasta'],
+]);
+
+/**
+ * @param {string|undefined|null} tipo
+ * @returns {string} la categoría legible; «Aviso» si el tipo es nuevo
+ */
+export function categoriaDelAviso(tipo) {
+  const codigo = String(tipo ?? '').trim();
+  if (Object.hasOwn(CATEGORIA_POR_TIPO, codigo)) {
+    return CATEGORIA_POR_TIPO[codigo];
+  }
+  const porPrefijo = CATEGORIA_POR_PREFIJO.find(([prefijo]) => codigo.startsWith(prefijo));
+  return porPrefijo ? porPrefijo[1] : 'Aviso';
+}
+
+/**
  * UX-R3.8 — el texto sin canal decia «Sin canal en tiempo real: consultando
  * periodicamente», en rojo. Dos cosas mal a la vez:
  *
@@ -139,7 +187,8 @@ function nodoDeAviso(aviso, alMarcar) {
 
   const tipo = document.createElement('span');
   tipo.className = 'distintivo';
-  tipo.textContent = aviso.tipo ?? '';
+  tipo.dataset.tipo = aviso.tipo ?? '';
+  tipo.textContent = categoriaDelAviso(aviso.tipo);
   cabecera.appendChild(tipo);
 
   item.appendChild(cabecera);

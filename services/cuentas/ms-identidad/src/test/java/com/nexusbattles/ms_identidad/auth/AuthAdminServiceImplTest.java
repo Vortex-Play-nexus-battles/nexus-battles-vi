@@ -55,8 +55,8 @@ class AuthAdminServiceImplTest {
 
         authAdminService = construir();
 
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.empty());
-        when(usuarioRepository.findByApodo(anyString())).thenReturn(Optional.empty());
+        when(usuarioRepository.existsByEmailIgnoreCase(anyString())).thenReturn(false);
+        when(usuarioRepository.existsByApodoIgnoreCase(anyString())).thenReturn(false);
         when(rolService.obtenerRolPorNombre("JUGADOR")).thenReturn(new RolEntity());
         when(usuarioRepository.save(any(Usuario.class)))
             .thenAnswer(invocacion -> invocacion.getArgument(0));
@@ -76,8 +76,7 @@ class AuthAdminServiceImplTest {
 
         authAdminService = construir();
 
-        when(usuarioRepository.findByEmail("cristian@test.com"))
-            .thenReturn(Optional.of(new Usuario()));
+        when(usuarioRepository.existsByEmailIgnoreCase("cristian@test.com")).thenReturn(true);
 
         IllegalArgumentException exception = assertThrows(
             IllegalArgumentException.class,
@@ -89,6 +88,64 @@ class AuthAdminServiceImplTest {
 
         assertEquals("El correo electrónico ya está registrado.", exception.getMessage());
         verify(codigos, never()).emitir(any(), any());
+    }
+
+    @Test
+    void elCorreoSeComparaSinMayusculasNiEspacios() {
+
+        authAdminService = construir();
+
+        // «Ana@X.com » y «ana@x.com» son la misma cuenta: el login busca en
+        // minusculas y solo encontraria una de las dos.
+        when(usuarioRepository.existsByEmailIgnoreCase("cristian@test.com")).thenReturn(true);
+
+        assertThrows(IllegalArgumentException.class,
+            () -> authAdminService.crearCuentaConRol(
+                "Cristian", "Chaparro", "  Cristian@Test.COM ",
+                "cristianc", null, Role.MODERADOR));
+        verify(usuarioRepository, never()).save(any());
+    }
+
+    @Test
+    void sinCorreoOSinApodoNoHayCuenta() {
+
+        authAdminService = construir();
+
+        IllegalArgumentException sinCorreo = assertThrows(IllegalArgumentException.class,
+            () -> authAdminService.crearCuentaConRol("Cristian", "Chaparro", null, "cristianc", null,
+                Role.MODERADOR));
+        assertEquals("El correo electrónico es obligatorio.", sinCorreo.getMessage());
+        assertThrows(IllegalArgumentException.class,
+            () -> authAdminService.crearCuentaConRol("Cristian", "Chaparro", "   ", "cristianc", null,
+                Role.MODERADOR));
+
+        when(usuarioRepository.existsByEmailIgnoreCase(anyString())).thenReturn(false);
+        IllegalArgumentException sinApodo = assertThrows(IllegalArgumentException.class,
+            () -> authAdminService.crearCuentaConRol("Cristian", "Chaparro", "nuevo@test.com", null, null,
+                Role.MODERADOR));
+        assertEquals("El apodo es obligatorio.", sinApodo.getMessage());
+        assertThrows(IllegalArgumentException.class,
+            () -> authAdminService.crearCuentaConRol("Cristian", "Chaparro", "nuevo@test.com", "  ", null,
+                Role.MODERADOR));
+        verify(usuarioRepository, never()).save(any());
+        verify(apodoBlacklistValidator, never()).validar(any());
+    }
+
+    @Test
+    void elApodoRepetidoSinDistinguirMayusculasSeRechaza() {
+
+        authAdminService = construir();
+
+        when(usuarioRepository.existsByEmailIgnoreCase(anyString())).thenReturn(false);
+        when(usuarioRepository.existsByApodoIgnoreCase("CristianC")).thenReturn(true);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> authAdminService.crearCuentaConRol(
+                "Cristian", "Chaparro", "nuevo@test.com",
+                " CristianC ", null, Role.ADMINISTRADOR));
+        assertEquals("El apodo ya está en uso.", error.getMessage());
+        verify(apodoBlacklistValidator).validar("CristianC");
+        verify(usuarioRepository, never()).save(any());
     }
 
     @Test

@@ -18,7 +18,12 @@ import java.util.UUID;
 public record IdentidadDelChat(boolean autenticado, String claveDeConversacion, String uid, String tokenCrudo,
                                SesionAnonima sesion) {
 
-    static final String PREFIJO_VISITANTE = "anonimo:";
+    public static final String PREFIJO_VISITANTE = "anonimo:";
+
+    /** 1.12.0: si una clave (de conversacion o duena de una solicitud) es la de un visitante. */
+    public static boolean esDeVisitante(String clave) {
+        return clave != null && clave.startsWith(PREFIJO_VISITANTE);
+    }
 
     public IdentidadDelChat {
         Objects.requireNonNull(claveDeConversacion);

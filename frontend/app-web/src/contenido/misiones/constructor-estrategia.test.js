@@ -129,6 +129,39 @@ beforeEach(() => {
   document.body.innerHTML = '';
 });
 
+/*
+ * Revisión del modo jugador del 6-oct, punto 23 — lo que necesita el
+ * asistente de preparar la misión: saber qué héroe hay elegido (para dejar
+ * seguir) y leyendas sin número (los pasos los numera él).
+ */
+describe('para el asistente de preparar la misión', () => {
+  test('heroe() dice el elegido con su nivel, y alElegirHeroe avisa al elegirlo', async () => {
+    const alElegirHeroe = jest.fn();
+    const { configurador } = await montar({ extra: { alElegirHeroe } });
+
+    expect(configurador.heroe()).toEqual({
+      id: 'h-1',
+      nombre: 'Aquiles',
+      prototipo: 'Guerrero Armas',
+      nivel: 1,
+    });
+    expect(alElegirHeroe).toHaveBeenCalledWith(configurador.heroe());
+  });
+
+  test('sin héroes que elegir, heroe() es null', async () => {
+    const { configurador } = await montar({ elementos: [] });
+    expect(configurador.heroe()).toBeNull();
+  });
+
+  test('numerarPasos: false deja las leyendas sin número', async () => {
+    await montar({ extra: { numerarPasos: false } });
+    const leyendas = [...document.querySelectorAll('legend.estrategia__paso-titulo')].map(
+      (l) => l.textContent,
+    );
+    expect(leyendas).toEqual(['Elige el héroe', 'Ordena sus rotaciones']);
+  });
+});
+
 describe('héroes', () => {
   test('lista solo los héroes del inventario, con su prototipo, y elige el primero', async () => {
     const { validar, vista, configurador } = await montar();

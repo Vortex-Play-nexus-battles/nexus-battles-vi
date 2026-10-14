@@ -13,7 +13,10 @@ public record PaginaInventarioResponse(
 
     static PaginaInventarioResponse de(PaginaInventario pagina) {
         return new PaginaInventarioResponse(
-                pagina.elementos().stream().map(ElementoInventarioResponse::de).toList(),
+                pagina.elementos().stream()
+                        .map(elemento -> ElementoInventarioResponse.de(
+                                elemento, pagina.equipadoEn(elemento.id())))
+                        .toList(),
                 pagina.numero(), pagina.tamanio(), pagina.totalElementos(),
                 pagina.totalPaginas(), pagina.ultima());
     }

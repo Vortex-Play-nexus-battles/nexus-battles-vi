@@ -19,13 +19,13 @@ import { h, vaciar } from '../../comun/ui/dom.js';
 import {
   accionDeCombate,
   chipDeEfecto,
-  impactoEnCampo,
   medidorDePoder,
   registroDeCombate,
 } from '../../comun/ui/juego/combate.js';
 import { panelDeResultado } from '../../comun/ui/juego/resultado.js';
 import { puntosDePoder } from '../../comun/heroe-propio.js';
 import { narrarAccion, narrarTurno, nombreDe } from './narracion.js';
+import { coreografiaDeCombate } from './coreografia-de-combate.js';
 import { textoDelServidor } from '../../comun/ui/texto-de-fallo.js';
 
 /**
@@ -730,6 +730,11 @@ export function montarControlesDeCombate(
   // Una partida que ya llega terminada no abre nada ni un instante.
   let terminado = Boolean(partidaFinalizada);
 
+  // HU-UX-003 (MOTION-2) — lo que se ve cuando llega un aviso: el golpe, el
+  // turno y el desenlace, coreografiados sobre el campo. Sin campo (movil,
+  // una prueba sin esa zona) no dibuja nada y no rompe nada.
+  const coreografia = coreografiaDeCombate({ campo: zonaCampo, participantes, yo });
+
   // UXC-2 · CombatLog: lo que ha pasado, con palabras.
   const bitacora = zonaRegistro ? registroDeCombate() : null;
   if (bitacora) {
@@ -1162,6 +1167,12 @@ export function montarControlesDeCombate(
     aviso.hidden = false;
     // El foco va a la salida principal: la partida acabó y es lo que toca.
     aviso.querySelector('.panel-resultado__acciones a, .panel-resultado__acciones button')?.focus();
+    // MOTION-2 — VICTORIA se celebra (contenida), DERROTA es sobria, EMPATE
+    // neutro. Una vez: el segundo aviso (reparto tardio) solo repinta.
+    if (primerAviso) {
+      coreografia.turno(null);
+      coreografia.desenlace(desenlace, aviso.querySelector('.panel-resultado')).catch(() => {});
+    }
   }
 
   /**
@@ -1334,16 +1345,18 @@ export function montarControlesDeCombate(
     }
   }
 
-  /** La cifra del golpe sobre el heroe en el campo; se va sola. */
-  function mostrarImpacto({ idJugador, cifra, etiqueta, tono, unidad = null }) {
+  /**
+   * La cifra del golpe sobre el heroe en el campo; se va sola (MOTION-2: la
+   * mueve y la retira `motion.float`; sin movimiento se queda quieta el
+   * tiempo de leerla). Las de una accion resuelta nacen en el impacto, desde
+   * la coreografia; esta es para lo que no tiene golpe (el gasto de poder).
+   */
+  function mostrarImpacto({ idJugador, cifra, etiqueta, tono, unidad = null, icono = null }) {
     const puesto = zonaCampo?.querySelector(`[data-puesto="${idJugador}"]`);
     if (!puesto) {
       return;
     }
-    puesto.querySelector('.impacto')?.remove();
-    const impacto = impactoEnCampo({ cifra, etiqueta, tono, unidad });
-    puesto.append(impacto);
-    setTimeout(() => impacto.remove(), 2400);
+    coreografia.cifra(puesto, { cifra, etiqueta, tono, unidad, icono });
   }
 
   /**
@@ -1595,9 +1608,13 @@ export function montarControlesDeCombate(
         if (principal) {
           anunciar(principal.texto, principal.tono);
         }
-        for (const impacto of impactos) {
-          mostrarImpacto(impacto);
-        }
+        // MOTION-2 — el golpe se ve ocurrir: quien actua se lanza, quien lo
+        // recibe lo acusa y la cifra nace en el impacto. El registro y el
+        // anuncio ya lo dijeron con palabras (arriba), asi que sin movimiento
+        // no se pierde nada. No se espera: el estado del servidor se aplica ya.
+        coreografia.accion(mensaje, impactos).catch((error) => {
+          console.warn('La coreografía del golpe no terminó:', error?.message ?? error);
+        });
         for (const afectado of mensaje.afectados ?? []) {
           if (Array.isArray(afectado.efectosActivos)) {
             pintarEfectos(afectado.idJugador, afectado.efectosActivos);
@@ -1629,6 +1646,8 @@ export function montarControlesDeCombate(
         accionPendiente = null;
         habilitar(mensaje.idJugador === yo);
         marcarTurno(mensaje.idJugador, numeroActual);
+        // MOTION-2 — un pulso en quien juega; la IA «piensa» hasta que actua.
+        coreografia.turno(terminado ? null : mensaje.idJugador);
         anotar(narrarTurno(mensaje, participantes, yo));
         if (mensaje.idJugador === yo && !terminado) {
           anunciar('¡Tu turno!', 'turno');

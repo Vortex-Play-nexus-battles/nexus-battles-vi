@@ -51,7 +51,8 @@ test('muestra un campo de busqueda con minimo de cuatro caracteres', async () =>
   const campo = formulario.querySelector('[name="criterio"]');
   expect(campo.type).toBe('search');
   expect(campo.minLength).toBe(4);
-  expect(formulario.querySelector('label').textContent).toMatch(/buscar productos/i);
+  // PLAYER-07a — la búsqueda es general (héroes y objetos) y lo dice.
+  expect(formulario.querySelector('label').textContent).toMatch(/buscar en tu inventario/i);
 });
 
 test('no consulta cuando el jugador escribe menos de cuatro caracteres', async () => {
@@ -155,4 +156,61 @@ test('limpiar restaura el inventario completo', async () => {
   expect(consultasCompletas).toBe(1);
   expect(raiz.querySelector('[name="criterio"]').value).toBe('');
   expect(raiz.querySelector('.inventario-busqueda__limpiar').hidden).toBe(true);
+});
+
+describe('enlace directo a una búsqueda (inventario.html?busqueda=…)', () => {
+  test('con cuatro letras o más, la vista se abre con la búsqueda hecha', async () => {
+    const buscar = jest.fn(async () => pagina([elemento('Amuleto de Bruma')]));
+    await montarInventario(raiz, 'jugador-A', 0, {
+      consultar: async () => pagina(),
+      buscar,
+      busquedaInicial: '  bruma ',
+    });
+
+    await esperarHasta(() => raiz.querySelector('.vitrina__nombre'));
+    expect(buscar).toHaveBeenCalledWith('jugador-A', 'bruma', 0);
+    expect(raiz.querySelector('[name="criterio"]').value).toBe('bruma');
+    expect(raiz.querySelector('.vitrina__nombre').textContent).toBe('Amuleto de Bruma');
+    expect(raiz.querySelector('.inventario-busqueda__limpiar').hidden).toBe(false);
+  });
+
+  test('con menos de cuatro letras no busca ni avisa: abre el inventario', async () => {
+    const buscar = jest.fn(async () => pagina());
+    await montarInventario(raiz, 'jugador-A', 0, {
+      consultar: async () => pagina([elemento('Inventario completo')]),
+      buscar,
+      busquedaInicial: 'arm',
+    });
+
+    expect(buscar).not.toHaveBeenCalled();
+    expect(raiz.querySelector('[name="criterio"]').value).toBe('');
+    expect(raiz.querySelector('.inventario__mensaje').textContent).toBe('');
+  });
+});
+
+test('un héroe de otra página en los resultados no se da por «Disponible» sin conocer su equipo', async () => {
+  const otroHeroe = {
+    id: 'heroe-lejano',
+    productoId: 'p-heroe',
+    tipo: 'HEROE',
+    nombrePropio: 'Heroe Lejano',
+  };
+  await montarInventario(raiz, 'jugador-A', 0, {
+    consultar: async () => pagina([elemento('Espada de Bruma')]),
+    buscar: async () => pagina([otroHeroe]),
+    consultarEquipo: async () => ({ armas: [], armaduras: {}, items: [] }),
+  });
+
+  raiz.querySelector('[name="criterio"]').value = 'lejano';
+  enviar(raiz.querySelector('.inventario-busqueda'));
+  await esperarHasta(() => raiz.querySelector('.vitrina__nombre')?.textContent.includes('Lejano'));
+
+  const tarjeta = raiz.querySelector('.vitrina__producto');
+  expect(tarjeta.querySelector('[data-estado="DISPONIBLE"]')).toBeNull();
+});
+
+test('el nombre propio admite como mucho 60 caracteres (inventario.yaml 1.7.0)', async () => {
+  await montarInventario(raiz, 'jugador-A', 0, { consultar: async () => pagina() });
+
+  expect(raiz.querySelector('[name="nombrePropio"]').maxLength).toBe(60);
 });

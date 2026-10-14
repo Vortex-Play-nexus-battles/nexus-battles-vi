@@ -16,7 +16,9 @@ import java.util.UUID;
 import com.nexusbattles.comun.seguridad.ConversorRolesJwt;
 import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
 import nexus.dominio.Producto;
+import nexus.dominio.RespaldoProducto;
 import nexus.persistencia.ProductoRepository;
+import nexus.persistencia.RespaldoProductoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -105,6 +107,9 @@ class SeguridadConEmisorRealTest {
     @MockitoBean
     private ProductoRepository repositorio;
 
+    @MockitoBean
+    private RespaldoProductoRepository respaldos;
+
     @BeforeEach
     void simularPersistencia() {
         when(repositorio.save(any(Producto.class)))
@@ -112,6 +117,8 @@ class SeguridadConEmisorRealTest {
         // B4: el alta usa insert (Producto.version es @Version).
         when(repositorio.insert(any(Producto.class)))
                 .thenAnswer(invocacion -> invocacion.getArgument(0, Producto.class));
+        when(respaldos.save(any(RespaldoProducto.class)))
+                .thenAnswer(invocacion -> invocacion.getArgument(0, RespaldoProducto.class));
     }
 
     @Nested

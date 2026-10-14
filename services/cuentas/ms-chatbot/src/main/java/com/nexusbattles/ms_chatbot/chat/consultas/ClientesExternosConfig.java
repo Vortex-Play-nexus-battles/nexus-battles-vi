@@ -77,6 +77,14 @@ public class ClientesExternosConfig {
         return builder.baseUrl(url).build();
     }
 
+    // 1.10.0: el catalogo de productos es dato publico (productos.yaml,
+    // GET /api/v1/productos sin token); la URL es la raiz del servicio.
+    @Bean
+    public RestClient productosRestClient(RestClient.Builder builder,
+                                          @Value("${app.productos.url}") String url) {
+        return builder.baseUrl(url).build();
+    }
+
     // B11: torneos es dato publico (torneos.yaml, GET /torneos sin token).
     @Bean
     public RestClient torneosRestClient(RestClient.Builder builder,

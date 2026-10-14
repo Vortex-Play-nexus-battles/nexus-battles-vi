@@ -465,3 +465,28 @@ describe('el saldo en el HUD de la cabecera', () => {
     expect(document.querySelector('[data-zona="bloque-saldo"]').textContent).toContain('380');
   });
 });
+
+/*
+ * Tarea #802 — la seccion se llama «Mi inventario» en los tres sitios donde el
+ * jugador la ve. La tarjeta de accesos desaparecio al reescribir la home
+ * (#902), asi que el Product Owner decidio el 13 de octubre que este boton del
+ * estado vacio cuenta como el tercer sitio.
+ */
+test('el camino al inventario desde la home dice «Mi inventario»', async () => {
+  montarHome(document, {
+    sesion: SESION,
+    fetchImpl: servicio({
+      ...TODO_BIEN,
+      '/api/v1/inventario/elementos': { cuerpo: { elementos: [] } },
+    }),
+  });
+  await asentar();
+  await asentar();
+
+  const zona = document.querySelector('[data-zona="bloque-heroe"]');
+  const accion = [...zona.querySelectorAll('a, button')].find((e) =>
+    /inventario/i.test(e.textContent ?? ''),
+  );
+  expect(accion).toBeDefined();
+  expect(accion.textContent.trim()).toBe('Ir a Mi inventario');
+});

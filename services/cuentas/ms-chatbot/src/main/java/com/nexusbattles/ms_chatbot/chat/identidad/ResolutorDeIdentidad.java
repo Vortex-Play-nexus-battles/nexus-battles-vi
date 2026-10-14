@@ -1,6 +1,5 @@
 package com.nexusbattles.ms_chatbot.chat.identidad;
 
-import com.nexusbattles.comun.seguridad.IdentidadDelToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
@@ -64,18 +63,71 @@ public class ResolutorDeIdentidad {
         return new Resultado(IdentidadDelChat.visitante(emitida.sesion()), emitida.identificador());
     }
 
-    // Un token que no identifica a un usuario (sin uid ni sujeto UUID, p. ej.
-    // una credencial de servicio) se trata como si no viniera: el chat es de
-    // personas, y degradar a visitante es lo mismo que ya se hace con un token
-    // vencido (HU-CHA-008).
+    // 1.12.0: para abrir una solicitud de soporte. Como resolverOEmitir, pero
+    // sin emitir una sesion nueva (la respuesta de una solicitud no la
+    // entregaria): un visitante que aun no escribio al asistente registra la
+    // que declara su navegador. Vacio si no hay usuario ni sesion con forma.
+    public Optional<IdentidadDelChat> resolverODeclarar(Authentication autenticacion, String cabeceraDeSesion,
+                                                        String origen) {
+        Optional<IdentidadDelChat> conocida = resolver(autenticacion, cabeceraDeSesion);
+        if (conocida.isPresent() || !SesionesAnonimas.esDeclarada(cabeceraDeSesion)) {
+            return conocida;
+        }
+        return Optional.of(IdentidadDelChat.visitante(sesiones.declarar(cabeceraDeSesion, origen)));
+    }
+
+    /**
+     * 7.4.9 (contracts/websocket/chatbot.yaml 1.0.0): quien abre el canal en
+     * tiempo real, con las reglas de arriba y sin registrar nada. El nombre lo
+     * pone el servidor, nunca el cliente (es el principal de la conexion):
+     *
+     * <ul>
+     *   <li>un jugador, por el uid de su token: su nombre es el uid;</li>
+     *   <li>si no, un visitante con una sesion emitida vigente o con la que
+     *       declara el navegador (se registra con su primer mensaje, como en
+     *       {@link #resolverOEmitir}): su nombre es {@code anonimo:} + la
+     *       huella de la sesion, nunca la sesion;</li>
+     *   <li>nadie mas: vacio, y el canal rechaza la conexion. A diferencia de
+     *       {@link #resolverOEmitir} no se emite una sesion, porque en un
+     *       CONNECT no hay respuesta HTTP donde devolverla.</li>
+     * </ul>
+     */
+    public Optional<EnElCanal> enElCanal(Authentication autenticacion, String cabeceraDeSesion) {
+        Optional<IdentidadDelChat> usuario = usuarioDelToken(autenticacion);
+        if (usuario.isPresent()) {
+            return Optional.of(new EnElCanal(usuario.get().uid(), true));
+        }
+        if (SesionesAnonimas.esDeclarada(cabeceraDeSesion) || sesiones.validar(cabeceraDeSesion).isPresent()) {
+            return Optional.of(new EnElCanal(
+                IdentidadDelChat.PREFIJO_VISITANTE + SesionesAnonimas.huella(cabeceraDeSesion), false));
+        }
+        return Optional.empty();
+    }
+
+    /** 7.4.9: el nombre de quien abre el canal y si es un jugador con sesion. */
+    public record EnElCanal(String nombre, boolean jugador) {
+    }
+
+    // La identidad de un usuario es SOLO el claim `uid` (ADR-002): el `sub` es
+    // su apodo y nunca se interpreta como uid (1.4.0; antes se aceptaba un
+    // `sub` con forma de UUID cuando faltaba el uid, via IdentidadDelToken).
+    // Un token sin uid valido (p. ej. una credencial de servicio) se trata
+    // como si no viniera: el chat es de personas, y degradar a visitante es
+    // lo mismo que ya se hace con un token vencido (HU-CHA-008).
+    static final String CLAIM_UID = "uid";
+
     private static Optional<IdentidadDelChat> usuarioDelToken(Authentication autenticacion) {
         if (!(autenticacion instanceof JwtAuthenticationToken jwt)) {
             return Optional.empty();
         }
+        Object claim = jwt.getToken().getClaims().get(CLAIM_UID);
+        if (!(claim instanceof String uidDelToken) || uidDelToken.isBlank()) {
+            return Optional.empty();
+        }
         try {
-            UUID uid = IdentidadDelToken.idDe(jwt.getToken());
+            UUID uid = UUID.fromString(uidDelToken.strip());
             return Optional.of(IdentidadDelChat.usuario(uid, jwt.getToken().getTokenValue()));
-        } catch (IllegalArgumentException | NullPointerException sinUsuario) {
+        } catch (IllegalArgumentException uidSinForma) {
             return Optional.empty();
         }
     }

@@ -2,6 +2,8 @@ package com.nexusbattles.ms_chatbot.config;
 
 import com.nexusbattles.comun.seguridad.CadenaDeSeguridad;
 import com.nexusbattles.comun.seguridad.ConversorRolesJwt;
+import com.nexusbattles.ms_chatbot.chat.conocimiento.LimiteDelArchivoDeImportacion;
+import com.nexusbattles.ms_chatbot.chat.tiemporeal.DestinosDelCanal;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,6 +14,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -92,15 +95,28 @@ public class SecurityConfig {
         return http.build();
     }
 
+    // ms-chatbot.yaml 1.6.0: el archivo de importacion de la base de
+    // conocimiento no pasa de 8 MiB (413 IMPORTACION_DEMASIADO_GRANDE). El
+    // filtro va DENTRO de esta cadena y despues de la autorizacion, y no como
+    // filtro suelto del servidor: asi el orden no depende de como se registren
+    // los filtros, y quien no es administrador recibe su 401/403 sin que el
+    // servicio lea un solo byte del cuerpo.
     @Bean
     @Order(2)
     public SecurityFilterChain filterChainPorDefecto(HttpSecurity http, ConversorRolesJwt conversor) throws Exception {
         CadenaDeSeguridad.aplicarBase(http, conversor);
         http
             .cors(Customizer.withDefaults())
+            .addFilterAfter(new LimiteDelArchivoDeImportacion(), AuthorizationFilter.class)
             .authorizeHttpRequests(auth -> auth
                 // Regla 3 de plataforma: actuator abierto para la sonda de salud.
                 .requestMatchers("/actuator/**").permitAll()
+                // 7.4.9 (contracts/websocket/chatbot.yaml 1.0.0): el handshake del
+                // canal en tiempo real. El navegador no puede mandar cabeceras en
+                // un handshake de WebSocket: la identidad va en el CONNECT de
+                // STOMP y la decide PoliticaDelCanal con las reglas de /chat/**.
+                // El origen lo filtran CORS (abajo) y el propio endpoint.
+                .requestMatchers(DestinosDelCanal.ENDPOINT).permitAll()
                 .requestMatchers("/chatbot/admin/**").hasAnyRole(ROL_ADMINISTRADOR, ROL_SUPER_ADMINISTRADOR)
                 .anyRequest().authenticated()
             );

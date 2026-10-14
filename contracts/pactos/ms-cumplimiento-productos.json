@@ -1,0 +1,256 @@
+{
+  "consumer": {
+    "name": "ms-cumplimiento"
+  },
+  "interactions": [
+    {
+      "description": "la lectura de las operaciones del catalogo desde la primera",
+      "providerStates": [
+        {
+          "name": "hay operaciones administrativas del catalogo"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/productos/auditoria/operaciones",
+        "query": {
+          "limite": [
+            "100"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "completo": true,
+          "hasta": "2026-10-14T15:00:00.250Z",
+          "operaciones": [
+            {
+              "autor": "8f14e45f-ceea-467f-a0e6-9ea7c2b1e7a1",
+              "descripcion": "Suspensi\u00F3n del producto",
+              "id": "7b1f0c9e-2a44-4f7b-9d1e-3c5a8b2e6f10",
+              "ipOrigen": "181.52.10.4",
+              "motivo": "Rompe el balance de la temporada",
+              "nombre": "Espada solar",
+              "objeto": "PRODUCTO",
+              "objetoId": "550e8400-e29b-41d4-a716-446655440000",
+              "ocurridaEn": "2026-10-14T15:00:00.250Z",
+              "tipo": "SUSPENSION_PRODUCTO",
+              "valorAnterior": "Estado: Activo",
+              "valorNuevo": "Estado: Suspendido"
+            }
+          ]
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.completo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.hasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z"
+                }
+              ]
+            },
+            "$.operaciones": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.operaciones[*].autor": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.operaciones[*].descripcion": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.operaciones[*].id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.operaciones[*].ipOrigen": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.operaciones[*].motivo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.operaciones[*].nombre": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.operaciones[*].objeto": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.operaciones[*].objetoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.operaciones[*].ocurridaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z"
+                }
+              ]
+            },
+            "$.operaciones[*].tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.operaciones[*].valorAnterior": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.operaciones[*].valorNuevo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "la lectura de las operaciones del catalogo desde un punto",
+      "providerStates": [
+        {
+          "name": "no hay operaciones administrativas del catalogo"
+        }
+      ],
+      "request": {
+        "matchingRules": {
+          "query": {
+            "desde": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z"
+                }
+              ]
+            },
+            "limite": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "100"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/api/v1/productos/auditoria/operaciones",
+        "query": {
+          "desde": [
+            "2026-10-14T14:58:00Z"
+          ],
+          "limite": [
+            "100"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "completo": true,
+          "hasta": "2026-10-14T14:58:00Z",
+          "operaciones": [
+
+          ]
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.hasta": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    }
+  ],
+  "metadata": {
+    "pact-jvm": {
+      "version": "4.6.17"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "productos"
+  }
+}

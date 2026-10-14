@@ -1,6 +1,8 @@
 package com.nexusbattles.ms_chatbot.chat.motor.model;
 
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -14,7 +16,13 @@ import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
 
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -26,12 +34,19 @@ import java.util.UUID;
  * <p>Desde HU-CHA-012 cada tema pertenece a una version de la base de
  * conocimiento; el mismo tema tiene una copia por version, y todas sus
  * copias comparten la misma {@code clave}.
+ *
+ * <p>Desde ms-chatbot.yaml 1.6.0 (7.4.10 «asociar respuestas con múltiples
+ * intenciones») la misma respuesta puede atender, además de su
+ * {@code categoria}, otras intenciones: ver {@link #atiende(Categoria)}.
  */
 @Entity
 @Table(name = "temas_conocimiento")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class TemaConocimiento {
+
+    /** 1.6.0: cuántas intenciones puede atender un tema además de su categoría. */
+    public static final int MAXIMO_DE_INTENCIONES_ADICIONALES = 5;
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -78,6 +93,22 @@ public class TemaConocimiento {
     @Column(nullable = false)
     private int prioridad;
 
+    // 1.6.0 (V12): otras intenciones que atiende la misma respuesta, ademas de
+    // `categoria`. Hasta MAXIMO_DE_INTENCIONES_ADICIONALES, sin la principal
+    // (asignarIntencionesAdicionales lo garantiza; el panel recibe un 400 con
+    // el motivo antes, en BaseConocimientoAdminService).
+    //
+    // EAGER y por subconsulta: el motor las mira en cada pregunta y lee todos
+    // los temas de produccion de una vez, a veces fuera de una transaccion
+    // (las pruebas, las tareas programadas). Asi son UNA consulta mas por
+    // lectura de temas, no una por tema, y nunca un LazyInitializationException.
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "intenciones_adicionales_de_tema", joinColumns = @JoinColumn(name = "tema_id"))
+    @Enumerated(EnumType.STRING)
+    @Column(name = "categoria", nullable = false, length = 40)
+    @Fetch(FetchMode.SUBSELECT)
+    private Set<Categoria> intencionesAdicionales = new HashSet<>();
+
     public TemaConocimiento(VersionBaseConocimiento version, String clave, Categoria categoria,
                             TipoRespuesta tipoRespuesta, String titulo,
                             String palabrasClaveEs, String palabrasClaveEn,
@@ -97,17 +128,21 @@ public class TemaConocimiento {
     }
     // HU-CHA-012: copia de este tema para otra version, con la MISMA clave
     // (asi las analiticas lo siguen reconociendo como el mismo tema).
+    // 1.6.0: la copia atiende las mismas intenciones adicionales.
     public TemaConocimiento copiarA(VersionBaseConocimiento destino) {
-        return new TemaConocimiento(destino, clave, categoria, tipoRespuesta, titulo,
+        TemaConocimiento copia = new TemaConocimiento(destino, clave, categoria, tipoRespuesta, titulo,
             palabrasClaveEs, palabrasClaveEn, contenidoRespuestaEs, contenidoRespuestaEn,
             prioridad, activo);
+        copia.intencionesAdicionales.addAll(intencionesAdicionales);
+        return copia;
     }
 
     // HU-CHA-012: edicion desde el panel. La version y la clave no cambian.
+    // 1.6.0: con sus intenciones adicionales (null = ninguna).
     public void actualizar(Categoria categoria, TipoRespuesta tipoRespuesta, String titulo,
                            String palabrasClaveEs, String palabrasClaveEn,
                            String contenidoRespuestaEs, String contenidoRespuestaEn,
-                           int prioridad, boolean activo) {
+                           int prioridad, boolean activo, Collection<Categoria> intencionesAdicionales) {
         this.categoria = categoria;
         this.tipoRespuesta = tipoRespuesta;
         this.titulo = titulo;
@@ -117,5 +152,39 @@ public class TemaConocimiento {
         this.contenidoRespuestaEn = contenidoRespuestaEn;
         this.prioridad = prioridad;
         this.activo = activo;
+        asignarIntencionesAdicionales(intencionesAdicionales);
+    }
+
+    /**
+     * 1.6.0: reemplaza las intenciones adicionales (null = ninguna). Se
+     * modifica la misma colección, no se cambia por otra: así Hibernate borra
+     * e inserta solo las filas que cambian.
+     *
+     * @throws IllegalArgumentException si son más de
+     *     {@value #MAXIMO_DE_INTENCIONES_ADICIONALES} o incluyen la categoría
+     *     principal (quien llama ya lo validó con un mensaje para el panel)
+     */
+    public void asignarIntencionesAdicionales(Collection<Categoria> intenciones) {
+        Set<Categoria> nuevas = intenciones == null ? Set.of() : Set.copyOf(intenciones);
+        if (nuevas.size() > MAXIMO_DE_INTENCIONES_ADICIONALES || nuevas.contains(categoria)) {
+            throw new IllegalArgumentException("Intenciones adicionales invalidas para el tema '" + titulo + "': "
+                + nuevas + " (principal " + categoria + ").");
+        }
+        intencionesAdicionales.retainAll(nuevas);
+        intencionesAdicionales.addAll(nuevas);
+    }
+
+    /** 1.6.0: las intenciones adicionales en el orden del enum (el del contrato), sin modificar. */
+    public List<Categoria> getIntencionesAdicionales() {
+        return intencionesAdicionales.stream().sorted().toList();
+    }
+
+    /**
+     * 1.6.0: si este tema atiende esa intención, como categoría principal o
+     * como adicional. Es lo que cuenta para la vista del jugador, las
+     * preguntas relacionadas y las sugerencias por categoría. False con null.
+     */
+    public boolean atiende(Categoria intencion) {
+        return intencion != null && (categoria == intencion || intencionesAdicionales.contains(intencion));
     }
 }

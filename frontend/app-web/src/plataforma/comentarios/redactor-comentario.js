@@ -48,12 +48,21 @@ import { RUTAS, resolver, urlDeLogin } from '../../comun/sesion.js';
 import {
   ErrorDeApi,
   ESTADO,
+  MAXIMO_DE_CARACTERES,
   MAXIMO_DE_IMAGENES,
   MOTIVO,
   TIPO,
   publicarComentario,
   subirImagen,
 } from './cliente-comentarios.js';
+
+/** Cuántos caracteres ve quien escribe (un emoji cuenta uno, como en el servicio). */
+export function caracteresDe(texto) {
+  return [...String(texto ?? '')].length;
+}
+
+/** A partir de cuántos restantes la cuenta avisa (y se anuncia una vez). */
+const AVISO_DE_LARGO = 100;
 
 /** Los formatos que admite el servicio (comentarios.yaml 1.5.0). */
 export const FORMATOS_DE_IMAGEN = 'image/jpeg,image/png,image/webp';
@@ -90,6 +99,14 @@ export function mensajeDePublicacion(error) {
       detalle:
         'Tu cuenta tiene un silencio activo. En tus sanciones ves hasta cuándo dura y cómo apelar.',
       enlace: { texto: 'Ver mis sanciones', href: resolver(RUTAS.misSanciones) },
+    };
+  }
+  if (error.tipo === TIPO.TEXTO_DEMASIADO_LARGO) {
+    return {
+      tono: 'advertencia',
+      titulo: 'Tu opinión es demasiado larga',
+      detalle: `Puede tener como mucho ${MAXIMO_DE_CARACTERES} caracteres. Acórtala y vuelve a publicarla; tu texto sigue aquí.`,
+      campo: 'texto',
     };
   }
   if (error.tipo === TIPO.IMAGENES_NO_VALIDAS) {
@@ -212,6 +229,7 @@ export function redactorDeComentario({
   secuencia += 1;
   const idTexto = `opinion-${secuencia}`;
   const idTextoError = `${idTexto}-error`;
+  const idCuenta = `${idTexto}-cuenta`;
   const idImagenes = `${idTexto}-imagenes`;
   const idPistaImagenes = `${idImagenes}-pista`;
 
@@ -222,11 +240,54 @@ export function redactorDeComentario({
       name: 'texto',
       rows: 3,
       required: true,
+      // comentarios.yaml 1.11.0: el navegador no deja escribir (ni pegar) más.
+      maxlength: MAXIMO_DE_CARACTERES,
+      'aria-describedby': idCuenta,
       placeholder: '¿Qué te pareció? Cuéntalo para quien lo esté pensando.',
     },
   });
   const errorTexto = h('p', { clase: 'campo__error', atributos: { id: idTextoError } });
   errorTexto.hidden = true;
+
+  // La cuenta de caracteres se lee al llegar al campo (aria-describedby); el
+  // lector solo la anuncia sola cuando quedan pocos o ninguno, una vez por
+  // umbral, para no dictar cada pulsación.
+  const cuenta = h('p', {
+    clase: 'campo__pista redactor-comentario__cuenta',
+    atributos: { id: idCuenta },
+  });
+  const anuncioDeLargo = h('p', {
+    clase: 'solo-lectores',
+    atributos: { role: 'status', 'aria-live': 'polite' },
+  });
+  let umbralAnunciado = null;
+  const pintarCuenta = () => {
+    const usados = caracteresDe(texto.value);
+    const quedan = MAXIMO_DE_CARACTERES - usados;
+    cuenta.textContent =
+      quedan <= AVISO_DE_LARGO
+        ? `${usados} de ${MAXIMO_DE_CARACTERES} caracteres · te quedan ${Math.max(quedan, 0)}`
+        : `${usados} de ${MAXIMO_DE_CARACTERES} caracteres`;
+    cuenta.dataset.cerca = String(quedan <= AVISO_DE_LARGO);
+    let umbral = null;
+    if (quedan <= 0) {
+      umbral = 'lleno';
+    } else if (quedan <= AVISO_DE_LARGO) {
+      umbral = 'cerca';
+    }
+    if (umbral !== umbralAnunciado) {
+      umbralAnunciado = umbral;
+      if (umbral === 'lleno') {
+        anuncioDeLargo.textContent = `Llegaste al máximo de ${MAXIMO_DE_CARACTERES} caracteres.`;
+      } else if (umbral === 'cerca') {
+        anuncioDeLargo.textContent = `Te quedan ${quedan} caracteres.`;
+      } else {
+        anuncioDeLargo.textContent = '';
+      }
+    }
+  };
+  pintarCuenta();
+  texto.addEventListener('input', pintarCuenta);
 
   const zonaAviso = h('div', { clase: 'redactor-comentario__aviso', datos: { zona: 'aviso' } });
   zonaAviso.hidden = true;
@@ -457,6 +518,8 @@ export function redactorDeComentario({
           }),
           texto,
           errorTexto,
+          cuenta,
+          anuncioDeLargo,
         ],
       }),
       h('div', {
@@ -488,13 +551,13 @@ export function redactorDeComentario({
     errorTexto.textContent = mensaje;
     errorTexto.hidden = false;
     texto.setAttribute('aria-invalid', 'true');
-    texto.setAttribute('aria-describedby', idTextoError);
+    texto.setAttribute('aria-describedby', `${idTextoError} ${idCuenta}`);
     texto.focus();
   };
   const desmarcarTexto = () => {
     errorTexto.hidden = true;
     texto.removeAttribute('aria-invalid');
-    texto.removeAttribute('aria-describedby');
+    texto.setAttribute('aria-describedby', idCuenta);
   };
   texto.addEventListener('input', desmarcarTexto);
 
@@ -515,6 +578,7 @@ export function redactorDeComentario({
 
   const reiniciar = () => {
     texto.value = '';
+    pintarCuenta();
     for (const adjunto of adjuntos) {
       liberarUrl(adjunto.url);
     }
@@ -571,6 +635,13 @@ export function redactorDeComentario({
     const escrito = texto.value.trim();
     if (!escrito) {
       marcarTexto('Escribe tu opinión antes de publicarla.');
+      return;
+    }
+    const largo = caracteresDe(escrito);
+    if (largo > MAXIMO_DE_CARACTERES) {
+      marcarTexto(
+        `Tu opinión tiene ${largo} caracteres; puede tener como mucho ${MAXIMO_DE_CARACTERES}.`,
+      );
       return;
     }
     desmarcarTexto();

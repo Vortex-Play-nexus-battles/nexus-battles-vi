@@ -51,6 +51,19 @@ public class SeguridadConfig {
                                 .permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/v1/productos")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                // HU-PRD-009 (contrato 1.10.0): la biblioteca de recursos
+                                // graficos es de la administracion del catalogo; los bytes
+                                // de un recurso son publicos, porque son la imagen que ve la
+                                // tienda. Van antes de GET /{id}, que es publico y casaria
+                                // con /recursos si esta regla no mandara primero.
+                                .requestMatchers(HttpMethod.POST, "/api/v1/productos/recursos")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(HttpMethod.GET, "/api/v1/productos/recursos")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(HttpMethod.DELETE, "/api/v1/productos/recursos/{id}")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(HttpMethod.GET, "/api/v1/productos/recursos/{id}")
+                                .permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/v1/banners")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 .requestMatchers(HttpMethod.PUT, "/api/v1/banners/{id}")
@@ -59,11 +72,34 @@ public class SeguridadConfig {
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 .requestMatchers(HttpMethod.GET, "/api/v1/banners")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                // SA-18 (contrato 1.12.0): el historial de un banner
+                                // es de la administracion del catalogo, como el de un
+                                // producto. Sin la IP de quien actuo (eso es de la
+                                // bitacora central, solo del Super Administrador).
+                                .requestMatchers(HttpMethod.GET, "/api/v1/banners/{id}/historial")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 .requestMatchers(HttpMethod.GET, "/api/v1/banners/vigentes")
                                 .permitAll()
                                 .requestMatchers(HttpMethod.GET, "/api/v1/productos/estadisticas")
                                 .authenticated()
                                 .requestMatchers(HttpMethod.PATCH, "/api/v1/productos/{id}")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/productos/{id}/historial")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(
+                                        HttpMethod.POST,
+                                        "/api/v1/productos/{id}/reversiones")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/productos/{id}/diseno/versiones",
+                                        "/api/v1/productos/{id}/diseno/plantilla")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(
+                                        HttpMethod.POST,
+                                        "/api/v1/productos/{id}/diseno/importaciones")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 // B4 (contrato 1.4.0): suspender y reactivar son de la
                                 // administracion del catalogo (seccion 7.2.1).
@@ -86,6 +122,17 @@ public class SeguridadConfig {
                                 // es la que manda, y esta ruta no puede quedar
                                 // nunca a merced de un patron publico.
                                 .requestMatchers(HttpMethod.GET, "/api/v1/productos/alertas/cambios")
+                                .hasRole("SERVICIO")
+                                // SA-18 (contrato 1.12.0, §7.3.5): las operaciones
+                                // administrativas del catalogo las importa la
+                                // bitacora central (ms-cumplimiento) con su
+                                // credencial. Ningun usuario, tampoco un Super
+                                // Administrador: el las lee en la bitacora, donde son
+                                // inmutables. De los servicios, solo los de
+                                // productos.auditoria.lectores (lo mira el
+                                // controlador por el claim azp). Antes de la regla
+                                // publica de GET /{id}, como la de arriba.
+                                .requestMatchers(HttpMethod.GET, "/api/v1/productos/auditoria/operaciones")
                                 .hasRole("SERVICIO")
                                 // Lectura publica del catalogo: el detalle por id y, desde
                                 // R16 (contrato 1.2.0), el listado paginado de la coleccion

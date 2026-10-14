@@ -17,6 +17,7 @@ import { PREFIJO_WEB } from './vistas.js';
 import { simularCanal } from './canal-simulado.js';
 import { ESCENARIOS } from './escenarios-poblados.js';
 import { inyectarSesion } from './identidad.js';
+import { sinMovimiento } from './movimiento.js';
 
 const MEDIDAS = [
   { ancho: 1366, alto: 768 },
@@ -34,6 +35,7 @@ for (const id of PARTIDAS) {
       const contexto = await browser.newContext({ viewport: { width: ancho, height: alto }, baseURL });
       try {
         await inyectarSesion(contexto, escenario.sesion());
+        await sinMovimiento(contexto);
         const pagina = await contexto.newPage();
         for (const [patron, respuesta] of escenario.rutas) {
           await pagina.route(patron, (ruta) =>

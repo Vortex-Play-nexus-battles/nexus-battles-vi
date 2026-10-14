@@ -19,8 +19,130 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Administracion de cuentas (ms-identidad)
-  version: 1.5.0
+  version: 1.12.0
   description: |
+    ### Cambios en 1.12.0 (§7.3.4, las horas de la consola — SA-21, implementado, compatible)
+
+    - **Las fechas de la fila del directorio y de la ficha llevan su zona**
+      (`creadoEn`, `ultimoAcceso`, `suspendidoHasta`), como ya pedia su
+      `format: date-time` (RFC 3339). Antes salian como hora de pared del
+      servidor sin zona («2026-10-14T17:30:00»), y un navegador las leia como
+      hora suya: con el servidor en UTC, la consola en Colombia enseñaba cada
+      registro y cada ultima entrada cinco horas adelantados. Mismo campo y
+      mismo tipo; un cliente que leia ISO-8601 sigue leyendolo.
+    - **Exportacion**: `Registro` y `Última entrada` en hora de Colombia, y
+      la cabecera lo dice (`Registro (hora de Colombia)`, `Última entrada
+      (hora de Colombia)`); el nombre del archivo, tambien.
+    - **Suspender** (`PUT /api/v1/admin/usuarios/{usuarioId}/suspender`):
+      `suspendidoHasta` se lee con su zona (la consola manda el instante). Una
+      hora sin zona se sigue leyendo como hora del servidor.
+
+    ### Cambios en 1.11.0 (§7.3.4, alertas de comportamiento sospechoso — SA-20, implementado, aditivo)
+
+    - **`GET /api/v1/admin/jugadores/bloqueos`.** La señal 1 de «comportamiento
+      sospechoso» que decidio el PO (D-45, 2026-10-06): las cuentas bloqueadas
+      por intentos fallidos de inicio de sesion desde un dia (por omision, la
+      ultima semana), la de bloqueo mas reciente primero, con el total real y
+      la lista cortada en `limite` (100 como maximo). Usa la regla de bloqueo
+      que ya existe; no introduce ningun numero nuevo. Identifica cuentas
+      porque es una alerta para actuar, no una estadistica: mismo permiso que
+      el directorio y sin correo. La marca del ultimo bloqueo (V9) no se borra
+      al volver a entrar; los bloqueos anteriores a ella no se inventan.
+
+    ### Cambios en 1.10.0 (§7.3.4, modificar el inventario de una cuenta — SA-10, implementado, aditivo)
+
+    - **`POST /api/v1/admin/usuarios/{usuarioId}/inventario/entregas`.** La
+      accion «ver y modificar inventario del usuario» de §7.3.4: entregar
+      unidades de un producto del catalogo al inventario de una cuenta (una
+      compensacion, un error de soporte). Administrador o Super
+      Administrador (`GESTIONAR_CUENTAS`), nunca sobre una cuenta de rol
+      igual o superior (7.3.1, la regla de editar el perfil). ms-identidad
+      la pide a inventario (`POST /api/v1/inventario/entregas`, origen
+      `ADMINISTRACION`, inventario.yaml 1.8.0) con el token de quien actua
+      —inventario anota al administrador como quien la pidio— y la deja en
+      la bitacora central con el motivo y la IP (§7.3.5). Idempotente por
+      `Idempotency-Key`: repetir con la misma clave devuelve la entrega
+      original (200) sin duplicar elementos ni la entrada de auditoria (la
+      clave viaja como `referencia`, ms-cumplimiento-auditoria 1.3.0). Si la
+      bitacora no responde, 503 `auditoria-no-disponible`: la entrega ya se
+      hizo y repetir con la misma clave termina el registro. La cuenta
+      recibe un aviso la primera vez. Todos los rechazos en problem details.
+
+    ### Cambios en 1.9.0 (§7.3.2 y Tabla 24, titulares para la consola de moderacion — SA-4, implementado, aditivo)
+
+    - **`GET /api/v1/admin/titulares`.** Quien es cada cuenta, con lo
+      minimo para reconocerla (`uid`, apodo, estado y rol; sin correo ni
+      nombre): por `uids` (hasta 100, para nombrar de una vez las filas de
+      una pagina de sanciones o apelaciones de `moderacion-sanciones`) o por
+      `buscar` (parte del apodo o un `uid` completo; las 10 primeras). La
+      leen los tres roles de moderacion (`EMITIR_ADVERTENCIAS`): el
+      Moderador emite advertencias y suspensiones temporales y no gestiona
+      cuentas, asi que el directorio no le sirve para encontrar a quien
+      sanciona.
+
+    ### Cambios en 1.8.0 (§7.3.2 y §7.3.7, causal de la sancion — SA-4, implementado, aditivo)
+
+    - **Causal y politica al suspender y al banear.** `PUT
+      .../suspender` y el cuerpo opcional de `PUT .../banear` admiten
+      `causal` (una de las ocho causales de §7.3.2, el enumerado `Causal` de
+      `moderacion-sanciones-admin.yaml` 1.4.0) y `politica` (la politica
+      violada, §7.3.7). Las dos son opcionales y viajan tal cual a `POST
+      /api/v1/sanciones`; moderacion las guarda con la sancion y las lleva al
+      aviso y al correo del sancionado. Una causal que no es de las ocho es
+      `400` aqui, sin llegar a moderacion. `motivo` sigue siendo el hecho
+      concreto.
+
+    ### Cambios en 1.7.0 (§7.3.4, ficha y directorio — SA-3, implementado, aditivo)
+
+    - **Filtro por historial de sanciones (7.3.4, RF-USR-009).** `GET
+      /admin/jugadores` y su exportacion admiten `historialSanciones`: `CON`
+      (cuentas a las que se les ha emitido alguna sancion, aunque se revirtiera)
+      o `SIN`. Cada fila de `EntradaDeDirectorio` trae `sancionesRegistradas`.
+      Sale de un resumen que fija moderacion-sanciones, dueño de las
+      sanciones, por la ruta interna nueva `PUT
+      /internal/usuarios/{uid}/historial-sanciones` (total y fecha de la
+      ultima, valores absolutos, idempotente): el directorio filtra y pagina en
+      su base sin consultar otro servicio por cada fila.
+    - **Cuentas de pruebas.** `ocultarPruebas` excluye por omision solo las del
+      dominio reservado `nexus.test`: la lista de prefijos de apodo nace vacia.
+      Un apodo lo elige la persona y no se esconde a nadie por parecerse a una
+      cuenta de pruebas.
+
+    ### Cambios en 1.6.0 (7.3.1, 7.3.5 y 7.3.9 — implementado, aditivo)
+
+    - **Jerarquia (7.3.1).** La matriz RBAC dice QUE puede hacer cada rol; ahora
+      tambien se mira SOBRE QUIEN: suspender, banear y reactivar solo sobre un
+      rol estrictamente inferior; editar el perfil y restablecer la contrasena
+      o el segundo factor sobre un rol inferior, o un Super Administrador sobre
+      otro. Si no, **403** problem details `.../errors/jerarquia-insuficiente`
+      (antes un Administrador podia banear a un Super Administrador, incluso al
+      ultimo). Reactivar es de Administrador o Super Administrador: la Tabla 24
+      deja al Moderador solo la suspension temporal.
+    - **Auditoria fail-closed (7.3.5).** Las acciones que exigen quedar en el
+      registro de auditoria y no pueden (ms-cumplimiento no responde) responden
+      **503** `.../errors/auditoria-no-disponible` con `Retry-After` y no
+      aplican nada. Antes salia un 500 sin cuerpo.
+    - La cuenta afectada de cada registro de auditoria es su `uid` (antes la
+      clave interna): es la misma clave con que se reune el historial
+      administrativo de la cuenta. Las cuentas sin `uid` siguen con la clave.
+    - Nueva `POST /admin/usuarios/{usuarioId}/segundo-factor/restablecimiento`
+      (7.3.9): un Super Administrador quita el segundo factor de otra cuenta
+      que perdio su aplicacion y sus codigos de recuperacion. Motivo
+      obligatorio, nunca sobre la propia cuenta, cierra las sesiones abiertas,
+      queda auditado y la cuenta recibe un aviso. Si el segundo factor es
+      obligatorio para su rol, el siguiente inicio de sesion le pide enrolarse.
+    - `POST /admin/cuentas`: `password` deja de ser obligatoria y se ignora
+      (nunca se uso: la cuenta nace `INACTIVO` y la persona fija su propia
+      contrasena con el codigo de activacion que le llega por correo; el
+      segundo factor lo enrola en su primer inicio de sesion). `rolNombre`
+      documenta lo que el servicio acepta, `MODERADOR` o `ADMINISTRADOR`. El
+      201 devuelve `CuentaAdministrativaCreada` en vez de la entidad
+      serializada, que llevaba el resumen de la clave y los contadores
+      internos de la cuenta. El 400 sale en problem details `datos-invalidos`.
+    - Nueva `GET /internal/usuarios/{uid}/rol`: el rol vigente de una cuenta,
+      sin datos de contacto, para que moderacion-sanciones aplique la misma
+      jerarquia en `POST /sanciones`. Solo `azp` `moderacion-sanciones`.
+
     ### Cambios en 1.5.0 (HU-USR-009 #562 — implementado, aditivo)
 
     - `buscar` (directorio y exportacion) encuentra ademas la cuenta por su
@@ -186,6 +308,7 @@ paths:
         - $ref: '#/components/parameters/FiltroEstado'
         - $ref: '#/components/parameters/RegistradoDesde'
         - $ref: '#/components/parameters/RegistradoHasta'
+        - $ref: '#/components/parameters/HistorialSanciones'
         - name: ocultarPruebas
           in: query
           required: false
@@ -196,8 +319,8 @@ paths:
             dominio reservado para pruebas o si su apodo empieza por un prefijo
             de pruebas. Las dos listas son configuracion del servicio, no de
             este contrato: `IDENTIDAD_DIRECTORIO_PRUEBAS_DOMINIOS` (por
-            omision `nexus.test`) e `IDENTIDAD_DIRECTORIO_PRUEBAS_PREFIJOS` (por
-            omision `qa_,smoke_,canario_`), sin distinguir mayusculas. Se
+            omision `nexus.test`) e `IDENTIDAD_DIRECTORIO_PRUEBAS_PREFIJOS` (desde
+            1.7.0, vacia por omision), sin distinguir mayusculas. Se
             excluyen en la consulta, antes de paginar: `total` y
             `totalPaginas` cuentan solo las que quedan. No borra ni marca nada.
           schema:
@@ -244,8 +367,9 @@ paths:
         Columnas, las que el directorio muestra y ninguna mas: `Apodo`,
         `Correo`, `Rol`, `Estado` (`BLOQUEADA` si la cuenta tiene ahora un
         bloqueo temporal por intentos fallidos, como en la tabla), `Registro`
-        y `Última entrada` (fecha y hora `aaaa-mm-dd hh:mm` del reloj del
-        servicio; vacia = sin dato o, en la ultima entrada, nunca ha entrado).
+        y `Última entrada` (1.12.0: `Registro (hora de Colombia)` y `Última
+        entrada (hora de Colombia)`, fecha y hora `aaaa-mm-dd hh:mm` en hora de
+        Colombia; vacia = sin dato o, en la ultima entrada, nunca ha entrado).
         Sin identificadores internos ni credenciales.
 
         Formato: UTF-8 con marca de orden de bytes (para que una hoja de
@@ -277,6 +401,7 @@ paths:
         - $ref: '#/components/parameters/FiltroEstado'
         - $ref: '#/components/parameters/RegistradoDesde'
         - $ref: '#/components/parameters/RegistradoHasta'
+        - $ref: '#/components/parameters/HistorialSanciones'
       responses:
         '200':
           description: El listado en CSV.
@@ -345,6 +470,110 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/IndicadoresDeCuentas'
+        '400':
+          $ref: '#/components/responses/ConsultaInvalida'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+
+  /api/v1/admin/jugadores/bloqueos:
+    get:
+      tags: [administracion]
+      operationId: cuentasBloqueadasPorIntentos
+      summary: Cuentas bloqueadas por intentos fallidos en un periodo (SA-20, 1.11.0)
+      description: |
+        §7.3.4 «Alertas de comportamiento sospechoso», señal 1 de D-45: las
+        cuentas que la regla de intentos fallidos bloqueo desde `desde` (por
+        omision, los ultimos `IDENTIDAD_BLOQUEOS_DIAS_POR_OMISION` dias, 7)
+        hasta ahora. Una cuenta bloqueada dos veces sale una vez, con su ultimo
+        bloqueo. `vigente` dice si sigue bloqueada en este momento y
+        `bloqueadaHasta`, hasta cuando.
+
+        Un `desde` futuro, mal escrito o un periodo de mas de
+        `IDENTIDAD_INDICADORES_DIAS_MAXIMOS` dias responde 400, igual que un
+        `limite` fuera de 1..100. Mismo permiso que el directorio. Solo lee.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: Primer dia del periodo (inclusive), `aaaa-mm-dd`.
+          schema:
+            type: string
+            format: date
+        - name: limite
+          in: query
+          required: false
+          description: Cuantas cuentas devolver como mucho (las de bloqueo mas reciente).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+        - $ref: '#/components/parameters/OcultarPruebas'
+      responses:
+        '200':
+          description: Las cuentas bloqueadas en el periodo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CuentasBloqueadasPorIntentos'
+        '400':
+          $ref: '#/components/responses/ConsultaInvalida'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+
+  /api/v1/admin/titulares:
+    get:
+      tags: [administracion]
+      operationId: consultarTitularesDeCuentas
+      summary: Quien es cada cuenta, para la consola de moderacion
+      description: |
+        1.9.0 (SA-4). Lo minimo para reconocer a la persona en la consola de
+        sanciones y de moderacion: `uid`, apodo, estado y rol. Sin correo, sin
+        nombre y sin fechas, que son de la ficha (`GESTIONAR_CUENTAS`). Una
+        sola de las dos formas por consulta:
+
+        - `uids`: hasta 100 `uid` separados por comas; solo las cuentas que
+          existan, ordenadas por apodo. Para nombrar de una vez a los titulares
+          de una pagina de otro servicio.
+        - `buscar`: parte del apodo (sin distinguir mayusculas; `%` y `_` se
+          buscan tal cual) o un `uid` completo; las 10 primeras por apodo.
+
+        Permiso `EMITIR_ADVERTENCIAS`: Moderador, Administrador y Super
+        Administrador (Tabla 24). Sin cache.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - name: uids
+          in: query
+          required: false
+          description: Hasta 100 `uid` separados por comas. Un `uid` mal escrito o mas de 100, `400`.
+          schema:
+            type: string
+          example: 11111111-2222-3333-4444-555555555555,66666666-7777-8888-9999-000000000000
+        - name: buscar
+          in: query
+          required: false
+          description: Al menos 2 caracteres del apodo, o un `uid` completo.
+          schema:
+            type: string
+            minLength: 2
+      responses:
+        '200':
+          description: Las cuentas encontradas (lista vacia si ninguna coincide).
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              description: no-store
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 100
+                items:
+                  $ref: '#/components/schemas/TitularDeCuenta'
         '400':
           $ref: '#/components/responses/ConsultaInvalida'
         '403':
@@ -477,11 +706,11 @@ paths:
         '400':
           $ref: '#/components/responses/InvalidoTexto'
         '403':
-          $ref: '#/components/responses/Prohibido'
+          $ref: '#/components/responses/ProhibidoOJerarquia'
         '404':
           $ref: '#/components/responses/NoEncontradoTexto'
         '503':
-          $ref: '#/components/responses/ModeracionNoDisponible'
+          $ref: '#/components/responses/ModeracionOAuditoriaNoDisponible'
 
   /api/v1/admin/usuarios/{usuarioId}/suspender:
     put:
@@ -513,23 +742,33 @@ paths:
                 suspendidoHasta:
                   type: string
                   format: date-time
-                  description: Fin de la suspension; debe ser futuro.
+                  description: |
+                    Fin de la suspension; debe ser futuro. 1.12.0: con su zona
+                    (`2026-10-15T15:00:00Z`, `2026-10-15T10:00:00-05:00`) es
+                    ese instante; sin zona se lee como hora del servidor.
                 motivo:
                   type: string
-                  description: Causal documentada (7.3.2 «Causales de sancion»). Opcional por compatibilidad.
+                  maxLength: 1000
+                  description: El hecho concreto que motiva la sancion. Opcional por compatibilidad.
+                causal:
+                  $ref: '#/components/schemas/CausalDeSancion'
+                politica:
+                  type: string
+                  maxLength: 200
+                  description: 1.8.0 — la politica violada (§7.3.7). Opcional.
       responses:
         '204':
           description: Cuenta suspendida.
         '400':
           $ref: '#/components/responses/InvalidoTexto'
         '403':
-          $ref: '#/components/responses/Prohibido'
+          $ref: '#/components/responses/ProhibidoOJerarquia'
         '404':
           $ref: '#/components/responses/NoEncontradoTexto'
         '409':
           $ref: '#/components/responses/ConflictoTexto'
         '503':
-          $ref: '#/components/responses/ModeracionNoDisponible'
+          $ref: '#/components/responses/ModeracionOAuditoriaNoDisponible'
 
   /api/v1/admin/usuarios/{usuarioId}/banear:
     put:
@@ -555,27 +794,36 @@ paths:
                 motivo:
                   type: string
                   maxLength: 1000
-                  description: Causal documentada (7.3.2 «Causales de sancion»).
+                  description: El hecho concreto que motiva el baneo.
+                causal:
+                  $ref: '#/components/schemas/CausalDeSancion'
+                politica:
+                  type: string
+                  maxLength: 200
+                  description: 1.8.0 — la politica violada (§7.3.7). Opcional.
       responses:
         '204':
           description: Cuenta baneada.
         '400':
           $ref: '#/components/responses/InvalidoTexto'
         '403':
-          $ref: '#/components/responses/Prohibido'
+          $ref: '#/components/responses/ProhibidoOJerarquia'
         '404':
           $ref: '#/components/responses/NoEncontradoTexto'
         '409':
           $ref: '#/components/responses/ConflictoTexto'
         '503':
-          $ref: '#/components/responses/ModeracionNoDisponible'
+          $ref: '#/components/responses/ModeracionOAuditoriaNoDisponible'
 
   /api/v1/admin/usuarios/{usuarioId}/reactivar:
     put:
       tags: [administracion]
       operationId: reactivarCuenta
-      summary: Levanta la suspension o el baneo de una cuenta
+      summary: Levanta la suspension de una cuenta
       description: |
+        1.6.0: solo Administrador o Super Administrador (403
+        `jerarquia-insuficiente` para un Moderador), y sobre un rol inferior.
+
         Desde B2: consulta a moderacion-sanciones la sancion activa de la
         cuenta (credencial de servicio) y, si la hay, la levanta con
         `POST /sanciones/{sancionId}/levantamiento` y el token de quien actua
@@ -592,11 +840,11 @@ paths:
         '400':
           $ref: '#/components/responses/InvalidoTexto'
         '403':
-          $ref: '#/components/responses/Prohibido'
+          $ref: '#/components/responses/ProhibidoOJerarquia'
         '404':
           $ref: '#/components/responses/NoEncontradoTexto'
         '503':
-          $ref: '#/components/responses/ModeracionNoDisponible'
+          $ref: '#/components/responses/ModeracionOAuditoriaNoDisponible'
 
   /api/v1/admin/usuarios/{usuarioId}/restablecer-password:
     post:
@@ -611,9 +859,160 @@ paths:
         '204':
           description: Codigo emitido y correo encolado.
         '403':
-          $ref: '#/components/responses/Prohibido'
+          $ref: '#/components/responses/ProhibidoOJerarquia'
         '404':
           $ref: '#/components/responses/NoEncontradoTexto'
+        '503':
+          $ref: '#/components/responses/AuditoriaNoDisponible'
+
+  /api/v1/admin/usuarios/{usuarioId}/segundo-factor/restablecimiento:
+    post:
+      tags: [administracion]
+      operationId: restablecerSegundoFactorAdministrado
+      summary: Quita el segundo factor de otra cuenta (solo Super Administrador, 7.3.9)
+      description: |
+        1.6.0. Para la persona que perdio su aplicacion de autenticacion y sus
+        codigos de recuperacion. Exige `RESTABLECER_SEGUNDO_FACTOR` (solo
+        Super Administrador en la matriz de `rbac.yaml`) y nunca se aplica a la
+        propia cuenta: esa se gestiona desde Mi cuenta con los codigos de
+        recuperacion (403 `jerarquia-insuficiente`).
+
+        Borra el secreto, los codigos de recuperacion y los desafios
+        pendientes; sube la version de token (las sesiones abiertas dejan de
+        valer); deja en la auditoria quien, a quien, el motivo y si tenia el
+        segundo factor activo (fail-closed: sin auditoria no se aplica, 503); y
+        la cuenta recibe un aviso. Si el segundo factor es obligatorio para su
+        rol, su siguiente inicio de sesion le pide enrolarse de nuevo.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/UsuarioId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                motivo:
+                  type: string
+                  minLength: 5
+                  maxLength: 500
+                  description: Por que se restablece; queda en la auditoria.
+      responses:
+        '204':
+          description: Segundo factor restablecido.
+        '400':
+          $ref: '#/components/responses/InvalidoTexto'
+        '403':
+          $ref: '#/components/responses/ProhibidoOJerarquia'
+        '404':
+          $ref: '#/components/responses/NoEncontradoTexto'
+        '503':
+          $ref: '#/components/responses/AuditoriaNoDisponible'
+
+  /api/v1/admin/usuarios/{usuarioId}/inventario/entregas:
+    post:
+      tags: [administracion]
+      operationId: entregarProductosAUnaCuenta
+      summary: Entrega unidades de un producto al inventario de una cuenta (7.3.4)
+      description: |
+        1.10.0 (SA-10). Exige `GESTIONAR_CUENTAS` (Administrador y Super
+        Administrador en la matriz de `rbac.yaml`) y que la cuenta tenga un
+        rol estrictamente inferior al de quien actua, o que un Super
+        Administrador actue sobre otro (403 `jerarquia-insuficiente`).
+
+        Orden: primero inventario (idempotente por clave), despues la
+        bitacora central (fail-closed). Un producto inexistente es 422 y uno
+        suspendido 409, con el detalle de inventario; si inventario no
+        responde, 503 `inventario-no-disponible` y no se entrego nada.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/UsuarioId'
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: |
+            La clave de la operacion, de 8 a 64 caracteres sin espacios
+            (`[A-Za-z0-9._:-]`). El panel la genera al abrir el formulario y
+            la repite si tiene que reintentar.
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntregaAdministrativaRequest'
+      responses:
+        '201':
+          description: Entrega hecha por esta peticion y registrada en la auditoria.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntregaAdministrativa'
+        '200':
+          description: |
+            La misma clave ya se proceso: la entrega original, sin duplicar
+            nada (`nueva` falso).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntregaAdministrativa'
+        '400':
+          description: |
+            Sin clave o con una clave fuera de formato, o cuerpo invalido
+            (producto vacio, cantidad fuera de 1..20, motivo de menos de 3 o
+            mas de 500 caracteres). `type` `.../errors/datos-invalidos`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          $ref: '#/components/responses/ProhibidoOJerarquia'
+        '404':
+          description: No existe la cuenta. `type` `.../errors/cuenta-no-encontrada`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: |
+            Inventario no lo acepto: el producto esta suspendido o la clave ya
+            se uso con otra entrega (`type` `.../errors/entrega-rechazada`); o
+            la cuenta es anterior al `uid` y no tiene inventario (`type`
+            `.../errors/cuenta-sin-inventario`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: |
+            El producto no existe en el catalogo o no es de un tipo que el
+            inventario guarde. `type` `.../errors/entrega-rechazada`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: |
+            Inventario no respondio (`type` `.../errors/inventario-no-disponible`,
+            no se entrego nada) o la bitacora no respondio despues de entregar
+            (`type` `.../errors/auditoria-no-disponible`): repetir con la misma
+            clave no duplica la entrega y completa el registro.
+          headers:
+            Retry-After:
+              description: Segundos sugeridos antes de reintentar (30).
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 
   /api/v1/admin/cuentas:
     post:
@@ -628,7 +1027,7 @@ paths:
           multipart/form-data:
             schema:
               type: object
-              required: [nombres, apellidos, email, password, apodo, rolNombre]
+              required: [nombres, apellidos, email, apodo, rolNombre]
               properties:
                 nombres:
                   type: string
@@ -640,28 +1039,34 @@ paths:
                 password:
                   type: string
                   format: password
+                  deprecated: true
+                  description: |
+                    1.6.0: se ignora. La cuenta nace `INACTIVO` y la persona
+                    fija su contrasena con el codigo de activacion que recibe
+                    por correo.
                 apodo:
                   type: string
                 rolNombre:
                   type: string
-                  enum: [MODERADOR, ADMINISTRADOR, SUPER_ADMINISTRADOR]
+                  enum: [MODERADOR, ADMINISTRADOR]
                 avatar:
                   type: string
                   format: binary
       responses:
         '201':
-          description: Cuenta creada (entidad serializada, como el registro).
+          description: |
+            Cuenta creada en `INACTIVO`; el correo de activacion sale al
+            confirmarse el alta. Queda en la auditoria (fail-closed).
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: true
+                $ref: '#/components/schemas/CuentaAdministrativaCreada'
         '400':
-          $ref: '#/components/responses/InvalidoTexto'
+          $ref: '#/components/responses/InvalidoProblema'
         '403':
           $ref: '#/components/responses/Prohibido'
         '503':
-          $ref: '#/components/responses/ModeracionNoDisponible'
+          $ref: '#/components/responses/ModeracionOAuditoriaNoDisponible'
 
   /api/v1/internal/usuarios/{uid}/estado-sancion:
     put:
@@ -788,6 +1193,117 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
 
+  /api/v1/internal/usuarios/{uid}/historial-sanciones:
+    put:
+      tags: [interno]
+      operationId: fijarHistorialDeSanciones
+      summary: El resumen del historial de sanciones de una cuenta (1.7.0)
+      description: |
+        Solo token de servicio con `azp` `moderacion-sanciones`, dueño de las
+        sanciones. Fija cuantas se le han emitido a la cuenta y cuando fue la
+        ultima, con valores absolutos: repetir la llamada o reconciliar no
+        cuenta dos veces. Lo manda al emitir una sancion y en su reconciliacion
+        periodica. Es lo que deja filtrar el directorio por historial de
+        sanciones (§7.3.4) sin consultar otro servicio por cada fila.
+      security:
+        - tokenDeServicio: []
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HistorialDeSanciones'
+      responses:
+        '200':
+          description: Lo que quedo guardado.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [uid, total]
+                properties:
+                  uid:
+                    type: string
+                    format: uuid
+                  total:
+                    type: integer
+                    minimum: 0
+                  ultimaEn:
+                    type: [string, 'null']
+                    format: date-time
+        '400':
+          description: |
+            `total` falta o es negativo, o hay sanciones y falta `ultimaEn`.
+            `type` `.../errors/datos-invalidos`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+        '404':
+          description: |
+            No existe una cuenta con ese uid (o el uid no es un UUID).
+            `type` `.../errors/cuenta-no-encontrada`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/internal/usuarios/{uid}/rol:
+    get:
+      tags: [interno]
+      operationId: rolDeUsuario
+      summary: El rol vigente de una cuenta, para la jerarquia de 7.3.1 (1.6.0)
+      description: |
+        Solo token de servicio con `azp` `moderacion-sanciones`: antes de
+        emitir, levantar o resolver una sancion comprueba que la cuenta
+        afectada tenga un rol inferior al de quien actua. Sin datos de
+        contacto: para decidir no hace falta el correo de nadie.
+      security:
+        - tokenDeServicio: []
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Rol y estado de la cuenta.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [uid, rol, estado]
+                properties:
+                  uid:
+                    type: string
+                    format: uuid
+                  rol:
+                    type: string
+                    enum: [JUGADOR, MODERADOR, ADMINISTRADOR, SUPER_ADMINISTRADOR]
+                  estado:
+                    type: string
+        '403':
+          $ref: '#/components/responses/Prohibido'
+        '404':
+          description: |
+            No existe una cuenta con ese uid (o el uid no es un UUID).
+            `type` `.../errors/cuenta-no-encontrada`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
 components:
   securitySchemes:
     tokenDeUsuario:
@@ -867,10 +1383,59 @@ components:
       schema:
         type: string
         format: date
+    HistorialSanciones:
+      name: historialSanciones
+      in: query
+      required: false
+      description: |
+        1.7.0 — `CON`: solo las cuentas a las que se les ha emitido alguna
+        sancion (tambien las revertidas: es historial); `SIN`: solo las que
+        nunca. Sin distinguir mayusculas. Otro valor es 400 `datos-invalidos`.
+      schema:
+        type: string
+        enum: [CON, SIN]
 
   responses:
     Prohibido:
       description: Sin token valido o sin permiso segun la matriz RBAC.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    ProhibidoOJerarquia:
+      description: |
+        Sin token valido o sin permiso segun la matriz RBAC; o, desde 1.6.0,
+        con permiso pero sobre una cuenta de rol igual o superior al de quien
+        actua: `type` `.../errors/jerarquia-insuficiente` (7.3.1).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    AuditoriaNoDisponible:
+      description: |
+        1.6.0 — la accion exige quedar en el registro de auditoria y
+        ms-cumplimiento no respondio. `type` `.../errors/auditoria-no-disponible`.
+        No se aplico nada.
+      headers:
+        Retry-After:
+          description: Segundos sugeridos antes de reintentar (30).
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    ModeracionOAuditoriaNoDisponible:
+      description: |
+        moderacion-sanciones no respondio (`.../errors/moderacion-no-disponible`,
+        1.1.0) o, desde 1.6.0, la accion exige quedar en la auditoria y
+        ms-cumplimiento no respondio (`.../errors/auditoria-no-disponible`).
+        En los dos casos no se aplico nada.
+      headers:
+        Retry-After:
+          description: Segundos sugeridos antes de reintentar (30).
+          schema:
+            type: integer
       content:
         application/problem+json:
           schema:
@@ -941,6 +1506,79 @@ components:
             $ref: '#/components/schemas/ProblemDetail'
 
   schemas:
+    EntregaAdministrativaRequest:
+      type: object
+      description: 1.10.0 — que producto, cuantas unidades y por que (queda en la auditoria).
+      required: [productoId, cantidad, motivo]
+      properties:
+        productoId:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Identificador del producto en el catalogo (productos.yaml).
+        cantidad:
+          type: integer
+          minimum: 1
+          maximum: 20
+        motivo:
+          type: string
+          minLength: 3
+          maxLength: 500
+
+    ElementoEntregado:
+      type: object
+      description: Lo que ms-identidad devuelve de cada `ElementoInventario` entregado.
+      properties:
+        id:
+          type: string
+        productoId:
+          type: string
+        tipo:
+          type: string
+        nombrePropio:
+          type: string
+
+    EntregaAdministrativa:
+      type: object
+      description: 1.10.0 — la entrega de inventario, con sus elementos y si la hizo esta peticion.
+      required: [entregaId, uid, productoId, cantidad, elementos, nueva]
+      properties:
+        entregaId:
+          type: string
+        uid:
+          type: string
+          format: uuid
+        productoId:
+          type: string
+        cantidad:
+          type: integer
+          description: Unidades entregadas (elementos creados).
+        elementos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ElementoEntregado'
+        entregadaEn:
+          type: [string, 'null']
+          format: date-time
+        nueva:
+          type: boolean
+          description: Falso cuando la clave ya se habia procesado (200).
+
+    CausalDeSancion:
+      type: string
+      description: >-
+        1.8.0 — una de las ocho causales de §7.3.2, como las nombra
+        `moderacion-sanciones-admin.yaml` 1.4.0 (`Causal`). Opcional.
+      enum:
+        - LENGUAJE_OFENSIVO
+        - ACOSO
+        - FRAUDE
+        - SOFTWARE_NO_AUTORIZADO
+        - SUPLANTACION_DE_IDENTIDAD
+        - VIOLACION_DE_PRIVACIDAD
+        - INCUMPLIMIENTO_DE_TERMINOS
+        - TERMINACION_DE_RELACION_LEGAL
+
     PaginaDeDirectorio:
       type: object
       required: [contenido, pagina, tamano, total, totalPaginas]
@@ -959,6 +1597,25 @@ components:
         totalPaginas:
           type: integer
 
+    TitularDeCuenta:
+      type: object
+      description: |
+        1.9.0 — a quien pertenece una sancion, una apelacion o un reporte. Lo
+        que ve cualquier jugador (el apodo) mas el estado y el rol; nada de
+        datos personales.
+      required: [uid, apodo, estado]
+      properties:
+        uid:
+          type: string
+          format: uuid
+        apodo:
+          type: string
+        estado:
+          type: string
+          description: ACTIVO, PENDIENTE_VERIFICACION, INACTIVO, SUSPENDIDO o BANEADO.
+        rol:
+          type: [string, 'null']
+          description: JUGADOR, MODERADOR, ADMINISTRADOR o SUPER_ADMINISTRADOR.
     EntradaDeDirectorio:
       type: object
       required: [id, apodo, email, estado, bloqueada]
@@ -994,6 +1651,28 @@ components:
         bloqueada:
           type: boolean
           description: Bloqueo temporal por intentos fallidos de login (no es una sancion).
+        sancionesRegistradas:
+          type: integer
+          minimum: 0
+          description: |
+            1.7.0 — cuantas sanciones se le han emitido a la cuenta, segun el
+            resumen que fija moderacion-sanciones (las revertidas tambien).
+
+    HistorialDeSanciones:
+      type: object
+      description: |
+        1.7.0 — el resumen del historial de sanciones de una cuenta que fija
+        moderacion-sanciones.
+      required: [total]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+          description: Cuantas sanciones se le han emitido (las revertidas tambien).
+        ultimaEn:
+          type: [string, 'null']
+          format: date-time
+          description: Cuando se emitio la mas reciente. Obligatoria si `total` es mayor que 0.
 
     IndicadoresDeCuentas:
       type: object
@@ -1044,6 +1723,62 @@ components:
           type: string
           format: date-time
           description: Cuando se contaron.
+
+    CuentasBloqueadasPorIntentos:
+      type: object
+      description: 1.11.0 — `GET /admin/jugadores/bloqueos` (SA-20, D-45 señal 1).
+      required: [desde, total, cuentas, ocultarPruebas, calculadoEn]
+      properties:
+        desde:
+          type: string
+          format: date
+          description: Primer dia del periodo (inclusive); llega hasta ahora.
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Cuentas bloqueadas en el periodo, aunque la lista se corte en `limite`.
+        cuentas:
+          type: array
+          description: La de bloqueo mas reciente primero.
+          items:
+            $ref: '#/components/schemas/CuentaBloqueadaPorIntentos'
+        ocultarPruebas:
+          type: boolean
+          description: Si se dejaron fuera las cuentas de pruebas automaticas.
+        calculadoEn:
+          type: string
+          format: date-time
+          description: Cuando se consulto.
+
+    CuentaBloqueadaPorIntentos:
+      type: object
+      description: |
+        1.11.0 — una cuenta bloqueada por intentos fallidos. Sin correo ni nada
+        que sirva para entrar. Las horas llevan su zona.
+      required: [uid, apodo, rol, estado, bloqueadaEn, vigente, bloqueadaHasta]
+      properties:
+        uid:
+          type: string
+          format: uuid
+        apodo:
+          type: string
+        rol:
+          type: [string, 'null']
+        estado:
+          type: string
+          description: Estado de la cuenta; el bloqueo por intentos no lo cambia.
+        bloqueadaEn:
+          type: string
+          format: date-time
+          description: Cuando empezo su ultimo bloqueo.
+        vigente:
+          type: boolean
+          description: Si sigue bloqueada ahora mismo.
+        bloqueadaHasta:
+          type: [string, 'null']
+          format: date-time
+          description: Hasta cuando, si sigue bloqueada; nulo si ya puede entrar.
 
     RegistrosPorDia:
       type: object
@@ -1159,6 +1894,29 @@ components:
             ms-cumplimiento; `false` si la bitacora no respondio (el evento
             quedo solo en la bitacora JSON del servicio).
 
+    CuentaAdministrativaCreada:
+      type: object
+      description: 1.6.0 — lo que la consola muestra al confirmar el alta.
+      required: [id, apodo, email, rol, estado]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Clave interna (la de `/admin/usuarios/{usuarioId}`).
+        uid:
+          type: [string, 'null']
+          format: uuid
+        apodo:
+          type: string
+        email:
+          type: string
+          format: email
+        rol:
+          type: string
+          enum: [MODERADOR, ADMINISTRADOR]
+        estado:
+          type: string
+          description: '`INACTIVO` hasta que la persona active la cuenta.'
     ProyeccionDeSancion:
       type: object
       required: [estado, sancionId]

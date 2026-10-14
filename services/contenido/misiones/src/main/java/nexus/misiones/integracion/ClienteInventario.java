@@ -341,7 +341,7 @@ public class ClienteInventario implements InventarioDeHeroes {
     record SolicitudDeEntrega(String uid, String origen, String referencia, List<ProductoEntregado> productos) {
     }
 
-    /** Solo lo que misiones lee de la entrega: lo que el jugador ya tenia (inventario 1.7.0; ausente antes). */
+    /** Solo lo que misiones lee de la entrega: lo que el jugador ya tenia (inventario 1.9.0; ausente antes). */
     @JsonIgnoreProperties(ignoreUnknown = true)
     record EntregaRealizada(List<String> yaTenia) {
     }

@@ -1,0 +1,15 @@
+{
+  "cuadros": 439,
+  "duracionMs": 7933,
+  "fpsMedio": 55,
+  "frameP50": 16.7,
+  "frameP95": 33.3,
+  "frameMax": 83.3,
+  "cuadrosLentos": 12,
+  "longTasks": 2,
+  "longTasksMs": 115,
+  "cls": 0,
+  "heapMB": 9.5,
+  "animacionesVivas": 9,
+  "figurasConGolpe": 0
+}

@@ -65,6 +65,27 @@ describe('montarContadorDeCabecera', () => {
     );
   });
 
+  test('MOTION-3 · la campana pulsa una vez cuando suben las no leídas, nunca al bajar', () => {
+    const raiz = cabecera();
+    const fabrica = fabricaFalsa();
+    const animacion = { finished: Promise.resolve(), cancel() {}, playState: 'finished' };
+    Element.prototype.animate = jest.fn(() => animacion);
+    try {
+      montarContadorDeCabecera(raiz, { fabrica, ventana: null });
+      const contador = raiz.querySelector('[data-zona="contador"]');
+      fabrica.callbacks.alCambiar({ noLeidas: 1 });
+      expect(Element.prototype.animate).toHaveBeenCalledTimes(1);
+      expect(Element.prototype.animate.mock.instances[0]).toBe(contador);
+      fabrica.callbacks.alCambiar({ noLeidas: 1 });
+      fabrica.callbacks.alCambiar({ noLeidas: 0 });
+      expect(Element.prototype.animate).toHaveBeenCalledTimes(1);
+      fabrica.callbacks.alCambiar({ noLeidas: 4 });
+      expect(Element.prototype.animate).toHaveBeenCalledTimes(2);
+    } finally {
+      delete Element.prototype.animate;
+    }
+  });
+
   test('más de lo que cabe se dice con un «+»', () => {
     expect(textoDelNumero(TOPE_VISIBLE)).toBe('99');
     expect(textoDelNumero(TOPE_VISIBLE + 1)).toBe('99+');
