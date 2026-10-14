@@ -9,7 +9,7 @@
 
 import { jest } from '@jest/globals';
 
-import { CLAVES } from './sesion.js';
+import { CLAVES, guardarSesion } from './sesion.js';
 import {
   EVENTO_RECHAZO,
   VALIDEZ_DE_COMPROBACION_MS,
@@ -206,6 +206,46 @@ describe('crearVigilante', () => {
     reloj.pendientes.clear();
     reloj.avanzar(11_000);
     expect(canal.sesionParaCompartir()).toBeNull();
+  });
+});
+
+describe('con el reloj de este equipo descuadrado (7.3.9)', () => {
+  const UNA_HORA = 3600_000;
+
+  /** El servidor va una hora por detrás: su token lleva SU hora. */
+  function sesionDeUnServidorAtrasado(reloj, segundos) {
+    const iat = Math.floor((reloj.ahora() - UNA_HORA) / 1000);
+    const token = tokenCon({
+      uid: 'u-1',
+      sub: 'Ana',
+      rol: 'ADMINISTRADOR',
+      iat,
+      exp: iat + segundos,
+    });
+    guardarSesion(
+      { token, apodo: 'Ana', rol: 'ADMINISTRADOR', recibidoEn: reloj.ahora() },
+      sessionStorage,
+    );
+  }
+
+  test('cierra a la hora que dice el token en la hora del servidor, no antes', () => {
+    const reloj = crearReloj();
+    sesionDeUnServidorAtrasado(reloj, 60);
+    const { vigilante, navegar } = montar(reloj);
+    expect(vigilante).not.toBeNull();
+
+    reloj.avanzar(59_000);
+    expect(navegar).not.toHaveBeenCalled();
+    reloj.avanzar(1_000);
+    expect(destino(navegar).searchParams.get('motivo')).toBe('caducada');
+  });
+
+  test('comparte con la sesión el desfase medido: la otra pestaña es el mismo reloj', () => {
+    const reloj = crearReloj();
+    sesionDeUnServidorAtrasado(reloj, 900);
+    const { canal } = montar(reloj);
+
+    expect(canal.sesionParaCompartir().desfase).toBe(UNA_HORA);
   });
 });
 

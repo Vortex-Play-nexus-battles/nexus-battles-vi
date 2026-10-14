@@ -7152,12 +7152,6 @@ button.tarjeta-heroe[aria-pressed='true'] {
   gap: var(--e-3);
 }
 
-.consola-integral__contrato {
-  border-left: 3px solid var(--primaria);
-  padding-left: var(--e-3);
-  max-width: 78ch;
-}
-
 .consola-integral__seccion {
   margin-block-start: var(--e-6, 1.5rem);
 }
@@ -7177,30 +7171,119 @@ button.tarjeta-heroe[aria-pressed='true'] {
   min-width: 0;
 }
 
-.panel-admin:has(.tabla-envoltorio) {
+.panel-admin:has(.tabla-envoltorio),
+.panel-admin:has(.tabla-admin),
+.panel-admin:has(.grafico-admin),
+.panel-admin:has(.filtros-admin) {
   grid-column: 1 / -1;
 }
 
 .panel-admin__encabezado {
   display: flex;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--e-2);
+  gap: var(--e-2) var(--e-3);
 }
 
 .panel-admin__textos {
+  flex: 1 1 14rem;
   min-width: 0;
+}
+
+/* El título del panel no trae el margen del navegador: el aire lo pone el
+   encabezado, igual en todos los paneles. */
+.panel-admin__textos .tarjeta__titulo {
+  margin: 0;
+}
+
+/* SA-2 — un panel declara su ancho al armarse: el de tabla o gráfico ocupa la
+   fila entera también mientras carga, y la página no salta al llegar los
+   datos. */
+.panel-admin[data-ancho='completo'] {
+  grid-column: 1 / -1;
+}
+
+/* Los paneles de cifras seguidos comparten una fila que se reparte entre
+   ellos: dos a la mitad, uno solo de lado a lado. Nunca una tarjeta suelta
+   junto a un hueco. */
+.consola-integral__cifras {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: var(--e-3);
+}
+
+/* Cuatro cifras: las cuatro en una fila en un escritorio ancho, dos y dos por
+   debajo, una debajo de otra en un teléfono; nunca tres y una suelta. */
+.consola-integral__cifras[data-cifras='4'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 1200px) {
+  .consola-integral__cifras[data-cifras='4'] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .consola-integral__cifras[data-cifras='4'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Un grupo de cifras dentro de un panel («Sanciones», «Apelaciones»). */
+.panel-admin__grupo {
+  margin: var(--e-4) 0 var(--e-2);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--texto-2);
+}
+
+.panel-admin__grupo:first-child {
+  margin-top: 0;
+}
+
+/* La frase que explica un estado («Ningún día llegó a 3 sanciones.»). */
+.panel-admin__explicacion {
+  margin: var(--e-2) 0 0;
+  color: var(--texto-2);
 }
 
 .panel-admin__cuerpo {
   min-width: 0;
 }
 
-.panel-admin__fuente {
-  color: var(--texto-3);
-  font-variant-numeric: var(--cifras-tabulares);
-  margin-block-start: auto;
-  overflow-wrap: anywhere;
+.panel-admin__descripcion {
+  margin: var(--e-1) 0 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+/* SA-2 — el distintivo de estado del panel: vacío mientras todo va bien. */
+.panel-admin__estado {
+  flex: 0 0 auto;
+}
+
+.panel-admin__estado:empty {
+  display: none;
+}
+
+.panel-admin__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--e-2);
+  margin-inline-start: auto;
+}
+
+.panel-admin__enlace {
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 /* --- El sello de estado -------------------------------------------------- */
@@ -7249,6 +7332,10 @@ button.tarjeta-heroe[aria-pressed='true'] {
   gap: var(--e-1);
 }
 
+.indicador > p {
+  margin: 0;
+}
+
 .indicador__valor {
   font-family: var(--fuente-titulo);
   font-size: 2.25rem;
@@ -7285,93 +7372,6 @@ button.tarjeta-heroe[aria-pressed='true'] {
      ancho minimo se apretaban a 375 px hasta partir cada palabra en una
      linea, en vez de desplazarse (UX-GAME-7). */
   min-width: 38rem;
-}
-
-/* --- Buscador y paginacion del directorio -------------------------------- */
-
-.consola-integral__buscador {
-  display: flex;
-  gap: var(--e-2);
-  flex-wrap: wrap;
-}
-
-.consola-integral__buscador .campo__entrada {
-  flex: 1 1 14rem;
-  min-width: 0;
-}
-
-.consola-integral__paginacion {
-  display: flex;
-  gap: var(--e-2);
-  margin-block-start: var(--e-2);
-}
-
-/* --- Usuarios: filtros, estados y registros por dia (HU-USR-008) ---------
-   Los filtros del directorio y el periodo de los indicadores van en una fila
-   que se parte en varias cuando no cabe; cada campo con su etiqueta visible.
-   El grafico es un SVG sin libreria: barras en la primaria de relleno, el
-   valor de cada una en su <title> y la misma serie en una tabla debajo. */
-
-.consola-integral__filtros {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--e-2) var(--e-3);
-}
-
-.consola-integral__filtros > .campo,
-.consola-integral__filtros > .desplegable {
-  flex: 1 1 10rem;
-  min-width: 0;
-}
-
-/* El desplegable separa su etiqueta mas que el campo: en la misma fila, las
-   etiquetas tienen que quedar a la misma altura. */
-.consola-integral__filtros > .desplegable {
-  gap: var(--e-1);
-}
-
-/* Dentro del buscador del directorio, los filtros van en su propia linea. */
-.consola-integral__buscador > .consola-integral__filtros {
-  flex: 1 1 100%;
-}
-
-.consola-integral__estados {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
-  gap: var(--e-3);
-}
-
-.grafico-registros {
-  display: block;
-  width: 100%;
-  height: 160px;
-}
-
-.grafico-registros__barra {
-  fill: var(--primaria-relleno);
-}
-
-.grafico-registros__barra:hover {
-  fill: var(--acento-relleno);
-}
-
-.grafico-registros__base {
-  stroke: var(--borde);
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-
-/* Primer y ultimo dia de la serie, debajo de las barras. */
-.grafico-registros__eje {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--e-2);
-}
-
-.consola-integral__datos-grafico > summary {
-  cursor: pointer;
-  color: var(--primaria);
 }
 
 /* =======================================================================
@@ -11151,4 +11151,1142 @@ body:has(.chatbot-flotante) main:not(.combate) {
 
 .sala-privada .tarjeta__cabecera {
   align-items: center;
+}
+
+/* =======================================================================
+   Kit de la consola de operación — SA-2
+   -----------------------------------------------------------------------
+   Informe de revisión del módulo Super Administrador, puntos 2 a 25: tablas
+   con columnas que casan, una barra de filtros con la búsqueda primero,
+   cifras que no inventan ceros, estados con palabras e icono, actualización
+   en vivo con su hora, un gráfico con ejes y un panel lateral. Los módulos
+   viven en src/comun/ui/admin/.
+   ======================================================================= */
+
+/* --- Tabla (tabla-de-datos.js) ------------------------------------------ */
+
+.tabla-admin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  min-width: 0;
+}
+
+.tabla-admin__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2) var(--e-4);
+}
+
+.tabla-admin__resumen {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--tinta-2, var(--texto-2));
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+/* El orden en el teléfono: solo cuando los encabezados no se ven. */
+.tabla-admin__orden-movil {
+  display: none;
+}
+
+.tabla-admin__marco {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  color: var(--texto);
+  overflow-x: auto;
+  max-width: 100%;
+  /* Cuando la tabla no cabe y se desplaza, una sombra en el borde dice que
+     hay más columnas a ese lado. Las dos capas `local` tapan la sombra al
+     llegar a cada extremo; sin desplazamiento no se ve nada. */
+  background:
+    linear-gradient(to right, var(--superficie) 30%, transparent) left center / 2.5rem 100%
+      no-repeat local,
+    linear-gradient(to left, var(--superficie) 30%, transparent) right center / 2.5rem 100%
+      no-repeat local,
+    radial-gradient(farthest-side at 0 50%, color-mix(in srgb, var(--texto) 20%, transparent), transparent) left center /
+      0.75rem 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, color-mix(in srgb, var(--texto) 20%, transparent), transparent) right center /
+      0.75rem 100% no-repeat scroll,
+    var(--superficie);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--radio);
+}
+
+.tabla-admin__marco:focus-visible {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+.tabla-admin__tabla {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.tabla-admin__leyenda {
+  caption-side: top;
+  text-align: start;
+  padding: var(--e-3) var(--e-4) 0;
+  font-family: var(--t-etiqueta-familia);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.tabla-admin__tabla thead th {
+  padding: var(--e-2) var(--e-4);
+  background: var(--superficie-2);
+  border-bottom: 1px solid var(--borde);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--texto-2);
+  text-align: start;
+  white-space: nowrap;
+  /* Al medio: el encabezado que se ordena es un botón más alto que el texto
+     de uno que no, y los dos tienen que quedar en la misma línea. */
+  vertical-align: middle;
+}
+
+.tabla-admin__tabla tbody th,
+.tabla-admin__tabla tbody td {
+  padding: var(--e-3) var(--e-4);
+  border-top: 1px solid var(--borde-tenue);
+  text-align: start;
+  vertical-align: middle;
+  font-size: var(--t-cuerpo-tam);
+  font-weight: 400;
+  color: var(--texto);
+}
+
+.tabla-admin__tabla tbody tr:first-child th,
+.tabla-admin__tabla tbody tr:first-child td {
+  border-top: 0;
+}
+
+.tabla-admin__tabla tbody tr {
+  transition: background var(--transicion);
+}
+
+.tabla-admin__tabla tbody tr:hover {
+  background: var(--interaccion-velo-hover);
+}
+
+.tabla-admin__tabla tbody .tabla-admin__principal {
+  font-weight: 600;
+}
+
+/* Cifras y acciones, a la derecha; las cifras con números tabulares para que
+   las unidades caigan una encima de otra. */
+.tabla-admin__tabla [data-tipo='numero'] {
+  text-align: end;
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.tabla-admin__tabla [data-tipo='accion'] {
+  text-align: end;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.tabla-admin__tabla [data-tipo='fecha'] {
+  white-space: nowrap;
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.tabla-admin__acciones {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: var(--e-2) var(--e-3);
+}
+
+.tabla-admin__sin-dato {
+  color: var(--texto-3);
+  font-style: italic;
+}
+
+/* Cuando la tabla no cabe, lo que la identifica (la primera columna) y lo que
+   se hace con ella (las acciones) se quedan a la vista y lo de en medio se
+   desplaza. Mientras cabe, una celda fija se ve igual que las demás: solo
+   cambia su fondo, que es el mismo. La sombra del borde aparece cuando
+   `vigilarDesborde` dice que hay más tabla a ese lado. */
+@media (min-width: 641px) {
+  .tabla-admin__tabla .tabla-admin__principal,
+  .tabla-admin__tabla thead th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+  }
+
+  .tabla-admin__tabla [data-tipo='accion'] {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+  }
+
+  .tabla-admin__tabla tbody .tabla-admin__principal,
+  .tabla-admin__tabla tbody [data-tipo='accion'] {
+    background: var(--superficie);
+    transition:
+      background var(--transicion),
+      box-shadow var(--transicion);
+  }
+
+  /* El velo del paso del ratón, también sobre las celdas fijas. */
+  .tabla-admin__tabla tbody tr:hover > .tabla-admin__principal,
+  .tabla-admin__tabla tbody tr:hover > [data-tipo='accion'] {
+    background:
+      linear-gradient(var(--interaccion-velo-hover), var(--interaccion-velo-hover)),
+      var(--superficie);
+  }
+
+  .tabla-admin__marco[data-desborde~='inicio'] .tabla-admin__principal,
+  .tabla-admin__marco[data-desborde~='inicio'] thead th:first-child {
+    box-shadow: 10px 0 12px -10px color-mix(in srgb, var(--texto) 30%, transparent);
+  }
+
+  .tabla-admin__marco[data-desborde~='fin'] [data-tipo='accion'] {
+    box-shadow: -10px 0 12px -10px color-mix(in srgb, var(--texto) 30%, transparent);
+  }
+}
+
+/* La paginación de una tabla, separada de su borde. */
+.tabla-admin + .paginacion {
+  margin-top: var(--e-3);
+}
+
+/* El encabezado ordenable es un botón del alto del encabezado: se pulsa
+   entero, con la flecha que dice el sentido. */
+.tabla-admin__ordenar {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  min-height: 2.25rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tabla-admin__ordenar:hover {
+  color: var(--primaria);
+}
+
+.tabla-admin__ordenar:focus-visible {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+  border-radius: var(--radio-chico);
+}
+
+/* La flecha dice el sentido: ↕ sin ordenar, ↑ de menor a mayor, ↓ al revés.
+   Va en `aria-hidden`: el sentido lo anuncia `aria-sort`. */
+.tabla-admin__flecha::before {
+  content: '\2195';
+  opacity: 0.5;
+}
+
+[aria-sort='ascending'] .tabla-admin__flecha::before {
+  content: '\2191';
+  opacity: 1;
+  color: var(--primaria);
+}
+
+[aria-sort='descending'] .tabla-admin__flecha::before {
+  content: '\2193';
+  opacity: 1;
+  color: var(--primaria);
+}
+
+/* En un teléfono cada fila es una ficha: el dato que identifica la fila
+   arriba y cada valor con su etiqueta delante. Los roles ARIA de las celdas
+   están escritos en el marcado, así que siguen siendo una tabla para el
+   lector de pantalla. */
+@media (max-width: 640px) {
+  .tabla-admin__orden-movil {
+    display: flex;
+    min-width: 12rem;
+  }
+
+  .tabla-admin__marco {
+    overflow-x: visible;
+    background: transparent;
+    border: 0;
+  }
+
+  .tabla-admin__tabla,
+  .tabla-admin__tabla tbody,
+  .tabla-admin__tabla tr,
+  .tabla-admin__tabla th,
+  .tabla-admin__tabla td {
+    display: block;
+    width: 100%;
+  }
+
+  .tabla-admin__tabla thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .tabla-admin__tabla tbody tr {
+    margin-block-end: var(--e-2);
+    padding: var(--e-3) var(--e-4);
+    background: var(--superficie);
+    border: 1px solid var(--borde-tenue);
+    border-radius: var(--radio);
+  }
+
+  .tabla-admin__tabla tbody th,
+  .tabla-admin__tabla tbody td {
+    display: grid;
+    /* minmax(0, …): el valor se parte en líneas antes que ensanchar la ficha. */
+    grid-template-columns: minmax(6rem, 34%) minmax(0, 1fr);
+    gap: var(--e-2);
+    padding: var(--e-1) 0;
+    border-top: 0;
+    text-align: start;
+    overflow-wrap: anywhere;
+  }
+
+  /* En el escritorio una fecha no se parte; en la ficha del teléfono, sí. */
+  .tabla-admin__tabla tbody [data-tipo='fecha'] {
+    white-space: normal;
+  }
+
+  /* El distintivo de estado mide lo que su texto, no la columna entera. */
+  .tabla-admin__tabla tbody td > .estado-admin {
+    justify-self: start;
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .tabla-admin__tabla tbody td::before {
+    content: attr(data-etiqueta);
+    font-size: var(--t-meta-tam);
+    font-weight: var(--t-etiqueta-peso);
+    color: var(--texto-2);
+  }
+
+  .tabla-admin__tabla tbody .tabla-admin__principal {
+    display: block;
+    font-size: var(--t-etiqueta-tam);
+    padding-block-end: var(--e-2);
+  }
+
+  .tabla-admin__tabla tbody [data-tipo='numero'] {
+    text-align: start;
+  }
+
+  .tabla-admin__tabla tbody [data-tipo='accion'] {
+    display: block;
+    width: 100%;
+    padding-block-start: var(--e-2);
+    text-align: start;
+    white-space: normal;
+  }
+
+  .tabla-admin__tabla tbody [data-tipo='accion']::before {
+    content: none;
+  }
+
+  .tabla-admin__acciones {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}
+
+/* --- Barra de filtros (barra-de-filtros.js) ----------------------------- */
+
+.filtros-admin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+}
+
+.filtros-admin__busqueda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--e-2);
+}
+
+.filtros-admin__campo-busqueda {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.filtros-admin__entrada {
+  width: 100%;
+}
+
+.filtros-admin__campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
+  align-items: end;
+  gap: var(--e-3);
+}
+
+.filtros-admin__campos .campo__control,
+.filtros-admin__campos .desplegable__control {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Las etiquetas de los desplegables y de las fechas, a la misma altura. */
+.filtros-admin__campos .desplegable {
+  gap: var(--e-1);
+}
+
+.filtros-admin__acciones {
+  display: flex;
+  align-items: flex-end;
+}
+
+.filtros-admin__error {
+  margin: 0;
+  color: var(--error);
+  font-weight: 600;
+}
+
+.filtros-admin__activos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+}
+
+.filtros-admin__ficha {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  min-height: 2rem;
+  padding: 0 var(--e-3);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio-pildora);
+  background: var(--info-insignia);
+  color: var(--info);
+  font-family: var(--t-cuerpo-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.filtros-admin__ficha:hover {
+  border-color: var(--primaria);
+}
+
+.filtros-admin__ficha:focus-visible {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+.filtros-admin__quitar {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+@media (max-width: 767px) {
+  .filtros-admin__ficha {
+    min-height: var(--objetivo-tactil);
+  }
+}
+
+/* --- Cifra (indicador.js) ------------------------------------------------ */
+
+.indicador-admin {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+  min-width: 0;
+  padding: var(--e-4);
+  background: var(--superficie);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--radio);
+  color: var(--texto);
+}
+
+/* El tono es una franja y un icono, nunca solo el color de la cifra. */
+.indicador-admin[data-tono]::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  border-radius: var(--radio) 0 0 var(--radio);
+  background: var(--info);
+}
+
+.indicador-admin[data-tono='exito']::before {
+  background: var(--exito);
+}
+
+.indicador-admin[data-tono='advertencia']::before {
+  background: var(--advertencia);
+}
+
+.indicador-admin[data-tono='error']::before {
+  background: var(--error);
+}
+
+.indicador-admin__etiqueta {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--texto-2);
+}
+
+.indicador-admin__icono {
+  width: var(--icono-chico);
+  height: var(--icono-chico);
+  flex: 0 0 auto;
+}
+
+.indicador-admin[data-tono='exito'] .indicador-admin__icono {
+  color: var(--exito);
+}
+
+.indicador-admin[data-tono='advertencia'] .indicador-admin__icono {
+  color: var(--advertencia);
+}
+
+.indicador-admin[data-tono='error'] .indicador-admin__icono {
+  color: var(--error);
+}
+
+.indicador-admin__valor {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+  /* La cifra, abajo: en una fila de tarjetas las cifras caen a la misma
+     altura aunque un rótulo ocupe dos líneas. */
+  margin: auto 0 0;
+  font-family: var(--fuente-titulo);
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.indicador-admin[data-sin-dato] .indicador-admin__valor {
+  color: var(--texto-3);
+}
+
+.indicador-admin__unidad {
+  font-family: var(--fuente-texto);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: 500;
+  color: var(--texto-2);
+}
+
+.indicador-admin__detalle {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.indicador-admin__enlace {
+  padding-top: var(--e-2);
+  font-weight: 600;
+}
+
+.rejilla-indicadores-admin {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr));
+  gap: var(--e-3);
+}
+
+.rejilla-indicadores-admin + .grafico-admin {
+  margin-top: var(--e-4);
+}
+
+/* Seis cifras: las seis en una fila en un escritorio ancho y de tres en tres
+   por debajo; cuatro, en una fila o de dos en dos. Así no queda una suelta. */
+.rejilla-indicadores-admin[data-cantidad='6'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.rejilla-indicadores-admin[data-cantidad='4'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 1200px) {
+  .rejilla-indicadores-admin[data-cantidad='6'] {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .rejilla-indicadores-admin[data-cantidad='4'] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* En un teléfono, dos cifras por fila: seis tarjetas no son seis pantallas. */
+@media (max-width: 480px) {
+  .rejilla-indicadores-admin,
+  .rejilla-indicadores-admin[data-cantidad] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* SA-3 — tres cifras (el saldo de la ficha): las tres en una fila y, en un
+   teléfono, una debajo de otra; nunca dos y una suelta. */
+.rejilla-indicadores-admin[data-cantidad='3'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 480px) {
+  .rejilla-indicadores-admin[data-cantidad='3'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --- Consola de sanciones (SA-4) ------------------------------------------
+   Tres pestañas (sanciones, apelaciones, emitir) sobre los paneles de la
+   consola. Lo propio: la barra de filtros dentro del panel, el estado con su
+   fecha fin, la cita del argumento de una apelación y el grupo de la
+   duración (cantidad + unidad) del formulario de emisión. */
+
+.consola-sanciones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+}
+
+.panel-admin__filtros {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+}
+
+.estado-con-fecha {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1) var(--e-2);
+}
+
+.cita-admin {
+  margin: 0;
+  padding: var(--e-2) var(--e-3);
+  border-inline-start: 3px solid var(--borde-int);
+  border-radius: var(--radio-chico);
+  background: var(--superficie-2);
+  color: var(--texto);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.formulario-sancion {
+  max-width: 44rem;
+  margin-block-start: var(--e-4);
+  padding-block-start: var(--e-4);
+  border-block-start: 1px solid var(--borde-tenue);
+}
+
+.formulario-sancion__titulo {
+  margin: 0;
+}
+
+/* Dos líneas en una celda: el dato y, debajo, su detalle en pequeño. */
+.celda-doble {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 10rem;
+}
+
+.campo--grupo {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.campo--grupo .fila {
+  flex-wrap: wrap;
+}
+
+.campo--grupo .fila > .campo__control {
+  flex: 0 1 8rem;
+}
+
+.campo--grupo .fila > .desplegable__control {
+  flex: 0 1 10rem;
+}
+
+.fila--entre {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.fila--entre > * {
+  flex: 0 1 auto;
+}
+
+/* --- Lista negra (lista-negra-admin.js, SA-4 punto 21) ------------------- */
+/* El alta en una fila en un escritorio —término, categoría, cómo se busca y
+   el botón— alineada por abajo, y de uno en uno en un teléfono. Los
+   desplegables son `desplegable__control`: altura del campo y el texto
+   centrado, como el resto de la consola. */
+.formulario-termino {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--e-3);
+}
+
+.formulario-termino .campo__control,
+.formulario-termino .desplegable__control {
+  width: 100%;
+  min-width: 0;
+}
+
+.formulario-termino .desplegable {
+  gap: var(--e-1);
+}
+
+/* El botón, a la altura de los controles: debajo de la etiqueta. */
+.formulario-termino__accion {
+  display: flex;
+  align-items: flex-end;
+  min-height: calc(var(--campo-alto) + 1.6em);
+}
+
+@media (max-width: 960px) {
+  .formulario-termino {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .formulario-termino {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .formulario-termino__accion {
+    min-height: 0;
+  }
+
+  .formulario-termino__accion .boton {
+    width: 100%;
+  }
+}
+
+/* --- Alertas de moderación (alertas-de-moderacion.js, SA-4 §7.3.8) ------- */
+/* Una caja por serie (sanciones y reportes por día), una junto a otra cuando
+   caben y una debajo de otra en un teléfono. Cada caja dice su estado arriba,
+   a la derecha del título, sin depender solo del color. */
+.alertas-moderacion {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--e-3);
+}
+
+.alertas-moderacion__serie {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  min-width: 0;
+  padding: var(--e-3);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.alertas-moderacion__cabeza {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2);
+}
+
+.alertas-moderacion__cabeza .panel-admin__grupo {
+  margin: 0;
+}
+
+.alertas-moderacion__serie .panel-admin__explicacion {
+  margin: 0;
+}
+
+/* Los gráficos de un tablero, de dos en dos cuando caben. */
+.rejilla-graficos-admin {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: var(--e-4);
+}
+
+/* --- Estado (estado.js) -------------------------------------------------- */
+
+.estado-admin {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  padding: 0.125rem var(--e-2);
+  border-radius: var(--radio-pildora);
+  background: var(--superficie-2);
+  color: var(--texto-2);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.estado-admin__icono {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: 0 0 auto;
+}
+
+.estado-admin__punto {
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.estado-admin[data-tono='exito'] {
+  background: var(--exito-insignia);
+  color: var(--exito);
+}
+
+.estado-admin[data-tono='advertencia'] {
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
+}
+
+.estado-admin[data-tono='error'] {
+  background: var(--error-insignia);
+  color: var(--error);
+}
+
+.estado-admin[data-tono='bloqueado'] {
+  background: var(--error-insignia);
+  color: var(--error);
+}
+
+.estado-admin[data-tono='info'] {
+  background: var(--info-insignia);
+  color: var(--info);
+}
+
+/* --- Actualización en vivo (actualizacion.js) --------------------------- */
+
+.actualizacion-admin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2) var(--e-3);
+  font-size: var(--t-meta-tam);
+  color: var(--tinta-2, var(--texto-2));
+}
+
+.actualizacion-admin__marca {
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+/* Va en el encabezado de la página, sobre la atmósfera: la etiqueta de la
+   casilla hereda la tinta del contexto en vez del texto oscuro del kit. */
+.actualizacion-admin .casilla__etiqueta {
+  color: inherit;
+  font-size: var(--t-meta-tam);
+}
+
+/* El fallo va en su distintivo de fondo claro: la marca vive sobre la
+   atmósfera, donde el rojo de error a secas no tiene contraste. */
+.actualizacion-admin__marca[data-estado='fallo'] {
+  padding: 0.125rem var(--e-2);
+  border-radius: var(--radio-pildora);
+  background: var(--error-insignia);
+  color: var(--error);
+  font-weight: 600;
+}
+
+.actualizacion-admin[aria-busy='true'] .actualizacion-admin__marca {
+  opacity: 0.7;
+}
+
+/* --- Gráfico de barras (grafico.js) ------------------------------------- */
+
+.grafico-admin {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  margin: 0;
+  min-width: 0;
+  /* Nada del gráfico (un globo, una etiqueta del eje) ensancha la página. */
+  overflow-x: clip;
+}
+
+.grafico-admin__titulo {
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.grafico-admin__area {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--e-2);
+  height: 13rem;
+  padding: var(--e-2) var(--e-2) 0 0;
+}
+
+.grafico-admin__eje-y {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-bottom: 1.5rem;
+  font-size: 0.75rem;
+  color: var(--texto-3);
+  text-align: end;
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.grafico-admin__eje-y span {
+  line-height: 0;
+}
+
+.grafico-admin__columnas {
+  --grafico-marcas: 4;
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+  /* La línea base, donde arrancan las barras, la del tope del eje y una línea
+     guía por marca. Las capas cubren solo el área de las barras: la franja de
+     abajo (1,5rem) es la de las etiquetas, así cada línea cae a la altura de
+     su cifra del eje. */
+  background-image:
+    linear-gradient(var(--borde), var(--borde)),
+    linear-gradient(var(--borde-tenue), var(--borde-tenue)),
+    repeating-linear-gradient(
+      to top,
+      var(--borde-tenue) 0,
+      var(--borde-tenue) 1px,
+      transparent 1px,
+      transparent calc(100% / var(--grafico-marcas))
+    );
+  background-size:
+    100% 1px,
+    100% 1px,
+    100% calc(100% - 1.5rem);
+  background-position:
+    0 calc(100% - 1.5rem),
+    0 0,
+    0 0;
+  background-repeat: no-repeat;
+  padding-bottom: 1.5rem;
+}
+
+.grafico-admin__columna {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.grafico-admin__barra {
+  width: min(100%, 2.5rem);
+  height: var(--grafico-alto, 0%);
+  min-height: 1px;
+  background: linear-gradient(180deg, var(--primaria), var(--acento-relleno));
+  border-radius: var(--radio-chico) var(--radio-chico) 0 0;
+  transition: filter var(--transicion);
+}
+
+.grafico-admin__barra--sin-dato {
+  background: transparent;
+  border: 1px dashed var(--borde);
+}
+
+.grafico-admin__columna:hover .grafico-admin__barra {
+  filter: brightness(1.25);
+}
+
+.grafico-admin__etiqueta {
+  position: absolute;
+  bottom: -1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  color: var(--texto-3);
+  white-space: nowrap;
+}
+
+/* La primera etiqueta arranca en su barra: centrada, se metería en el eje. */
+.grafico-admin__columna:first-child .grafico-admin__etiqueta {
+  left: 0;
+  transform: none;
+}
+
+/* Por debajo del escritorio, diez fechas seguidas se pisan: queda una de cada
+   tres. */
+@media (max-width: 1023px) {
+  .grafico-admin__etiqueta:not([data-movil]) {
+    visibility: hidden;
+  }
+}
+
+.grafico-admin__globo {
+  position: absolute;
+  bottom: calc(var(--grafico-alto, 0%) + 0.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  padding: var(--e-1) var(--e-2);
+  border-radius: var(--radio-chico);
+  background: var(--cromo);
+  color: var(--texto-sobre-color);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transicion);
+}
+
+.grafico-admin__columna:hover .grafico-admin__globo {
+  opacity: 1;
+}
+
+/* Los globos de las barras de los bordes se abren hacia dentro. */
+.grafico-admin__columna[data-lado='inicio'] .grafico-admin__globo {
+  left: 0;
+  transform: none;
+}
+
+.grafico-admin__columna[data-lado='fin'] .grafico-admin__globo {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.grafico-admin__resumen {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.grafico-admin__datos summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--objetivo-tactil);
+  font-weight: 600;
+  color: var(--primaria);
+  cursor: pointer;
+}
+
+/* --- Panel lateral (panel-lateral.js) ----------------------------------- */
+
+.velo--lateral {
+  place-items: stretch end;
+}
+
+.dialogo--lateral {
+  width: min(32rem, 100vw);
+  height: 100%;
+  max-height: 100dvh;
+  overflow-y: auto;
+  border-radius: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dialogo--lateral {
+    animation: entrar-panel-lateral var(--duracion-normal) var(--curva-salida) both;
+  }
+}
+
+@keyframes entrar-panel-lateral {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.panel-lateral__cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-4);
+}
+
+.panel-lateral__subtitulo {
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.lista-datos-admin {
+  display: grid;
+  gap: var(--e-2);
+  margin: 0;
+}
+
+.lista-datos-admin__par {
+  display: grid;
+  grid-template-columns: minmax(8rem, 40%) 1fr;
+  gap: var(--e-2);
+  padding-block: var(--e-2);
+  border-bottom: 1px solid var(--borde-tenue);
+}
+
+.lista-datos-admin__par dt {
+  font-weight: 600;
+  color: var(--texto-2);
+}
+
+.lista-datos-admin__par dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.lista-datos-admin__sin-dato {
+  color: var(--texto-3);
+  font-style: italic;
+}
+
+/* SA-5 — una celda de texto largo (el cambio y el motivo de la bitácora) en
+   dos líneas como mucho: el texto entero queda en el detalle de la fila y en
+   su `title`. Sin esto, una frase larga estiraba la fila o la columna y el
+   resto de la tabla salía del panel. */
+.celda-recortada {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  max-width: 22rem;
+  overflow-wrap: anywhere;
 }

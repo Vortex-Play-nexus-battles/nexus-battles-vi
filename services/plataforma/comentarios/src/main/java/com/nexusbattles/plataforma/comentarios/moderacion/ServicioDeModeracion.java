@@ -16,6 +16,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.nexusbattles.plataforma.comentarios.Comentario;
+import com.nexusbattles.plataforma.comentarios.DeteccionAutomatica;
 import com.nexusbattles.plataforma.comentarios.publicacion.ComentarioRepository;
 import com.nexusbattles.plataforma.comentarios.publicacion.RegistroDeComentario;
 import com.nexusbattles.plataforma.comentarios.publicacion.ResumenDeComentario;
@@ -114,6 +115,7 @@ public class ServicioDeModeracion {
     private final ComentarioRepository comentarios;
     private final ReporteRepository reportes;
     private final AsientoRepository asientos;
+    private final DeteccionRepository detecciones;
     private final AvisoAlAutor aviso;
     private final RegistroDeAuditoria auditoria;
     private final Clock reloj;
@@ -126,6 +128,7 @@ public class ServicioDeModeracion {
             ComentarioRepository comentarios,
             ReporteRepository reportes,
             AsientoRepository asientos,
+            DeteccionRepository detecciones,
             AvisoAlAutor aviso,
             RegistroDeAuditoria auditoria,
             Clock reloj,
@@ -136,6 +139,7 @@ public class ServicioDeModeracion {
         this.comentarios = comentarios;
         this.reportes = reportes;
         this.asientos = asientos;
+        this.detecciones = detecciones;
         this.aviso = aviso;
         this.auditoria = auditoria;
         this.reloj = reloj;
@@ -294,7 +298,8 @@ public class ServicioDeModeracion {
      * que mover los filtros a la consulta.
      *
      * <p>Los reportes de todos los comentarios de la cola se leen en una sola
-     * consulta, no uno por comentario.
+     * consulta, no uno por comentario. Las detecciones del filtro automatico
+     * (HU-COM-007 CA-01) tambien: una consulta para toda la cola.
      */
     @Transactional(readOnly = true)
     public Cola cola(String productoId, Boolean marcado, CategoriaDeReporte categoria,
@@ -304,10 +309,14 @@ public class ServicioDeModeracion {
                 .toList();
 
         Map<String, List<RegistroDeReporte>> reportesPorComentario = new LinkedHashMap<>();
+        Map<String, DeteccionAutomatica> deteccionPorComentario = new LinkedHashMap<>();
         if (!candidatos.isEmpty()) {
-            for (RegistroDeReporte reporte : reportes.findByComentarioIdInOrderByFechaAsc(
-                    candidatos.stream().map(Comentario::id).toList())) {
+            List<String> ids = candidatos.stream().map(Comentario::id).toList();
+            for (RegistroDeReporte reporte : reportes.findByComentarioIdInOrderByFechaAsc(ids)) {
                 reportesPorComentario.computeIfAbsent(reporte.comentarioId(), id -> new ArrayList<>()).add(reporte);
+            }
+            for (RegistroDeDeteccion deteccion : detecciones.findAllById(ids)) {
+                deteccionPorComentario.put(deteccion.comentarioId(), deteccion.aDominio());
             }
         }
 
@@ -326,7 +335,8 @@ public class ServicioDeModeracion {
             if (prioridadElevada != null && prioridadElevada != elevada) {
                 continue;
             }
-            entradas.add(new Entrada(c, suyos.size(), porCategoria, primero, elevada));
+            entradas.add(new Entrada(c, suyos.size(), porCategoria, primero, elevada,
+                    deteccionPorComentario.get(c.id())));
         }
 
         // Mas reportado primero; a igualdad, el que lleva mas tiempo esperando.
@@ -390,7 +400,10 @@ public class ServicioDeModeracion {
                 .toList();
     }
 
-    /** Un comentario en revision con todo lo que el moderador necesita para decidir. */
+    /**
+     * Un comentario en revision con todo lo que el moderador necesita para
+     * decidir, tambien por que lo retuvo el filtro si fue el (HU-COM-007 CA-01).
+     */
     @Transactional(readOnly = true)
     public Detalle detalle(String comentarioId) {
         Comentario comentario = comentarios.findById(comentarioId)
@@ -399,7 +412,8 @@ public class ServicioDeModeracion {
         return new Detalle(
                 comentario,
                 reportes.findByComentarioIdOrderByFechaAsc(comentarioId),
-                asientos.findByComentarioIdOrderByFechaAsc(comentarioId));
+                asientos.findByComentarioIdOrderByFechaAsc(comentarioId),
+                detecciones.findById(comentarioId).map(RegistroDeDeteccion::aDominio).orElse(null));
     }
 
     /**
@@ -673,16 +687,18 @@ public class ServicioDeModeracion {
             boolean prioridadElevada) {
     }
 
+    /** {@code deteccion} es nula si el comentario llego a la cola por reportes (HU-COM-007). */
     public record Entrada(Comentario comentario, int reportes,
             Map<CategoriaDeReporte, Long> porCategoria, Instant primerReporte,
-            boolean prioridadElevada) {
+            boolean prioridadElevada, DeteccionAutomatica deteccion) {
     }
 
     public record Cola(List<Entrada> entradas, int total, int pagina, int tamano) {
     }
 
+    /** {@code deteccion} es nula si el filtro no lo retuvo (HU-COM-007). */
     public record Detalle(Comentario comentario, List<RegistroDeReporte> reportes,
-            List<AsientoDeModeracion> historial) {
+            List<AsientoDeModeracion> historial, DeteccionAutomatica deteccion) {
     }
 
     /** {@code apodoAutor} es el del comentario mas reciente de la pagina; nulo si no hay ninguno. */

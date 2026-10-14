@@ -87,7 +87,7 @@ export async function consultar(recurso, { senal, buscar = fetchWithHttpErrorInt
       resultado: RESULTADO.SERVICIO_DEGRADADO,
       datos: null,
       estado: null,
-      motivo: 'No hubo respuesta del servicio.',
+      motivo: 'No pudimos conectar. Revisa tu conexión e inténtalo de nuevo.',
       recurso,
       detalle: error?.message ?? null,
     };
@@ -99,7 +99,7 @@ export async function consultar(recurso, { senal, buscar = fetchWithHttpErrorInt
       resultado: estaVacio(datos) ? RESULTADO.VACIO : RESULTADO.DATOS,
       datos,
       estado: respuesta.status,
-      motivo: estaVacio(datos) ? 'El servicio respondió, pero no hay registros.' : '',
+      motivo: estaVacio(datos) ? 'Todavía no hay registros.' : '',
       recurso,
       detalle: null,
     };
@@ -109,7 +109,8 @@ export async function consultar(recurso, { senal, buscar = fetchWithHttpErrorInt
 }
 
 /**
- * Un archivo de la API (HU-USR-008: la exportación del directorio en CSV).
+ * Un archivo de la API (HU-USR-008: la exportación del directorio en CSV; SA-5:
+ * la del registro de auditoría en CSV o PDF).
  *
  * Como {@link consultar}, **nunca lanza**: devuelve el contenido y el nombre
  * que da el servidor (`Content-Disposition`), o el desenlace y el motivo por
@@ -117,16 +118,24 @@ export async function consultar(recurso, { senal, buscar = fetchWithHttpErrorInt
  * el `detail`, y es lo que se enseña.
  *
  * @param {string} recurso por ejemplo `/admin/jugadores/exportacion?rol=JUGADOR`
- * @param {{senal?: AbortSignal, buscar?: typeof fetchWithHttpErrorInterceptor}} [opciones]
+ * @param {{senal?: AbortSignal, buscar?: typeof fetchWithHttpErrorInterceptor,
+ *   acepta?: string}} [opciones] `acepta`: el `Accept` (por omisión, CSV)
  * @returns {Promise<{resultado: string, contenido: Blob|null, nombreArchivo: string|null,
  *   estado: number|null, motivo: string, recurso: string}>}
  */
-export async function descargar(recurso, { senal, buscar = fetchWithHttpErrorInterceptor } = {}) {
+export async function descargar(
+  recurso,
+  {
+    senal,
+    buscar = fetchWithHttpErrorInterceptor,
+    acepta = 'text/csv, application/problem+json',
+  } = {},
+) {
   let respuesta;
   try {
     respuesta = await buscar(rutaDeApi(recurso), {
       method: 'GET',
-      headers: { Accept: 'text/csv, application/problem+json' },
+      headers: { Accept: acepta },
       signal: senal,
     });
   } catch {
@@ -135,7 +144,7 @@ export async function descargar(recurso, { senal, buscar = fetchWithHttpErrorInt
       contenido: null,
       nombreArchivo: null,
       estado: null,
-      motivo: 'No hubo respuesta del servicio.',
+      motivo: 'No pudimos conectar. Revisa tu conexión e inténtalo de nuevo.',
       recurso,
     };
   }
@@ -215,35 +224,36 @@ function clasificarFallo(estado) {
   if (estado === 401) {
     return {
       resultado: RESULTADO.SIN_PERMISO,
-      motivo: 'Tu sesión ya no es válida. Vuelve a entrar.',
+      motivo: 'Tu sesión terminó. Vuelve a iniciar sesión.',
       detalle: null,
     };
   }
   if (estado === 403) {
     return {
       resultado: RESULTADO.SIN_PERMISO,
-      motivo: 'Tu rol no alcanza para ver esta sección.',
+      motivo: 'Tu rol no tiene acceso a esta información.',
       detalle: null,
     };
   }
   if (estado === 404) {
     return {
       resultado: RESULTADO.NO_IMPLEMENTADO,
-      motivo: 'El servicio está en pie, pero no publica esta consulta.',
+      motivo: 'Esta información no está disponible en este momento.',
       detalle: null,
     };
   }
   if (CAIDO.includes(estado)) {
     return {
       resultado: RESULTADO.SERVICIO_DEGRADADO,
-      motivo: 'El servicio que responde esta consulta no está atendiendo.',
+      motivo: 'No pudimos cargar esta información. Inténtalo de nuevo en unos segundos.',
       detalle: null,
     };
   }
   return {
     resultado: RESULTADO.NO_DISPONIBLE,
-    motivo: 'El servicio respondió algo que la consola no sabe interpretar.',
-    detalle: `HTTP ${estado}`,
+    motivo: 'No pudimos cargar esta información.',
+    // Solo para depurar: no se pinta nunca.
+    detalle: estado,
   };
 }
 

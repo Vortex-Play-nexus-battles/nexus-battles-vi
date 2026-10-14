@@ -1,35 +1,52 @@
 /**
- * Consola de control integral -- la pantalla unica de operacion.
+ * Consola de control integral — la pantalla única de operación.
  *
- * ## Que responde
+ * ## Qué responde
  *
- * Ocho preguntas, en el orden en que las hace quien opera el sistema:
- * como esta el Nexo, quien juega, que se esta jugando, como va la economia,
- * que se esta subastando, que torneos hay, que se ha moderado y que servicios
- * estan de pie.
+ * Las preguntas que hace quien opera el sistema, en su orden: cómo está el
+ * Nexo, quién juega, qué se está jugando, cómo va la economía, qué se está
+ * subastando, qué torneos hay, qué se ha moderado y qué servicios están de
+ * pie.
  *
- * ## De donde sale cada numero
+ * ## De dónde sale cada número
  *
- * De la API del servicio que es dueno del dato, por HTTP, con el JWT de quien
+ * De la API del servicio que es dueño del dato, por HTTP, con el JWT de quien
  * mira y contra los mismos guardas de RBAC que protegen el resto del
- * producto. **El navegador no habla con ninguna base de datos**, no hay una
- * base administrativa aparte, y ningun servicio lee las tablas de otro: cada
- * panel nombra su endpoint al pie, y ese endpoint es el que ya existia.
+ * producto. El navegador no habla con ninguna base de datos y ningún servicio
+ * lee las tablas de otro. Donde un servicio no contesta, el panel lo dice en
+ * vez de pintar un cero: un hueco explicado es información; un cero inventado
+ * es una mentira operativa.
  *
- * Donde no hay backend, la consola lo dice -- NO IMPLEMENTADO -- en vez de
- * fabricar el dato. Donde el servicio no contesta, lo dice tambien --
- * SERVICIO DEGRADADO -- en vez de pintar un cero. Un panel en blanco con una
- * explicacion es informacion; un cero inventado es una mentira operativa.
+ * ## SA-2 — informe de revisión del módulo Super Administrador
+ *
+ * Fuera el texto de andamio que el informe señaló (puntos 2 a 15): la ruta de
+ * cada consulta al pie del panel, los códigos HTTP, las etiquetas de estado
+ * en mayúsculas, el «sondeo real», la tarjeta de un módulo que no existe
+ * (misiones, que 7.2 y 7.3 no piden administrar) y el panel de movimientos,
+ * que enseñaba el historial de la propia cuenta de quien mira y no el de la
+ * plataforma. Las tablas son las del kit de la consola (columnas alineadas,
+ * orden por columna, fichas en el teléfono) y la página dice de cuándo es lo
+ * que se ve y se actualiza sola.
  *
  * @module plataforma/consola/control-integral
  */
 
 import { consultar, descargar, filasDe, totalDe, RESULTADO } from './cliente-consola.js';
-import { indicador, moduloNoImplementado, panel, pintarDesenlace, tabla } from './panel.js';
+import { indicador, panel, pintarDesenlace } from './panel.js';
+import {
+  celdaDeSobre,
+  momentoDe,
+  quienDe,
+  recortado,
+  sobreDe,
+  uidsDe,
+} from './entradas-de-auditoria.js';
+import { directorioDeTitulares } from './titulares.js';
 import {
   ESTADOS_DE_CUENTA,
   exportarDirectorio,
   guardarArchivo,
+  HISTORIAL_DE_SANCIONES,
   panelDeUsuarios,
   recursoDelDirectorio,
 } from './panel-usuarios.js';
@@ -38,39 +55,56 @@ import { encabezadoDePagina } from '../../comun/ui/pagina.js';
 import { NOMBRE_DE_ROL } from '../../comun/shell.js';
 import { RUTAS, resolver } from '../../comun/sesion.js';
 import { urlDeVista } from '../../comun/acceso.js';
-import { distintivo } from '../../comun/ui/distintivo.js';
 import { nombreDeModalidad } from '../../comun/ui/juego/partida.js';
+import { construirPaginacion } from '../../comun/paginacion.js';
+import { creditos, numero } from '../../comun/ui/formato.js';
+import { NOMBRE_DE_SANCION } from '../../comun/ui/sancion.js';
+import { actualizacionPeriodica } from '../../comun/ui/admin/actualizacion.js';
+import { barraDeFiltros } from '../../comun/ui/admin/barra-de-filtros.js';
+import {
+  ESTADOS_DE_CUENTA_ADMIN,
+  ESTADOS_DE_SALA,
+  ESTADOS_DE_SERVICIO,
+  ESTADOS_DE_TORNEO,
+  estadoSegun,
+  humanizar,
+} from '../../comun/ui/admin/estado.js';
+import { rejillaDeIndicadores, tarjetaDeIndicador } from '../../comun/ui/admin/indicador.js';
+import { nombreDeAccion } from '../../comun/ui/admin/nombres.js';
+import { pintarAlertasDeModeracion } from '../../comun/ui/admin/alertas-de-moderacion.js';
+import { fichaDeParametro, valorLegible } from '../../comun/ui/admin/parametros.js';
+import { SITUACION_DEL_SERVICIO, nombreDelServicio } from '../../comun/ui/admin/servicios.js';
+import { tablaDeDatos } from '../../comun/ui/admin/tabla-de-datos.js';
 
-/** Tamano de pagina del directorio. Coincide con el techo comodo del backend. */
-const FILAS_POR_PAGINA = 20;
+// SA-4: las alertas viven en el kit (las usa también el tablero de moderación);
+// se reexportan para quien ya las importaba de aquí.
+export { pintarAlertasDeModeracion };
+
+/**
+ * Cuentas por página del directorio: las dieciséis de los listados del
+ * producto (RNF-USA-001).
+ */
+export const FILAS_POR_PAGINA = 16;
+
+/** Cada cuánto se pone al día la consola sola, con la pestaña a la vista. */
+export const PERIODO_DE_ACTUALIZACION_MS = 60_000;
 
 /**
  * RFINAL-06 — lo que se pinta cuando el contrato de la fuente no trae el dato.
- * Un guion parecia un fallo de la pantalla y un identificador no lo lee nadie;
- * «sin dato» dice exactamente lo que pasa.
+ * Un guion parecía un fallo de la pantalla y un identificador no lo lee
+ * nadie; «Sin dato» dice exactamente lo que pasa.
  */
-export const SIN_DATO = 'sin dato';
-
-/** @param {*} valor */
-function oSinDato(valor) {
-  return valor === null || valor === undefined || valor === '' ? SIN_DATO : valor;
-}
-
-/** Fecha legible, o «sin dato»: nunca la de hoy, nunca un guion. */
-function fechaOSinDato(valor) {
-  return valor ? formatearFecha(valor) : SIN_DATO;
-}
+export const SIN_DATO = 'Sin dato';
 
 /** «3 de 8», solo si el servidor dio las dos cifras. */
 function deCuantos(parte, total) {
-  return Number.isFinite(parte) && Number.isFinite(total) ? `${parte} de ${total}` : SIN_DATO;
+  return Number.isFinite(parte) && Number.isFinite(total)
+    ? `${numero(parte)} de ${numero(total)}`
+    : null;
 }
 
 /**
- * Las ocho secciones, con el recurso del que se alimenta cada una.
- *
- * Es una tabla y no codigo repetido a proposito: anadir una seccion es una
- * fila aqui, y el orden de la pantalla es el orden de esta lista.
+ * Las secciones, en el orden de la pantalla. Añadir una es una fila aquí.
  */
 export const SECCIONES = Object.freeze([
   { id: 'resumen', etiqueta: 'Resumen' },
@@ -89,25 +123,19 @@ export const SECCIONES = Object.freeze([
  * @param {Document|HTMLElement} raiz
  * @param {{apodo?: string, rol?: string|null}} sesion
  * @param {{consultarApi?: typeof consultar, descargarApi?: typeof descargar,
- *          guardar?: typeof guardarArchivo}} [dependencias] inyectables en pruebas
+ *          guardar?: typeof guardarArchivo, actualizarSola?: boolean}} [dependencias]
+ *   inyectables en pruebas
  */
 export function montarControlIntegral(
   raiz,
   sesion,
-  { consultarApi = consultar, descargarApi = descargar, guardar = guardarArchivo } = {},
+  {
+    consultarApi = consultar,
+    descargarApi = descargar,
+    guardar = guardarArchivo,
+    actualizarSola = true,
+  } = {},
 ) {
-  const zonaEncabezado = raiz.querySelector('[data-zona="encabezado"]');
-  if (zonaEncabezado) {
-    zonaEncabezado.replaceChildren(
-      encabezadoDePagina({
-        titulo: 'Control integral del Nexo',
-        descripcion: sesion?.apodo
-          ? `Sesión de ${sesion.apodo} - ${NOMBRE_DE_ROL[sesion?.rol] ?? 'Operacion'}`
-          : 'Operación de la plataforma',
-      }),
-    );
-  }
-
   const zonaSecciones = raiz.querySelector('[data-zona="secciones"]');
   if (!zonaSecciones) {
     return null;
@@ -125,6 +153,39 @@ export function montarControlIntegral(
     sistema: seccionSistema(consultarApi),
   };
 
+  // La actualización en vivo: todos los paneles menos el directorio, que se
+  // consulta cuando quien opera cambia un filtro o de página y no se le
+  // redibuja mientras lo usa.
+  const enVivo = Object.values(paneles)
+    .flat()
+    .filter((p) => p.id !== 'directorio');
+  const actualizacion = actualizacionPeriodica({
+    nombre: 'la consola',
+    cadaMs: PERIODO_DE_ACTUALIZACION_MS,
+    automatica: actualizarSola,
+    cargar: async () => {
+      const desenlaces = await Promise.all(enVivo.map((p) => p.cargar()));
+      // «No se pudo» solo si no contestó nadie: con medio sistema caído la
+      // consola sigue al día en lo demás, y cada panel caído lo dice.
+      return desenlaces.some(
+        (d) => d?.resultado === RESULTADO.DATOS || d?.resultado === RESULTADO.VACIO,
+      );
+    },
+  });
+
+  const zonaEncabezado = raiz.querySelector('[data-zona="encabezado"]');
+  if (zonaEncabezado) {
+    zonaEncabezado.replaceChildren(
+      encabezadoDePagina({
+        titulo: 'Control integral',
+        descripcion: sesion?.rol
+          ? `${NOMBRE_DE_ROL[sesion.rol] ?? 'Operación'} · jugadores, partidas, economía, moderación y servicios`
+          : 'Jugadores, partidas, economía, moderación y servicios',
+        acciones: [actualizacion.elemento],
+      }),
+    );
+  }
+
   for (const seccion of SECCIONES) {
     const bloque = h('section', {
       clase: 'consola-integral__seccion',
@@ -132,27 +193,61 @@ export function montarControlIntegral(
       atributos: { 'aria-label': seccion.etiqueta },
     });
     bloque.append(h('h2', { clase: 't-subtitulo', texto: seccion.etiqueta }));
-    const rejilla = h('div', { clase: 'consola-integral__rejilla' });
-    for (const p of paneles[seccion.id]) {
-      rejilla.append(p.elemento);
-    }
-    bloque.append(rejilla);
+    bloque.append(
+      h('div', {
+        clase: 'consola-integral__rejilla',
+        hijos: agruparPaneles(paneles[seccion.id].map((p) => p.elemento)),
+      }),
+    );
     zonaSecciones.append(bloque);
   }
 
-  // Cada panel se carga por su cuenta. No hay un `await` que los encadene:
-  // que subastas tarde diez segundos no puede retrasar a jugadores.
-  for (const lista of Object.values(paneles)) {
-    for (const p of lista) {
-      p.cargar();
+  // La primera carga: el directorio por su cuenta y el resto con la marca de
+  // hora de la actualización. Ningún `await` encadena paneles: que subastas
+  // tarde diez segundos no retrasa a jugadores.
+  paneles.jugadores[0].cargar();
+  actualizacion.actualizar();
+
+  return Object.assign(paneles, { actualizacion });
+}
+
+/**
+ * Los paneles de cifras seguidos van juntos en una fila que se reparte entre
+ * ellos (dos a la mitad, cuatro a un cuarto); los de ancho completo, cada uno
+ * en su fila. Así no queda una tarjeta suelta junto a un hueco.
+ *
+ * @param {HTMLElement[]} elementos
+ * @returns {HTMLElement[]}
+ */
+export function agruparPaneles(elementos) {
+  const salida = [];
+  let grupo = [];
+  const cerrarGrupo = () => {
+    if (grupo.length > 0) {
+      salida.push(
+        h('div', {
+          clase: 'consola-integral__cifras',
+          datos: { cifras: String(grupo.length) },
+          hijos: grupo,
+        }),
+      );
+      grupo = [];
+    }
+  };
+  for (const elemento of elementos) {
+    if (elemento.dataset.ancho === 'completo') {
+      cerrarGrupo();
+      salida.push(elemento);
+    } else {
+      grupo.push(elemento);
     }
   }
-
-  return paneles;
+  cerrarGrupo();
+  return salida;
 }
 
 /* -------------------------------------------------------------------------
-   Armador comun de panel
+   Armador común de panel
    ------------------------------------------------------------------------- */
 
 /**
@@ -160,17 +255,43 @@ export function montarControlIntegral(
  *
  * @param {{id: string, titulo: string, descripcion?: string, recurso: string,
  *          pintar: (datos: *) => HTMLElement|HTMLElement[],
- *          consultarApi: Function}} opciones
+ *          consultarApi: Function, vacio?: {titulo: string, detalle?: string|null},
+ *          acciones?: Node[], ancho?: 'completo'|null}} opciones
  */
-function panelDeRecurso({ id, titulo, descripcion, recurso, pintar, consultarApi }) {
-  const partes = panel({ id, titulo, descripcion, fuente: `GET /api/v1${recurso}` });
+function panelDeRecurso({
+  id,
+  titulo,
+  descripcion,
+  recurso,
+  pintar,
+  consultarApi,
+  vacio,
+  acciones,
+  ancho = null,
+}) {
+  const partes = panel({ id, titulo, descripcion, acciones, ancho });
   const cargar = async () => {
     const desenlace = await consultarApi(recurso);
-    pintarDesenlace(partes, desenlace, pintar, { alReintentar: cargar });
+    pintarDesenlace(partes, desenlace, pintar, { alReintentar: cargar, vacio });
     return desenlace;
   };
   return { ...partes, cargar, id };
 }
+
+/** Enlace de texto a una vista de la consola. */
+function enlaceA(vista, texto, parametros = {}) {
+  let destino;
+  try {
+    destino = new URL(urlDeVista(vista));
+  } catch {
+    return null;
+  }
+  for (const [clave, valor] of Object.entries(parametros)) {
+    destino.searchParams.set(clave, valor);
+  }
+  return h('a', { clase: 'panel-admin__enlace', texto, atributos: { href: destino.href } });
+}
+
 /* -------------------------------------------------------------------------
    1. Resumen
    ------------------------------------------------------------------------- */
@@ -179,7 +300,6 @@ function seccionResumen(consultarApi, { guardar } = {}) {
   const jugadores = panelDeRecurso({
     id: 'resumen-jugadores',
     titulo: 'Cuentas registradas',
-    descripcion: 'Total del directorio de identidad.',
     recurso: '/admin/jugadores?page=0&size=1',
     consultarApi,
     pintar: (datos) => indicador({ etiqueta: 'cuentas', valor: totalDe(datos) }),
@@ -187,17 +307,16 @@ function seccionResumen(consultarApi, { guardar } = {}) {
 
   const servicios = panelDeRecurso({
     id: 'resumen-servicios',
-    titulo: 'Servicios en linea',
-    descripcion: 'Sondeo real de la salud de cada servicio del catálogo.',
+    titulo: 'Servicios en línea',
     recurso: '/admin/sistema/servicios',
     consultarApi,
     pintar: (datos) => {
-      const total = Number(datos?.total ?? 0);
-      const operativos = Number(datos?.operativos ?? 0);
+      const total = Number.isFinite(datos?.total) ? datos.total : null;
+      const operativos = Number.isFinite(datos?.operativos) ? datos.operativos : null;
       return indicador({
         etiqueta: 'operativos',
-        valor: `${operativos} / ${total}`,
-        nota: datos?.instante ? `Sondeado ${formatearInstante(datos.instante)}` : '',
+        valor: total !== null && operativos !== null ? `${operativos} de ${total}` : null,
+        nota: notaDeServicios(datos),
       });
     },
   });
@@ -205,7 +324,6 @@ function seccionResumen(consultarApi, { guardar } = {}) {
   const sanciones = panelDeRecurso({
     id: 'resumen-sanciones',
     titulo: 'Sanciones del último mes',
-    descripcion: 'Recuento que publica el servicio de moderación.',
     recurso: '/sanciones/metricas',
     consultarApi,
     pintar: (datos) =>
@@ -214,7 +332,9 @@ function seccionResumen(consultarApi, { guardar } = {}) {
         valor: typeof datos?.total === 'number' ? datos.total : null,
         nota:
           datos?.apelaciones && typeof datos.apelaciones.PENDIENTE === 'number'
-            ? `${datos.apelaciones.PENDIENTE} apelaciones pendientes`
+            ? `${numero(datos.apelaciones.PENDIENTE)} ${
+                datos.apelaciones.PENDIENTE === 1 ? 'apelación pendiente' : 'apelaciones pendientes'
+              }`
             : '',
       }),
   });
@@ -222,7 +342,6 @@ function seccionResumen(consultarApi, { guardar } = {}) {
   const torneos = panelDeRecurso({
     id: 'resumen-torneos',
     titulo: 'Torneos publicados',
-    descripcion: 'Los que el servicio de torneos lista ahora mismo.',
     recurso: '/torneos',
     consultarApi,
     pintar: (datos) => indicador({ etiqueta: 'torneos', valor: totalDe(datos) }),
@@ -235,21 +354,35 @@ function seccionResumen(consultarApi, { guardar } = {}) {
   return [jugadores, servicios, sanciones, torneos, usuarios];
 }
 
+/** «1 lento · 2 caídos»: solo lo que no está bien, y solo si hay algo. */
+function notaDeServicios(datos) {
+  const partes = [];
+  if (Number(datos?.lentos) > 0) {
+    partes.push(`${datos.lentos} ${datos.lentos === 1 ? 'lento' : 'lentos'}`);
+  }
+  if (Number(datos?.caidos) > 0) {
+    partes.push(`${datos.caidos} ${datos.caidos === 1 ? 'caído' : 'caídos'}`);
+  }
+  return partes.join(' · ');
+}
+
 /* -------------------------------------------------------------------------
    2. Jugadores
    ------------------------------------------------------------------------- */
+
+/** Valor del filtro «Cuentas» que deja fuera las de las pruebas automáticas. */
+const SIN_CUENTAS_DE_PRUEBA = 'sin-pruebas';
 
 function seccionJugadores(
   consultarApi,
   { descargarApi = descargar, guardar = guardarArchivo } = {},
 ) {
-  // RFINAL-06 — las cuentas de las pruebas automáticas se ocultan por omisión
-  // y las excluye el servidor antes de paginar (ms-identidad-admin.yaml 1.2.0,
-  // `ocultarPruebas`). Qué cuenta es de pruebas lo decide su configuración,
-  // no esta pantalla.
+  // HU-USR-008 (1.3.0) — búsqueda, rol, estado y fecha de registro: los
+  // filtros APLICADOS, los de la página que se ve y los de la exportación.
   //
-  // HU-USR-008 (1.3.0) — rol, estado y fecha de registro. Son los filtros
-  // APLICADOS: los de la página que se ve y los de la exportación.
+  // RFINAL-06 / SA-2 — las cuentas de las pruebas automáticas (las del dominio
+  // reservado `.test`) se pueden excluir con un filtro VISIBLE, que viene
+  // puesto y se quita como cualquier otro: nada se oculta sin que se vea.
   const estado = {
     pagina: 0,
     buscar: '',
@@ -258,110 +391,91 @@ function seccionJugadores(
     estadoCuenta: '',
     desde: '',
     hasta: '',
+    historialSanciones: '',
   };
+
+  const exportar = h('button', {
+    clase: 'boton boton--secundario',
+    texto: 'Exportar CSV',
+    atributos: { type: 'button' },
+    datos: { accion: 'exportar-directorio' },
+  });
   const partes = panel({
     id: 'directorio',
     titulo: 'Directorio de jugadores',
-    descripcion:
-      'Busca por apodo, correo o nombre y filtra por rol, estado y fecha de registro. El ' +
-      'filtrado, la paginación y la exportación los hace el servidor, no el navegador.',
-    fuente: 'GET /api/v1/admin/jugadores',
+    acciones: [exportar],
+    ancho: 'completo',
   });
 
-  const buscador = h('form', { clase: 'consola-integral__buscador' });
-  const campo = h('input', {
-    clase: 'campo__entrada',
-    atributos: {
-      type: 'search',
-      name: 'buscar',
-      placeholder: 'Apodo, correo o nombre',
-      'aria-label': 'Buscar jugador por apodo, correo o nombre',
+  const filtros = barraDeFiltros({
+    etiqueta: 'Buscar en el directorio',
+    busqueda: {
+      nombre: 'buscar',
+      etiqueta: 'Buscar',
+      // ms-identidad-admin 1.5.0: también por el ID de la cuenta o su uid.
+      placeholder: 'Apodo, correo, nombre o ID',
     },
-  });
-  const boton = h('button', {
-    clase: 'boton boton--primario',
-    texto: 'Buscar',
-    atributos: { type: 'submit' },
-  });
-  const filtros = filtrosDelDirectorio();
-  buscador.append(campo, boton, filtros.fila);
-  partes.elemento.insertBefore(buscador, partes.zona);
-
-  const ocultarPruebas = h('input', {
-    clase: 'casilla__entrada',
-    atributos: { type: 'checkbox', name: 'ocultarPruebas' },
-  });
-  ocultarPruebas.checked = estado.ocultarPruebas;
-  partes.elemento.insertBefore(
-    h('label', {
-      clase: 'casilla',
-      hijos: [
-        ocultarPruebas,
-        h('span', {
-          clase: 'casilla__etiqueta',
-          texto: 'Ocultar cuentas de pruebas automáticas',
-        }),
-      ],
-    }),
-    partes.zona,
-  );
-
-  // HU-USR-008 — exportar el listado con los filtros vigentes. Lo arma el
-  // servidor (una consulta, sin páginas que se corran mientras alguien se
-  // registra); aquí se descarga y se dice cómo fue.
-  const exportar = h('button', {
-    clase: 'boton boton--secundario',
-    texto: 'Exportar listado (CSV)',
-    atributos: { type: 'button' },
-    datos: { accion: 'exportar-directorio' },
+    filtros: [
+      { nombre: 'rol', etiqueta: 'Rol', opciones: Object.entries(NOMBRE_DE_ROL) },
+      {
+        nombre: 'estadoCuenta',
+        etiqueta: 'Estado',
+        opciones: ESTADOS_DE_CUENTA.map(({ estado: valor, nombre }) => [valor, nombre]),
+      },
+      { nombre: 'desde', etiqueta: 'Registrada desde', tipo: 'fecha' },
+      { nombre: 'hasta', etiqueta: 'Registrada hasta', tipo: 'fecha' },
+      // SA-3 — §7.3.4 «filtros por historial de sanciones».
+      {
+        nombre: 'historialSanciones',
+        etiqueta: 'Sanciones',
+        todos: 'Todas las cuentas',
+        opciones: HISTORIAL_DE_SANCIONES,
+      },
+      {
+        nombre: 'cuentas',
+        etiqueta: 'Cuentas de prueba',
+        todos: 'Incluidas',
+        opciones: [[SIN_CUENTAS_DE_PRUEBA, 'Excluidas']],
+      },
+    ],
+    valores: { cuentas: SIN_CUENTAS_DE_PRUEBA },
+    validar: (valores) =>
+      valores.desde && valores.hasta && valores.desde > valores.hasta
+        ? 'La fecha «Registrada desde» es posterior a «Registrada hasta»: corrige el periodo.'
+        : null,
+    alAplicar: (valores) => {
+      Object.assign(estado, {
+        buscar: valores.buscar,
+        rol: valores.rol,
+        estadoCuenta: valores.estadoCuenta,
+        desde: valores.desde,
+        hasta: valores.hasta,
+        historialSanciones: valores.historialSanciones,
+        ocultarPruebas: valores.cuentas === SIN_CUENTAS_DE_PRUEBA,
+        pagina: 0,
+      });
+      cargar();
+    },
   });
   const aviso = h('p', {
     clase: 't-meta',
     datos: { zona: 'aviso-directorio' },
     atributos: { role: 'status', 'aria-live': 'polite' },
   });
-  partes.elemento.insertBefore(
-    h('div', { clase: 'fila fila--acciones', hijos: [exportar] }),
-    partes.zona,
-  );
+  partes.elemento.insertBefore(filtros.elemento, partes.zona);
   partes.elemento.insertBefore(aviso, partes.zona);
 
   const cargar = async () => {
     const desenlace = await consultarApi(recursoDelDirectorio(estado, FILAS_POR_PAGINA));
     pintarDesenlace(partes, desenlace, (datos) => pintarDirectorio(datos, estado, cargar), {
       alReintentar: cargar,
+      vacio: {
+        titulo: 'Ninguna cuenta coincide',
+        detalle: 'Prueba con otra búsqueda o quita algún filtro.',
+      },
     });
     return desenlace;
   };
-
-  /** Aplica lo que dice el formulario y vuelve a la primera página. */
-  const aplicar = () => {
-    const valores = filtros.leer();
-    if (valores.desde && valores.hasta && valores.desde > valores.hasta) {
-      // El servidor lo rechazaría igual (400); aquí se explica sin preguntar.
-      filtros.marcarRangoInvalido(true);
-      aviso.textContent = 'La fecha «Registrada desde» es posterior a «hasta»: corrige el periodo.';
-      return;
-    }
-    filtros.marcarRangoInvalido(false);
-    aviso.textContent = '';
-    Object.assign(estado, valores, { buscar: campo.value.trim(), pagina: 0 });
-    cargar();
-  };
-
-  buscador.addEventListener('submit', (evento) => {
-    evento.preventDefault();
-    aplicar();
-  });
-  for (const control of filtros.controles) {
-    control.addEventListener('change', aplicar);
-  }
-
-  ocultarPruebas.addEventListener('change', () => {
-    estado.ocultarPruebas = ocultarPruebas.checked;
-    estado.pagina = 0;
-    cargar();
-  });
 
   exportar.addEventListener('click', async () => {
     exportar.disabled = true;
@@ -377,157 +491,94 @@ function seccionJugadores(
     }
   });
 
-  return [{ ...partes, cargar, id: 'directorio' }];
+  return [{ ...partes, cargar, id: 'directorio', filtros }];
 }
 
 /**
- * HU-USR-008 — rol, estado y fecha de registro del directorio, cada uno con su
- * etiqueta visible. «Todos» es no filtrar.
+ * Una página del directorio: la tabla del kit y la paginación común.
  *
- * @returns {{fila: HTMLElement, controles: HTMLElement[],
- *   leer: () => {rol: string, estadoCuenta: string, desde: string, hasta: string},
- *   marcarRangoInvalido: (invalido: boolean) => void}}
+ * @param {*} datos la página de `/admin/jugadores`
+ * @param {{pagina: number}} estado
+ * @param {() => void} recargar
+ * @returns {HTMLElement[]}
  */
-function filtrosDelDirectorio() {
-  const desplegable = (nombre, etiqueta, opciones) => {
-    const control = h('select', {
-      clase: 'desplegable__control',
-      atributos: { name: nombre },
-      hijos: [
-        h('option', { texto: 'Todos', atributos: { value: '' } }),
-        ...opciones.map(([valor, texto]) => h('option', { texto, atributos: { value: valor } })),
-      ],
-    });
-    const caja = h('label', {
-      clase: 'desplegable',
-      hijos: [h('span', { clase: 'campo__etiqueta', texto: etiqueta }), control],
-    });
-    return { caja, control };
-  };
-  const fecha = (nombre, etiqueta) => {
-    const control = h('input', {
-      clase: 'campo__control',
-      atributos: { type: 'date', name: nombre },
-    });
-    const caja = h('label', {
-      clase: 'campo',
-      hijos: [h('span', { clase: 'campo__etiqueta', texto: etiqueta }), control],
-    });
-    return { caja, control };
-  };
-
-  const rol = desplegable('rol', 'Rol', Object.entries(NOMBRE_DE_ROL));
-  const estadoCuenta = desplegable(
-    'estado',
-    'Estado',
-    ESTADOS_DE_CUENTA.map(({ estado, nombre }) => [estado, nombre]),
-  );
-  const desde = fecha('registradoDesde', 'Registrada desde');
-  const hasta = fecha('registradoHasta', 'Registrada hasta');
-
-  return {
-    fila: h('div', {
-      clase: 'consola-integral__filtros',
-      hijos: [rol.caja, estadoCuenta.caja, desde.caja, hasta.caja],
-    }),
-    controles: [rol.control, estadoCuenta.control, desde.control, hasta.control],
-    leer: () => ({
-      rol: rol.control.value,
-      estadoCuenta: estadoCuenta.control.value,
-      desde: desde.control.value,
-      hasta: hasta.control.value,
-    }),
-    marcarRangoInvalido: (invalido) => {
-      if (invalido) {
-        desde.control.setAttribute('aria-invalid', 'true');
-      } else {
-        desde.control.removeAttribute('aria-invalid');
-      }
-    },
-  };
-}
-
 export function pintarDirectorio(datos, estado, recargar) {
-  const filas = filasDe(datos).map((jugador) => [
-    jugador.apodo ?? '--',
-    jugador.email ?? '--',
-    jugador.rol ?? '--',
-    jugador.bloqueada ? 'BLOQUEADA' : (jugador.estado ?? '--'),
-    formatearFecha(jugador.creadoEn),
-    jugador.ultimoAcceso ? formatearFecha(jugador.ultimoAcceso) : 'Nunca ha entrado',
-    enlaceAFicha(jugador),
-    enlaceAGestion(jugador),
-    enlaceASanciones(jugador),
-  ]);
+  const cuentas = filasDe(datos);
+  const total = Number.isFinite(datos?.total) ? datos.total : cuentas.length;
+  const totalPaginas = Math.max(1, Number(datos?.totalPaginas) || 1);
+  const pagina = Math.min(Math.max(0, Number(estado?.pagina) || 0), totalPaginas - 1);
 
-  const cuantas = estado?.ocultarPruebas
-    ? 'cuentas sin contar las de pruebas automáticas'
-    : 'cuentas en total';
-  const cuerpo = tabla({
+  const cuerpo = tablaDeDatos({
+    titulo: 'Directorio de jugadores',
+    // La página en la que se está la dice la paginación, debajo.
+    resumen: `${numero(total)} ${total === 1 ? 'cuenta' : 'cuentas'}`,
     columnas: [
-      'Apodo',
-      'Correo',
-      'Rol',
-      'Estado',
-      'Registro',
-      'Última entrada',
-      'Ficha',
-      'Gestión',
-      'Sanciones',
+      { clave: 'apodo', titulo: 'Apodo', principal: true },
+      { clave: 'email', titulo: 'Correo' },
+      { clave: 'rol', titulo: 'Rol', valor: (j) => NOMBRE_DE_ROL[j.rol] ?? j.rol },
+      {
+        clave: 'estado',
+        titulo: 'Estado',
+        tipo: 'estado',
+        valor: (j) => estadoSegun(j.bloqueada ? 'BLOQUEADA' : j.estado, ESTADOS_DE_CUENTA_ADMIN),
+      },
+      {
+        clave: 'creadoEn',
+        titulo: 'Registro',
+        tipo: 'fecha',
+        valor: (j) => (j.creadoEn ? formatearDia(j.creadoEn) : null),
+      },
+      {
+        clave: 'ultimoAcceso',
+        titulo: 'Última entrada',
+        tipo: 'fecha',
+        valor: (j) => (j.ultimoAcceso ? formatearFecha(j.ultimoAcceso) : 'Nunca ha entrado'),
+      },
+      // SA-3 — cuántas sanciones se le han emitido (ms-identidad-admin 1.7.0);
+      // un servicio anterior que no la publica deja «Sin dato», no un cero.
+      {
+        clave: 'sancionesRegistradas',
+        titulo: 'Sanciones',
+        tipo: 'numero',
+        valor: (j) => (Number.isInteger(j.sancionesRegistradas) ? j.sancionesRegistradas : null),
+      },
+      {
+        clave: 'acciones',
+        titulo: 'Acciones',
+        tipo: 'accion',
+        valor: (j) => [enlaceAFicha(j), enlaceAGestion(j), enlaceASanciones(j)],
+      },
     ],
-    filas,
-    resumen: `Página ${(datos?.pagina ?? 0) + 1} de ${datos?.totalPaginas ?? 1}, ${
-      datos?.total ?? filas.length
-    } ${cuantas}`,
+    filas: cuentas,
+    claveDeFila: (j) => String(j.uid ?? j.id ?? j.apodo ?? ''),
   });
 
-  const navegacion = h('nav', {
-    clase: 'consola-integral__paginacion',
-    atributos: { 'aria-label': 'Paginación del directorio' },
-  });
-  const totalPaginas = Number(datos?.totalPaginas ?? 1);
-  const anterior = h('button', {
-    clase: 'boton boton--secundario',
-    texto: 'Anterior',
-    atributos: { type: 'button' },
-    datos: { accion: 'anterior' },
-  });
-  anterior.disabled = estado.pagina <= 0;
-  anterior.addEventListener('click', () => {
-    estado.pagina = Math.max(0, estado.pagina - 1);
-    recargar();
-  });
-  const siguiente = h('button', {
-    clase: 'boton boton--secundario',
-    texto: 'Siguiente',
-    atributos: { type: 'button' },
-    datos: { accion: 'siguiente' },
-  });
-  siguiente.disabled = estado.pagina >= totalPaginas - 1;
-  siguiente.addEventListener('click', () => {
-    estado.pagina += 1;
-    recargar();
-  });
-  navegacion.append(anterior, siguiente);
-
-  return [cuerpo, navegacion];
+  const paginacion = construirPaginacion(
+    { paginaActual: pagina, totalPaginas },
+    (nueva) => {
+      estado.pagina = nueva;
+      recargar();
+    },
+    { etiqueta: 'Páginas del directorio', flechas: 'siempre', casillas: 5 },
+  );
+  return [cuerpo, paginacion];
 }
+
 /**
- * UXC-9 — §7.3.4: de la ficha del directorio al historial de sanciones de
- * esa cuenta, sin copiar su identificador. El panel de sanciones hace su
- * propia guarda de rol (Tabla 24).
+ * UXC-9 — §7.3.4: de la fila al historial de sanciones de esa cuenta, sin
+ * copiar su identificador. El panel de sanciones hace su propia guarda de rol.
  *
  * @param {{uid?: string, apodo?: string}} jugador
- * @returns {HTMLAnchorElement|string}
+ * @returns {HTMLAnchorElement|null}
  */
 function enlaceASanciones(jugador) {
   if (!jugador?.uid) {
-    return '--';
+    return null;
   }
   const destino = new URL(resolver(RUTAS.sanciones));
   destino.searchParams.set('usuario', jugador.uid);
   return h('a', {
-    texto: 'Ver sanciones',
+    texto: 'Sanciones',
     atributos: {
       href: destino.href,
       'aria-label': `Ver las sanciones de ${jugador.apodo ?? 'esta cuenta'}`,
@@ -537,23 +588,22 @@ function enlaceASanciones(jugador) {
 }
 
 /**
- * HU-USR-010 — de la fila a la ficha administrativa de esa cuenta: lo que cada
- * servicio publica de ella, con su línea de tiempo y la consulta auditada. Va
- * por la clave de la cuenta (`id`, la tienen todas); sin ella, por el `uid`.
+ * HU-USR-010 — de la fila a la ficha administrativa de esa cuenta. Va por la
+ * clave de la cuenta (`id`, la tienen todas); sin ella, por el `uid`.
  *
  * @param {{id?: number, uid?: string|null, apodo?: string}} jugador
- * @returns {HTMLAnchorElement|string}
+ * @returns {HTMLAnchorElement|null}
  */
 function enlaceAFicha(jugador) {
   const clave = Number(jugador?.id);
   const cuenta = Number.isInteger(clave) && clave > 0 ? String(clave) : jugador?.uid;
   if (!cuenta) {
-    return SIN_DATO;
+    return null;
   }
   const destino = new URL(urlDeVista('ficha-usuario'));
   destino.searchParams.set('usuario', cuenta);
   return h('a', {
-    texto: 'Ver ficha',
+    texto: 'Ficha',
     atributos: {
       href: destino.href,
       'aria-label': `Ver la ficha de ${jugador.apodo ?? 'esta cuenta'}`,
@@ -563,18 +613,17 @@ function enlaceAFicha(jugador) {
 }
 
 /**
- * RFINAL-06 — de la fila a la ficha de gestión de esa cuenta, sin copiar su
- * identificador: la gestión espera la clave interna de la cuenta, que el
- * directorio publica desde ms-identidad-admin.yaml 1.2.0 (`id`). Sin ella
- * (un servicio anterior) se dice, en vez de pintar un enlace que no abre nada.
+ * RFINAL-06 — de la fila a la gestión de esa cuenta: la gestión espera la
+ * clave interna (`id`, ms-identidad-admin.yaml 1.2.0). Sin ella no se pinta
+ * un enlace que no abre nada.
  *
  * @param {{id?: number, apodo?: string}} jugador
- * @returns {HTMLAnchorElement|string}
+ * @returns {HTMLAnchorElement|null}
  */
 function enlaceAGestion(jugador) {
   const clave = Number(jugador?.id);
   if (!Number.isInteger(clave) || clave <= 0) {
-    return SIN_DATO;
+    return null;
   }
   const destino = new URL(resolver(RUTAS.gestionUsuarios));
   destino.searchParams.set('usuario', String(clave));
@@ -595,28 +644,49 @@ function enlaceAGestion(jugador) {
 function seccionPartidas(consultarApi) {
   const salas = panelDeRecurso({
     id: 'salas',
+    ancho: 'completo',
     titulo: 'Salas y partidas',
-    descripcion: 'Partidas y salas abiertas en este momento.',
     recurso: '/salas',
     consultarApi,
-    // `Sala` de salas-partidas.yaml: no tiene nombre («las salas no tienen
-    // nombre») y del anfitrion solo trae `idAnfitrion`, un UUID; su apodo es
-    // de identidad y no se replica alli. La sala se describe por su modalidad
-    // y el anfitrion queda «sin dato» en vez de un identificador ilegible.
-    pintar: (datos) =>
-      tabla({
-        columnas: ['Sala', 'Estado', 'Jugadores', 'Creada', 'Anfitrión'],
-        filas: filasDe(datos).map((sala) => [
-          descripcionDeSala(sala),
-          oSinDato(sala.estado),
-          deCuantos(sala.ocupacion, sala.maximoParticipantes),
-          fechaOSinDato(sala.creadaEn),
-          SIN_DATO,
-        ]),
-      }),
+    vacio: { titulo: 'No hay salas abiertas ahora mismo' },
+    // `Sala` de salas-partidas.yaml no tiene nombre («las salas no tienen
+    // nombre») y del anfitrión solo trae un UUID: la sala se describe por su
+    // modalidad, y una columna que nunca tendría dato no se pinta.
+    pintar: (datos) => {
+      const filas = filasDe(datos);
+      return tablaDeDatos({
+        titulo: 'Salas y partidas',
+        resumen: `${numero(filas.length)} ${filas.length === 1 ? 'sala' : 'salas'}`,
+        columnas: [
+          { clave: 'sala', titulo: 'Sala', principal: true, valor: descripcionDeSala },
+          {
+            clave: 'estado',
+            titulo: 'Estado',
+            tipo: 'estado',
+            ordenable: true,
+            valor: (s) => estadoSegun(s.estado, ESTADOS_DE_SALA),
+          },
+          {
+            clave: 'ocupacion',
+            titulo: 'Jugadores',
+            tipo: 'numero',
+            ordenable: true,
+            valor: (s) => deCuantos(s.ocupacion, s.maximoParticipantes),
+          },
+          {
+            clave: 'creadaEn',
+            titulo: 'Creada',
+            tipo: 'fecha',
+            ordenable: true,
+            valor: (s) => fechaOVacio(s.creadaEn),
+          },
+        ],
+        filas,
+      });
+    },
   });
 
-  return [salas, panelDeMisiones()];
+  return [salas];
 }
 
 /** «1 contra 1 · privada»: lo que identifica una sala que no tiene nombre. */
@@ -625,77 +695,21 @@ function descripcionDeSala(sala) {
   return sala?.privada ? `${modalidad} · privada` : modalidad;
 }
 
-/**
- * Misiones: el servicio existe, pero no publica nada para operar.
- *
- * UXC-9 — este panel decía que ningún servicio publicaba misiones, y desde B9
- * ya no es verdad: `misiones.yaml` publica el tablón, las misiones en curso y
- * el historial, pero todo es de cada jugador (sale de su token). No hay un
- * agregado de progreso para la consola, y la alternativa -- inventar cifras
- * para que el panel se vea lleno -- la convertiría en una demo.
- */
-function panelDeMisiones() {
-  const partes = panel({
-    id: 'misiones',
-    titulo: 'Misiones',
-    descripcion: 'Progreso de misiones de los jugadores.',
-  });
-  const cargar = async () => {
-    vaciar(partes.zona).append(
-      moduloNoImplementado({
-        razon:
-          'El servicio de misiones publica lo de cada jugador (su tablón, sus misiones en curso ' +
-          'y su historial), pero no un progreso de todos para operación. No hay nada que ' +
-          'consultar aquí, y esta consola no fabrica datos para llenar un hueco.',
-      }),
-    );
-    partes.sello.dataset.estado = 'neutro';
-    partes.sello.textContent = 'NO IMPLEMENTADO';
-    return { resultado: RESULTADO.NO_IMPLEMENTADO, datos: null, estado: null, recurso: '' };
-  };
-  return { ...partes, cargar, id: 'misiones' };
-}
-
 /* -------------------------------------------------------------------------
-   4. Economia
+   4. Economía
    ------------------------------------------------------------------------- */
 
 function seccionEconomia(consultarApi) {
-  const transacciones = panelDeRecurso({
-    id: 'transacciones',
-    titulo: 'Movimientos de tu cuenta',
-    descripcion:
-      'El sistema no publica un libro mayor global: solo el historial de quien consulta.',
-    // No hay un libro mayor global: /transacciones acepta POST para registrar
-    // un movimiento y a un GET responde 405. Lo unico consultable es el
-    // historial de quien pregunta. Se ensena eso, dicho con todas las letras,
-    // en vez de fabricar un agregado que ningun servicio calcula.
-    recurso: '/transacciones/mi-historial',
-    consultarApi,
-    pintar: (datos) =>
-      tabla({
-        columnas: ['Referencia', 'Tipo', 'Monto', 'Fecha'],
-        filas: filasDe(datos)
-          .slice(0, 25)
-          .map((t) => [
-            t.referencia ?? t.refId ?? t.id ?? '--',
-            t.tipo ?? '--',
-            t.monto ?? t.valor ?? '--',
-            formatearFecha(t.fecha ?? t.creadoEn),
-          ]),
-      }),
-  });
-
   const catalogo = panelDeRecurso({
     id: 'catalogo',
     titulo: 'Catálogo de productos',
-    descripcion: 'Lo que está publicado a la venta ahora mismo.',
     recurso: '/productos',
     consultarApi,
+    acciones: [enlaceA('productos', 'Gestionar el catálogo')].filter(Boolean),
     pintar: (datos) => indicador({ etiqueta: 'productos publicados', valor: totalDe(datos) }),
   });
 
-  return [transacciones, catalogo];
+  return [catalogo];
 }
 
 /* -------------------------------------------------------------------------
@@ -706,27 +720,50 @@ function seccionSubastas(consultarApi) {
   return [
     panelDeRecurso({
       id: 'subastas',
+      ancho: 'completo',
       titulo: 'Subastas activas',
-      descripcion: 'Publicaciones abiertas ahora mismo.',
       recurso: '/subastas',
       consultarApi,
+      vacio: { titulo: 'No hay subastas abiertas ahora mismo' },
       // `SubastaResumen` de ms-subastas-listado.yaml: el producto viene en
-      // `nombreProducto`, la puja mas alta en `ofertaVigente` y el cierre en
+      // `nombreProducto`, la puja más alta en `ofertaVigente` y el cierre en
       // `fechaFin`. El `id` es un UUID: no se pinta.
       pintar: (datos) => {
-        const filas = filasDe(datos)
-          .slice(0, 25)
-          .map((s) => [
-            oSinDato(s.nombreProducto),
-            oSinDato(s.ofertaVigente),
-            oSinDato(s.cantidadPujas),
-            fechaOSinDato(s.fechaFin),
-          ]);
+        const filas = filasDe(datos).slice(0, 25);
         const total = datos?.totalElementos;
-        return tabla({
-          columnas: ['Elemento', 'Precio actual', 'Pujas', 'Cierra'],
+        return tablaDeDatos({
+          titulo: 'Subastas activas',
+          resumen: Number.isFinite(total)
+            ? `${numero(filas.length)} de ${numero(total)} subastas activas`
+            : `${numero(filas.length)} subastas activas`,
+          columnas: [
+            { clave: 'nombreProducto', titulo: 'Elemento', principal: true, ordenable: true },
+            {
+              clave: 'ofertaVigente',
+              titulo: 'Puja más alta',
+              tipo: 'numero',
+              ordenable: true,
+              valor: (s) =>
+                Number.isFinite(Number(s.ofertaVigente)) && s.ofertaVigente !== null
+                  ? `${creditos(s.ofertaVigente)} créditos`
+                  : null,
+            },
+            {
+              clave: 'cantidadPujas',
+              titulo: 'Pujas',
+              tipo: 'numero',
+              ordenable: true,
+              valor: (s) => (Number.isFinite(s.cantidadPujas) ? numero(s.cantidadPujas) : null),
+            },
+            {
+              clave: 'fechaFin',
+              titulo: 'Cierra',
+              tipo: 'fecha',
+              ordenable: true,
+              valor: (s) => fechaOVacio(s.fechaFin),
+            },
+          ],
           filas,
-          resumen: Number.isFinite(total) ? `${filas.length} de ${total} subastas activas` : '',
         });
       },
     }),
@@ -741,172 +778,347 @@ function seccionTorneos(consultarApi) {
   return [
     panelDeRecurso({
       id: 'torneos',
+      ancho: 'completo',
       titulo: 'Torneos',
-      descripcion: 'Convocatorias que publica el servicio de torneos.',
       recurso: '/torneos',
       consultarApi,
+      vacio: { titulo: 'No hay torneos publicados' },
       // `TorneoResumen` de torneos.yaml: equipos en `equiposInscritos` de
-      // `cupos`. El listado no publica fecha de inicio (el inicio real lo da
-      // un administrador y solo sale en la ficha, `iniciadoEn`); lo que si
-      // trae es el cierre de inscripciones.
-      pintar: (datos) =>
-        tabla({
-          columnas: ['Torneo', 'Estado', 'Equipos', 'Inscripciones hasta'],
-          filas: filasDe(datos).map((t) => [
-            oSinDato(t.nombre),
-            oSinDato(t.estado),
-            deCuantos(t.equiposInscritos, t.cupos),
-            fechaOSinDato(t.inscripcionesCierranEn),
-          ]),
-        }),
+      // `cupos`; del calendario, el cierre de inscripciones.
+      pintar: (datos) => {
+        const filas = filasDe(datos);
+        return tablaDeDatos({
+          titulo: 'Torneos',
+          resumen: `${numero(filas.length)} ${filas.length === 1 ? 'torneo' : 'torneos'}`,
+          columnas: [
+            { clave: 'nombre', titulo: 'Torneo', principal: true, ordenable: true },
+            {
+              clave: 'estado',
+              titulo: 'Estado',
+              tipo: 'estado',
+              ordenable: true,
+              valor: (t) => estadoSegun(t.estado, ESTADOS_DE_TORNEO),
+            },
+            {
+              clave: 'equiposInscritos',
+              titulo: 'Equipos',
+              tipo: 'numero',
+              ordenable: true,
+              valor: (t) => deCuantos(t.equiposInscritos, t.cupos),
+            },
+            {
+              clave: 'inscripcionesCierranEn',
+              titulo: 'Inscripciones hasta',
+              tipo: 'fecha',
+              ordenable: true,
+              valor: (t) => fechaOVacio(t.inscripcionesCierranEn),
+            },
+          ],
+          filas,
+        });
+      },
     }),
   ];
 }
+
 /* -------------------------------------------------------------------------
-   7. Moderacion y auditoria
+   7. Moderación y auditoría
    ------------------------------------------------------------------------- */
 
 function seccionModeracion(consultarApi) {
-  const auditoria = panelDeRecurso({
-    id: 'auditoria',
-    titulo: 'Bitácora de acciones administrativas',
-    descripcion: 'Cada acción, con la identidad de quien la hizo.',
-    // La ruta de LECTURA es /admin/auditoria. /admin/auditoria/eventos es la
-    // de escritura: acepta POST y a un GET responde 405. Comprobado contra
-    // dev con un token de administrador.
-    //
-    // RFINAL-06: sin `sort` el orden lo decidia la base de datos y «los
-    // ultimos quince» eran los primeros que se registraron. Fecha descendente
-    // y el `id` como desempate (ms-cumplimiento-auditoria.yaml, `sort`).
-    recurso: '/admin/auditoria?page=0&size=15&sort=fechaHora,desc&sort=id,desc',
-    consultarApi,
-    pintar: (datos) =>
-      tabla({
-        columnas: ['Cuándo', 'Quién', 'Acción', 'Sobre', 'Motivo'],
-        filas: filasDe(datos).map((e) => [
-          formatearFecha(e.fechaHora),
-          e.administrador ?? '--',
-          e.tipoAccion ?? '--',
-          e.afectado ?? '--',
-          e.motivo ?? '--',
-        ]),
-        resumen: 'Últimos quince eventos registrados',
-      }),
-  });
+  // §7.3.5 (SA-5): las quince acciones más recientes de la bitácora central,
+  // con nombres en vez de identificadores; «Ver toda la auditoría» lleva al
+  // registro completo, con sus filtros y su exportación.
+  const auditoria = panelDeBitacora(consultarApi);
 
-  // No hay listado global de sanciones: /sanciones acepta POST para emitir una,
-  // y la consulta es por usuario (/sanciones/usuarios/{id}). Lo unico agregado
-  // que el servicio publica es este recuento, y es lo que se ensena. Inventar
-  // una tabla de sanciones a partir del recuento seria exactamente lo que esta
-  // consola no hace.
+  // No hay listado global de sanciones en esta sección: el servicio publica
+  // el recuento de la ventana de treinta días, y eso es lo que se enseña.
   const sanciones = panelDeRecurso({
     id: 'sanciones',
+    ancho: 'completo',
     titulo: 'Sanciones del último mes',
-    descripcion: 'Recuento por tipo y estado de las apelaciones.',
+    acciones: [enlaceA('sanciones-admin', 'Ir a sanciones')].filter(Boolean),
     recurso: '/sanciones/metricas',
     consultarApi,
-    pintar: (datos) => {
-      const porTipo = datos?.porTipo ?? {};
-      const apelaciones = datos?.apelaciones ?? {};
-      return tabla({
-        columnas: ['Concepto', 'Cantidad'],
-        filas: [
-          ['Total de sanciones', datos?.total ?? '--'],
-          ...Object.entries(porTipo).map(([tipo, cuantas]) => [tipo, cuantas]),
-          ...Object.entries(apelaciones).map(([estado, cuantas]) => [
-            `Apelaciones ${estado.toLowerCase()}`,
-            cuantas,
-          ]),
-          ['Moderadores activos', datos?.moderadoresActivos ?? '--'],
-        ],
-        resumen: 'Ventana de treinta días que calcula el servicio',
-      });
-    },
+    pintar: (datos) => pintarMetricasDeSanciones(datos),
   });
 
   const comentarios = panelDeRecurso({
     id: 'comentarios',
     titulo: 'Comentarios reportados',
-    descripcion: 'Cola de moderación de comentarios.',
+    acciones: [enlaceA('moderar-comentarios', 'Abrir la moderación')].filter(Boolean),
     recurso: '/comentarios/moderacion',
     consultarApi,
-    pintar: (datos) => indicador({ etiqueta: 'en cola', valor: totalDe(datos) }),
+    vacio: { titulo: 'No hay comentarios reportados' },
+    pintar: (datos) => indicador({ etiqueta: 'por revisar', valor: totalDe(datos) }),
   });
 
-  // UXC-9 — §7.3.4 «alertas»: las de alta frecuencia de sanciones que evalúa
-  // el servicio de métricas contra su umbral (`TableroDeModeracion`). Es el
-  // mismo dato que el tablero técnico; aquí, a la vista de quien opera sin
-  // cambiar de pantalla. Sin umbral configurado no hay alerta que evaluar, y
-  // se dice así en vez de pintar «sin alertas».
+  // §7.3.4 «alertas» y §7.3.8 «alertas de actividad sospechosa o alta
+  // frecuencia de reportes»: los días con alta frecuencia de sanciones o de
+  // reportes que evalúa el servicio de métricas contra los umbrales de
+  // Parámetros (SA-4, metricas-plataforma 1.11.0).
   const alertas = panelDeRecurso({
     id: 'alertas-moderacion',
     titulo: 'Alertas de moderación',
-    descripcion: 'Días en que las sanciones superan el umbral configurado.',
+    descripcion: 'Días con alta frecuencia de sanciones o de reportes en los últimos 30 días.',
+    acciones: [enlaceA('tablero-tecnico', 'Ver el tablero de moderación')].filter(Boolean),
     recurso: '/moderacion',
     consultarApi,
     pintar: (datos) => pintarAlertasDeModeracion(datos),
   });
 
-  return [alertas, auditoria, sanciones, comentarios];
+  // HU-USR-008 (D-45) — «comportamiento sospechoso», una de las dos señales que
+  // fijó el PO: quien acumula varias sanciones sin revertir (#909, integrado en
+  // SA-4). Sin `minimo` el servicio usa el del PO (3); el panel lo lee de la
+  // respuesta, no lo repite.
+  const reincidentes = panelDeReincidentes(consultarApi);
+
+  // Las dos cifras juntas arriba; la lista, la bitácora y el recuento, cada
+  // uno en su fila.
+  return [alertas, comentarios, reincidentes, auditoria, sanciones];
 }
 
 /**
- * Las alertas de moderación tal como las publica el servicio de métricas.
+ * El panel de la bitácora central (§7.3.5, SA-5): las quince acciones más
+ * recientes, con el apodo de quien actuó y de la cuenta afectada.
  *
- * @param {{alertasConfiguradas?: boolean, umbralSancionesPorDia?: number|null,
- *          alertas?: string[], pendientes?: string[]}} datos
+ * @param {typeof consultar} consultarApi
+ */
+function panelDeBitacora(consultarApi) {
+  const partes = panel({
+    id: 'auditoria',
+    titulo: 'Bitácora de acciones administrativas',
+    acciones: [enlaceA('auditoria', 'Ver toda la auditoría')].filter(Boolean),
+    ancho: 'completo',
+  });
+  const titulares = directorioDeTitulares({ consultarApi });
+  const cargar = async () => {
+    // La ruta de LECTURA es /admin/auditoria (la de escritura, /eventos, a un
+    // GET responde 405). Fecha descendente y el `id` como desempate.
+    const desenlace = await consultarApi(
+      '/admin/auditoria?page=0&size=15&sort=fechaHora,desc&sort=id,desc',
+    );
+    if (desenlace.resultado === RESULTADO.DATOS) {
+      await titulares.nombrar(uidsDe(filasDe(desenlace.datos)));
+    }
+    pintarDesenlace(partes, desenlace, (datos) => pintarBitacora(datos, titulares), {
+      alReintentar: cargar,
+      vacio: { titulo: 'Todavía no hay acciones registradas' },
+    });
+    return desenlace;
+  };
+  return { ...partes, cargar, id: 'auditoria' };
+}
+
+/**
+ * Las acciones recientes de la bitácora: cuándo, quién, qué, sobre qué y por
+ * qué, con los textos largos recortados (el registro completo los tiene
+ * enteros) para que la tabla no se desborde.
+ *
+ * @param {{content?: object[]}} datos `PaginaDeAuditoria`
+ * @param {{de: (uid: string) => ({apodo?: string}|null)}} titulares
+ * @returns {HTMLElement}
+ */
+export function pintarBitacora(datos, titulares) {
+  return tablaDeDatos({
+    titulo: 'Bitácora de acciones administrativas',
+    resumen: 'Las quince acciones más recientes',
+    claveDeFila: (e) => e.id,
+    columnas: [
+      {
+        clave: 'fechaHora',
+        titulo: 'Fecha',
+        tipo: 'fecha',
+        principal: true,
+        valor: (e) => fechaOVacio(momentoDe(e)),
+      },
+      {
+        clave: 'administrador',
+        titulo: 'Quién',
+        valor: (e) => {
+          const quien = quienDe(e.administrador, titulares);
+          return quien.identificado
+            ? quien.texto
+            : h('span', { clase: 'tabla-admin__sin-dato', texto: quien.texto });
+        },
+      },
+      { clave: 'tipoAccion', titulo: 'Acción', valor: (e) => nombreDeAccion(e.tipoAccion) },
+      {
+        clave: 'afectado',
+        titulo: 'Sobre',
+        valor: (e) => celdaDeSobre(sobreDe(e.afectado, titulares)),
+      },
+      { clave: 'motivo', titulo: 'Motivo', valor: (e) => recortado(e.motivo, 70) },
+    ],
+    filas: filasDe(datos),
+  });
+}
+
+/**
+ * El panel de quienes acumulan sanciones sin revertir, con el apodo de cada
+ * cuenta (ms-identidad-admin 1.9.0, `GET /admin/titulares`): un identificador
+ * en pantalla no le dice nada a quien opera.
+ *
+ * @param {typeof consultar} consultarApi
+ */
+function panelDeReincidentes(consultarApi) {
+  const partes = panel({
+    id: 'reincidentes',
+    titulo: 'Usuarios con varias sanciones',
+    descripcion:
+      'Cuentas que acumulan sanciones sin revertir: una de las alertas de comportamiento ' +
+      'sospechoso.',
+    ancho: 'completo',
+  });
+  const cargar = async () => {
+    const desenlace = await consultarApi('/sanciones/reincidentes');
+    const apodos = new Map();
+    const uids = (Array.isArray(desenlace.datos?.usuarios) ? desenlace.datos.usuarios : [])
+      .map((u) => u?.usuarioId)
+      .filter(Boolean);
+    if (desenlace.resultado === RESULTADO.DATOS && uids.length > 0) {
+      const nombres = await consultarApi(`/admin/titulares?uids=${uids.join(',')}`);
+      if (nombres.resultado === RESULTADO.DATOS && Array.isArray(nombres.datos)) {
+        nombres.datos.forEach((t) => apodos.set(String(t.uid).toLowerCase(), t.apodo));
+      }
+    }
+    pintarDesenlace(partes, desenlace, (datos) => pintarReincidentes(datos, apodos), {
+      alReintentar: cargar,
+    });
+    return desenlace;
+  };
+  return { ...partes, cargar, id: 'reincidentes' };
+}
+
+/**
+ * La lista de reincidentes tal como la publica moderacion-sanciones
+ * (`GET /sanciones/reincidentes`, 1.5.0). Un cuerpo que no tenga esa forma se
+ * trata como «sin datos»: no se inventa a nadie.
+ *
+ * @param {{minimo?: number, total?: number,
+ *          usuarios?: {usuarioId?: string, sanciones?: number, ultimaEn?: string}[]}} datos
+ * @param {Map<string, string>} [apodos] uid → apodo
  * @returns {HTMLElement[]}
  */
-export function pintarAlertasDeModeracion(datos) {
-  const lista = (Array.isArray(datos?.alertas) ? datos.alertas : []).filter(
-    (alerta) => typeof alerta === 'string' && alerta.trim(),
+export function pintarReincidentes(datos, apodos = new Map()) {
+  const usuarios = (Array.isArray(datos?.usuarios) ? datos.usuarios : []).filter(
+    (u) => u?.usuarioId,
   );
-  const partes = [];
-  if (!datos?.alertasConfiguradas) {
-    partes.push(
+  const minimo = Number.isInteger(datos?.minimo) ? datos.minimo : null;
+  const criterio = minimo === null ? 'varias' : `${minimo} o más`;
+  if (usuarios.length === 0) {
+    return [
       h('p', {
         clase: 't-meta',
-        datos: { zona: 'sin-umbral' },
-        texto:
-          'Sin umbral configurado: se publican los conteos, pero no se evalúa ninguna alerta. El umbral de sanciones por día se fija en Parámetros.',
+        datos: { zona: 'sin-reincidentes' },
+        texto: `Nadie tiene ${criterio} sanciones sin revertir.`,
       }),
-    );
-  } else if (lista.length === 0) {
-    const umbral = Number.isInteger(datos?.umbralSancionesPorDia)
-      ? ` de ${datos.umbralSancionesPorDia} sanciones`
-      : '';
-    partes.push(
-      h('p', {
-        clase: 't-meta',
-        datos: { zona: 'sin-alertas' },
-        texto: `Sin alertas: ningún día supera el umbral${umbral}.`,
-      }),
-    );
-  } else {
-    partes.push(
-      h('ul', {
-        clase: 'pila pila--ajustada',
-        datos: { zona: 'alertas' },
-        hijos: lista.map((alerta) =>
-          h('li', { hijos: [distintivo('Alerta', 'reportado'), ` ${alerta}`] }),
-        ),
-      }),
-    );
+    ];
   }
-  const pendientes = (Array.isArray(datos?.pendientes) ? datos.pendientes : []).filter(
-    (p) => typeof p === 'string' && p.trim(),
-  );
-  if (pendientes.length > 0) {
-    partes.push(
-      h('ul', {
-        clase: 'pila pila--ajustada',
-        datos: { zona: 'pendientes' },
-        hijos: pendientes.map((p) => h('li', { clase: 't-meta', texto: `Pendiente: ${p}` })),
-      }),
-    );
-  }
-  return partes;
+
+  const total =
+    Number.isInteger(datos?.total) && datos.total >= usuarios.length
+      ? datos.total
+      : usuarios.length;
+  const cortada =
+    total > usuarios.length ? ` Se muestran los ${usuarios.length} con más sanciones.` : '';
+  const filas = usuarios.map((u) => ({
+    ...u,
+    apodo: apodos.get(String(u.usuarioId).toLowerCase()) ?? null,
+  }));
+  return [
+    h('p', {
+      clase: 't-meta',
+      datos: { zona: 'resumen-reincidentes' },
+      texto: `${total} ${total === 1 ? 'usuario' : 'usuarios'} con ${criterio} sanciones sin revertir.${cortada}`,
+    }),
+    tablaDeDatos({
+      titulo: 'Usuarios con varias sanciones sin revertir',
+      claveDeFila: (u) => u.usuarioId,
+      columnas: [
+        {
+          clave: 'apodo',
+          titulo: 'Cuenta',
+          principal: true,
+          valor: (u) =>
+            u.apodo ?? h('span', { clase: 'tabla-admin__sin-dato', texto: 'Sin apodo' }),
+        },
+        { clave: 'sanciones', titulo: 'Sanciones sin revertir', tipo: 'numero' },
+        {
+          clave: 'ultimaEn',
+          titulo: 'Última sanción',
+          tipo: 'fecha',
+          valor: (u) => formatearFecha(u.ultimaEn),
+        },
+        {
+          clave: 'acciones',
+          titulo: 'Acciones',
+          tipo: 'accion',
+          valor: (u) => [
+            enlaceAFicha({ uid: u.usuarioId, apodo: u.apodo ?? undefined }),
+            enlaceASanciones({ uid: u.usuarioId, apodo: u.apodo ?? undefined }),
+          ],
+        },
+      ],
+      filas,
+    }),
+  ];
 }
+
+/** El tipo de sanción en plural, para el rótulo de su cifra. */
+const SANCIONES_EN_PLURAL = Object.freeze({
+  ADVERTENCIA: 'Advertencias',
+  SUSPENSION: 'Suspensiones',
+  BANEO: 'Baneos definitivos',
+});
+
+/**
+ * El recuento de sanciones de los últimos treinta días, en cifras: las
+ * sanciones por tipo y quién las puso, y las apelaciones por estado. Una
+ * apelación pendiente es trabajo por hacer: su cifra va en tono de aviso.
+ *
+ * @param {*} datos `MetricasSanciones` de moderacion-sanciones-admin.yaml
+ * @returns {HTMLElement[]}
+ */
+export function pintarMetricasDeSanciones(datos) {
+  const cifra = (valor) => (typeof valor === 'number' && Number.isFinite(valor) ? valor : null);
+  const deSanciones = [
+    tarjetaDeIndicador({ etiqueta: 'Sanciones en total', valor: cifra(datos?.total) }),
+    ...Object.entries(datos?.porTipo ?? {}).map(([tipo, cuantas]) =>
+      tarjetaDeIndicador({
+        etiqueta: SANCIONES_EN_PLURAL[tipo] ?? NOMBRE_DE_SANCION[tipo] ?? humanizar(tipo),
+        valor: cifra(cuantas),
+      }),
+    ),
+    tarjetaDeIndicador({
+      etiqueta: 'Moderadores que sancionaron',
+      valor: cifra(datos?.moderadoresActivos),
+    }),
+  ];
+  const deApelaciones = Object.entries(datos?.apelaciones ?? {}).map(([estadoApelacion, cuantas]) =>
+    tarjetaDeIndicador({
+      etiqueta:
+        NOMBRE_DE_APELACION[estadoApelacion] ?? `Apelaciones: ${humanizar(estadoApelacion)}`,
+      valor: cifra(cuantas),
+      tono: estadoApelacion === 'PENDIENTE' && cifra(cuantas) > 0 ? 'advertencia' : null,
+    }),
+  );
+  const grupo = (titulo, tarjetas) => [
+    h('h4', { clase: 'panel-admin__grupo', texto: titulo }),
+    rejillaDeIndicadores(tarjetas),
+  ];
+  return [
+    ...grupo('Sanciones', deSanciones),
+    ...(deApelaciones.length > 0 ? grupo('Apelaciones', deApelaciones) : []),
+  ];
+}
+
+/** El estado de una apelación en el recuento de sanciones. */
+const NOMBRE_DE_APELACION = Object.freeze({
+  PENDIENTE: 'Apelaciones pendientes',
+  ACEPTADA: 'Apelaciones aceptadas',
+  RECHAZADA: 'Apelaciones rechazadas',
+});
 
 /* -------------------------------------------------------------------------
    8. Sistema
@@ -915,113 +1127,176 @@ export function pintarAlertasDeModeracion(datos) {
 function seccionSistema(consultarApi) {
   const servicios = panelDeRecurso({
     id: 'sistema',
+    ancho: 'completo',
     titulo: 'Estado de los servicios',
-    descripcion:
-      'Sondeo real de la salud de cada servicio. Caído, lento, fuera del host y no observable ' +
-      'son cuatro cosas distintas.',
+    acciones: [enlaceA('tablero-tecnico', 'Ver el tablero técnico')].filter(Boolean),
     recurso: '/admin/sistema/servicios',
     consultarApi,
-    pintar: (datos) => {
-      // `servicio` y no `nombre`: es como se llama el campo en la respuesta.
-      const filas = (datos?.servicios ?? []).map((s) => [
-        s.servicio ?? '--',
-        selloDeServicio(s.estado),
-        s.detalle ?? '--',
-      ]);
-      const partes = [`${datos?.operativos ?? 0} operativos`, `${datos?.caidos ?? 0} caídos`];
-      // RFINAL-08: conectó y no contestó a tiempo. Solo se nombra si hay alguno.
-      if (datos?.lentos) {
-        partes.push(`${datos.lentos} lentos`);
-      }
-      partes.push(`${datos?.noDesplegados ?? 0} fuera del host`);
-      if (datos?.noObservables) {
-        partes.push(`${datos.noObservables} en otro host`);
-      }
-      const resumen = h('p', {
-        clase: 't-meta',
-        texto: `${partes.join(', ')}, de ${datos?.total ?? filas.length} catalogados.`,
-      });
-      const piezas = [resumen];
-      // La ronda se reutiliza unos segundos (desdeCache): la hora dice de cuándo es.
-      if (datos?.instante) {
-        piezas.push(
-          h('p', {
-            clase: 't-meta',
-            datos: { zona: 'medido' },
-            texto: `Medido a las ${formatearInstante(datos.instante)}.`,
-          }),
-        );
-      }
-      piezas.push(tabla({ columnas: ['Servicio', 'Estado', 'Detalle'], filas }));
-      return piezas;
-    },
+    pintar: (datos) => pintarServicios(datos),
   });
 
   const parametros = panelDeRecurso({
     id: 'parametros',
+    ancho: 'completo',
     titulo: 'Parámetros de plataforma',
-    descripcion: 'Valores en caliente que gobiernan el juego.',
+    acciones: [enlaceA('parametros-admin', 'Gestionar parámetros')].filter(Boolean),
     recurso: '/parametros',
     consultarApi,
     pintar: (datos) =>
-      tabla({
-        columnas: ['Clave', 'Valor', 'Unidad', 'Versión'],
-        filas: filasDe(datos)
-          .slice(0, 25)
-          .map((p) => [p.clave ?? '--', p.valor ?? '--', p.unidad ?? '--', p.version ?? '--']),
+      tablaDeDatos({
+        titulo: 'Parámetros de plataforma',
+        columnas: [
+          {
+            clave: 'nombre',
+            titulo: 'Parámetro',
+            principal: true,
+            ordenable: true,
+            valor: (p) => fichaDeParametro(p).nombre,
+            ordenarPor: (p) => fichaDeParametro(p).nombre,
+          },
+          { clave: 'valor', titulo: 'Valor vigente', valor: (p) => valorLegible(p) },
+          {
+            clave: 'grupo',
+            titulo: 'Área',
+            ordenable: true,
+            valor: (p) => fichaDeParametro(p).grupo,
+            ordenarPor: (p) => fichaDeParametro(p).grupo,
+          },
+          {
+            clave: 'actualizadoEn',
+            titulo: 'Último cambio',
+            tipo: 'fecha',
+            ordenable: true,
+            valor: (p) => fechaOVacio(p.actualizadoEn),
+          },
+        ],
+        filas: filasDe(datos),
       }),
   });
 
   return [servicios, parametros];
 }
 
-/** @param {string} estado */
-function selloDeServicio(estado) {
-  const tono =
-    {
-      OPERATIVO: 'ok',
-      CAIDO: 'malo',
-      // Conectó y no contestó a tiempo: ni verde ni rojo (RFINAL-08).
-      LENTO: 'aviso',
-      NO_DESPLEGADO: 'neutro',
-      // Un servicio de otro host no va en rojo: no esta roto, esta fuera del
-      // alcance de la sonda.
-      NO_OBSERVABLE: 'neutro',
-    }[String(estado)] ?? 'neutro';
-  return h('span', {
-    clase: 'sello-estado',
-    texto: String(estado ?? '--').replaceAll('_', ' '),
-    datos: { estado: tono },
-  });
+/**
+ * La salud de los servicios: el recuento y la tabla, con el nombre de lo que
+ * hace cada servicio y lo que significa su estado.
+ *
+ * @param {*} datos `RespuestaDelSistema` de metricas-plataforma.yaml
+ * @returns {HTMLElement[]}
+ */
+export function pintarServicios(datos) {
+  const lista = Array.isArray(datos?.servicios) ? datos.servicios : [];
+  const recuento = [
+    [datos?.operativos, 'operativos'],
+    [datos?.lentos, 'lentos'],
+    [datos?.caidos, 'caídos'],
+    [datos?.noDesplegados, 'fuera de este entorno'],
+    [datos?.noObservables, 'en otro servidor'],
+  ]
+    .filter(([cuantos], indice) => indice === 0 || Number(cuantos) > 0)
+    .map(([cuantos, que]) => `${Number.isFinite(cuantos) ? numero(cuantos) : SIN_DATO} ${que}`);
+  const total = Number.isFinite(datos?.total) ? datos.total : lista.length;
+
+  const ordenEstado = { CAIDO: 0, LENTO: 1, OPERATIVO: 2, NO_OBSERVABLE: 3, NO_DESPLEGADO: 4 };
+  return [
+    tablaDeDatos({
+      titulo: 'Estado de los servicios',
+      resumen: `${recuento.join(' · ')} — de ${numero(total)} servicios`,
+      columnas: [
+        {
+          clave: 'servicio',
+          titulo: 'Servicio',
+          principal: true,
+          ordenable: true,
+          valor: (s) => nombreDelServicio(s.servicio),
+          ordenarPor: (s) => nombreDelServicio(s.servicio),
+        },
+        {
+          clave: 'estado',
+          titulo: 'Estado',
+          tipo: 'estado',
+          ordenable: true,
+          valor: (s) => estadoSegun(s.estado, ESTADOS_DE_SERVICIO),
+          ordenarPor: (s) => ordenEstado[s.estado] ?? 9,
+        },
+        {
+          clave: 'situacion',
+          titulo: 'Situación',
+          valor: (s) => SITUACION_DEL_SERVICIO[s.estado] ?? null,
+        },
+      ],
+      // Lo que necesita atención, primero.
+      filas: [...lista].sort((a, b) => (ordenEstado[a.estado] ?? 9) - (ordenEstado[b.estado] ?? 9)),
+      orden: { clave: 'estado', direccion: 'asc' },
+    }),
+  ];
 }
 
 /* -------------------------------------------------------------------------
    Formato
    ------------------------------------------------------------------------- */
 
-/** Fecha corta y local. Nulo se pinta como guion, no como "hoy". */
+/** Fecha legible, o vacío (la tabla dice «Sin dato»): nunca la de hoy. */
+function fechaOVacio(valor) {
+  return valor ? formatearFecha(valor) : null;
+}
+
+const DIA_COMPACTO = new Intl.DateTimeFormat('es-CO', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+});
+
+const HORA_COMPACTA = new Intl.DateTimeFormat('es-CO', { hour: 'numeric', minute: '2-digit' });
+
+/**
+ * El día de una fecha, compacto: «05 oct 2026». `es-CO` lo escribe «05 de oct
+ * de 2026»; en una tabla de la consola esos «de» son un tercio del ancho de la
+ * columna, y a 1366 px (la resolución mínima, RNF-USA-001) el directorio no
+ * cabía entero (SA-3, al ganar la columna «Sanciones»).
+ *
+ * @param {Date} fecha válida
+ */
+function diaCompacto(fecha) {
+  return DIA_COMPACTO.formatToParts(fecha)
+    .filter((parte) => parte.type !== 'literal')
+    .map((parte) => (parte.type === 'month' ? parte.value.replace('.', '') : parte.value))
+    .join(' ');
+}
+
+/** Fecha y hora de un instante, compactas: «05 oct 2026, 6:30 p. m.». Nulo es un guion. */
 export function formatearFecha(valor) {
   if (!valor) {
-    return '--';
+    return '—';
   }
   const fecha = new Date(valor);
   if (Number.isNaN(fecha.getTime())) {
     return String(valor);
   }
-  return fecha.toLocaleString('es', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return `${diaCompacto(fecha)}, ${HORA_COMPACTA.format(fecha)}`;
 }
 
-/** Hora del sondeo, sin fecha: el panel se mira en el momento. */
+/** El día de un instante, sin la hora: «05 oct 2026». Nulo se pinta como guion. */
+export function formatearDia(valor) {
+  if (!valor) {
+    return '—';
+  }
+  const fecha = new Date(valor);
+  if (Number.isNaN(fecha.getTime())) {
+    return String(valor);
+  }
+  return diaCompacto(fecha);
+}
+
+/** Hora de un instante, sin fecha. */
 export function formatearInstante(valor) {
   const fecha = new Date(valor);
   if (Number.isNaN(fecha.getTime())) {
     return String(valor);
   }
-  return fecha.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return fecha.toLocaleTimeString('es-CO', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 }

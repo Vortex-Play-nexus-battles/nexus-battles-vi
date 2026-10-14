@@ -107,9 +107,9 @@ class FichaAdministrativaServiceTest {
         assertEquals(LocalDateTime.of(2026, 10, 4, 21, 15), ficha.ultimoAcceso());
         assertFalse(ficha.bloqueada());
         assertTrue(ficha.accesoAuditado());
-        // Mismo afectado que el resto de acciones del panel (la clave interna),
-        // quien consulta, sin valores (no cambia nada) y la IP de origen.
-        verify(auditoria).registrar("OTRO", "simon_superadmin", "15", null, null,
+        // Mismo afectado que el resto de acciones del panel (el uid), quien
+        // consulta, sin valores (no cambia nada) y la IP de origen.
+        verify(auditoria).registrar("OTRO", "simon_superadmin", UID.toString(), null, null,
                 FichaAdministrativaService.MOTIVO, "203.0.113.5");
     }
 
@@ -120,7 +120,8 @@ class FichaAdministrativaServiceTest {
         assertEquals(15L, ficha.id());
         verify(usuarios).findByPublicId(UID);
         verify(usuarios, never()).findById(anyLong());
-        verify(auditoria).registrar("OTRO", "admin", "15", null, null, FichaAdministrativaService.MOTIVO, "10.0.0.1");
+        verify(auditoria).registrar("OTRO", "admin", UID.toString(), null, null, FichaAdministrativaService.MOTIVO,
+                "10.0.0.1");
     }
 
     @Test
@@ -177,7 +178,7 @@ class FichaAdministrativaServiceTest {
         // un 503 de la bitacora y la consulta quedaria sin registrar.
         servicio.consultar("15", null, " ");
 
-        verify(auditoria).registrar("OTRO", FichaAdministrativaService.DESCONOCIDO, "15", null, null,
+        verify(auditoria).registrar("OTRO", FichaAdministrativaService.DESCONOCIDO, UID.toString(), null, null,
                 FichaAdministrativaService.MOTIVO, FichaAdministrativaService.DESCONOCIDA);
     }
 

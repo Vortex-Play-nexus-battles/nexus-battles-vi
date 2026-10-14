@@ -63,6 +63,15 @@ const PROHIBIDO = Object.freeze([
     motivo: 'frase de estado HTTP',
   },
   { patron: /\b[A-Z][A-Za-z]+Exception\b/, motivo: 'nombre de una excepción' },
+  // SA-2 — el andamio que el informe de revisión del Super Administrador
+  // encontró en la consola (puntos 2 a 15): de dónde sale el dato, la ruta de
+  // la consulta, el código HTTP en una plantilla y los estados internos.
+  { patron: /\bFuente:\s/, motivo: 'origen técnico de un dato' },
+  { patron: /\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/api\//, motivo: 'ruta de la API' },
+  { patron: /HTTP\s*\$\{/, motivo: 'código HTTP en una plantilla' },
+  { patron: /\bNO IMPLEMENTADO\b/, motivo: 'estado interno de un módulo' },
+  { patron: /\bSERVICIO DEGRADADO\b/, motivo: 'estado interno de un servicio' },
+  { patron: /Sondeo real/i, motivo: 'texto de andamio' },
 ]);
 
 /**
@@ -80,6 +89,13 @@ const EXENTO = Object.freeze([
   // consola del navegador, no por la pantalla. Quien la abre es quien depura,
   // y ahí el identificador de la historia es justo lo que ayuda.
   /console\.(?:log|warn|error|info|debug)\([\s\S]*?\);/g,
+  // SA-2 — el mensaje de un `Error` (o de su `super`) es para quien depura:
+  // lo que se pinta pasa por `textoDeError`, que no deja pasar un código.
+  /new\s+Error\(\s*`[^`]*`\s*\)/g,
+  /super\([^;]*\);/g,
+  // Las claves de un mapa de nombres («'ms-identidad': 'Identidad y
+  // cuentas'») no se leen: lo que se lee es el valor.
+  /'(?:ms|srv)-[a-z-]+'\s*:/g,
 ]);
 
 function ficheros(extension) {
@@ -149,4 +165,20 @@ test('la prueba detecta lo que dice detectar', () => {
   expect(hallazgos('x', "'HTTP 502 · Bad Gateway'")).toHaveLength(2);
   expect(hallazgos('x', "'srv-inventario: NullPointerException'")).toHaveLength(2);
   expect(hallazgos('x', "'(RN-INV-004)'")).toHaveLength(1);
+  // SA-2 — los textos de la consola que señaló el informe de revisión, tal
+  // como estaban escritos (con plantillas incluidas).
+  expect(hallazgos('x', 'texto: `Fuente: ${fuente}`')).toHaveLength(1);
+  expect(hallazgos('x', "fuente: 'GET /api/v1/admin/jugadores'")).toHaveLength(1);
+  expect(
+    hallazgos('x', 'texto: `Consulta: GET /api/v1${recurso}${estado ? ` (HTTP ${estado})` : ""}`'),
+  ).toHaveLength(2);
+  // El mensaje de un error es para quien depura, y las claves de un mapa de
+  // nombres no se leen: ninguna de las dos cosas salta.
+  expect(hallazgos('x', 'throw new Error(`Error HTTP ${respuesta.status}`);')).toEqual([]);
+  expect(hallazgos('x', 'super(detalle ?? `HTTP ${estado}`);')).toEqual([]);
+  expect(hallazgos('x', "{ 'ms-identidad': 'Identidad y cuentas' }")).toEqual([]);
+  // …pero el mismo nombre en un texto sí.
+  expect(hallazgos('x', "texto: 'Caído: ms-identidad'")).toHaveLength(1);
+  expect(hallazgos('x', "'<strong>SERVICIO DEGRADADO</strong> o NO IMPLEMENTADO'")).toHaveLength(2);
+  expect(hallazgos('x', "'Sondeo real de la salud de cada servicio'")).toHaveLength(1);
 });

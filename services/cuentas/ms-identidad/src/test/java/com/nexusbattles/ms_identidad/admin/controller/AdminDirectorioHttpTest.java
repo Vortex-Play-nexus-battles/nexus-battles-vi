@@ -210,7 +210,22 @@ class AdminDirectorioHttpTest {
         ArgumentCaptor<FiltroDelDirectorio> filtro = ArgumentCaptor.forClass(FiltroDelDirectorio.class);
         verify(exportacion).exportar(filtro.capture());
         assertThat(filtro.getValue()).isEqualTo(new FiltroDelDirectorio("ana", true, "JUGADOR", "SUSPENDIDO",
-                LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)));
+                LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), null));
+    }
+
+    @Test
+    @DisplayName("1.7.0: la exportacion lleva tambien el filtro por historial de sanciones")
+    void exportacionConHistorialDeSanciones() throws Exception {
+        when(exportacion.exportar(any(FiltroDelDirectorio.class)))
+                .thenReturn(new ExportacionDelDirectorio.Exportacion("directorio.csv", new byte[0], 0));
+
+        mvc.perform(get(EXPORTACION).param("historialSanciones", "con")
+                        .header("Authorization", token("ADMINISTRADOR")))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<FiltroDelDirectorio> filtro = ArgumentCaptor.forClass(FiltroDelDirectorio.class);
+        verify(exportacion).exportar(filtro.capture());
+        assertThat(filtro.getValue().historialSanciones()).isEqualTo("CON");
     }
 
     // ------------------------------------------- HU-USR-009: auditoria de la exportacion

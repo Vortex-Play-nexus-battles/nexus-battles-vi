@@ -31,8 +31,38 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Bitacora de auditoria (ms-cumplimiento)
-  version: 1.1.1
+  version: 1.3.0
   description: |
+    **1.3.0 (§7.3.5, auditoria central — SA-5), aditivo:**
+    - `POST /eventos` admite `ocurridoEn` (cuando ocurrio la accion en el
+      servicio de origen; `fechaHora` sigue siendo cuando quedo registrada
+      aqui y la fija este servicio) y `referencia` (la clave del evento en el
+      origen, hasta 120 caracteres). Con una `referencia` ya registrada
+      responde **200** con la entrada que habia, sin crear otra: los servicios
+      que entregan desde una cola propia reintentan sin duplicar.
+    - Un cuerpo incompleto, un campo mas largo que su columna o un
+      `ocurridoEn` en el futuro (mas de 5 minutos) responden **400**: el
+      aviso 2 queda resuelto.
+    - `GET /admin/auditoria` y `/exportar` admiten `administradorId`
+      repetible: la misma persona figura con su apodo en las entradas de
+      ms-identidad y con su `uid` en las de los servicios de plataforma.
+    - `/exportar` admite `formato=csv` (CSV de RFC 4180 en UTF-8 con BOM)
+      para analizar la bitacora en una hoja de calculo; sin `formato`, PDF.
+    - `size` de la consulta tiene tope: 100.
+    - `AuditLogResponse` suma `ocurridoEn` y `referencia` (nulos en las
+      entradas que no los traian). `TipoAccion` documenta `EXPORTACION`, que
+      el servicio ya registraba en cada exportacion, y suma `ELIMINACION`
+      para lo que se borra de verdad (un termino de la lista negra);
+      `ELIMINACION_LOGICA` queda para lo que se marca y se conserva.
+
+    **1.2.0 (§7.3.4, ficha administrativa del usuario — SA-3), aditivo:**
+    `GET /api/v1/admin/auditoria` y `GET /api/v1/admin/auditoria/exportar`
+    admiten `afectado` (repetible), la cuenta o el comentario sobre el que se
+    actuo, con coincidencia exacta. Se puede repetir porque `afectado` guarda
+    a veces el `uid` y a veces la clave numerica de la misma cuenta: la ficha
+    pide los dos. Los valores en blanco se ignoran. Mismo acceso que antes
+    (solo SUPER_ADMINISTRADOR con segundo factor).
+
     **1.1.1 (B0, solo forma):** `GET /api/v1/admin/auditoria/exportar`
     (HU-AUD-004, #715) estaba escrito con catorce espacios de mas, anidado
     dentro del esquema del 503 de `POST /eventos`: el YAML era valido pero la
@@ -76,7 +106,10 @@ info:
     describe `about:blank` porque es lo que el servicio devuelve; corregirlo
     es trabajo del dueno del modulo, no de este documento.
 
-    ### Aviso 2 — un cuerpo incompleto responde 503, no 400
+    ### Aviso 2 — un cuerpo incompleto respondia 503, no 400 (resuelto en 1.3.0)
+
+    Hasta 1.2.0 era asi; desde 1.3.0 el servicio valida el cuerpo antes de
+    escribir y responde 400. Se conserva la explicacion como historia.
 
     En `POST /api/v1/admin/auditoria/eventos` el cuerpo **no lleva `@Valid`**,
     asi que Bean Validation no se ejecuta: quien impone los campos
@@ -133,12 +166,9 @@ paths:
         siempre. Cuando se encienda, se comprueba el claim `amr` (RFC 8176)
         buscando `mfa`, `otp` o `hwk`.
 
-        **Limitacion conocida: `size` no tiene tope en el codigo.** El
-        controlador recibe el `Pageable` que Spring construye y no lo acota,
-        a diferencia de `GET /creditos/{uid}/movimientos` de ms-finanzas, que
-        lo limita a 100. Un llamador puede pedir `size=100000` y obligar al
-        servicio a materializar en memoria toda la bitacora. Se documenta
-        como esta, no como deberia estar.
+        **`size` tiene tope desde 1.3.0:** 100
+        (`spring.data.web.pageable.max-page-size`). Hasta 1.2.0 no lo tenia y
+        `size=100000` materializaba en memoria toda la bitacora.
       security:
         - tokenDeUsuario: []
       parameters:
@@ -146,10 +176,29 @@ paths:
           in: query
           required: false
           description: |
-            Filtra por el administrador que ejecuto la accion. Un valor en
-            blanco se trata como ausente.
+            Filtra por el administrador que ejecuto la accion, con
+            coincidencia exacta. 1.3.0 — repetible
+            (`?administradorId=<apodo>&administradorId=<uid>`): se devuelve lo
+            que coincide con cualquiera. Los valores en blanco se ignoran.
+          style: form
+          explode: true
           schema:
-            type: string
+            type: array
+            items:
+              type: string
+        - name: afectado
+          in: query
+          required: false
+          description: |
+            1.2.0 — la cuenta o el comentario afectado, con coincidencia
+            exacta. Repetible (`?afectado=<uid>&afectado=<clave>`): se devuelve
+            lo que coincide con cualquiera. Los valores en blanco se ignoran.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
         - name: tipoAccion
           in: query
           required: false
@@ -184,12 +233,12 @@ paths:
           in: query
           required: false
           description: |
-            Tamano de pagina (parametro de Spring Data). **Sin tope en el
-            codigo**: ver la limitacion conocida en la descripcion de la
-            operacion.
+            Tamano de pagina (parametro de Spring Data). 1.3.0 — como mucho
+            100: un valor mayor se trata como 100.
           schema:
             type: integer
             minimum: 1
+            maximum: 100
             default: 20
         - name: sort
           in: query
@@ -265,7 +314,11 @@ paths:
 
         `fechaHora` no se acepta en el cuerpo: la fija el servidor con
         `Instant.now()` al construir la entrada. Quien registra el evento no
-        elige cuando quedo registrado.
+        elige cuando quedo registrado. 1.3.0 — si el origen entrega desde una
+        cola propia, manda `ocurridoEn`, el momento real de la accion, que se
+        guarda aparte (no sustituye a `fechaHora`) y no puede estar mas de 5
+        minutos en el futuro. Y manda `referencia`: una entrega repetida con la
+        misma responde 200 con la entrada que ya existia.
       security:
         - credencialDeServicio: []
       requestBody:
@@ -281,6 +334,14 @@ paths:
               motivo: 'CREDENTIAL_MISSING'
               ipOrigen: 172.18.0.7
       responses:
+        '200':
+          description: |
+            1.3.0 — la `referencia` ya estaba registrada: se devuelve la
+            entrada que existia y no se crea otra.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogResponse'
         '201':
           description: Entrada registrada; se devuelve tal como quedo guardada
           content:
@@ -299,13 +360,12 @@ paths:
                 ipOrigen: 172.18.0.7
         '400':
           description: |
-            `tipoAccion` no esta en el enumerado. Es el unico 400 que produce
-            esta operacion: `AuditLogService.registrarDesdeSolicitud` traduce
-            el valor a `AuditActionType` y relanza un `IllegalArgumentException`
-            cuyo texto enumera los valores admitidos. `type` sale como
-            `about:blank` (aviso 1).
-
-            Un campo obligatorio que falte NO cae aqui: cae en el 503.
+            `tipoAccion` no esta en el enumerado (el texto enumera los valores
+            admitidos); desde 1.3.0 tambien un campo obligatorio vacio, un
+            campo mas largo que su columna (`administradorId` 64, `afectado`
+            255, `motivo` 500, `ipOrigen` 45, `referencia` 120) o un
+            `ocurridoEn` en el futuro. `type` sale como `about:blank`
+            (aviso 1).
           content:
             application/problem+json:
               schema:
@@ -316,20 +376,11 @@ paths:
           $ref: '#/components/responses/NoAutorizado'
         '503':
           description: |
-            No se pudo escribir la entrada y la accion administrativa se
-            cancela (`AuditWriteException`, titulo «Bitacora de auditoria no
-            disponible»). Cubre el fallo real de la base de datos y, **por un
-            defecto conocido, tambien el cuerpo incompleto**: un cuerpo
-            incompleto hoy se ve como bitacora no disponible, porque el
-            `IllegalStateException` del builder se construye dentro del `try`
-            del servicio y su `catch (Exception e)` lo reenvia como
-            `AuditWriteException`.
-
-            Practicamente: un 503 de esta operacion no distingue «la bitacora
-            esta caida, reintenta» de «tu peticion esta mal, no reintentes».
-            Quien reintente ciegamente los 503 reintentara para siempre una
-            peticion que nunca va a funcionar. `type` sale como `about:blank`
-            (aviso 1).
+            No se pudo escribir la entrada (`AuditWriteException`, titulo
+            «Bitacora de auditoria no disponible»): fallo real de la base de
+            datos. Desde 1.3.0 un cuerpo incompleto ya no cae aqui (es 400),
+            asi que un 503 si significa «reintenta». `type` sale como
+            `about:blank` (aviso 1).
           content:
             application/problem+json:
               schema:
@@ -338,7 +389,7 @@ paths:
     get:
       tags: [ auditoria ]
       operationId: exportarAuditoria
-      summary: Exporta a PDF la bitacora filtrada (HU-AUD-004)
+      summary: Exporta la bitacora filtrada en PDF o CSV (HU-AUD-004)
       description: |
         Genera un PDF con las entradas de la bitacora que cumplan los
         filtros -- los mismos tres que admite la consulta paginada, sin
@@ -370,10 +421,29 @@ paths:
           in: query
           required: false
           description: |
-            Filtra por el administrador que ejecuto la accion. Un valor en
-            blanco se trata como ausente.
+            Filtra por el administrador que ejecuto la accion, con
+            coincidencia exacta. 1.3.0 — repetible
+            (`?administradorId=<apodo>&administradorId=<uid>`): se devuelve lo
+            que coincide con cualquiera. Los valores en blanco se ignoran.
+          style: form
+          explode: true
           schema:
-            type: string
+            type: array
+            items:
+              type: string
+        - name: afectado
+          in: query
+          required: false
+          description: |
+            1.2.0 — la cuenta o el comentario afectado, con coincidencia
+            exacta. Repetible (`?afectado=<uid>&afectado=<clave>`): se devuelve
+            lo que coincide con cualquiera. Los valores en blanco se ignoran.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
         - name: tipoAccion
           in: query
           required: false
@@ -382,6 +452,21 @@ paths:
             400.
           schema:
             $ref: '#/components/schemas/TipoAccion'
+        - name: formato
+          in: query
+          required: false
+          description: |
+            1.3.0 — `pdf` (por omision) o `csv`, sin distinguir mayusculas.
+            Otro valor responde 400. El CSV lleva las columnas `id`,
+            `fecha_hora`, `ocurrido_en`, `administrador`, `tipo_accion`,
+            `afectado`, `valor_anterior`, `valor_nuevo`, `motivo` e
+            `ip_origen`, todas entre comillas; una celda que empieza por `=`,
+            `+`, `-` o `@` lleva delante un apostrofo, para que una hoja de
+            calculo no la ejecute como formula.
+          schema:
+            type: string
+            enum: [pdf, csv]
+            default: pdf
         - name: desde
           in: query
           required: false
@@ -398,12 +483,18 @@ paths:
             format: date-time
       responses:
         '200':
-          description: PDF con las entradas de la bitacora que cumplen los filtros
+          description: |
+            El archivo con las entradas que cumplen los filtros: PDF o, con
+            `formato=csv`, CSV (UTF-8 con BOM). `Content-Disposition` trae el
+            nombre `auditoria-<fecha>.pdf|csv`.
           content:
             application/pdf:
               schema:
                 type: string
                 format: binary
+            text/csv:
+              schema:
+                type: string
         '400':
           description: |
             `tipoAccion` no esta en el enumerado. `type` sale como
@@ -496,12 +587,14 @@ components:
         - CREACION
         - ACTUALIZACION
         - ELIMINACION_LOGICA
+        - ELIMINACION
         - SUSPENSION
         - SANCION
         - CAMBIO_ROL
         - APROBACION
         - RECHAZO
         - SECURITY_BYPASS_ATTEMPT
+        - EXPORTACION
         - OTRO
 
     RegistrarAuditoriaRequest:
@@ -543,6 +636,20 @@ components:
         ipOrigen:
           type: string
           description: Direccion desde la que se ejecuto. Hasta 45 caracteres (cabe una IPv6).
+        ocurridoEn:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            1.3.0 — cuando ocurrio la accion en el servicio de origen. Opcional;
+            no puede estar mas de 5 minutos en el futuro. No sustituye a
+            `fechaHora`, que la fija este servicio.
+        referencia:
+          type: [string, 'null']
+          maxLength: 120
+          description: |
+            1.3.0 — la clave del evento en el servicio de origen (por ejemplo
+            `moderacion-sanciones:sancion-<id>-emision`). Opcional; si ya hay
+            una entrada con ella, se devuelve esa con 200.
 
     AuditLogResponse:
       type: object
@@ -588,6 +695,13 @@ components:
           type: string
         ipOrigen:
           type: string
+        ocurridoEn:
+          type: [string, 'null']
+          format: date-time
+          description: 1.3.0 — cuando ocurrio la accion en su origen, si el origen lo mando.
+        referencia:
+          type: [string, 'null']
+          description: 1.3.0 — la clave del evento en su origen, si el origen la mando.
 
     PaginaDeAuditoria:
       type: object

@@ -13,6 +13,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import com.nexusbattles.plataforma.comentarios.HiloDeComentarios;
+import com.nexusbattles.plataforma.comentarios.SolicitudDePublicacion;
 import com.nexusbattles.plataforma.comentarios.calificacion.CalificacionNoEncontrada;
 import com.nexusbattles.plataforma.comentarios.calificacion.YaCalificado;
 import com.nexusbattles.plataforma.comentarios.catalogo.CatalogoNoDisponible;
@@ -75,6 +76,17 @@ public class ManejadorErroresComentarios {
     public ProblemDetail manejarCarrera(DataIntegrityViolationException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
                 "otra solicitud simultanea cambio lo mismo; vuelve a intentarlo");
+    }
+
+    /**
+     * Contrato 1.11.0: el texto pasa de 2000 caracteres (decision del Product
+     * Owner, issue 34). Mas especifico que el de {@link IllegalArgumentException},
+     * asi que Spring elige este.
+     */
+    @ExceptionHandler(SolicitudDePublicacion.TextoDemasiadoLargo.class)
+    public ProblemDetail manejarTextoDemasiadoLargo(SolicitudDePublicacion.TextoDemasiadoLargo ex) {
+        return problema(HttpStatus.BAD_REQUEST, "texto-demasiado-largo",
+                "Tu comentario es demasiado largo", ex);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

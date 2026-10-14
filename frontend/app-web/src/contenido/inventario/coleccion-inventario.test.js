@@ -141,7 +141,37 @@ describe('pintarHeroes', () => {
     cartas[0].querySelector('[data-accion="ver-ficha"]').click();
     expect(alVerFicha).toHaveBeenCalledWith(expect.objectContaining({ id: 'h1' }), {
       prototipo: 'Mago Hielo',
+      origen: cartas[0].querySelector('[data-accion="ver-ficha"]'),
     });
+  });
+
+  test('un clic en la carta (fuera de sus botones) abre la ficha del héroe (§7.1)', async () => {
+    const alEquipar = jest.fn();
+    const alVerFicha = jest.fn();
+    await pintarHeroes(contenedor, {
+      heroes: [heroe('h1')],
+      identidad: 'yo',
+      consultarEquipo: async () => ({ armas: [], armaduras: {}, items: [] }),
+      consultarEstadisticas: async () => ({ poder: 10, vida: 44, defensa: 11 }),
+      consultarProducto: async () => ({ prototipo: 'Mago Hielo' }),
+      alVerFicha,
+      alEquipar,
+    });
+    const carta = contenedor.querySelector('[data-heroe]');
+    const botonFicha = carta.querySelector('[data-accion="ver-ficha"]');
+    expect(botonFicha.getAttribute('aria-label')).toBe('Ver ficha de Heroe h1');
+
+    carta.click();
+    expect(alVerFicha).toHaveBeenCalledTimes(1);
+    expect(alVerFicha).toHaveBeenCalledWith(expect.objectContaining({ id: 'h1' }), {
+      prototipo: 'Mago Hielo',
+      origen: botonFicha,
+    });
+
+    // Sus botones siguen siendo suyos: «Equipamiento» no abre la ficha además.
+    carta.querySelector('[data-accion="equipar"]').click();
+    expect(alEquipar).toHaveBeenCalledTimes(1);
+    expect(alVerFicha).toHaveBeenCalledTimes(1);
   });
 
   test('si un servicio no contesta, la carta sale igual sin lo que falto', async () => {

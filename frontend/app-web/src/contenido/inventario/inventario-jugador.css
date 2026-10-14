@@ -246,3 +246,30 @@
 .inventario__misiones .banner-misiones__texto {
   display: none;
 }
+
+/* -------------------------------------------------------------------------
+   §7.1 — «se espera que cada producto sobresalga al pasar el ratón sobre él».
+   Un héroe también es un producto del inventario: sus cartas (propias y del
+   Nexo) se realzan igual que las de la vitrina de objetos (HU-INV-013): borde
+   primario y brillo, con el ratón y con el foco del teclado, sin mover ni
+   cambiar el tamaño de las demás (criterio 3). Con `prefers-reduced-motion`
+   el cambio es instantáneo (tokens).
+   ------------------------------------------------------------------------- */
+.inventario__panel--heroes .hero-card,
+.heroes-del-nexo .nexo-heroe {
+  transition:
+    border-color var(--transicion),
+    box-shadow var(--transicion);
+}
+
+.inventario__panel--heroes .hero-card:hover,
+.inventario__panel--heroes .hero-card:focus-within,
+.heroes-del-nexo .nexo-heroe:hover,
+.heroes-del-nexo .nexo-heroe:focus-within {
+  border-color: var(--primaria);
+  box-shadow: var(--sombra-2), var(--brillo-primaria);
+}
+
+.hero-card--pulsable {
+  cursor: pointer;
+}

@@ -90,6 +90,9 @@ class MigracionesIT {
                 "--spring.jpa.hibernate.ddl-auto=create")) {
             JdbcTemplate jdbc = heredado.getBean(JdbcTemplate.class);
             Long rol = jdbc.queryForObject("SELECT id FROM roles WHERE nombre = 'JUGADOR'", Long.class);
+            // SA-3 (V7): el resumen del historial de sanciones tampoco existe en
+            // DEV. Se quita antes de insertar, como lo encontrara la migracion.
+            jdbc.execute("ALTER TABLE usuarios DROP COLUMN sanciones_registradas, DROP COLUMN ultima_sancion_en");
             jdbc.update("INSERT INTO usuarios (public_id, apodo, email, password, estado, rol_id, intentos_fallidos,"
                             + " version_token, creado_en) VALUES (?, 'veterana', 'veterana@upb.edu.co', 'x', 'ACTIVO', ?,"
                             + " 0, 0, ?)",
@@ -160,14 +163,48 @@ class MigracionesIT {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    /**
+     * SA-3 — V7: el resumen del historial de sanciones nace en cero para las
+     * cuentas que ya estaban y la base no admite un total negativo.
+     */
+    private static void comprobarHistorialDeSanciones(JdbcTemplate jdbc, UUID uid) {
+        assertThat(jdbc.queryForObject("SELECT sanciones_registradas FROM usuarios WHERE public_id = ?",
+                Integer.class, uid)).isZero();
+        assertThat(jdbc.queryForObject("SELECT ultima_sancion_en FROM usuarios WHERE public_id = ?",
+                Timestamp.class, uid)).isNull();
+        assertThatThrownBy(() -> jdbc.update("UPDATE usuarios SET sanciones_registradas = -1 WHERE public_id = ?",
+                uid)).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     /** RFINAL-05 — V5 crea las tres tablas del segundo factor. */
+    /**
+     * SA-4 — V8: un desafio puede ser APELAR (el codigo para apelar sin
+     * sesion) y el CHECK sigue rechazando lo que no es un proposito.
+     */
+    private static void comprobarPropositosDelDesafio(JdbcTemplate jdbc) {
+        Long rol = jdbc.queryForObject("SELECT id FROM roles WHERE nombre = 'JUGADOR'", Long.class);
+        UUID uid = UUID.randomUUID();
+        jdbc.update("INSERT INTO usuarios (public_id, apodo, email, password, estado, rol_id, intentos_fallidos,"
+                        + " version_token, creado_en) VALUES (?, 'apelante', 'apelante@upb.edu.co', 'x', 'BANEADO', ?,"
+                        + " 0, 0, ?)",
+                uid, rol, Timestamp.valueOf(LocalDateTime.now()));
+        Long id = jdbc.queryForObject("SELECT id FROM usuarios WHERE public_id = ?", Long.class, uid);
+        String insercion = "INSERT INTO desafios_acceso (id, usuario_id, token_hash, proposito, version_token,"
+                + " creado_en, expira_en) VALUES (?, ?, ?, ?, 0, now(), now() + interval '30 minutes')";
+        jdbc.update(insercion, UUID.randomUUID(), id, "a".repeat(64), "APELAR");
+        assertThatThrownBy(() -> jdbc.update(insercion, UUID.randomUUID(), id, "b".repeat(64), "INVENTADO"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        jdbc.update("DELETE FROM desafios_acceso WHERE usuario_id = ?", id);
+        jdbc.update("DELETE FROM usuarios WHERE id = ?", id);
+    }
+
     private static int tablasDelSegundoFactor(JdbcTemplate jdbc) {
         return jdbc.queryForObject("SELECT count(*) FROM information_schema.tables WHERE table_name IN"
                 + " ('segundo_factor','codigos_recuperacion','desafios_acceso')", Integer.class);
     }
 
     @Test
-    @DisplayName("base vacia: V1 a V6 se aplican y las entidades validan contra ellas")
+    @DisplayName("base vacia: V1 a V8 se aplican y las entidades validan contra ellas")
     void baseVacia() throws Exception {
         String url = crearBase("nueva");
         try (ConfigurableApplicationContext contexto = arrancarComoDespliegue(url)) {
@@ -180,9 +217,16 @@ class MigracionesIT {
                             org.assertj.core.groups.Tuple.tuple("3", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("4", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("5", "SQL"),
-                            org.assertj.core.groups.Tuple.tuple("6", "SQL"));
+                            org.assertj.core.groups.Tuple.tuple("6", "SQL"),
+                            org.assertj.core.groups.Tuple.tuple("7", "SQL"),
+                            org.assertj.core.groups.Tuple.tuple("8", "SQL"));
             assertThat(indicesDePrefijo(jdbc)).isEqualTo(1);
             assertThat(tablasDelSegundoFactor(jdbc)).isEqualTo(3);
+            // V8 (SA-4): el desafio admite el proposito APELAR y sigue sin admitir otros.
+            comprobarPropositosDelDesafio(jdbc);
+            // V7 (SA-3): las dos columnas del resumen del historial de sanciones.
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM information_schema.columns WHERE table_name = 'usuarios'"
+                    + " AND column_name IN ('sanciones_registradas','ultima_sancion_en')", Integer.class)).isEqualTo(2);
             assertThat(jdbc.queryForObject(
                     "SELECT count(*) FROM information_schema.tables WHERE table_name = 'preguntas_seguridad'",
                     Integer.class)).isEqualTo(1);
@@ -198,7 +242,7 @@ class MigracionesIT {
     }
 
     @Test
-    @DisplayName("base heredada con datos: se marca como V1 sin tocarla, se aplican V2 a V6 y el jugador sigue ahi")
+    @DisplayName("base heredada con datos: se marca como V1 sin tocarla, se aplican V2 a V8 y el jugador sigue ahi")
     void baseHeredada() throws Exception {
         String url = crearBase("heredada");
         UUID veterana = baseHeredadaConUnJugador(url);
@@ -213,10 +257,16 @@ class MigracionesIT {
                             org.assertj.core.groups.Tuple.tuple("3", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("4", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("5", "SQL"),
-                            org.assertj.core.groups.Tuple.tuple("6", "SQL"));
+                            org.assertj.core.groups.Tuple.tuple("6", "SQL"),
+                            org.assertj.core.groups.Tuple.tuple("7", "SQL"),
+                            org.assertj.core.groups.Tuple.tuple("8", "SQL"));
             assertThat(tablasDelSegundoFactor(jdbc)).isEqualTo(3);
             // V6 sobre la cuenta heredada: el cierre se programa con su uid.
             comprobarCierresDeCuenta(jdbc, veterana);
+            // V7 sobre la cuenta heredada: su historial de sanciones empieza en cero.
+            comprobarHistorialDeSanciones(jdbc, veterana);
+            // V8 sobre la tabla que creo V5 en la base heredada.
+            comprobarPropositosDelDesafio(jdbc);
             // V4 sobre la tabla que creo Hibernate: el indice de la busqueda existe.
             assertThat(indicesDePrefijo(jdbc)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT apodo FROM usuarios WHERE public_id = ?", String.class, veterana))
@@ -274,8 +324,10 @@ class MigracionesIT {
             assertThat(jdbc.queryForObject(
                     "SELECT count(*) FROM pg_constraint WHERE conname = 'uk_usuarios_public_id'", Integer.class))
                     .isEqualTo(1);
-            // V1 (linea base) y V2 a V6: V5 es el segundo factor y V6 el cierre de cuenta.
-            assertThat(historial(jdbc)).hasSize(6);
+            // V1 (linea base) y V2 a V8: V5 es el segundo factor, V6 el cierre de
+            // cuenta, V7 el resumen del historial de sanciones y V8 el codigo de
+            // apelacion sin sesion.
+            assertThat(historial(jdbc)).hasSize(8);
         }
     }
 }

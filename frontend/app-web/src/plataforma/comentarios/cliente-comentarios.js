@@ -60,7 +60,16 @@ export const TIPO = Object.freeze({
   IMAGEN_AUSENTE: 'https://nexusbattles.local/errores/imagen-ausente',
   IMAGEN_DEMASIADO_GRANDE: 'https://nexusbattles.local/errores/imagen-demasiado-grande',
   IMAGEN_NO_ADMITIDA: 'https://nexusbattles.local/errores/imagen-no-admitida',
+  // comentarios.yaml 1.11.0 — el texto pasa de MAXIMO_DE_CARACTERES.
+  TEXTO_DEMASIADO_LARGO: 'https://nexusbattles.local/errores/texto-demasiado-largo',
 });
+
+/**
+ * Largo máximo del texto de un comentario (comentarios.yaml 1.11.0; decisión
+ * del Product Owner sobre el issue 34). El servicio cuenta caracteres, no
+ * bytes: un emoji cuenta uno.
+ */
+export const MAXIMO_DE_CARACTERES = 2000;
 
 /** Estados del comentario que enumera el contrato en `ComentarioResponse.estado`. */
 export const ESTADO = Object.freeze({

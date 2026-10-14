@@ -208,7 +208,19 @@ export function idsEquipados(equipo) {
  */
 export function pintarEquipamiento(
   contenedor,
-  { equipo, elementos, alEquipar, alDesequipar, alPintarRetratos, pedirPagina = null },
+  {
+    equipo,
+    elementos,
+    alEquipar,
+    alDesequipar,
+    alPintarRetratos,
+    pedirPagina = null,
+    // Revisión final del módulo (13-oct): quién lleva cada objeto. Por omisión,
+    // `equipadoEn` del inventario (1.7.0). Un objeto puesto en OTRO héroe se
+    // ofrece apagado y diciendo quién lo lleva: antes se ofrecía, el servicio
+    // respondía 409 y la vista decía «ranura ocupada», que no era el motivo.
+    portadorDe = (elemento) => elemento?.equipadoEn ?? null,
+  },
 ) {
   if (!(contenedor instanceof HTMLElement)) {
     throw new TypeError('equipamiento: se esperaba un HTMLElement.');
@@ -261,7 +273,10 @@ export function pintarEquipamiento(
         // Es el camino de las pruebas unitarias del panel, que no tienen
         // servicio detras.
         if (!pedirPagina) {
-          elegirObjeto(ranura, candidatos, (elemento) => alEquipar(ranura, elemento));
+          elegirObjeto(ranura, candidatos, (elemento) => alEquipar(ranura, elemento), {
+            heroeId: equipo?.heroeId ?? null,
+            portadorDe,
+          });
           return;
         }
 
@@ -294,6 +309,8 @@ export function pintarEquipamiento(
         };
         elegirObjeto(ranura, [], (elemento) => alEquipar(ranura, elemento), {
           alCargar: traerTanda,
+          heroeId: equipo?.heroeId ?? null,
+          portadorDe,
         });
       },
     });
@@ -402,6 +419,26 @@ export async function juntarCandidatos(
 }
 
 /**
+ * Qué se lee en una opción del selector y por qué está apagada, si lo está.
+ *
+ * @param {string} nombre
+ * @param {{enSubasta: boolean, quien: string|null}} estado
+ * @returns {{texto: string, motivo: string|null}}
+ */
+function presentacionDeCandidato(nombre, { enSubasta, quien }) {
+  if (enSubasta) {
+    return { texto: `${nombre} · en subasta`, motivo: 'Está publicado en una subasta' };
+  }
+  if (quien) {
+    return {
+      texto: `${nombre} · lo lleva ${quien}`,
+      motivo: `Lo lleva ${quien}: quítaselo primero`,
+    };
+  }
+  return { texto: nombre, motivo: null };
+}
+
+/**
  * Dialogo para elegir que meter en una ranura vacia.
  *
  * Se usa el dialogo del kit y no una lista suelta porque atrapa el foco y se
@@ -414,14 +451,28 @@ export async function juntarCandidatos(
  *   FI-R7 — con `alCargar`, el dialogo trae sus candidatos del inventario en
  *   tandas en vez de recibirlos ya resueltos.
  */
-function elegirObjeto(ranura, candidatos, alElegir, { alCargar = null } = {}) {
+function elegirObjeto(
+  ranura,
+  candidatos,
+  alElegir,
+  { alCargar = null, heroeId = null, portadorDe = null } = {},
+) {
   const lista = h('ul', { clase: 'elegir-objeto' });
   const cuerpo = h('div', { clase: 'pila pila--compacta', hijos: [lista] });
   const nota = h('p', { clase: 't-meta', atributos: { role: 'status' } });
 
   function pintarOpciones(elementos) {
     for (const elemento of elementos) {
-      const disponible = elemento.disponible !== false;
+      const portador = typeof portadorDe === 'function' ? portadorDe(elemento) : null;
+      // Puesto en otro héroe: el servicio lo rechazaría (409, «ya equipado»).
+      const enOtro = portador && heroeId && portador.heroeId !== heroeId ? portador : null;
+      const enSubasta = elemento.disponible === false;
+      const disponible = !enSubasta && !enOtro;
+      const quien = enOtro ? (enOtro.nombreHeroe ?? 'otro héroe') : null;
+      const { texto, motivo } = presentacionDeCandidato(elemento.nombrePropio, {
+        enSubasta,
+        quien,
+      });
       const boton = h('button', {
         clase: clases('elegir-objeto__opcion', !disponible && 'elegir-objeto__opcion--bloqueada'),
         atributos: {
@@ -429,10 +480,10 @@ function elegirObjeto(ranura, candidatos, alElegir, { alCargar = null } = {}) {
           disabled: !disponible,
           // HU-INV-010: bloqueado por una subasta en curso. Se dice, no se
           // esconde: el jugador tiene que poder entender por que no puede.
-          title: disponible ? null : 'Está publicado en una subasta',
+          title: motivo,
         },
         datos: { elegir: elemento.id },
-        texto: disponible ? elemento.nombrePropio : `${elemento.nombrePropio} · en subasta`,
+        texto,
       });
       boton.addEventListener('click', () => {
         cerrar();

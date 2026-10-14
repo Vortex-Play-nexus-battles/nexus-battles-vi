@@ -65,7 +65,10 @@ let secuencia = 0;
  * @param {object} producto tal como lo devuelve el servicio de productos.
  * @returns {HTMLElement} dialogo listo para insertar en el documento.
  */
-export function construirFicha(producto, { nombrePropio = null, contexto = 'inventario' } = {}) {
+export function construirFicha(
+  producto,
+  { nombrePropio = null, contexto = 'inventario', enTuInventario = null } = {},
+) {
   if (!producto || typeof producto !== 'object') {
     throw new TypeError('La ficha necesita un producto del catálogo');
   }
@@ -128,6 +131,14 @@ export function construirFicha(producto, { nombrePropio = null, contexto = 'inve
 
   ficha.append(imagen, nombre, tipo);
 
+  // Revisión final del módulo (13-oct) — §7.1: la vista de detalle tiene «la
+  // información del inventario». Lo que es del jugador (cómo llamó a su
+  // objeto, si lo lleva un héroe, si está bloqueado) va aquí, junto a lo que
+  // dice el catálogo, que es lo mismo para todos.
+  if (enTuInventario) {
+    ficha.appendChild(construirEnTuInventario(producto, enTuInventario));
+  }
+
   // RN-27 (seccion 7.2.1): un producto suspendido no admite nuevas
   // adquisiciones, pero **permanece en los inventarios de quienes ya lo
   // poseen**. El flujo alternativo de la ficha pide mostrarla con el
@@ -149,6 +160,34 @@ export function construirFicha(producto, { nombrePropio = null, contexto = 'inve
   }
 
   return ficha;
+}
+
+/**
+ * «En tu inventario»: el nombre que le puso el jugador (si no es el del
+ * catálogo) y el sello de su estado (equipado en…, en subasta, disponible).
+ *
+ * @param {object} producto
+ * @param {{nombrePropio?: string|null, sello?: Node|null}} datos
+ * @returns {HTMLElement}
+ */
+function construirEnTuInventario(producto, { nombrePropio = null, sello = null } = {}) {
+  const bloque = document.createElement('section');
+  bloque.className = 'ficha__inventario';
+  bloque.dataset.zona = 'en-tu-inventario';
+  const titulo = document.createElement('h3');
+  titulo.className = 'ficha__subtitulo';
+  titulo.textContent = 'En tu inventario';
+  bloque.appendChild(titulo);
+  if (nombrePropio && nombrePropio !== producto.nombre) {
+    const propio = document.createElement('p');
+    propio.className = 'ficha__nombre-propio';
+    propio.textContent = `Lo llamas «${nombrePropio}»`;
+    bloque.appendChild(propio);
+  }
+  if (sello) {
+    bloque.appendChild(sello);
+  }
+  return bloque;
 }
 
 /**
@@ -246,6 +285,9 @@ export async function abrirFicha(
     // «inventario» (por omision), «tienda» o «portada»: cambia solo las frases
     // que hablan de lo que el jugador tiene.
     contexto = 'inventario',
+    // Revisión final del módulo (13-oct): `{nombrePropio, sello}` del elemento
+    // del inventario que se abrió (ver `construirEnTuInventario`).
+    enTuInventario = null,
   } = {},
 ) {
   cerrarFicha();
@@ -261,8 +303,18 @@ export async function abrirFicha(
   // («Eliminar tu comentario»), Escape cerraba las dos. Ahora solo actúa la
   // ficha si es el modal de más arriba; si no, la tecla es de la confirmación.
   const alPulsarTecla = (evento) => {
-    if (evento.key === 'Escape' && esElModalDeArriba(capa)) {
+    if (!esElModalDeArriba(capa)) {
+      return;
+    }
+    if (evento.key === 'Escape') {
       cerrarFicha();
+      return;
+    }
+    // RNF-ACC-002 / revisión final del módulo (13-oct): el foco no se escapa a
+    // la vista de atrás. Tab desde el último vuelve al primero y Mayús+Tab
+    // desde el primero al último, como el diálogo del kit.
+    if (evento.key === 'Tab') {
+      atraparFoco(capa, evento);
     }
   };
   document.addEventListener('keydown', alPulsarTecla);
@@ -287,7 +339,7 @@ export async function abrirFicha(
   if (abierta === null || abierta.capa !== capa) {
     return; // Se cerro mientras se consultaba.
   }
-  const ficha = construirFicha(producto, { nombrePropio, contexto });
+  const ficha = construirFicha(producto, { nombrePropio, contexto, enTuInventario });
   reemplazarContenido(capa, ficha);
   const zonaDeComplementos = anadirComplementos(ficha, producto, complementos);
 
@@ -389,4 +441,41 @@ function reemplazarContenido(capa, contenido) {
     }
   }
   capa.appendChild(contenido);
+  // Revisión final del módulo (13-oct): con la ficha ya pintada, el botón de
+  // cerrar pasa DENTRO del diálogo (`aria-modal`), donde lo encuentra un lector
+  // de pantalla, y queda en su esquina. Si tenía el foco, lo conserva.
+  if (cerrar && contenido.getAttribute?.('role') === 'dialog') {
+    const teniaElFoco = document.activeElement === cerrar;
+    contenido.prepend(cerrar);
+    contenido.classList.add('ficha--con-cerrar');
+    if (teniaElFoco) {
+      cerrar.focus();
+    }
+  }
+}
+
+/** Lo que el teclado puede alcanzar dentro de la capa, en orden. */
+function enfocablesDe(capa) {
+  return Array.from(
+    capa.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((nodo) => !nodo.hasAttribute('disabled') && nodo.getClientRects().length > 0);
+}
+
+function atraparFoco(capa, evento) {
+  const lista = enfocablesDe(capa);
+  if (lista.length === 0) {
+    return;
+  }
+  const primero = lista[0];
+  const ultimo = lista[lista.length - 1];
+  const dentro = capa.contains(document.activeElement);
+  if (evento.shiftKey && (document.activeElement === primero || !dentro)) {
+    evento.preventDefault();
+    ultimo.focus();
+  } else if (!evento.shiftKey && (document.activeElement === ultimo || !dentro)) {
+    evento.preventDefault();
+    primero.focus();
+  }
 }

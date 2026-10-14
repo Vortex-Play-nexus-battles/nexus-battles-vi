@@ -4,6 +4,7 @@
  *
  * Las pruebas se escriben antes que la implementacion (TDD, ciclo rojo).
  */
+import { jest } from '@jest/globals';
 import { construirPaginacion, calcularVentana, CASILLAS_VISIBLES } from './paginacion.js';
 
 /** Botones numerados del control, en orden. */
@@ -313,5 +314,78 @@ describe('Control de paginacion', () => {
       expect(casillas(muchas)).toHaveLength(CASILLAS_VISIBLES);
       expect(casillas(ninguna)).toHaveLength(1);
     });
+  });
+});
+
+/*
+ * Revisión final del módulo Inventario (13-oct): §7.1 literal. «Si hay una
+ * página, aparece la casilla uno (1) … Si hay más páginas a la izquierda,
+ * aparece una flecha a la izquierda para mostrar las opciones ocultas y del
+ * mismo modo a la derecha.»
+ */
+describe('Paginación de §7.1 (unaPagina: visible, flechas: revelan-ocultas)', () => {
+  const S71 = { unaPagina: 'visible', flechas: 'revelan-ocultas' };
+
+  test('con una página aparece la casilla 1, marcada y sin flechas', () => {
+    const control = construirPaginacion({ paginaActual: 0, totalPaginas: 1 }, () => {}, S71);
+
+    expect(control.hidden).toBe(false);
+    expect(numeros(control)).toEqual(['1']);
+    expect(casillas(control)[0].getAttribute('aria-current')).toBe('page');
+    expect(flecha(control, 'anterior')).toBeNull();
+    expect(flecha(control, 'siguiente')).toBeNull();
+  });
+
+  test('con dos páginas, las casillas 1 y 2; con diez, de la 1 a la 10', () => {
+    expect(
+      numeros(construirPaginacion({ paginaActual: 0, totalPaginas: 2 }, () => {}, S71)),
+    ).toEqual(['1', '2']);
+    expect(
+      numeros(construirPaginacion({ paginaActual: 0, totalPaginas: 10 }, () => {}, S71)),
+    ).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']);
+  });
+
+  test('vacío sigue sin control: no hay páginas que enseñar', () => {
+    expect(construirPaginacion({ paginaActual: 0, totalPaginas: 0 }, () => {}, S71).hidden).toBe(
+      true,
+    );
+  });
+
+  test('la flecha derecha lleva a la primera página oculta y la deja a la vista', () => {
+    const pedida = jest.fn();
+    const control = construirPaginacion({ paginaActual: 0, totalPaginas: 25 }, pedida, S71);
+
+    expect(flecha(control, 'anterior')).toBeNull();
+    flecha(control, 'siguiente').click();
+    expect(pedida).toHaveBeenCalledWith(10);
+
+    const despues = construirPaginacion({ paginaActual: 10, totalPaginas: 25 }, () => {}, S71);
+    expect(numeros(despues)).toContain('11');
+    expect(numeros(despues)).toContain('15');
+  });
+
+  test('desde la última, la flecha izquierda revela las ocultas en una sola pulsación', () => {
+    const pedida = jest.fn();
+    const control = construirPaginacion({ paginaActual: 24, totalPaginas: 25 }, pedida, S71);
+
+    expect(numeros(control)).toEqual(['16', '17', '18', '19', '20', '21', '22', '23', '24', '25']);
+    expect(flecha(control, 'siguiente')).toBeNull();
+    flecha(control, 'anterior').click();
+    expect(pedida).toHaveBeenCalledWith(14);
+
+    const despues = construirPaginacion({ paginaActual: 14, totalPaginas: 25 }, () => {}, S71);
+    expect(numeros(despues)).toContain('15');
+    expect(numeros(despues)[0]).toBe('10');
+  });
+
+  test('las flechas dicen a qué página llevan', () => {
+    const control = construirPaginacion({ paginaActual: 12, totalPaginas: 25 }, () => {}, S71);
+
+    expect(flecha(control, 'anterior').getAttribute('aria-label')).toBe(
+      'Mostrar páginas anteriores (ir a la 7)',
+    );
+    expect(flecha(control, 'siguiente').getAttribute('aria-label')).toBe(
+      'Mostrar páginas siguientes (ir a la 18)',
+    );
   });
 });

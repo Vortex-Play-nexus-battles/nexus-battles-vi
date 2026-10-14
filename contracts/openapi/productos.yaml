@@ -1110,7 +1110,6 @@ components:
         - imagen
         - descripcion
         - tipo
-        - campos
         - tiraje
         - premium
       properties:

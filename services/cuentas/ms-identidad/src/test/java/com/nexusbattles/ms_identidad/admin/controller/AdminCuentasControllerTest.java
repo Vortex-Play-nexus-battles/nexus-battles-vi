@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_identidad.admin.controller;
 
 import com.nexusbattles.ms_identidad.admin.dto.CrearCuentaAdminRequest;
+import com.nexusbattles.ms_identidad.admin.dto.CuentaAdministrativaCreadaResponse;
 import com.nexusbattles.ms_identidad.admin.service.AdminCuentaService;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,10 +12,12 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -56,7 +59,13 @@ class AdminCuentasControllerTest {
         );
 
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
-        assertSame(usuarioCreado, response.getBody());
+        // Antes se devolvia la entidad entera (con el resumen BCrypt de la
+        // clave de relleno, la version del token y los contadores de
+        // intentos). Ahora solo lo que la interfaz muestra.
+        CuentaAdministrativaCreadaResponse cuerpo =
+            assertInstanceOf(CuentaAdministrativaCreadaResponse.class, response.getBody());
+        assertEquals("Santi", cuerpo.apodo());
+        assertNull(cuerpo.uid());
 
         verify(adminCuentaService).crearCuentaAdministrativa(
             datos,
@@ -78,7 +87,8 @@ class AdminCuentasControllerTest {
         );
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals("Rol no permitido", response.getBody());
+        ProblemDetail problema = assertInstanceOf(ProblemDetail.class, response.getBody());
+        assertEquals("Rol no permitido", problema.getDetail());
 
         verify(adminCuentaService).crearCuentaAdministrativa(
             datos,

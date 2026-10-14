@@ -77,4 +77,7 @@ héroes vive en memoria y siempre es el oficial.
   arma, armadura e ítem a un tipo de héroe (campo `heroe` del contrato), pero
   el documento no enuncia una regla que impida equipar los de otro tipo. La
   única afinidad con efecto que define es la de las épicas (Tabla 20). Por
-  eso el inventario no la aplica al equipar. Queda como decisión del PO.
+  eso el inventario no la aplica al equipar. **Decisión del PO (Simón Pérez,
+  13-oct-2026, registrada en #85): no se aplica.** «Incompatible» al equipar es
+  la ranura o el tipo equivocado (solo ARMA, ARMADURA e ITEM ocupan ranura; una
+  armadura va en la parte que fija el catálogo), y eso sí se rechaza.

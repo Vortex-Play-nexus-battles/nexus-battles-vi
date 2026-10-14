@@ -9,10 +9,16 @@ function obtenerToken() {
   return sessionStorage.getItem(CLAVE_TOKEN);
 }
 
+/**
+ * @param {number|string} usuarioId clave de la cuenta
+ * @param {string} nuevoRol
+ * @param {{motivo?: string|null, fetchImpl?: typeof fetch}} [opciones]
+ *   `motivo` (rbac.yaml 2.0.0) queda en la auditoría del cambio
+ */
 export async function cambiarRol(
   usuarioId,
   nuevoRol,
-  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+  { motivo = null, fetchImpl = fetchWithHttpErrorInterceptor } = {},
 ) {
   const token = obtenerToken();
 
@@ -34,9 +40,7 @@ export async function cambiarRol(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({
-      nuevoRol,
-    }),
+    body: JSON.stringify(motivo ? { nuevoRol, motivo } : { nuevoRol }),
   });
 
   const texto = await response.text();

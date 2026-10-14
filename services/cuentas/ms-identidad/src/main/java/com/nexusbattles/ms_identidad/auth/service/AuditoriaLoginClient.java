@@ -107,6 +107,30 @@ public class AuditoriaLoginClient {
         }
     }
 
+    /**
+     * 7.3.9 — la cuenta acaba de quedar bloqueada por intentos fallidos. Mismo
+     * trato que el login fallido: si ms-cumplimiento no responde, el bloqueo
+     * sigue en pie y queda la evidencia en la bitacora local.
+     *
+     * @param afectado uid de la cuenta (no el correo: no se reparte por la auditoria)
+     */
+    public void registrarBloqueo(String afectado, String ipOrigen) {
+        String ip = ipOrigen == null || ipOrigen.isBlank() ? "DESCONOCIDA" : ipOrigen;
+        AuditoriaLoginRequest solicitud = new AuditoriaLoginRequest(
+            "OTRO", "ms-identidad", afectado, null, "BLOQUEADA_TEMPORALMENTE",
+            "BLOQUEO_POR_INTENTOS_FALLIDOS", ip);
+        try {
+            restClient.post()
+                .uri(urlAuditoria)
+                .body(solicitud)
+                .retrieve()
+                .toBodilessEntity();
+        } catch (Exception e) {
+            log.warn("No fue posible registrar el BLOQUEO de {} en ms-cumplimiento ip={} motivo={}",
+                afectado, ip, e.getMessage());
+        }
+    }
+
     private record AuditoriaLoginRequest(
         String tipoAccion,
         String administradorId,

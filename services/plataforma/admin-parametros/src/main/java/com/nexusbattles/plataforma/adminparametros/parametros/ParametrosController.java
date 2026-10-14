@@ -55,9 +55,39 @@ public class ParametrosController {
 
     @PutMapping("/{clave}")
     public ParametroResponse cambiar(@AuthenticationPrincipal Jwt actor, @PathVariable String clave,
-                                     @RequestBody CambioRequest request) {
+                                     @RequestBody CambioRequest request,
+                                     jakarta.servlet.http.HttpServletRequest peticion) {
         return ParametroResponse.desde(servicio.cambiar(actorDe(actor), clave,
-                new ParametrosService.Cambio(request.valor(), request.motivo(), request.vigenteDesde())));
+                new ParametrosService.Cambio(request.valor(), request.motivo(), request.vigenteDesde()),
+                ipDe(peticion)));
+    }
+
+    /**
+     * SA-5 (§7.3.5): la IP de quien cambia. Primero {@code X-Real-IP}, que el
+     * borde fija con {@code $remote_addr} y no se puede falsear desde fuera;
+     * despues el primer valor de {@code X-Forwarded-For} y, sin borde, la
+     * remota. Solo caracteres de una IP y como mucho 45.
+     */
+    static String ipDe(jakarta.servlet.http.HttpServletRequest peticion) {
+        String real = peticion.getHeader("X-Real-IP");
+        if (real != null && pareceUnaIp(real.strip())) {
+            return real.strip();
+        }
+        String reenviada = peticion.getHeader("X-Forwarded-For");
+        if (reenviada != null) {
+            String primera = reenviada.split(",", 2)[0].strip();
+            if (pareceUnaIp(primera)) {
+                return primera;
+            }
+        }
+        String remota = peticion.getRemoteAddr();
+        return pareceUnaIp(remota) ? remota : null;
+    }
+
+    static boolean pareceUnaIp(String valor) {
+        return valor != null && !valor.isEmpty() && valor.length() <= 45
+                && valor.chars().allMatch(c -> (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+                        || (c >= 'A' && c <= 'F') || c == ':' || c == '.');
     }
 
     @GetMapping("/{clave}/historial")

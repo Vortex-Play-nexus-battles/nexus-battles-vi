@@ -74,6 +74,23 @@ public class AsientoDeModeracion {
     @Column(name = "ip_origen", length = 45)
     private String ipOrigen;
 
+    /**
+     * SA-5 (V9): cuando este asiento entro en la bitacora central de
+     * ms-cumplimiento. Nulo mientras esta pendiente; los anteriores a V9 llevan
+     * su propia fecha y no se envian.
+     */
+    @Column(name = "auditado_en")
+    private Instant auditadoEn;
+
+    @Column(name = "intentos_de_auditoria", nullable = false)
+    private int intentosDeAuditoria;
+
+    @Column(name = "error_de_auditoria", length = 300)
+    private String errorDeAuditoria;
+
+    @Column(name = "proximo_intento_de_auditoria")
+    private Instant proximoIntentoDeAuditoria;
+
     protected AsientoDeModeracion() {
     }
 
@@ -152,5 +169,41 @@ public class AsientoDeModeracion {
     /** IP de origen de la peticion; nula en los asientos anteriores a V5. */
     public String ipOrigen() {
         return ipOrigen;
+    }
+
+    /** SA-5: entro en la bitacora central. */
+    public void auditado(Instant ahora) {
+        this.auditadoEn = java.util.Objects.requireNonNull(ahora);
+        this.intentosDeAuditoria++;
+        this.errorDeAuditoria = null;
+        this.proximoIntentoDeAuditoria = null;
+    }
+
+    /** SA-5: un intento que no entro; la espera crece con cada fallo hasta {@code maxima}. */
+    public void falloDeAuditoria(String motivo, Instant ahora, java.time.Duration base, java.time.Duration maxima) {
+        this.intentosDeAuditoria++;
+        String texto = motivo == null ? "" : motivo;
+        this.errorDeAuditoria = texto.length() <= 300 ? texto : texto.substring(0, 300);
+        java.time.Duration espera = base;
+        for (int i = 1; i < intentosDeAuditoria && espera.compareTo(maxima) < 0; i++) {
+            espera = espera.multipliedBy(2);
+        }
+        this.proximoIntentoDeAuditoria = ahora.plus(espera.compareTo(maxima) > 0 ? maxima : espera);
+    }
+
+    public Instant auditadoEn() {
+        return auditadoEn;
+    }
+
+    public int intentosDeAuditoria() {
+        return intentosDeAuditoria;
+    }
+
+    public String errorDeAuditoria() {
+        return errorDeAuditoria;
+    }
+
+    public Instant proximoIntentoDeAuditoria() {
+        return proximoIntentoDeAuditoria;
     }
 }

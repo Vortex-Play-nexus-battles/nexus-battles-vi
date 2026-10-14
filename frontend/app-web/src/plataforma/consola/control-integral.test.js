@@ -1,22 +1,28 @@
 /**
- * La consola de control integral, montada contra un sistema medio caido.
+ * La consola de control integral, montada contra un sistema medio caído.
  *
- * Es el escenario real del entorno de demostracion: identidad y torneos
- * responden, subastas esta caida, misiones no existe y auditoria niega el
- * permiso. Lo que se prueba es que la pantalla siga sirviendo -- y que cada
- * hueco diga POR QUE esta vacio, que es lo unico que distingue una consola
- * de operacion de un tablero decorativo.
+ * Es el escenario real del entorno de demostración: identidad y torneos
+ * responden, subastas está caída y auditoría niega el permiso. Lo que se
+ * prueba es que la pantalla siga sirviendo, que cada hueco diga POR QUÉ está
+ * vacío y —desde SA-2, con el informe de revisión del módulo— que lo diga como
+ * un producto: sin rutas de la API, sin códigos HTTP, sin etiquetas internas
+ * en mayúsculas y con las tablas del kit de la consola.
  */
 
 import { jest } from '@jest/globals';
 
 import { RESULTADO } from './cliente-consola.js';
 import {
+  FILAS_POR_PAGINA,
   SECCIONES,
+  agruparPaneles,
+  formatearDia,
   formatearFecha,
-  formatearInstante,
   montarControlIntegral,
   pintarAlertasDeModeracion,
+  pintarMetricasDeSanciones,
+  pintarServicios,
+  pintarReincidentes,
 } from './control-integral.js';
 
 const asentar = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -30,11 +36,11 @@ const conDatos = (datos) => ({
   detalle: null,
 });
 
-const conFallo = (resultado, estado, recurso) => ({
+const conFallo = (resultado, estado, recurso, motivo = 'motivo de prueba') => ({
   resultado,
   datos: null,
   estado,
-  motivo: 'motivo de prueba',
+  motivo,
   recurso,
   detalle: null,
 });
@@ -52,6 +58,7 @@ const JUGADORES = {
       ultimoAcceso: '2026-09-20T18:30:00',
       suspendidoHasta: null,
       bloqueada: false,
+      sancionesRegistradas: 2,
     },
     {
       id: 16,
@@ -67,7 +74,7 @@ const JUGADORES = {
     },
   ],
   pagina: 0,
-  tamano: 20,
+  tamano: 16,
   total: 42,
   totalPaginas: 3,
 };
@@ -95,10 +102,25 @@ const SUBASTAS = {
       tipoProducto: 'ARMA',
       rareza: null,
       precioInicial: 50,
-      ofertaVigente: 65,
+      ofertaVigente: 1250,
       precioCompraInmediata: null,
       cantidadPujas: 2,
       fechaFin: '2026-10-06T18:00:00Z',
+      esMaestroDeJuego: false,
+      vendedorId: null,
+      esPropia: false,
+    },
+    {
+      id: '8d1f0c2e-aaaa-bbbb-cccc-ddddeeeeffff',
+      estado: 'ACTIVA',
+      nombreProducto: 'Arco largo',
+      tipoProducto: 'ARMA',
+      rareza: null,
+      precioInicial: 20,
+      ofertaVigente: 30,
+      precioCompraInmediata: null,
+      cantidadPujas: 7,
+      fechaFin: '2026-10-07T18:00:00Z',
       esMaestroDeJuego: false,
       vendedorId: null,
       esPropia: false,
@@ -152,10 +174,34 @@ const INDICADORES = {
   calculadoEn: '2026-10-05T15:00:00-05:00',
 };
 
+const SERVICIOS = {
+  total: 18,
+  operativos: 12,
+  caidos: 2,
+  lentos: 0,
+  noDesplegados: 3,
+  noObservables: 1,
+  instante: '2026-09-24T02:00:00Z',
+  desdeCache: false,
+  servicios: [
+    { servicio: 'ms-identidad', estado: 'OPERATIVO', detalle: 'HTTP 200' },
+    { servicio: 'ms-subastas', estado: 'CAIDO', detalle: 'Connection refused' },
+    { servicio: 'ms-chatbot', estado: 'NO_DESPLEGADO', detalle: 'fuera del host' },
+    { servicio: 'heroes', estado: 'NO_OBSERVABLE', detalle: 'en otro host' },
+  ],
+};
+
 /** Un UUID a la vista es un dato que nadie puede leer (RFINAL-06). */
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
-/** Un sistema medio caido, como el del entorno de demostracion. */
+/**
+ * Lo que el informe de revisión prohibió en la consola: la ruta de la
+ * consulta, el código HTTP y las etiquetas internas.
+ */
+const ANDAMIO =
+  /Fuente:|GET \/api|\/api\/v1|HTTP\s?\d|NO IMPLEMENTADO|SERVICIO DEGRADADO|SIN PERMISO|EN LINEA|Sondeo real|pruebas automáticas/;
+
+/** Un sistema medio caído, como el del entorno de demostración. */
 function apiSimulada(sobrescribir = {}) {
   return jest.fn(async (recurso) => {
     for (const [prefijo, respuesta] of Object.entries(sobrescribir)) {
@@ -170,20 +216,7 @@ function apiSimulada(sobrescribir = {}) {
       return conDatos(JUGADORES);
     }
     if (recurso.startsWith('/admin/sistema/servicios')) {
-      return conDatos({
-        total: 18,
-        operativos: 12,
-        caidos: 2,
-        noDesplegados: 3,
-        noObservables: 1,
-        instante: '2026-09-24T02:00:00Z',
-        servicios: [
-          { servicio: 'ms-identidad', estado: 'OPERATIVO', detalle: 'HTTP 200' },
-          { servicio: 'ms-subastas', estado: 'CAIDO', detalle: 'Connection refused' },
-          { servicio: 'ms-chatbot', estado: 'NO_DESPLEGADO', detalle: 'fuera del host' },
-          { servicio: 'heroes', estado: 'NO_OBSERVABLE', detalle: 'en otro host' },
-        ],
-      });
+      return conDatos(SERVICIOS);
     }
     if (recurso.startsWith('/torneos')) {
       return conDatos([TORNEO]);
@@ -192,16 +225,23 @@ function apiSimulada(sobrescribir = {}) {
       return conDatos({ total: 0, apelaciones: { PENDIENTE: 0 } });
     }
     if (recurso.startsWith('/subastas')) {
-      return conFallo(RESULTADO.SERVICIO_DEGRADADO, 502, recurso);
+      return conFallo(
+        RESULTADO.SERVICIO_DEGRADADO,
+        502,
+        recurso,
+        'No pudimos cargar esta información. Inténtalo de nuevo en unos segundos.',
+      );
     }
     if (recurso.startsWith('/admin/auditoria')) {
-      return conFallo(RESULTADO.SIN_PERMISO, 403, recurso);
+      return conFallo(
+        RESULTADO.SIN_PERMISO,
+        403,
+        recurso,
+        'Tu rol no tiene acceso a esta información.',
+      );
     }
     if (recurso.startsWith('/comentarios/moderacion')) {
       return conDatos({ entradas: [{ id: 1 }, { id: 2 }], total: 2, pagina: 0, tamano: 20 });
-    }
-    if (recurso.startsWith('/transacciones')) {
-      return conFallo(RESULTADO.SERVICIO_DEGRADADO, 502, recurso);
     }
     return conDatos([]);
   });
@@ -212,57 +252,93 @@ function pagina() {
   return document;
 }
 
+async function montar(opciones = {}, sesion = {}) {
+  const consultarApi = opciones.consultarApi ?? apiSimulada();
+  const raiz = pagina();
+  const paneles = montarControlIntegral(raiz, sesion, {
+    actualizarSola: false,
+    ...opciones,
+    consultarApi,
+  });
+  await asentar();
+  return { raiz, consultarApi, paneles };
+}
+
+const celdas = (panel) =>
+  [...panel.querySelectorAll('tbody tr:first-child > *')].map((c) => c.textContent.trim());
+const encabezados = (panel) =>
+  [...panel.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+
 describe('montaje', () => {
   test('pinta las ocho secciones del mandato', async () => {
-    const raiz = pagina();
-
-    montarControlIntegral(
-      raiz,
-      { apodo: 'admin.simon', rol: 'SUPER_ADMINISTRADOR' },
-      {
-        consultarApi: apiSimulada(),
-      },
-    );
-    await asentar();
+    const { raiz } = await montar({}, { apodo: 'admin.simon', rol: 'SUPER_ADMINISTRADOR' });
 
     const pintadas = [...raiz.querySelectorAll('[data-seccion]')].map((s) => s.dataset.seccion);
     expect(pintadas).toEqual(SECCIONES.map((s) => s.id));
   });
 
-  test('cada panel dice de que endpoint sale su dato', async () => {
-    const raiz = pagina();
+  test('SA-2: ningún panel dice de qué ruta sale su dato ni lleva texto de andamio', async () => {
+    const { raiz } = await montar();
 
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
+    expect(raiz.querySelector('.panel-admin__fuente')).toBeNull();
+    expect(raiz.body.textContent).not.toMatch(ANDAMIO);
+  });
+
+  test('SA-2: sin la tarjeta de misiones ni los movimientos de la propia cuenta', async () => {
+    const { raiz, consultarApi } = await montar();
+
+    expect(raiz.querySelector('[data-panel="misiones"]')).toBeNull();
+    expect(raiz.querySelector('[data-panel="transacciones"]')).toBeNull();
+    expect(consultarApi.mock.calls.map((c) => c[0])).not.toContain('/transacciones/mi-historial');
+  });
+
+  test('el encabezado dice el rol y la hora de la última actualización', async () => {
+    const { raiz } = await montar({}, { apodo: 'admin.simon', rol: 'SUPER_ADMINISTRADOR' });
+
+    const encabezado = raiz.querySelector('[data-zona="encabezado"]');
+    expect(encabezado.querySelector('h1').textContent).toBe('Control integral');
+    expect(encabezado.textContent).toContain('Super administrador');
+    expect(encabezado.querySelector('[data-zona="marca"]').textContent).toMatch(
+      /^Actualizado a las /,
+    );
+  });
+
+  test('«Actualizar» vuelve a consultar todos los paneles menos el directorio', async () => {
+    const { raiz, consultarApi } = await montar();
+    const antes = consultarApi.mock.calls.length;
+
+    raiz.querySelector('[data-accion="actualizar"]').dispatchEvent(new window.Event('click'));
     await asentar();
 
-    const fuentes = [...raiz.querySelectorAll('.panel-admin__fuente')].map((p) => p.textContent);
-    expect(fuentes.length).toBeGreaterThan(8);
-    expect(fuentes.every((t) => t.startsWith('Fuente: GET /api/v1'))).toBe(true);
+    const nuevas = consultarApi.mock.calls.slice(antes).map((c) => c[0]);
+    expect(nuevas).toContain('/subastas');
+    expect(nuevas).toContain('/admin/sistema/servicios');
+    expect(nuevas.some((r) => r.startsWith('/admin/jugadores?page='))).toBe(true); // el KPI
+    expect(
+      nuevas.some((r) => r.startsWith(`/admin/jugadores?page=0&size=${FILAS_POR_PAGINA}`)),
+    ).toBe(false);
   });
 });
 
-describe('un servicio caido no tumba la consola', () => {
-  test('subastas caida se pinta como SERVICIO DEGRADADO y torneos sigue con datos', async () => {
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
-    await asentar();
+describe('un servicio caído no tumba la consola', () => {
+  test('subastas caída lo dice con palabras y torneos sigue con datos', async () => {
+    const { raiz } = await montar();
 
     const subastas = raiz.querySelector('[data-panel="subastas"]');
-    expect(subastas.querySelector('.sello-estado').textContent).toBe('SERVICIO DEGRADADO');
-    expect(subastas.textContent).toContain('GET /api/v1/subastas');
+    expect(subastas.querySelector('.panel-admin__estado').textContent).toBe('Sin conexión');
+    expect(subastas.querySelector('.estado-admin').dataset.tono).toBe('error');
+    expect(subastas.querySelector('.aviso__titulo').textContent).toBe(
+      'No pudimos cargar esta información',
+    );
+    expect(subastas.textContent).not.toMatch(ANDAMIO);
 
     const torneos = raiz.querySelector('[data-panel="torneos"]');
-    expect(torneos.querySelector('.sello-estado').textContent).toBe('EN LINEA');
+    expect(torneos.querySelector('.panel-admin__estado').textContent).toBe('');
     expect(torneos.textContent).toContain('Copa Nexo');
   });
 
   test('un panel degradado ofrece reintentar y vuelve a consultar solo lo suyo', async () => {
-    const consultarApi = apiSimulada();
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi });
-    await asentar();
+    const { raiz, consultarApi } = await montar();
     const llamadasAntes = consultarApi.mock.calls.length;
 
     raiz
@@ -275,232 +351,233 @@ describe('un servicio caido no tumba la consola', () => {
   });
 
   test('sin permiso NO ofrece reintentar: no se arregla reintentando', async () => {
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
-    await asentar();
+    const { raiz } = await montar();
 
     const auditoria = raiz.querySelector('[data-panel="auditoria"]');
-    expect(auditoria.querySelector('.sello-estado').textContent).toBe('SIN PERMISO');
+    expect(auditoria.querySelector('.panel-admin__estado').textContent).toBe('Sin acceso');
     expect(auditoria.querySelector('[data-accion="reintentar"]')).toBeNull();
+    expect(auditoria.textContent).toContain('Tu rol no tiene acceso a esta información.');
+  });
+
+  test('una consulta que no trae registros lo dice, sin distintivo de fallo', async () => {
+    const { raiz } = await montar({
+      consultarApi: apiSimulada({
+        '/salas': {
+          ...conDatos(null),
+          resultado: RESULTADO.VACIO,
+          motivo: 'Todavía no hay registros.',
+        },
+      }),
+    });
+
+    const salas = raiz.querySelector('[data-panel="salas"]');
+    expect(salas.querySelector('.panel-admin__estado').textContent).toBe('');
+    expect(salas.querySelector('.estado-vista--vacio').textContent).toContain(
+      'No hay salas abiertas ahora mismo',
+    );
   });
 });
 
 describe('nada se inventa', () => {
-  test('misiones dice NO IMPLEMENTADO y no fabrica ninguna', async () => {
-    const raiz = pagina();
+  test('un contador sin total se pinta como «sin dato», nunca como cero', async () => {
+    const { raiz } = await montar({
+      consultarApi: apiSimulada({ '/admin/jugadores?page=0&size=1': conDatos({ algo: 1 }) }),
+    });
 
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
-    await asentar();
-
-    const misiones = raiz.querySelector('[data-panel="misiones"]');
-    expect(misiones.querySelector('.sello-estado').textContent).toBe('NO IMPLEMENTADO');
-    expect(misiones.textContent).toMatch(/no fabrica datos/i);
-    expect(misiones.querySelector('.tabla')).toBeNull();
-  });
-
-  test('un contador sin total se pinta como guion, nunca como cero', async () => {
-    const raiz = pagina();
-
-    montarControlIntegral(
-      raiz,
-      {},
-      { consultarApi: apiSimulada({ '/admin/jugadores?page=0&size=1': conDatos({ algo: 1 }) }) },
-    );
-    await asentar();
-
-    const valor = raiz.querySelector('[data-panel="resumen-jugadores"] .indicador__valor');
-    expect(valor.textContent).toBe('--');
+    const caja = raiz.querySelector('[data-panel="resumen-jugadores"] .indicador');
+    expect(caja.dataset.sinDato).toBe('si');
+    expect(caja.querySelector('.indicador__valor').textContent).toBe('—Sin dato');
   });
 
   test('un cero que el servicio dijo de verdad se pinta como cero', async () => {
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
-    await asentar();
+    const { raiz } = await montar();
 
     const valor = raiz.querySelector('[data-panel="resumen-sanciones"] .indicador__valor');
     expect(valor.textContent).toBe('0');
   });
+
+  test('los servicios operativos se dicen «12 de 18», con lo que falla en la nota', async () => {
+    const { raiz } = await montar();
+
+    const panel = raiz.querySelector('[data-panel="resumen-servicios"]');
+    expect(panel.querySelector('.indicador__valor').textContent).toBe('12 de 18');
+    expect(panel.querySelector('.indicador__nota').textContent).toBe('2 caídos');
+  });
 });
 
 describe('directorio de jugadores', () => {
-  test('lista las cuentas sin publicar ninguna credencial', async () => {
-    const raiz = pagina();
+  const pedidasAlDirectorio = (consultarApi) =>
+    consultarApi.mock.calls
+      .map((c) => c[0])
+      .filter((r) => r.startsWith(`/admin/jugadores?page=`) && !r.includes('size=1&'))
+      .filter((r) => !r.endsWith('size=1'));
 
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
-    await asentar();
+  test('lista las cuentas sin publicar ninguna credencial', async () => {
+    const { raiz } = await montar();
 
     const directorio = raiz.querySelector('[data-panel="directorio"]');
     expect(directorio.textContent).toContain('ana@nexus.test');
     expect(directorio.textContent).not.toMatch(/password|hash|token|\$2a\$/i);
   });
 
-  test('UXC-9 — cada cuenta enlaza a su historial de sanciones por su uid', async () => {
-    const raiz = pagina();
+  test('pide dieciséis cuentas por página (RNF-USA-001) sin las de prueba, con el filtro a la vista', async () => {
+    const { raiz, consultarApi } = await montar();
 
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
-    await asentar();
-
-    const enlaces = [
-      ...raiz.querySelectorAll('[data-panel="directorio"] tbody a[data-accion="ver-sanciones"]'),
-    ];
-    expect(enlaces).toHaveLength(2);
-    const destino = new URL(enlaces[0].href);
-    expect(destino.pathname).toMatch(/moderacion-sanciones\/sanciones-admin\.html$/);
-    expect(destino.searchParams.get('usuario')).toBe('11111111-2222-3333-4444-555555555555');
-    expect(enlaces[0].getAttribute('aria-label')).toBe('Ver las sanciones de Ana');
-  });
-
-  test('una cuenta que nunca entro lo dice, no finge una fecha', async () => {
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
-    await asentar();
-
-    expect(raiz.querySelector('[data-panel="directorio"]').textContent).toContain(
-      'Nunca ha entrado',
-    );
-  });
-
-  test('buscar pide al servidor con el filtro y vuelve a la primera pagina', async () => {
-    const consultarApi = apiSimulada();
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi });
-    await asentar();
-
-    const directorio = raiz.querySelector('[data-panel="directorio"]');
-    directorio.querySelector('input[name="buscar"]').value = '  Ana  ';
-    directorio
-      .querySelector('form')
-      .dispatchEvent(new window.Event('submit', { cancelable: true }));
-    await asentar();
-
-    expect(consultarApi.mock.calls.at(-1)[0]).toBe(
-      '/admin/jugadores?page=0&size=20&buscar=Ana&ocultarPruebas=true',
-    );
-  });
-
-  test('la paginacion avanza y el boton de anterior arranca deshabilitado', async () => {
-    const consultarApi = apiSimulada();
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi });
-    await asentar();
-
-    const directorio = raiz.querySelector('[data-panel="directorio"]');
-    expect(directorio.querySelector('[data-accion="anterior"]').disabled).toBe(true);
-
-    directorio.querySelector('[data-accion="siguiente"]').dispatchEvent(new window.Event('click'));
-    await asentar();
-
-    expect(consultarApi.mock.calls.at(-1)[0]).toBe(
-      '/admin/jugadores?page=1&size=20&ocultarPruebas=true',
-    );
-  });
-
-  /**
-   * RFINAL-06 — «las primeras veinte filas del directorio son cuentas qa_,
-   * smoke_ y canario» (revisión del 4-oct). No se borra nada: el servidor las
-   * excluye antes de paginar (ms-identidad-admin.yaml 1.2.0,
-   * `ocultarPruebas`), así que la página y el total cuadran.
-   */
-  test('RFINAL-06: abre ocultando, en el servidor, las cuentas de pruebas automáticas', async () => {
-    const consultarApi = apiSimulada();
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi });
-    await asentar();
-
-    const directorio = raiz.querySelector('[data-panel="directorio"]');
-    const casilla = directorio.querySelector('input[type="checkbox"][name="ocultarPruebas"]');
-    expect(casilla.checked).toBe(true);
-    expect(casilla.closest('label').textContent).toContain(
-      'Ocultar cuentas de pruebas automáticas',
-    );
-    expect(consultarApi.mock.calls.map((c) => c[0]).filter((r) => r.includes('size=20'))).toEqual([
-      '/admin/jugadores?page=0&size=20&ocultarPruebas=true',
+    expect(pedidasAlDirectorio(consultarApi)).toEqual([
+      '/admin/jugadores?page=0&size=16&ocultarPruebas=true',
     ]);
-    expect(directorio.querySelector('caption').textContent).toContain(
-      'sin contar las de pruebas automáticas',
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
+    expect(directorio.querySelector('select[name="cuentas"]').value).toBe('sin-pruebas');
+    const fichas = [...directorio.querySelectorAll('.filtros-admin__ficha')].map((f) =>
+      f.textContent.replace('×', '').trim(),
+    );
+    expect(fichas).toEqual(['Cuentas de prueba: Excluidas']);
+    expect(directorio.querySelector('input[type="checkbox"][name="ocultarPruebas"]')).toBeNull();
+  });
+
+  test('quitar el filtro de cuentas de prueba las vuelve a pedir, desde la primera página', async () => {
+    const { raiz, consultarApi } = await montar();
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
+
+    directorio.querySelector('[data-quitar="cuentas"]').dispatchEvent(new window.Event('click'));
+    await asentar();
+
+    expect(pedidasAlDirectorio(consultarApi).at(-1)).toBe('/admin/jugadores?page=0&size=16');
+    expect(directorio.querySelectorAll('.filtros-admin__ficha')).toHaveLength(0);
+  });
+
+  test('la búsqueda va primero y pide al servidor con el filtro, desde la primera página', async () => {
+    const { raiz, consultarApi } = await montar();
+
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
+    const formulario = directorio.querySelector('form.filtros-admin');
+    expect(formulario.firstElementChild.querySelector('input[name="buscar"]')).not.toBeNull();
+    expect(directorio.querySelector('input[name="buscar"]').getAttribute('placeholder')).toBe(
+      'Apodo, correo, nombre o ID',
+    );
+    directorio.querySelector('input[name="buscar"]').value = '  Ana  ';
+    formulario.dispatchEvent(new window.Event('submit', { cancelable: true }));
+    await asentar();
+
+    expect(pedidasAlDirectorio(consultarApi).at(-1)).toBe(
+      '/admin/jugadores?page=0&size=16&buscar=Ana&ocultarPruebas=true',
     );
   });
 
-  test('RFINAL-06: quitar la casilla las vuelve a pedir, desde la primera página', async () => {
-    const consultarApi = apiSimulada();
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi });
-    await asentar();
-    const directorio = raiz.querySelector('[data-panel="directorio"]');
-    directorio.querySelector('[data-accion="siguiente"]').dispatchEvent(new window.Event('click'));
-    await asentar();
-
-    const casilla = directorio.querySelector('input[name="ocultarPruebas"]');
-    casilla.checked = false;
-    casilla.dispatchEvent(new window.Event('change'));
-    await asentar();
-
-    expect(consultarApi.mock.calls.at(-1)[0]).toBe('/admin/jugadores?page=0&size=20');
-    expect(directorio.querySelector('caption').textContent).toContain('cuentas en total');
-  });
-
-  /**
-   * RFINAL-06 — «hoy solo se edita tras buscar por ID». Cada fila abre la
-   * ficha de gestión de esa cuenta con su clave (`id`, 1.2.0), sin copiar
-   * nada; la clave no se pinta como dato.
-   */
-  test('RFINAL-06: cada cuenta abre su ficha de gestión sin copiar identificadores', async () => {
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
-    await asentar();
-
-    const enlaces = [
-      ...raiz.querySelectorAll('[data-panel="directorio"] tbody a[data-accion="gestionar"]'),
-    ];
-    expect(enlaces).toHaveLength(2);
-    const destino = new URL(enlaces[0].href);
-    expect(destino.pathname).toMatch(/cuentas\/gestion-usuarios\.html$/);
-    expect(destino.searchParams.get('usuario')).toBe('15');
-    expect(enlaces[0].textContent).toBe('Gestionar');
-    expect(enlaces[0].getAttribute('aria-label')).toBe('Gestionar la cuenta de Ana');
-  });
-
-  /**
-   * HU-USR-010 — cada fila abre la ficha administrativa de esa cuenta (todo lo
-   * que los servicios publican de ella), por su clave y sin copiar nada.
-   */
-  test('HU-USR-010: cada cuenta abre su ficha administrativa por su clave', async () => {
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
-    await asentar();
+  test('la paginación común lleva a otra página con los mismos filtros', async () => {
+    const { raiz, consultarApi } = await montar();
 
     const directorio = raiz.querySelector('[data-panel="directorio"]');
-    const cabeceras = [...directorio.querySelectorAll('thead th')].map((th) => th.textContent);
-    expect(cabeceras).toEqual([
+    const paginacion = directorio.querySelector('nav.paginacion');
+    expect(paginacion.getAttribute('aria-label')).toBe('Páginas del directorio');
+    expect(paginacion.querySelector('[aria-current="page"]').textContent).toBe('1');
+    expect(paginacion.querySelector('[data-direccion="anterior"]').disabled).toBe(true);
+    [...paginacion.querySelectorAll('.paginacion__pagina')]
+      .find((b) => b.textContent === '2')
+      .dispatchEvent(new window.Event('click'));
+    await asentar();
+
+    expect(pedidasAlDirectorio(consultarApi).at(-1)).toBe(
+      '/admin/jugadores?page=1&size=16&ocultarPruebas=true',
+    );
+  });
+
+  test('las columnas son las de la operación, con el estado dicho con palabras', async () => {
+    const { raiz } = await montar();
+
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
+    expect(encabezados(directorio)).toEqual([
       'Apodo',
       'Correo',
       'Rol',
       'Estado',
       'Registro',
       'Última entrada',
-      'Ficha',
-      'Gestión',
       'Sanciones',
+      'Acciones',
     ]);
-    const enlaces = [...directorio.querySelectorAll('tbody a[data-accion="ver-ficha"]')];
-    expect(enlaces).toHaveLength(2);
-    const destino = new URL(enlaces[0].href);
-    expect(destino.pathname).toMatch(/plataforma\/moderacion-sanciones\/ficha-usuario\.html$/);
-    expect(destino.searchParams.get('usuario')).toBe('15');
-    expect(enlaces[0].textContent).toBe('Ver ficha');
-    expect(enlaces[0].getAttribute('aria-label')).toBe('Ver la ficha de Ana');
+    const estados = [...directorio.querySelectorAll('tbody .estado-admin')].map((e) =>
+      e.textContent.trim(),
+    );
+    expect(estados).toEqual(['Activa', 'Bloqueada']);
+    expect(directorio.querySelector('tbody th[scope="row"]').textContent).toBe('Ana');
+    // La página la dice la paginación; el resumen, cuántas cuentas hay.
+    expect(directorio.querySelector('.tabla-admin__resumen').textContent).toBe('42 cuentas');
+    expect(directorio.querySelector('.paginacion').textContent).toContain('Página 1 de 3');
   });
 
-  test('HU-USR-010: sin clave la ficha se abre por el uid, y sin ninguno dice «sin dato»', async () => {
+  test('SA-3: la columna «Sanciones» dice cuántas se le han emitido; sin el dato, no un cero', async () => {
+    const { raiz } = await montar();
+
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
+    const indice = encabezados(directorio).indexOf('Sanciones');
+    const columna = [...directorio.querySelectorAll('tbody tr')].map(
+      (tr) => tr.children[indice].textContent,
+    );
+    expect(columna[0]).toContain('2');
+    // Beto no trae `sancionesRegistradas` (un servicio anterior a 1.7.0).
+    expect(columna[1]).toContain('Sin dato');
+    expect(columna[1]).not.toMatch(/^\s*0\s*$/);
+  });
+
+  test('SA-3: el filtro «Sanciones» pide las cuentas con historial, desde la primera página', async () => {
+    const { raiz, consultarApi } = await montar();
+
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
+    const filtro = directorio.querySelector('select[name="historialSanciones"]');
+    expect([...filtro.options].map((o) => o.textContent)).toEqual([
+      'Todas las cuentas',
+      'Con sanciones',
+      'Sin sanciones',
+    ]);
+    filtro.value = 'CON';
+    filtro.dispatchEvent(new window.Event('change'));
+    await asentar();
+
+    expect(pedidasAlDirectorio(consultarApi).at(-1)).toBe(
+      '/admin/jugadores?page=0&size=16&historialSanciones=CON&ocultarPruebas=true',
+    );
+    const fichas = [...directorio.querySelectorAll('.filtros-admin__ficha')].map((f) =>
+      f.textContent.replace('×', '').trim(),
+    );
+    expect(fichas).toContain('Sanciones: Con sanciones');
+  });
+
+  test('una cuenta que nunca entró lo dice, no finge una fecha', async () => {
+    const { raiz } = await montar();
+
+    expect(raiz.querySelector('[data-panel="directorio"]').textContent).toContain(
+      'Nunca ha entrado',
+    );
+  });
+
+  test('cada cuenta abre su ficha, su gestión y sus sanciones sin copiar identificadores', async () => {
+    const { raiz } = await montar();
+
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
+    const ficha = directorio.querySelector('tbody a[data-accion="ver-ficha"]');
+    expect(new URL(ficha.href).pathname).toMatch(
+      /plataforma\/moderacion-sanciones\/ficha-usuario\.html$/,
+    );
+    expect(new URL(ficha.href).searchParams.get('usuario')).toBe('15');
+    expect(ficha.getAttribute('aria-label')).toBe('Ver la ficha de Ana');
+
+    const gestion = directorio.querySelector('tbody a[data-accion="gestionar"]');
+    expect(new URL(gestion.href).pathname).toMatch(/cuentas\/gestion-usuarios\.html$/);
+    expect(new URL(gestion.href).searchParams.get('usuario')).toBe('15');
+    expect(gestion.getAttribute('aria-label')).toBe('Gestionar la cuenta de Ana');
+
+    const sanciones = directorio.querySelector('tbody a[data-accion="ver-sanciones"]');
+    expect(new URL(sanciones.href).pathname).toMatch(
+      /moderacion-sanciones\/sanciones-admin\.html$/,
+    );
+    expect(new URL(sanciones.href).searchParams.get('usuario')).toBe(
+      '11111111-2222-3333-4444-555555555555',
+    );
+    expect(directorio.querySelector('tbody').textContent).not.toMatch(UUID);
+  });
+
+  test('sin clave la ficha se abre por el uid, y sin ninguno no hay enlace roto', async () => {
     const soloUid = {
       ...JUGADORES,
       contenido: [
@@ -508,143 +585,22 @@ describe('directorio de jugadores', () => {
         { ...JUGADORES.contenido[1], id: undefined, uid: null },
       ],
     };
-    const raiz = pagina();
-
-    montarControlIntegral(
-      raiz,
-      {},
-      { consultarApi: apiSimulada({ '/admin/jugadores?page=0&size=20': conDatos(soloUid) }) },
-    );
-    await asentar();
-
-    const enlaces = [
-      ...raiz.querySelectorAll('[data-panel="directorio"] tbody a[data-accion="ver-ficha"]'),
-    ];
-    expect(enlaces).toHaveLength(1);
-    expect(new URL(enlaces[0].href).searchParams.get('usuario')).toBe(
-      '11111111-2222-3333-4444-555555555555',
-    );
-  });
-
-  test('una cuenta sin clave (servicio anterior a 1.2.0) dice «sin dato» en vez de un enlace roto', async () => {
-    const sinClave = {
-      ...JUGADORES,
-      contenido: JUGADORES.contenido.map(({ id: _id, ...resto }) => resto),
-    };
-    const raiz = pagina();
-
-    montarControlIntegral(
-      raiz,
-      {},
-      { consultarApi: apiSimulada({ '/admin/jugadores?page=0&size=20': conDatos(sinClave) }) },
-    );
-    await asentar();
+    const { raiz } = await montar({
+      consultarApi: apiSimulada({ '/admin/jugadores?page=0&size=16': conDatos(soloUid) }),
+    });
 
     const directorio = raiz.querySelector('[data-panel="directorio"]');
+    const fichas = [...directorio.querySelectorAll('tbody a[data-accion="ver-ficha"]')];
+    expect(fichas).toHaveLength(1);
+    expect(new URL(fichas[0].href).searchParams.get('usuario')).toBe(
+      '11111111-2222-3333-4444-555555555555',
+    );
     expect(directorio.querySelectorAll('a[data-accion="gestionar"]')).toHaveLength(0);
-    expect(directorio.textContent).toContain('sin dato');
-  });
-});
-
-/**
- * HU-USR-008 (#561), §7.3.4 — «Panel: vista general»: activas, suspendidas,
- * baneadas y los demás estados, registros por día con su gráfico, periodo y
- * exportación, en el Resumen.
- */
-describe('HU-USR-008 — usuarios de la comunidad en el Resumen', () => {
-  test('pinta las cuentas por estado y el gráfico de registros, ocultando las de pruebas', async () => {
-    const consultarApi = apiSimulada();
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi });
-    await asentar();
-
-    const resumen = raiz.querySelector('[data-seccion="resumen"]');
-    const panelUsuarios = resumen.querySelector('[data-panel="resumen-usuarios"]');
-    expect(panelUsuarios).not.toBeNull();
-    expect(consultarApi.mock.calls.map((c) => c[0])).toContain(
-      '/admin/jugadores/indicadores?ocultarPruebas=true',
-    );
-    const valor = (etiqueta) =>
-      panelUsuarios.querySelector(`[data-indicador="${etiqueta}"] .indicador__valor`).textContent;
-    expect(valor('activas')).toBe('10');
-    expect(valor('suspendidas')).toBe('1');
-    expect(valor('baneadas')).toBe('3');
-    expect(panelUsuarios.querySelector('svg.grafico-registros[role="img"]')).not.toBeNull();
-    expect(panelUsuarios.querySelectorAll('rect.grafico-registros__barra')).toHaveLength(2);
   });
 
-  test('CA-03: si los indicadores fallan, lo dice ese panel y el resto del tablero sigue', async () => {
-    const raiz = pagina();
-
-    montarControlIntegral(
-      raiz,
-      {},
-      {
-        consultarApi: apiSimulada({
-          '/admin/jugadores/indicadores': conFallo(
-            RESULTADO.SERVICIO_DEGRADADO,
-            503,
-            '/admin/jugadores/indicadores?ocultarPruebas=true',
-          ),
-        }),
-      },
-    );
-    await asentar();
-
-    const panelUsuarios = raiz.querySelector('[data-panel="resumen-usuarios"]');
-    expect(panelUsuarios.querySelector('.sello-estado').textContent).toBe('SERVICIO DEGRADADO');
-    expect(panelUsuarios.querySelector('[data-accion="exportar-indicadores"]').disabled).toBe(true);
-    expect(raiz.querySelector('[data-panel="torneos"] .sello-estado').textContent).toBe('EN LINEA');
-    expect(raiz.querySelector('[data-panel="directorio"]').textContent).toContain('ana@nexus.test');
-  });
-
-  test('CA-02: «Exportar indicadores» guarda en el navegador lo que se está viendo', async () => {
-    const guardar = jest.fn();
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada(), guardar });
-    await asentar();
-    raiz
-      .querySelector('[data-panel="resumen-usuarios"] [data-accion="exportar-indicadores"]')
-      .dispatchEvent(new window.Event('click'));
-
-    expect(guardar).toHaveBeenCalledTimes(1);
-    const [nombre, contenido] = guardar.mock.calls[0];
-    expect(nombre).toBe('indicadores-de-usuarios-2026-09-06-a-2026-10-05.csv');
-    expect(contenido).toContain('Suspendidas,1');
-    expect(contenido).toContain('2026-10-05,3');
-  });
-});
-
-/**
- * HU-USR-008 — «Búsqueda y filtros de usuarios» y «Exportar listados de
- * usuarios» (§7.3.4). El filtrado lo hace el servidor; la pantalla solo pide.
- */
-describe('HU-USR-008 — filtros y exportación del directorio', () => {
-  async function montarDirectorio(opciones = {}) {
-    const consultarApi = opciones.consultarApi ?? apiSimulada();
-    const raiz = pagina();
-    montarControlIntegral(raiz, {}, { consultarApi, ...opciones });
-    await asentar();
-    return { raiz, consultarApi, directorio: raiz.querySelector('[data-panel="directorio"]') };
-  }
-
-  const pedidasAlDirectorio = (consultarApi) =>
-    consultarApi.mock.calls.map((c) => c[0]).filter((r) => r.startsWith('/admin/jugadores?'));
-
-  test('la búsqueda dice que también encuentra por nombre', async () => {
-    const { directorio } = await montarDirectorio();
-
-    const campo = directorio.querySelector('input[name="buscar"]');
-    expect(campo.getAttribute('placeholder')).toBe('Apodo, correo o nombre');
-    expect(campo.getAttribute('aria-label')).toBe('Buscar jugador por apodo, correo o nombre');
-  });
-
-  test('elegir un rol vuelve a pedir desde la primera página, con el filtro', async () => {
-    const { consultarApi, directorio } = await montarDirectorio();
-    directorio.querySelector('[data-accion="siguiente"]').dispatchEvent(new window.Event('click'));
-    await asentar();
+  test('elegir un rol vuelve a pedir desde la primera página, con el filtro y su ficha', async () => {
+    const { raiz, consultarApi } = await montar();
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
 
     const rol = directorio.querySelector('select[name="rol"]');
     rol.value = 'MODERADOR';
@@ -652,65 +608,65 @@ describe('HU-USR-008 — filtros y exportación del directorio', () => {
     await asentar();
 
     expect(pedidasAlDirectorio(consultarApi).at(-1)).toBe(
-      '/admin/jugadores?page=0&size=20&rol=MODERADOR&ocultarPruebas=true',
+      '/admin/jugadores?page=0&size=16&rol=MODERADOR&ocultarPruebas=true',
     );
+    expect(directorio.querySelector('[data-quitar="rol"]').textContent).toContain('Rol: Moderador');
   });
 
   test('estado y fechas de registro van juntos con la búsqueda', async () => {
-    const { consultarApi, directorio } = await montarDirectorio();
+    const { raiz, consultarApi } = await montar();
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
 
     directorio.querySelector('input[name="buscar"]').value = 'Ana';
-    directorio.querySelector('select[name="estado"]').value = 'SUSPENDIDO';
-    directorio.querySelector('input[name="registradoDesde"]').value = '2026-09-01';
-    directorio.querySelector('input[name="registradoHasta"]').value = '2026-09-30';
+    directorio.querySelector('select[name="estadoCuenta"]').value = 'SUSPENDIDO';
+    directorio.querySelector('input[name="desde"]').value = '2026-09-01';
+    directorio.querySelector('input[name="hasta"]').value = '2026-09-30';
     directorio
-      .querySelector('form')
+      .querySelector('form.filtros-admin')
       .dispatchEvent(new window.Event('submit', { cancelable: true }));
     await asentar();
 
     expect(pedidasAlDirectorio(consultarApi).at(-1)).toBe(
-      '/admin/jugadores?page=0&size=20&buscar=Ana&estado=SUSPENDIDO' +
+      '/admin/jugadores?page=0&size=16&buscar=Ana&estado=SUSPENDIDO' +
         '&registradoDesde=2026-09-01&registradoHasta=2026-09-30&ocultarPruebas=true',
     );
   });
 
   test('los estados del filtro son los del contrato, con su nombre en castellano', async () => {
-    const { directorio } = await montarDirectorio();
+    const { raiz } = await montar();
 
-    const opciones = [...directorio.querySelectorAll('select[name="estado"] option')].map((o) => [
-      o.value,
-      o.textContent,
-    ]);
+    const opciones = [
+      ...raiz.querySelectorAll('[data-panel="directorio"] select[name="estadoCuenta"] option'),
+    ].map((o) => [o.value, o.textContent]);
     expect(opciones).toEqual([
       ['', 'Todos'],
       ['ACTIVO', 'Activas'],
-      ['PENDIENTE_VERIFICACION', 'Pendientes de verificar el correo'],
-      ['INACTIVO', 'Inactivas (administrativas sin activar)'],
+      ['PENDIENTE_VERIFICACION', 'Sin verificar el correo'],
+      ['INACTIVO', 'Pendientes de activar'],
       ['SUSPENDIDO', 'Suspendidas'],
       ['BANEADO', 'Baneadas'],
     ]);
   });
 
   test('un periodo al revés no se pide: se explica', async () => {
-    const { consultarApi, directorio } = await montarDirectorio();
+    const { raiz, consultarApi } = await montar();
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
     const antes = pedidasAlDirectorio(consultarApi).length;
 
-    const desde = directorio.querySelector('input[name="registradoDesde"]');
-    desde.value = '2026-10-05';
-    directorio.querySelector('input[name="registradoHasta"]').value = '2026-10-01';
+    directorio.querySelector('input[name="desde"]').value = '2026-10-05';
+    directorio.querySelector('input[name="hasta"]').value = '2026-10-01';
     directorio
-      .querySelector('form')
+      .querySelector('form.filtros-admin')
       .dispatchEvent(new window.Event('submit', { cancelable: true }));
     await asentar();
 
     expect(pedidasAlDirectorio(consultarApi)).toHaveLength(antes);
-    expect(desde.getAttribute('aria-invalid')).toBe('true');
-    expect(directorio.querySelector('[data-zona="aviso-directorio"]').textContent).toMatch(
+    expect(directorio.querySelector('[data-zona="error-filtros"]').textContent).toMatch(
       /posterior/,
     );
   });
 
-  test('«Exportar listado» descarga del servidor con los filtros aplicados', async () => {
+  test('«Exportar CSV» descarga del servidor con los filtros aplicados', async () => {
     const descargarApi = jest.fn(async () => ({
       resultado: RESULTADO.DATOS,
       contenido: 'csv',
@@ -720,7 +676,8 @@ describe('HU-USR-008 — filtros y exportación del directorio', () => {
       recurso: '',
     }));
     const guardar = jest.fn();
-    const { directorio } = await montarDirectorio({ descargarApi, guardar });
+    const { raiz } = await montar({ descargarApi, guardar });
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
     const rol = directorio.querySelector('select[name="rol"]');
     rol.value = 'JUGADOR';
     rol.dispatchEvent(new window.Event('change'));
@@ -754,7 +711,8 @@ describe('HU-USR-008 — filtros y exportación del directorio', () => {
       recurso: '/admin/jugadores/exportacion',
     }));
     const guardar = jest.fn();
-    const { directorio } = await montarDirectorio({ descargarApi, guardar });
+    const { raiz } = await montar({ descargarApi, guardar });
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
 
     const boton = directorio.querySelector('[data-accion="exportar-directorio"]');
     boton.dispatchEvent(new window.Event('click'));
@@ -766,117 +724,201 @@ describe('HU-USR-008 — filtros y exportación del directorio', () => {
       '12000 cuentas',
     );
   });
+
+  test('ninguna cuenta coincide: lo dice y propone qué hacer', async () => {
+    const { raiz } = await montar({
+      consultarApi: apiSimulada({
+        '/admin/jugadores?page=0&size=16': {
+          ...conDatos({ contenido: [], total: 0 }),
+          resultado: RESULTADO.VACIO,
+        },
+      }),
+    });
+
+    expect(
+      raiz.querySelector('[data-panel="directorio"] .estado-vista--vacio').textContent,
+    ).toContain('Ninguna cuenta coincide');
+  });
+});
+
+/**
+ * HU-USR-008 (#561), §7.3.4 — «Panel: vista general»: activas, suspendidas,
+ * baneadas y los demás estados, registros por día con su gráfico, periodo y
+ * exportación, en el Resumen.
+ */
+describe('HU-USR-008 — usuarios de la comunidad en el Resumen', () => {
+  test('pinta las cuentas por estado y el gráfico de registros, sin las de prueba', async () => {
+    const { raiz, consultarApi } = await montar();
+
+    const panelUsuarios = raiz.querySelector(
+      '[data-seccion="resumen"] [data-panel="resumen-usuarios"]',
+    );
+    expect(consultarApi.mock.calls.map((c) => c[0])).toContain(
+      '/admin/jugadores/indicadores?ocultarPruebas=true',
+    );
+    const valor = (etiqueta) =>
+      panelUsuarios.querySelector(`[data-indicador="${etiqueta}"] .indicador-admin__valor`)
+        .textContent;
+    expect(valor('Activas')).toBe('10');
+    expect(valor('Suspendidas')).toBe('1');
+    expect(valor('Baneadas')).toBe('3');
+    expect(panelUsuarios.querySelectorAll('.grafico-admin__columna')).toHaveLength(2);
+    expect(panelUsuarios.textContent).not.toMatch(ANDAMIO);
+    expect(panelUsuarios.textContent).not.toContain('Contado a las');
+  });
+
+  test('CA-03: si los indicadores fallan, lo dice ese panel y el resto del tablero sigue', async () => {
+    const { raiz } = await montar({
+      consultarApi: apiSimulada({
+        '/admin/jugadores/indicadores': conFallo(
+          RESULTADO.SERVICIO_DEGRADADO,
+          503,
+          '/admin/jugadores/indicadores?ocultarPruebas=true',
+        ),
+      }),
+    });
+
+    const panelUsuarios = raiz.querySelector('[data-panel="resumen-usuarios"]');
+    expect(panelUsuarios.querySelector('.panel-admin__estado').textContent).toBe('Sin conexión');
+    expect(panelUsuarios.querySelector('[data-accion="exportar-indicadores"]').disabled).toBe(true);
+    expect(raiz.querySelector('[data-panel="torneos"]').textContent).toContain('Copa Nexo');
+    expect(raiz.querySelector('[data-panel="directorio"]').textContent).toContain('ana@nexus.test');
+  });
+
+  test('CA-02: «Exportar CSV» guarda en el navegador lo que se está viendo', async () => {
+    const guardar = jest.fn();
+    const { raiz } = await montar({ guardar });
+    raiz
+      .querySelector('[data-panel="resumen-usuarios"] [data-accion="exportar-indicadores"]')
+      .dispatchEvent(new window.Event('click'));
+
+    expect(guardar).toHaveBeenCalledTimes(1);
+    const [nombre, contenido] = guardar.mock.calls[0];
+    expect(nombre).toBe('indicadores-de-usuarios-2026-09-06-a-2026-10-05.csv');
+    expect(contenido).toContain('Suspendidas,1');
+    expect(contenido).toContain('2026-10-05,3');
+  });
 });
 
 describe('sistema', () => {
-  test('distingue los cuatro estados con palabras, no solo con color', async () => {
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
-    await asentar();
+  test('cada estado con palabras de producto e icono, lo que falla primero', async () => {
+    const { raiz } = await montar();
 
     const sistema = raiz.querySelector('[data-panel="sistema"]');
-    const sellos = [...sistema.querySelectorAll('.tabla .sello-estado')].map((s) => s.textContent);
-    expect(sellos).toEqual(['OPERATIVO', 'CAIDO', 'NO DESPLEGADO', 'NO OBSERVABLE']);
-    expect(sistema.textContent).toContain('12 operativos');
-    expect(sistema.textContent).toContain('de 18 catalogados');
+    const filas = [...sistema.querySelectorAll('tbody tr')].map((tr) => [
+      tr.querySelector('th').textContent,
+      tr.querySelector('.estado-admin').textContent.trim(),
+    ]);
+    expect(filas).toEqual([
+      ['Subastas', 'Caído'],
+      ['Identidad y cuentas', 'Operativo'],
+      ['Héroes', 'En otro servidor'],
+      ['Asistente', 'Fuera de este entorno'],
+    ]);
+    expect(sistema.querySelector('.tabla-admin__resumen').textContent).toBe(
+      '12 operativos · 2 caídos · 3 fuera de este entorno · 1 en otro servidor — de 18 servicios',
+    );
+    expect(sistema.textContent).not.toMatch(/Connection refused|HTTP 200/);
   });
 
-  /** Un servicio de otro host no puede salir en rojo: no esta roto. */
-  test('lo que vive en otro host no se pinta como caido', async () => {
-    const raiz = pagina();
+  /** Un servicio de otro host no puede salir en rojo: no está roto. */
+  test('lo que vive en otro servidor no se pinta como caído', async () => {
+    const { raiz } = await montar();
 
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
-    await asentar();
-
-    const sellos = [...raiz.querySelectorAll('[data-panel="sistema"] .tabla .sello-estado')];
-    const caido = sellos.find((s) => s.textContent === 'CAIDO');
-    const otroHost = sellos.find((s) => s.textContent === 'NO OBSERVABLE');
-    expect(caido.dataset.estado).toBe('malo');
-    expect(otroHost.dataset.estado).toBe('neutro');
+    const estados = [...raiz.querySelectorAll('[data-panel="sistema"] tbody .estado-admin')];
+    expect(estados.find((e) => e.dataset.estado === 'CAIDO').dataset.tono).toBe('error');
+    expect(estados.find((e) => e.dataset.estado === 'NO_OBSERVABLE').dataset.tono).toBe('neutro');
   });
 
   /**
    * RFINAL-08: el servicio que conecta y no contesta a tiempo no está caído ni
-   * operativo. Va en ámbar, con su palabra, y se cuenta aparte; y el panel dice
-   * de qué hora es la medición, porque la ronda se reutiliza unos segundos.
+   * operativo. Va en ámbar, con su palabra, y se cuenta aparte.
    */
-  test('un servicio lento va en ámbar, se cuenta aparte y se ve la hora de la medición', async () => {
-    const raiz = pagina();
-    const instante = '2026-10-05T15:04:05Z';
-
-    montarControlIntegral(
-      raiz,
-      {},
-      {
-        consultarApi: apiSimulada({
-          '/admin/sistema/servicios': conDatos({
-            total: 3,
-            operativos: 1,
-            caidos: 1,
-            lentos: 1,
-            noDesplegados: 0,
-            noObservables: 0,
-            instante,
-            desdeCache: true,
-            servicios: [
-              { servicio: 'torneos', estado: 'OPERATIVO', detalle: '' },
-              { servicio: 'misiones', estado: 'LENTO', detalle: 'sin respuesta en 1500 ms' },
-              { servicio: 'correo', estado: 'CAIDO', detalle: 'conexión rechazada' },
-            ],
-          }),
-        }),
-      },
+  test('un servicio lento va en ámbar y se cuenta aparte', () => {
+    const caja = document.createElement('div');
+    caja.append(
+      ...pintarServicios({
+        total: 3,
+        operativos: 1,
+        caidos: 1,
+        lentos: 1,
+        noDesplegados: 0,
+        noObservables: 0,
+        servicios: [
+          { servicio: 'torneos', estado: 'OPERATIVO', detalle: '' },
+          { servicio: 'misiones', estado: 'LENTO', detalle: 'sin respuesta en 1500 ms' },
+          { servicio: 'correo', estado: 'CAIDO', detalle: 'conexión rechazada' },
+        ],
+      }),
     );
-    await asentar();
 
-    const sistema = raiz.querySelector('[data-panel="sistema"]');
-    const lento = [...sistema.querySelectorAll('.tabla .sello-estado')].find(
-      (s) => s.textContent === 'LENTO',
+    const lento = [...caja.querySelectorAll('.estado-admin')].find(
+      (e) => e.dataset.estado === 'LENTO',
     );
-    expect(lento.dataset.estado).toBe('aviso');
-    expect(sistema.textContent).toContain('sin respuesta en 1500 ms');
-    expect(sistema.textContent).toContain('1 operativos, 1 caídos, 1 lentos');
-    expect(sistema.querySelector('[data-zona="medido"]').textContent).toBe(
-      `Medido a las ${formatearInstante(instante)}.`,
+    expect(lento.dataset.tono).toBe('advertencia');
+    expect(lento.textContent.trim()).toBe('Lento');
+    expect(caja.textContent).toContain('Responde, pero tarda más de lo esperado.');
+    expect(caja.querySelector('.tabla-admin__resumen').textContent).toBe(
+      '1 operativos · 1 lentos · 1 caídos — de 3 servicios',
     );
   });
 
-  test('sin lentos no se menciona la palabra: el resumen de siempre no cambia', async () => {
-    const raiz = pagina();
+  test('los parámetros se leen con su nombre y su unidad, no con la clave técnica', async () => {
+    const { raiz } = await montar({
+      consultarApi: apiSimulada({
+        '/parametros': conDatos([
+          {
+            clave: 'sanciones.apelacion.plazo-dias',
+            descripcion: 'Dias desde la sancion para poder apelarla',
+            valor: '30',
+            unidad: 'dias',
+            version: 2,
+            actualizadoEn: '2026-10-01T10:00:00Z',
+          },
+          {
+            clave: 'subastas.incremento-minimo',
+            descripcion: 'Incremento minimo entre pujas',
+            valor: null,
+            unidad: 'creditos',
+            version: 1,
+            actualizadoEn: null,
+          },
+        ]),
+      }),
+    });
 
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
-    await asentar();
-
-    expect(raiz.querySelector('[data-panel="sistema"]').textContent).not.toContain('lentos');
+    const parametros = raiz.querySelector('[data-panel="parametros"]');
+    expect(encabezados(parametros)).toEqual([
+      'Parámetro',
+      'Valor vigente',
+      'Área',
+      'Último cambio',
+    ]);
+    expect(celdas(parametros).slice(0, 3)).toEqual([
+      'Plazo para apelar',
+      '30 días',
+      'Sanciones y moderación',
+    ]);
+    expect(parametros.textContent).toContain('Sin definir');
+    expect(parametros.textContent).not.toContain('sanciones.apelacion.plazo-dias');
   });
 });
 
 describe('las consultas son las que el sistema atiende de verdad', () => {
-  test('la auditoria se lee de /admin/auditoria, no de la ruta de escritura', async () => {
-    const consultarApi = apiSimulada();
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi });
-    await asentar();
+  test('la auditoría se lee de /admin/auditoria, no de la ruta de escritura', async () => {
+    const { consultarApi } = await montar();
 
     const pedidas = consultarApi.mock.calls.map((c) => c[0]);
     expect(pedidas.some((r) => r.startsWith('/admin/auditoria?'))).toBe(true);
-    // /admin/auditoria/eventos acepta POST; a un GET responde 405.
     expect(pedidas.some((r) => r.startsWith('/admin/auditoria/eventos'))).toBe(false);
   });
 
   /**
-   * RFINAL-06 (revisión del 4-oct): el panel decía «últimos quince eventos» y
-   * pintaba los más antiguos (23 y 24 de septiembre), porque sin `sort` el
-   * orden lo decide la base de datos.
+   * RFINAL-06: sin `sort` «los últimos quince» eran los primeros que se
+   * registraron.
    */
   test('la bitácora pide los quince más recientes, con desempate estable', async () => {
-    const consultarApi = apiSimulada();
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi });
-    await asentar();
+    const { consultarApi } = await montar();
 
     const pedida = consultarApi.mock.calls
       .map((c) => c[0])
@@ -887,153 +929,231 @@ describe('las consultas son las que el sistema atiende de verdad', () => {
     expect(consulta.getAll('sort')).toEqual(['fechaHora,desc', 'id,desc']);
   });
 
-  test('economia pide el historial consultable, no un libro mayor inexistente', async () => {
-    const consultarApi = apiSimulada();
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi });
-    await asentar();
-
-    const pedidas = consultarApi.mock.calls.map((c) => c[0]);
-    expect(pedidas).toContain('/transacciones/mi-historial');
-    expect(pedidas).not.toContain('/transacciones');
-  });
-
-  test('la cola de moderacion cuenta bien aunque llame a su lista "entradas"', async () => {
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
-    await asentar();
-
-    expect(raiz.querySelector('[data-panel="comentarios"] .indicador__valor').textContent).toBe(
-      '2',
-    );
-  });
-
-  test('sanciones ensena el recuento que publica el servicio, no una tabla inventada', async () => {
-    const raiz = pagina();
-
-    montarControlIntegral(
-      raiz,
-      {},
-      {
-        consultarApi: apiSimulada({
-          '/sanciones/metricas': conDatos({
-            total: 3,
-            porTipo: { ADVERTENCIA: 2, SUSPENSION: 1, BANEO: 0 },
-            apelaciones: { PENDIENTE: 1 },
-            moderadoresActivos: 2,
-          }),
+  test('la bitácora nombra cada acción como la diría quien opera', async () => {
+    const { raiz } = await montar({
+      consultarApi: apiSimulada({
+        '/admin/auditoria': conDatos({
+          content: [
+            {
+              id: 1,
+              fechaHora: '2026-10-12T10:00:00Z',
+              administrador: 'simon_superadmin',
+              tipoAccion: 'CAMBIO_ROL',
+              afectado: 'ana',
+              motivo: 'Refuerzo del equipo',
+            },
+          ],
         }),
-      },
-    );
-    await asentar();
+      }),
+    });
+
+    const auditoria = raiz.querySelector('[data-panel="auditoria"]');
+    expect(celdas(auditoria).slice(1, 3)).toEqual(['simon_superadmin', 'Cambio de rol']);
+    expect(auditoria.textContent).not.toContain('CAMBIO_ROL');
+  });
+
+  test('SA-5: la bitácora dice el apodo de quien actuó y de la cuenta, nunca su uid ni un prefijo técnico', async () => {
+    const moderadora = '5b2e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55';
+    const lyra = '7a1e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55';
+    const { raiz, consultarApi } = await montar({
+      consultarApi: apiSimulada({
+        '/admin/auditoria': conDatos({
+          content: [
+            {
+              id: 'e-1',
+              fechaHora: '2026-10-14T15:00:02Z',
+              ocurridoEn: '2026-10-14T15:00:00Z',
+              administrador: moderadora,
+              tipoAccion: 'SANCION',
+              afectado: lyra,
+              motivo: 'Insultos en el chat general',
+            },
+            {
+              id: 'e-2',
+              fechaHora: '2026-10-14T14:00:00Z',
+              administrador: moderadora,
+              tipoAccion: 'ACTUALIZACION',
+              afectado: 'comentario:c-42',
+              motivo: `Fuera de tema ${'x'.repeat(200)}`,
+            },
+          ],
+        }),
+        '/admin/titulares': conDatos([
+          { uid: moderadora, apodo: 'moderadora_qa', estado: 'ACTIVO' },
+          { uid: lyra, apodo: 'lyra_92', estado: 'ACTIVO' },
+        ]),
+      }),
+    });
+
+    const auditoria = raiz.querySelector('[data-panel="auditoria"]');
+    expect(celdas(auditoria).slice(1, 3)).toEqual(['moderadora_qa', 'Sanción']);
+    expect(auditoria.textContent).toContain('lyra_92');
+    expect(auditoria.textContent).toContain('Comentario');
+    expect(auditoria.textContent).not.toContain(lyra);
+    expect(auditoria.textContent).not.toContain(moderadora);
+    expect(auditoria.textContent).not.toContain('comentario:');
+    expect(auditoria.textContent).toContain('…');
+    const pedidas = consultarApi.mock.calls.map((c) => c[0]);
+    expect(pedidas.filter((r) => r.startsWith('/admin/titulares?uids='))).toHaveLength(1);
+  });
+
+  test('la cola de moderación cuenta bien aunque llame a su lista «entradas»', async () => {
+    const { raiz } = await montar();
+
+    const comentarios = raiz.querySelector('[data-panel="comentarios"]');
+    expect(comentarios.querySelector('.indicador__valor').textContent).toBe('2');
+    expect(comentarios.querySelector('.indicador__etiqueta').textContent).toBe('por revisar');
+  });
+
+  test('sanciones enseña el recuento que publica el servicio, con nombres de producto', async () => {
+    const { raiz } = await montar({
+      consultarApi: apiSimulada({
+        '/sanciones/metricas': conDatos({
+          total: 3,
+          porTipo: { ADVERTENCIA: 2, SUSPENSION: 1, BANEO: 0 },
+          apelaciones: { PENDIENTE: 1 },
+          moderadoresActivos: 2,
+        }),
+      }),
+    });
 
     const sanciones = raiz.querySelector('[data-panel="sanciones"]');
-    expect(sanciones.textContent).toContain('ADVERTENCIA');
-    expect(sanciones.textContent).toContain('Apelaciones pendiente');
-    expect(sanciones.textContent).toContain('Moderadores activos');
+    const cifras = (grupo) =>
+      [...grupo.querySelectorAll('.indicador-admin')].map((c) => [
+        c.querySelector('.indicador-admin__etiqueta').textContent,
+        c.querySelector('.indicador-admin__valor').textContent,
+      ]);
+    const [deSanciones, deApelaciones] = sanciones.querySelectorAll('.rejilla-indicadores-admin');
+    expect(
+      [...sanciones.querySelectorAll('.panel-admin__grupo')].map((g) => g.textContent),
+    ).toEqual(['Sanciones', 'Apelaciones']);
+    expect(cifras(deSanciones)).toEqual([
+      ['Sanciones en total', '3'],
+      ['Advertencias', '2'],
+      ['Suspensiones', '1'],
+      ['Baneos definitivos', '0'],
+      ['Moderadores que sancionaron', '2'],
+    ]);
+    expect(cifras(deApelaciones)).toEqual([['Apelaciones pendientes', '1']]);
+    // Una apelación pendiente es trabajo por hacer: se dice con tono e icono.
+    expect(deApelaciones.querySelector('.indicador-admin').dataset.tono).toBe('advertencia');
+  });
+
+  test('sin dato no hay cero inventado, y sin apelaciones no hay grupo vacío', () => {
+    const partes = pintarMetricasDeSanciones({ porTipo: { OTRA_COSA: 1 } });
+    const contenedor = document.createElement('div');
+    contenedor.append(...partes);
+
+    expect(
+      [...contenedor.querySelectorAll('.panel-admin__grupo')].map((g) => g.textContent),
+    ).toEqual(['Sanciones']);
+    const etiquetas = [...contenedor.querySelectorAll('.indicador-admin__etiqueta')].map(
+      (e) => e.textContent,
+    );
+    expect(etiquetas).toEqual(['Sanciones en total', 'Otra cosa', 'Moderadores que sancionaron']);
+    expect(contenedor.querySelectorAll('[data-sin-dato="si"]')).toHaveLength(2);
   });
 });
 
 /**
- * RFINAL-06 — revisión del super administrador en DEV (4-oct, §3.2): «Subastas
- * activas» con elemento y cierre «--», «Torneos» con inicio «--» y «Salas y
- * partidas» con el id de la sala y el anfitrión «--». El panel leía campos que
- * ningún contrato publica (`elemento.nombre`, `cierraEn`, `fechaInicio`,
- * `anfitrion`). Ahora lee los del contrato de cada fuente, y lo que el
- * contrato no trae se dice («sin dato»), no se rellena con un guion ni con un
- * identificador.
+ * RFINAL-06 — los paneles leen los campos del contrato de cada fuente, y lo
+ * que el contrato no trae se dice («Sin dato»), no se rellena con un guion ni
+ * con un identificador.
  */
 describe('cada panel lee los campos de su contrato', () => {
-  async function montarCon(sobrescribir) {
-    const raiz = pagina();
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada(sobrescribir) });
-    await asentar();
-    return raiz;
-  }
-
-  const celdas = (panel) =>
-    [...panel.querySelectorAll('tbody td')].map((td) => td.textContent.trim());
-  const encabezados = (panel) =>
-    [...panel.querySelectorAll('thead th')].map((th) => th.textContent.trim());
-
-  test('subastas: el producto, la oferta vigente, las pujas y el cierre; nunca el id', async () => {
-    const raiz = await montarCon({ '/subastas': conDatos(SUBASTAS) });
+  test('subastas: el producto, la puja más alta, las pujas y el cierre; nunca el id', async () => {
+    const { raiz } = await montar({
+      consultarApi: apiSimulada({ '/subastas': conDatos(SUBASTAS) }),
+    });
     const panel = raiz.querySelector('[data-panel="subastas"]');
 
-    expect(encabezados(panel)).toEqual(['Elemento', 'Precio actual', 'Pujas', 'Cierra']);
+    expect(encabezados(panel)).toEqual(['Elemento', 'Puja más alta', 'Pujas', 'Cierra']);
     const fila = celdas(panel);
-    expect(fila.slice(0, 3)).toEqual(['Espada corta', '65', '2']);
+    expect(fila.slice(0, 3)).toEqual(['Espada corta', '1.250 créditos', '2']);
     expect(fila[3]).toBe(formatearFecha('2026-10-06T18:00:00Z'));
-    expect(fila).not.toContain('--');
     expect(panel.textContent).not.toMatch(UUID);
-    expect(panel.querySelector('caption').textContent).toContain('13');
+    expect(panel.querySelector('.tabla-admin__resumen').textContent).toBe(
+      '2 de 13 subastas activas',
+    );
   });
 
-  test('torneos: equipos inscritos de los cupos y el cierre de inscripciones', async () => {
-    const raiz = await montarCon({});
+  test('subastas: se ordenan por columna, con aria-sort y aviso al lector de pantalla', async () => {
+    const { raiz } = await montar({
+      consultarApi: apiSimulada({ '/subastas': conDatos(SUBASTAS) }),
+    });
+    const panel = raiz.querySelector('[data-panel="subastas"]');
+
+    const pujas = panel.querySelector('[data-orden="cantidadPujas"]');
+    pujas.dispatchEvent(new window.Event('click'));
+    expect(pujas.closest('th').getAttribute('aria-sort')).toBe('ascending');
+    expect(celdas(panel)[0]).toBe('Espada corta');
+    pujas.dispatchEvent(new window.Event('click'));
+    expect(pujas.closest('th').getAttribute('aria-sort')).toBe('descending');
+    expect(celdas(panel)[0]).toBe('Arco largo');
+    expect(panel.querySelector('[role="status"].solo-lectores').textContent).toBe(
+      'Ordenado por Pujas, de mayor a menor.',
+    );
+  });
+
+  test('torneos: estado con palabras, equipos de los cupos y el cierre de inscripciones', async () => {
+    const { raiz } = await montar();
     const panel = raiz.querySelector('[data-panel="torneos"]');
 
     expect(encabezados(panel)).toEqual(['Torneo', 'Estado', 'Equipos', 'Inscripciones hasta']);
     const fila = celdas(panel);
-    expect(fila.slice(0, 3)).toEqual(['Copa Nexo', 'INSCRIPCIONES_ABIERTAS', '3 de 8']);
+    expect(fila.slice(0, 3)).toEqual(['Copa Nexo', 'Inscripciones abiertas', '3 de 8']);
     expect(fila[3]).toBe(formatearFecha('2026-10-31T23:00:00Z'));
     expect(panel.textContent).not.toMatch(UUID);
   });
 
-  test('salas: modalidad y ocupación; el anfitrión que el contrato no trae es «sin dato»', async () => {
-    const raiz = await montarCon({ '/salas': conDatos(SALAS) });
+  test('salas: modalidad, estado y ocupación; ninguna columna sin dato fijo', async () => {
+    const { raiz } = await montar({ consultarApi: apiSimulada({ '/salas': conDatos(SALAS) }) });
     const panel = raiz.querySelector('[data-panel="salas"]');
 
-    expect(encabezados(panel)).toEqual(['Sala', 'Estado', 'Jugadores', 'Creada', 'Anfitrión']);
+    expect(encabezados(panel)).toEqual(['Sala', 'Estado', 'Jugadores', 'Creada']);
     const fila = celdas(panel);
-    expect(fila.slice(0, 3)).toEqual(['1 contra 1 · privada', 'ABIERTA', '1 de 2']);
+    expect(fila.slice(0, 3)).toEqual(['1 contra 1 · privada', 'Abierta', '1 de 2']);
     expect(fila[3]).toBe(formatearFecha('2026-10-04T15:00:00Z'));
-    expect(fila[4]).toBe('sin dato');
     expect(panel.textContent).not.toMatch(UUID);
   });
 
-  test('un campo que la respuesta no trae se dice «sin dato», no «--»', async () => {
-    const raiz = await montarCon({
-      '/subastas': conDatos({ contenido: [{ id: SUBASTAS.contenido[0].id }] }),
-      '/torneos': conDatos([{ id: TORNEO.id }]),
+  test('un campo que la respuesta no trae se dice «Sin dato», no «--»', async () => {
+    const { raiz } = await montar({
+      consultarApi: apiSimulada({
+        '/subastas': conDatos({ contenido: [{ id: SUBASTAS.contenido[0].id }] }),
+        '/torneos': conDatos([{ id: TORNEO.id }]),
+      }),
     });
 
     for (const id of ['subastas', 'torneos']) {
       const fila = celdas(raiz.querySelector(`[data-panel="${id}"]`));
       expect(fila).not.toContain('--');
       expect(fila.join(' ')).not.toMatch(UUID);
-      expect(fila).toContain('sin dato');
+      expect(fila).toContain('Sin dato');
     }
   });
 });
 
 describe('maquetado del aviso', () => {
   /**
-   * `.aviso` del kit es una fila: [cuerpo][accion]. Si el titulo, el motivo y
-   * el detalle cuelgan como hermanos sueltos salen como cuatro columnas
-   * estrujadas, que es como se vio en dev la primera vez.
+   * `.aviso` del kit es una fila: [cuerpo][accion]. Si el título y el motivo
+   * cuelgan como hermanos sueltos salen como columnas estrujadas.
    */
-  test('el titulo, el motivo y el detalle van dentro de aviso__cuerpo', async () => {
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
-    await asentar();
+  test('el título y el motivo van dentro de aviso__cuerpo, sin detalle técnico', async () => {
+    const { raiz } = await montar();
 
     const aviso = raiz.querySelector('[data-panel="subastas"] .aviso');
     expect(aviso.children.length).toBe(2);
     const cuerpo = aviso.querySelector('.aviso__cuerpo');
-    expect(cuerpo.querySelector('.aviso__titulo').textContent).toBe('SERVICIO DEGRADADO');
-    expect(cuerpo.querySelector('.aviso__detalle').textContent).toContain('GET /api/v1/subastas');
+    expect(cuerpo.querySelector('.aviso__titulo').textContent).toBe(
+      'No pudimos cargar esta información',
+    );
+    expect(cuerpo.querySelector('.aviso__detalle')).toBeNull();
     expect(aviso.lastElementChild.dataset.accion).toBe('reintentar');
   });
 
   test('sin permiso el aviso lleva solo el cuerpo', async () => {
-    const raiz = pagina();
-
-    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
-    await asentar();
+    const { raiz } = await montar();
 
     const aviso = raiz.querySelector('[data-panel="auditoria"] .aviso');
     expect(aviso.children.length).toBe(1);
@@ -1048,63 +1168,346 @@ describe('alertas de moderación (UXC-9, §7.3.4)', () => {
     return caja;
   };
 
-  test('el panel sale de GET /api/v1/moderacion y pinta las alertas del servicio', async () => {
-    const raiz = pagina();
-    const consultarApi = apiSimulada({
-      '/moderacion': conDatos({
-        sanciones: {},
-        alertasConfiguradas: true,
-        umbralSancionesPorDia: 10,
-        alertas: ['2026-09-20: 14 sanciones (umbral 10)'],
-        pendientes: [],
+  test('el panel pinta las alertas del servicio de métricas, serie por serie', async () => {
+    const { raiz, consultarApi } = await montar({
+      consultarApi: apiSimulada({
+        '/moderacion': conDatos({
+          sanciones: {},
+          alertasConfiguradas: true,
+          umbralSancionesPorDia: 10,
+          umbralReportesPorDia: null,
+          avisos: [{ tipo: 'SANCIONES', fecha: '2026-09-20', cantidad: 14, umbral: 10 }],
+          alertas: ['Alta frecuencia de sanciones el 2026-09-20: 14 (umbral: 10 o más por día)'],
+          pendientes: [],
+          noDisponibles: [],
+          reportes: { total: 2, porDia: [{ fecha: '2026-09-20', reportes: 2 }] },
+        }),
       }),
     });
 
-    montarControlIntegral(raiz, {}, { consultarApi });
-    await asentar();
-
+    expect(consultarApi.mock.calls.map((c) => c[0])).toContain('/moderacion');
     const panelDeAlertas = raiz.querySelector('[data-panel="alertas-moderacion"]');
-    expect(panelDeAlertas.textContent).toContain('Fuente: GET /api/v1/moderacion');
-    expect(panelDeAlertas.querySelector('[data-zona="alertas"]').textContent).toContain(
-      '2026-09-20: 14 sanciones (umbral 10)',
+    const sanciones = panelDeAlertas.querySelector(
+      '[data-zona="alertas"] [data-serie="SANCIONES"]',
     );
+    expect(sanciones.querySelector('[data-zona="avisos"]').textContent).toMatch(/14 sanciones/);
+    // Cuántas, de un vistazo y no solo con color.
+    const resumen = sanciones.querySelector('.estado-admin');
+    expect(resumen.textContent).toBe('1 alerta');
+    expect(resumen.dataset.tono).toBe('error');
+    // La de reportes, sin umbral del PO, dice que no se evalúa (no «sin alertas»).
+    const reportes = panelDeAlertas.querySelector('[data-serie="REPORTES"]');
+    expect(reportes.querySelector('.estado-admin').textContent).toBe('Desactivada');
   });
 
-  test('sin umbral configurado lo dice, en vez de un «sin alertas» que no se evaluó', () => {
+  test('sin ningún umbral lo dice en las dos series, en vez de un «sin alertas» que no se evaluó', () => {
     const caja = contenedor(
-      pintarAlertasDeModeracion({ alertasConfiguradas: false, alertas: [], pendientes: [] }),
+      pintarAlertasDeModeracion({
+        alertasConfiguradas: false,
+        avisos: [],
+        alertas: [],
+        pendientes: [],
+      }),
     );
+    const estados = [...caja.querySelectorAll('.estado-admin')].map((e) => e.textContent);
+    expect(estados).toEqual(['Desactivada', 'Desactivada']);
+    expect(caja.querySelectorAll('[data-zona="sin-umbral"]')).toHaveLength(2);
     expect(caja.querySelector('[data-zona="sin-umbral"]').textContent).toMatch(
-      /Sin umbral configurado/,
+      /no se evalúa ninguna alerta/,
     );
     expect(caja.querySelector('[data-zona="sin-alertas"]')).toBeNull();
   });
 
-  test('con umbral y sin días por encima, «sin alertas» con el umbral', () => {
+  test('con umbral y sin días que lleguen, «sin alertas» con el umbral; las notas internas no se pintan', () => {
     const caja = contenedor(
       pintarAlertasDeModeracion({
         alertasConfiguradas: true,
         umbralSancionesPorDia: 10,
+        avisos: [],
         alertas: [],
-        pendientes: ['registro de usuarios sin contrato de lectura'],
+        pendientes: ['registro de usuarios: ms-identidad no responde: contrato'],
       }),
     );
-    expect(caja.querySelector('[data-zona="sin-alertas"]').textContent).toBe(
-      'Sin alertas: ningún día supera el umbral de 10 sanciones.',
+    const sanciones = caja.querySelector('[data-serie="SANCIONES"]');
+    expect(sanciones.querySelector('.estado-admin').textContent).toBe('Sin alertas');
+    expect(sanciones.querySelector('.estado-admin').dataset.tono).toBe('exito');
+    expect(sanciones.querySelector('[data-zona="sin-alertas"]').textContent).toBe(
+      'Ningún día llegó a 10 sanciones.',
     );
-    expect(caja.querySelector('[data-zona="pendientes"]').textContent).toBe(
-      'Pendiente: registro de usuarios sin contrato de lectura',
+    expect(caja.textContent).not.toContain('contrato');
+  });
+});
+
+describe('HU-USR-008 — comportamiento sospechoso: usuarios con varias sanciones (D-45, #909)', () => {
+  const ANA = '33333333-4444-5555-6666-777777777777';
+  const BETO = '44444444-5555-6666-7777-888888888888';
+  const REINCIDENTES = {
+    minimo: 3,
+    total: 2,
+    usuarios: [
+      { usuarioId: ANA, sanciones: 5, ultimaEn: '2026-10-05T14:00:00Z' },
+      { usuarioId: BETO, sanciones: 3, ultimaEn: '2026-10-01T09:30:00Z' },
+    ],
+  };
+  const TITULARES = [
+    { uid: ANA, apodo: 'ana_reincide', estado: 'SUSPENDIDO', rol: 'JUGADOR' },
+    { uid: BETO, apodo: 'beto_avisado', estado: 'ACTIVO', rol: 'JUGADOR' },
+  ];
+
+  const contenedor = (partes) => {
+    const caja = document.createElement('div');
+    caja.append(...partes);
+    return caja;
+  };
+
+  test('el panel lista cuántas sanciones sin revertir tiene cada cuenta, por su apodo y sin andamio', async () => {
+    const raiz = pagina();
+    const consultarApi = apiSimulada({
+      '/sanciones/reincidentes': conDatos(REINCIDENTES),
+      '/admin/titulares': conDatos(TITULARES),
+    });
+
+    montarControlIntegral(raiz, {}, { consultarApi });
+    await asentar();
+    await asentar();
+
+    const panelDeLista = raiz.querySelector('[data-panel="reincidentes"]');
+    const filas = panelDeLista.querySelectorAll('tbody tr');
+    expect(filas).toHaveLength(2);
+    expect(filas[0].querySelector('th').textContent).toBe('ana_reincide');
+    expect(filas[0].textContent).toContain('5');
+    expect(filas[1].querySelector('th').textContent).toBe('beto_avisado');
+    expect(panelDeLista.querySelector('[data-zona="resumen-reincidentes"]').textContent).toBe(
+      '2 usuarios con 3 o más sanciones sin revertir.',
+    );
+    expect(panelDeLista.textContent).not.toMatch(ANDAMIO);
+    // Una sola consulta a identidad para nombrarlos a todos.
+    const nombrar = consultarApi.mock.calls.filter(([recurso]) =>
+      recurso.startsWith('/admin/titulares'),
+    );
+    expect(nombrar).toHaveLength(1);
+    expect(nombrar[0][0]).toBe(`/admin/titulares?uids=${ANA},${BETO}`);
+  });
+
+  test('cada fila lleva a la ficha y al historial de esa cuenta, sin pintar su identificador', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(
+      raiz,
+      {},
+      {
+        consultarApi: apiSimulada({
+          '/sanciones/reincidentes': conDatos(REINCIDENTES),
+          '/admin/titulares': conDatos(TITULARES),
+        }),
+      },
+    );
+    await asentar();
+    await asentar();
+
+    const fila = raiz.querySelector('[data-panel="reincidentes"] tbody tr');
+    const historial = fila.querySelector('[data-accion="ver-sanciones"]');
+    const ficha = fila.querySelector('[data-accion="ver-ficha"]');
+    expect(new URL(historial.href).searchParams.get('usuario')).toBe(ANA);
+    expect(new URL(ficha.href).searchParams.get('usuario')).toBe(ANA);
+    expect(ficha.getAttribute('aria-label')).toBe('Ver la ficha de ana_reincide');
+    // RFINAL-06: un UUID a la vista es un dato que nadie puede leer.
+    expect(fila.textContent).not.toMatch(UUID);
+  });
+
+  test('si identidad no responde, la lista sale igual y la cuenta dice «Sin apodo», nunca su uid', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(
+      raiz,
+      {},
+      {
+        consultarApi: apiSimulada({
+          '/sanciones/reincidentes': conDatos(REINCIDENTES),
+          '/admin/titulares': conFallo(RESULTADO.SERVICIO_DEGRADADO, 503, '/admin/titulares'),
+        }),
+      },
+    );
+    await asentar();
+    await asentar();
+
+    const fila = raiz.querySelector('[data-panel="reincidentes"] tbody tr');
+    expect(fila.querySelector('th').textContent).toBe('Sin apodo');
+    expect(fila.textContent).not.toMatch(UUID);
+  });
+
+  test('si nadie llega al mínimo lo dice con el mínimo, no pinta una tabla vacía', () => {
+    const caja = contenedor(pintarReincidentes({ minimo: 3, total: 0, usuarios: [] }));
+
+    expect(caja.querySelector('[data-zona="sin-reincidentes"]').textContent).toBe(
+      'Nadie tiene 3 o más sanciones sin revertir.',
+    );
+    expect(caja.querySelector('table')).toBeNull();
+  });
+
+  test('con un contrato viejo o un cuerpo inesperado no revienta: lo trata como sin datos', () => {
+    expect(() => contenedor(pintarReincidentes([]))).not.toThrow();
+    expect(contenedor(pintarReincidentes(null)).querySelector('table')).toBeNull();
+  });
+
+  test('si la lista se cortó, dice cuántos hay de verdad y cuántos se muestran', () => {
+    const caja = contenedor(
+      pintarReincidentes({ minimo: 3, total: 140, usuarios: REINCIDENTES.usuarios }),
+    );
+
+    expect(caja.querySelector('[data-zona="resumen-reincidentes"]').textContent).toBe(
+      '140 usuarios con 3 o más sanciones sin revertir. Se muestran los 2 con más sanciones.',
+    );
+  });
+
+  test('uno solo va en singular', () => {
+    const caja = contenedor(
+      pintarReincidentes({ minimo: 3, total: 1, usuarios: [REINCIDENTES.usuarios[0]] }),
+    );
+
+    expect(caja.querySelector('[data-zona="resumen-reincidentes"]').textContent).toBe(
+      '1 usuario con 3 o más sanciones sin revertir.',
+    );
+  });
+
+  test('con el servicio caído lo dice ese panel y el resto sigue', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(
+      raiz,
+      {},
+      {
+        consultarApi: apiSimulada({
+          '/sanciones/reincidentes': conFallo(
+            RESULTADO.SERVICIO_DEGRADADO,
+            503,
+            '/sanciones/reincidentes',
+          ),
+        }),
+      },
+    );
+    await asentar();
+
+    expect(raiz.querySelector('[data-panel="reincidentes"] .panel-admin__estado').textContent).toBe(
+      'Sin conexión',
+    );
+    expect(raiz.querySelector('[data-panel="sanciones"] .panel-admin__estado').textContent).toBe(
+      '',
     );
   });
 });
 
 describe('formatearFecha', () => {
-  test('nulo es un guion, no la fecha de hoy', () => {
-    expect(formatearFecha(null)).toBe('--');
-    expect(formatearFecha('')).toBe('--');
+  test('nulo es un guion largo, no la fecha de hoy', () => {
+    expect(formatearFecha(null)).toBe('—');
+    expect(formatearFecha('')).toBe('—');
   });
 
   test('lo que no es fecha se devuelve tal cual, sin inventar', () => {
     expect(formatearFecha('no soy una fecha')).toBe('no soy una fecha');
+  });
+});
+
+/**
+ * SA-2 — la disposición: las cifras seguidas comparten fila y cada tabla va
+ * en la suya, declarado al armar el panel y no deducido de lo que se pinte.
+ */
+describe('disposición de los paneles', () => {
+  const panelDe = (id, ancho = null) => {
+    const elemento = document.createElement('section');
+    elemento.dataset.panel = id;
+    if (ancho) {
+      elemento.dataset.ancho = ancho;
+    }
+    return elemento;
+  };
+
+  test('agruparPaneles junta las cifras seguidas y deja cada panel ancho en su fila', () => {
+    const salida = agruparPaneles([
+      panelDe('a'),
+      panelDe('b', 'completo'),
+      panelDe('c'),
+      panelDe('d'),
+    ]);
+
+    expect(salida.map((e) => e.className || e.dataset.panel)).toEqual([
+      'consola-integral__cifras',
+      'b',
+      'consola-integral__cifras',
+    ]);
+    expect(salida[0].dataset.cifras).toBe('1');
+    expect(salida[2].dataset.cifras).toBe('2');
+    expect([...salida[2].children].map((e) => e.dataset.panel)).toEqual(['c', 'd']);
+    expect(agruparPaneles([])).toEqual([]);
+  });
+
+  test('el resumen: cuatro cifras en una fila y los usuarios debajo, de lado a lado', async () => {
+    const { raiz } = await montar();
+
+    const rejilla = raiz.querySelector('[data-seccion="resumen"] .consola-integral__rejilla');
+    const [cifras, usuarios] = rejilla.children;
+    expect(cifras.dataset.cifras).toBe('4');
+    expect([...cifras.children].map((p) => p.dataset.panel)).toEqual([
+      'resumen-jugadores',
+      'resumen-servicios',
+      'resumen-sanciones',
+      'resumen-torneos',
+    ]);
+    expect(usuarios.dataset.panel).toBe('resumen-usuarios');
+    expect(usuarios.dataset.ancho).toBe('completo');
+  });
+
+  test('moderación: las dos cifras juntas arriba; la lista de reincidentes, la bitácora y el recuento en su fila', async () => {
+    const { raiz } = await montar();
+
+    const rejilla = raiz.querySelector('[data-seccion="moderacion"] .consola-integral__rejilla');
+    const orden = [...rejilla.children].map((e) =>
+      e.dataset.cifras ? [...e.children].map((p) => p.dataset.panel) : e.dataset.panel,
+    );
+    expect(orden).toEqual([
+      ['alertas-moderacion', 'comentarios'],
+      'reincidentes',
+      'auditoria',
+      'sanciones',
+    ]);
+  });
+
+  test('las tablas ocupan la fila entera desde que se arman, también mientras cargan', () => {
+    const raiz = document.createElement('div');
+    raiz.innerHTML = '<div data-zona="secciones"></div>';
+    montarControlIntegral(
+      raiz,
+      { rol: 'SUPER_ADMINISTRADOR' },
+      {
+        consultarApi: () => new Promise(() => {}),
+        actualizarSola: false,
+      },
+    );
+
+    const anchos = [...raiz.querySelectorAll('[data-ancho="completo"]')].map(
+      (p) => p.dataset.panel,
+    );
+    expect(anchos).toEqual([
+      'resumen-usuarios',
+      'directorio',
+      'salas',
+      'subastas',
+      'torneos',
+      'reincidentes',
+      'auditoria',
+      'sanciones',
+      'sistema',
+      'parametros',
+    ]);
+  });
+});
+
+describe('formatearDia', () => {
+  test('el día sin la hora; sin valor, un guion; lo ilegible, tal cual', () => {
+    const dia = formatearDia('2026-09-10T15:00:00Z');
+    expect(dia).toMatch(/2026/);
+    expect(dia).not.toMatch(/:/);
+    expect(formatearDia(null)).toBe('—');
+    expect(formatearDia('no es fecha')).toBe('no es fecha');
   });
 });
