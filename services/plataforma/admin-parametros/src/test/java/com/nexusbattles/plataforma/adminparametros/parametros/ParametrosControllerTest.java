@@ -71,7 +71,7 @@ class ParametrosControllerTest {
     void cambiar() throws Exception {
         mvc.perform(put("/api/v1/parametros/x").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isUnauthorized());
-        when(servicio.cambiar(any(), eq("sanciones.suspension.maxima-dias"), any())).thenReturn(vigente());
+        when(servicio.cambiar(any(), eq("sanciones.suspension.maxima-dias"), any(), any())).thenReturn(vigente());
         mvc.perform(put("/api/v1/parametros/sanciones.suspension.maxima-dias")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("admin", ADMIN, "ADMINISTRADOR"))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -80,12 +80,12 @@ class ParametrosControllerTest {
                 .andExpect(jsonPath("$.valor").value("30"));
         ArgumentCaptor<Actor> actor = ArgumentCaptor.forClass(Actor.class);
         ArgumentCaptor<ParametrosService.Cambio> cambio = ArgumentCaptor.forClass(ParametrosService.Cambio.class);
-        verify(servicio).cambiar(actor.capture(), eq("sanciones.suspension.maxima-dias"), cambio.capture());
+        verify(servicio).cambiar(actor.capture(), eq("sanciones.suspension.maxima-dias"), cambio.capture(), any());
         assertThat(actor.getValue().id()).isEqualTo(ADMIN);
         assertThat(actor.getValue().rol()).isEqualTo("ADMINISTRADOR");
         assertThat(cambio.getValue().valor()).isEqualTo("15");
 
-        when(servicio.cambiar(any(), eq("torneos.cupos"), any()))
+        when(servicio.cambiar(any(), eq("torneos.cupos"), any(), any()))
                 .thenThrow(new ParametroRechazado(ParametroRechazado.Motivo.INALTERABLE, "Charter"));
         mvc.perform(put("/api/v1/parametros/torneos.cupos")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("admin", ADMIN, "ADMINISTRADOR"))
@@ -95,7 +95,7 @@ class ParametrosControllerTest {
                 .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/inalterable"))
                 .andExpect(jsonPath("$.motivo").value("INALTERABLE"));
 
-        when(servicio.cambiar(any(), eq("chat.historial.tamano"), any()))
+        when(servicio.cambiar(any(), eq("chat.historial.tamano"), any(), any()))
                 .thenThrow(new ParametroRechazado(ParametroRechazado.Motivo.VALOR_INVALIDO, "fuera de rango"));
         mvc.perform(put("/api/v1/parametros/chat.historial.tamano")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("admin", ADMIN, "ADMINISTRADOR"))
@@ -108,7 +108,7 @@ class ParametrosControllerTest {
     @Test
     @DisplayName("un token de servicio llega al controlador como actor sin uid, y el servicio lo rechaza con 403")
     void servicioNoConfigura() throws Exception {
-        when(servicio.cambiar(any(), any(), any()))
+        when(servicio.cambiar(any(), any(), any(), any()))
                 .thenThrow(new ParametroRechazado(ParametroRechazado.Motivo.PERMISO_INSUFICIENTE, "solo administracion"));
         mvc.perform(put("/api/v1/parametros/chat.historial.tamano")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeServicio("salas-partidas"))
@@ -116,8 +116,35 @@ class ParametrosControllerTest {
                         .content("{\"valor\":\"10\",\"motivo\":\"x\"}"))
                 .andExpect(status().isForbidden());
         ArgumentCaptor<Actor> actor = ArgumentCaptor.forClass(Actor.class);
-        verify(servicio).cambiar(actor.capture(), any(), any());
+        verify(servicio).cambiar(actor.capture(), any(), any(), any());
         assertThat(actor.getValue().id()).isNull();
         assertThat(actor.getValue().puedeConfigurar()).isFalse();
+    }
+
+    @Test
+    @DisplayName("SA-5: el cambio lleva la IP que fija el borde (X-Real-IP), no la que declara el cliente")
+    void ipDelBorde() throws Exception {
+        when(servicio.cambiar(any(), eq("sanciones.suspension.maxima-dias"), any(), any())).thenReturn(vigente());
+        mvc.perform(put("/api/v1/parametros/sanciones.suspension.maxima-dias")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("admin", ADMIN, "ADMINISTRADOR"))
+                        .header("X-Real-IP", "203.0.113.9")
+                        .header("X-Forwarded-For", "1.2.3.4, 203.0.113.9")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"valor\":\"15\",\"motivo\":\"Sprint Review\"}"))
+                .andExpect(status().isOk());
+        verify(servicio).cambiar(any(), eq("sanciones.suspension.maxima-dias"), any(), eq("203.0.113.9"));
+    }
+
+    @Test
+    @DisplayName("SA-5: sin borde, el primer valor de X-Forwarded-For o la remota; nunca algo que no sea una IP")
+    void ipSinBorde() {
+        org.springframework.mock.web.MockHttpServletRequest conProxy = new org.springframework.mock.web.MockHttpServletRequest();
+        conProxy.addHeader("X-Forwarded-For", "198.51.100.23, 172.18.0.5");
+        assertThat(ParametrosController.ipDe(conProxy)).isEqualTo("198.51.100.23");
+
+        org.springframework.mock.web.MockHttpServletRequest falsa = new org.springframework.mock.web.MockHttpServletRequest();
+        falsa.addHeader("X-Real-IP", "<script>");
+        falsa.setRemoteAddr("192.0.2.9");
+        assertThat(ParametrosController.ipDe(falsa)).isEqualTo("192.0.2.9");
     }
 }

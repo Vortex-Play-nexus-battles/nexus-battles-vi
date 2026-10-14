@@ -26,7 +26,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -34,6 +36,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -89,8 +92,8 @@ class AuditLogControllerTest {
         @Test
         @DisplayName("un SUPER_ADMINISTRADOR con su token real la consulta: el rol se llama asi, no SUPER_ADMIN")
         void superAdministrador() throws Exception {
-            when(auditLogService.consultar(eq("admin-1"), eq(List.of()), eq(AuditActionType.CAMBIO_ROL), any(), any(),
-                any()))
+            when(auditLogService.buscar(eq(new AuditLogService.FiltroDeAuditoria(List.of("admin-1"), List.of(),
+                AuditActionType.CAMBIO_ROL, null, null)), any()))
                 .thenReturn(new PageImpl<>(List.of(registro(AuditActionType.CAMBIO_ROL))));
 
             mvc.perform(get(BITACORA)
@@ -105,8 +108,8 @@ class AuditLogControllerTest {
         @Test
         @DisplayName("1.2.0: filtra por la cuenta afectada, con varios valores (uid y clave) y sin repetidos ni vacios")
         void porAfectado() throws Exception {
-            when(auditLogService.consultar(any(), eq(List.of("7a1e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55", "42")), any(),
-                any(), any(), any()))
+            when(auditLogService.buscar(eq(new AuditLogService.FiltroDeAuditoria(List.of(),
+                List.of("7a1e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55", "42"), null, null, null)), any()))
                 .thenReturn(new PageImpl<>(List.of(registro(AuditActionType.SUSPENSION))));
 
             mvc.perform(get(BITACORA)
@@ -115,6 +118,21 @@ class AuditLogControllerTest {
                         "Bearer " + TokensDePrueba.deUsuario("root", UUID.randomUUID(), "SUPER_ADMINISTRADOR")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].tipoAccion").value("SUSPENSION"));
+        }
+
+        @Test
+        @DisplayName("1.3.0: la misma persona por su apodo y por su uid, en una sola consulta")
+        void porVariosAdministradores() throws Exception {
+            when(auditLogService.buscar(eq(new AuditLogService.FiltroDeAuditoria(
+                List.of("moderadora_qa", "5b2e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55"), List.of(), null, null, null)), any()))
+                .thenReturn(new PageImpl<>(List.of(registro(AuditActionType.SANCION))));
+
+            mvc.perform(get(BITACORA)
+                    .param("administradorId", "moderadora_qa", " 5b2e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55 ", "")
+                    .header(HttpHeaders.AUTHORIZATION,
+                        "Bearer " + TokensDePrueba.deUsuario("root", UUID.randomUUID(), "SUPER_ADMINISTRADOR")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].tipoAccion").value("SANCION"));
         }
 
         @Test
@@ -160,14 +178,50 @@ class AuditLogControllerTest {
         @DisplayName("un SUPER_ADMINISTRADOR exporta: 200, PDF")
         void superAdministradorExporta() throws Exception {
             byte[] pdfSimulado = "contenido-pdf-simulado".getBytes();
-            when(auditLogService.exportarPdf(any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(pdfSimulado);
+            when(auditLogService.exportar(any(), eq(AuditLogService.Formato.PDF), any(), any()))
+                .thenReturn(new AuditLogService.Exportacion(pdfSimulado, AuditLogService.Formato.PDF));
 
             mvc.perform(get(EXPORTAR).header(HttpHeaders.AUTHORIZATION,
                     "Bearer " + TokensDePrueba.deUsuario("root", UUID.randomUUID(), "SUPER_ADMINISTRADOR")))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString(".pdf")))
                 .andExpect(content().bytes(pdfSimulado));
+        }
+
+        @Test
+        @DisplayName("1.3.0: formato=csv entrega text/csv con su nombre de archivo, con los filtros de la consulta")
+        void exportaEnCsv() throws Exception {
+            // El nombre del principal es el uid del token (ConversorDeRoles), no el apodo.
+            UUID root = UUID.randomUUID();
+            byte[] csv = "id,fecha_hora".getBytes();
+            when(auditLogService.exportar(eq(new AuditLogService.FiltroDeAuditoria(List.of("admin-1"), List.of(),
+                    AuditActionType.SANCION, null, null)), eq(AuditLogService.Formato.CSV), eq(root.toString()), any()))
+                .thenReturn(new AuditLogService.Exportacion(csv, AuditLogService.Formato.CSV));
+
+            mvc.perform(get(EXPORTAR).param("formato", "csv").param("administradorId", "admin-1")
+                    .param("tipoAccion", "SANCION")
+                    .header("X-Real-IP", "203.0.113.9")
+                    .header(HttpHeaders.AUTHORIZATION,
+                        "Bearer " + TokensDePrueba.deUsuario("root", root, "SUPER_ADMINISTRADOR")))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith("text/csv"))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString(".csv")))
+                .andExpect(content().bytes(csv));
+
+            verify(auditLogService).exportar(any(), eq(AuditLogService.Formato.CSV), eq(root.toString()),
+                eq("203.0.113.9"));
+        }
+
+        @Test
+        @DisplayName("1.3.0: un formato que no existe es 400 y no exporta nada")
+        void formatoDesconocido() throws Exception {
+            mvc.perform(get(EXPORTAR).param("formato", "xml").header(HttpHeaders.AUTHORIZATION,
+                    "Bearer " + TokensDePrueba.deUsuario("root", UUID.randomUUID(), "SUPER_ADMINISTRADOR")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Solicitud invalida"));
+
+            verifyNoInteractions(auditLogService);
         }
 
         @Test
@@ -188,7 +242,7 @@ class AuditLogControllerTest {
         @Test
         @DisplayName("si el filtro excede el maximo, 422 con las dos cifras en la raiz del JSON")
         void excedeMaximo() throws Exception {
-            when(auditLogService.exportarPdf(any(), any(), any(), any(), any(), any(), any()))
+            when(auditLogService.exportar(any(), any(), any(), any()))
                 .thenThrow(new ExportacionExcedeMaximoException(15000, 10000));
 
             mvc.perform(get(EXPORTAR).header(HttpHeaders.AUTHORIZATION,
@@ -207,8 +261,8 @@ class AuditLogControllerTest {
         @Test
         @DisplayName("un servicio con credencial registra el evento: 201")
         void servicioRegistra() throws Exception {
-            when(auditLogService.registrarDesdeSolicitud(any(RegistrarAuditoriaRequest.class)))
-                .thenReturn(registro(AuditActionType.SUSPENSION));
+            when(auditLogService.registrarEvento(any(RegistrarAuditoriaRequest.class)))
+                .thenReturn(new AuditLogService.ResultadoDeRegistro(registro(AuditActionType.SUSPENSION), true));
 
             mvc.perform(post(EVENTOS)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + TokensDePrueba.deServicio("ms-identidad"))
@@ -217,7 +271,27 @@ class AuditLogControllerTest {
                 .andExpect(jsonPath("$.tipoAccion").value("SUSPENSION"))
                 .andExpect(jsonPath("$.administrador").value("admin-2"));
 
-            verify(auditLogService).registrarDesdeSolicitud(any(RegistrarAuditoriaRequest.class));
+            verify(auditLogService).registrarEvento(any(RegistrarAuditoriaRequest.class));
+        }
+
+        @Test
+        @DisplayName("1.3.0: el momento y la referencia viajan al servicio; una referencia repetida responde 200")
+        void referenciaRepetida() throws Exception {
+            when(auditLogService.registrarEvento(any(RegistrarAuditoriaRequest.class)))
+                .thenReturn(new AuditLogService.ResultadoDeRegistro(registro(AuditActionType.SANCION), false));
+
+            mvc.perform(post(EVENTOS)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + TokensDePrueba.deServicio("moderacion-sanciones"))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(EVENTO.replace("\"ipOrigen\":\"10.0.0.1\"",
+                        "\"ipOrigen\":\"10.0.0.1\",\"ocurridoEn\":\"2026-10-14T03:00:00Z\","
+                            + "\"referencia\":\"sancion-1-emision\"")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tipoAccion").value("SANCION"));
+
+            verify(auditLogService).registrarEvento(argThat(solicitud ->
+                "sancion-1-emision".equals(solicitud.referencia())
+                    && java.time.Instant.parse("2026-10-14T03:00:00Z").equals(solicitud.ocurridoEn())));
         }
 
         @Test
@@ -237,7 +311,7 @@ class AuditLogControllerTest {
         @Test
         @DisplayName("un tipoAccion desconocido es 400 con problem details, no 500")
         void tipoDesconocidoEs400() throws Exception {
-            when(auditLogService.registrarDesdeSolicitud(any(RegistrarAuditoriaRequest.class)))
+            when(auditLogService.registrarEvento(any(RegistrarAuditoriaRequest.class)))
                 .thenThrow(new IllegalArgumentException("tipoAccion inválido: TIPO_QUE_NO_EXISTE"));
 
             mvc.perform(post(EVENTOS)

@@ -46,7 +46,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * mano para saber exactamente que vuelta mira.
  */
 @Testcontainers
-@SpringBootTest(properties = {"spring.jpa.hibernate.ddl-auto=validate", "sanciones.avisos.reintento-ms=3600000"})
+@SpringBootTest(properties = {"spring.jpa.hibernate.ddl-auto=validate", "sanciones.avisos.reintento-ms=3600000",
+        "auditoria.reintento-ms=3600000"})
 @DisplayName("Salidas de sancion · proyeccion, correo y aviso contra dobles de sus contratos")
 class SalidasDeSancionIT {
 
@@ -75,6 +76,7 @@ class SalidasDeSancionIT {
         registro.add("sanciones.identidad.url", () -> base);
         registro.add("sanciones.correo.url", () -> base);
         registro.add("sanciones.notificaciones.url", () -> base + "/api/v1");
+        registro.add("auditoria.url", () -> base + "/api/v1/admin/auditoria/eventos");
     }
 
     @Autowired
@@ -89,6 +91,9 @@ class SalidasDeSancionIT {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired
+    private com.nexusbattles.plataforma.moderacionsanciones.auditoria.EntregaDeAuditoria entregaDeAuditoria;
+
     private final JsonMapper json = JsonMapper.builder().build();
     private final Actor admin = new Actor(UUID.randomUUID(), "ADMINISTRADOR");
 
@@ -101,6 +106,25 @@ class SalidasDeSancionIT {
     @AfterEach
     void restaurar() {
         estadoDeIdentidad = 200;
+        org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes();
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
+
+    /** La peticion tal como la deja pasar el borde: con X-Real-IP y el token de quien actua. */
+    private void comoDesdeLaConsola(Actor quien, String ipDelBorde) {
+        org.springframework.mock.web.MockHttpServletRequest peticion =
+                new org.springframework.mock.web.MockHttpServletRequest();
+        if (ipDelBorde != null) {
+            peticion.addHeader("X-Real-IP", ipDelBorde);
+        }
+        org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(
+                new org.springframework.web.context.request.ServletRequestAttributes(peticion));
+        org.springframework.security.oauth2.jwt.Jwt token = org.springframework.security.oauth2.jwt.Jwt
+                .withTokenValue("t").header("alg", "RS256").subject("admin_qa")
+                .claim("uid", quien.id().toString()).claim("rol", quien.rol()).build();
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken(
+                        token, List.of()));
     }
 
     @AfterAll
@@ -260,6 +284,54 @@ class SalidasDeSancionIT {
 
     // ------------------------------------------------------------------
 
+    @Test
+    @DisplayName("SA-5: una suspension desde la consola deja su asiento con la sancion y llega a ms-cumplimiento una vez")
+    void auditoriaCentral() throws Exception {
+        UUID jugador = UUID.randomUUID();
+        comoDesdeLaConsola(admin, "203.0.113.9");
+
+        sanciones.emitir(admin, new SancionesService.SolicitudDeSancion(jugador, Sancion.Tipo.SUSPENSION,
+                "Lenguaje ofensivo", null, null, 48L, false));
+
+        assertThat(jdbc.queryForObject("select count(*) from auditoria_pendiente where afectado = ? "
+                + "and entregado_en is null", Integer.class, jugador.toString())).isEqualTo(1);
+
+        assertThat(entregaDeAuditoria.ejecutar()).isGreaterThanOrEqualTo(1);
+
+        List<Peticion> eventos = recibidas("POST", "/api/v1/admin/auditoria/eventos").stream()
+                .filter(p -> p.cuerpo().contains(jugador.toString())).toList();
+        assertThat(eventos).hasSize(1);
+        assertThat(eventos.get(0).autorizacion()).isEqualTo("Bearer token-de-moderacion");
+        var evento = json.readTree(eventos.get(0).cuerpo());
+        assertThat(evento.path("tipoAccion").asString()).isEqualTo("SUSPENSION");
+        assertThat(evento.path("administradorId").asString()).isEqualTo(admin.id().toString());
+        assertThat(evento.path("afectado").asString()).isEqualTo(jugador.toString());
+        assertThat(evento.path("valorNuevo").asString()).startsWith("Suspensión hasta el ");
+        assertThat(evento.path("motivo").asString()).isEqualTo("Lenguaje ofensivo");
+        assertThat(evento.path("ipOrigen").asString()).isEqualTo("203.0.113.9");
+        assertThat(evento.path("ocurridoEn").asString()).isNotBlank();
+        assertThat(evento.path("referencia").asString()).startsWith("moderacion-sanciones:");
+
+        assertThat(jdbc.queryForObject("select count(*) from auditoria_pendiente where afectado = ? "
+                + "and entregado_en is null", Integer.class, jugador.toString())).isZero();
+        entregaDeAuditoria.ejecutar();
+        assertThat(recibidas("POST", "/api/v1/admin/auditoria/eventos").stream()
+                .filter(p -> p.cuerpo().contains(jugador.toString()))).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("SA-5: la misma accion pedida por ms-identidad (sin X-Real-IP) no se registra dos veces")
+    void sinBordeNoSeRegistra() {
+        UUID jugador = UUID.randomUUID();
+        comoDesdeLaConsola(admin, null);
+
+        sanciones.emitir(admin, new SancionesService.SolicitudDeSancion(jugador, Sancion.Tipo.ADVERTENCIA,
+                "Spam", null, null, null, false));
+
+        assertThat(jdbc.queryForObject("select count(*) from auditoria_pendiente where afectado = ?",
+                Integer.class, jugador.toString())).isZero();
+    }
+
     private static HttpServer levantarDobles() {
         try {
             HttpServer servidor = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -287,6 +359,10 @@ class SalidasDeSancionIT {
                 responder(intercambio, 202, "");
             });
             servidor.createContext("/api/v1/internal/notifications", intercambio -> {
+                anotar(intercambio);
+                responder(intercambio, 201, "{}");
+            });
+            servidor.createContext("/api/v1/admin/auditoria/eventos", intercambio -> {
                 anotar(intercambio);
                 responder(intercambio, 201, "{}");
             });

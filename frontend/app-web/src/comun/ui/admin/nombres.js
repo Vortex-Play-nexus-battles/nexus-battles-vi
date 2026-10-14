@@ -15,12 +15,14 @@ export const NOMBRE_DE_ACCION = Object.freeze({
   CREACION: 'Alta',
   ACTUALIZACION: 'Modificación',
   ELIMINACION_LOGICA: 'Retiro',
+  ELIMINACION: 'Eliminación',
   SUSPENSION: 'Suspensión',
   SANCION: 'Sanción',
   CAMBIO_ROL: 'Cambio de rol',
   APROBACION: 'Aprobación',
   RECHAZO: 'Rechazo',
   SECURITY_BYPASS_ATTEMPT: 'Intento de acceso no autorizado',
+  EXPORTACION: 'Exportación',
   OTRO: 'Otra acción',
 });
 

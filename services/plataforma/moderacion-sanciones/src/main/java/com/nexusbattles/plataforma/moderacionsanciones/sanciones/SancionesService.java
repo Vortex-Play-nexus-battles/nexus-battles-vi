@@ -1,5 +1,7 @@
 package com.nexusbattles.plataforma.moderacionsanciones.sanciones;
 
+import com.nexusbattles.plataforma.moderacionsanciones.auditoria.BitacoraDeAuditoria;
+import com.nexusbattles.plataforma.moderacionsanciones.auditoria.TipoDeAccion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -61,11 +63,18 @@ public class SancionesService {
     private final LimitesDeSancion limites;
     private final RolesDeCuentas roles;
     private final PlazoDeDecision plazoDeDecision;
+    private final BitacoraDeAuditoria bitacora;
 
+    /**
+     * SA-5 (§7.3.5): con la bitacora central. Emitir, levantar y resolver una
+     * apelacion dejan su asiento en la misma transaccion; la bitacora decide si
+     * la accion es de una persona desde la consola o de otro servicio que ya la
+     * registra ({@code OrigenDeLaAccion}).
+     */
     @org.springframework.beans.factory.annotation.Autowired
     public SancionesService(SancionRepository sanciones, ApelacionRepository apelaciones,
                             SalidasDeSancion salidas, Clock reloj, LimitesDeSancion limites,
-                            RolesDeCuentas roles, PlazoDeDecision plazoDeDecision) {
+                            RolesDeCuentas roles, PlazoDeDecision plazoDeDecision, BitacoraDeAuditoria bitacora) {
         this.sanciones = Objects.requireNonNull(sanciones);
         this.apelaciones = Objects.requireNonNull(apelaciones);
         this.salidas = Objects.requireNonNull(salidas);
@@ -73,6 +82,14 @@ public class SancionesService {
         this.limites = Objects.requireNonNull(limites);
         this.roles = Objects.requireNonNull(roles);
         this.plazoDeDecision = Objects.requireNonNull(plazoDeDecision);
+        this.bitacora = Objects.requireNonNull(bitacora);
+    }
+
+    /** Sin bitacora central (pruebas). */
+    public SancionesService(SancionRepository sanciones, ApelacionRepository apelaciones,
+                            SalidasDeSancion salidas, Clock reloj, LimitesDeSancion limites,
+                            RolesDeCuentas roles, PlazoDeDecision plazoDeDecision) {
+        this(sanciones, apelaciones, salidas, reloj, limites, roles, plazoDeDecision, BitacoraDeAuditoria.NINGUNA);
     }
 
     /** Sin festivos configurados: el plazo de decision cuenta de lunes a viernes. */
@@ -168,6 +185,8 @@ public class SancionesService {
                 sancion.id(), sancion.tipo(), sancion.causal(), sancion.usuarioId(), actor.id(), actor.rol(),
                 vigenteHasta);
         salidas.emision(sancion, tituloDe(sancion), cuerpoDe(sancion), ahora);
+        bitacora.registrar(sancion.tipo() == Sancion.Tipo.SUSPENSION ? TipoDeAccion.SUSPENSION : TipoDeAccion.SANCION,
+                sancion.usuarioId().toString(), null, descripcionDe(sancion), sancion.motivo());
         return sancion;
     }
 
@@ -217,12 +236,15 @@ public class SancionesService {
                     "el baneo es definitivo: solo lo revierte una apelacion favorable del panel");
         }
         exigirJerarquia(actor, sancion.usuarioId(), "levantar la sancion de");
+        String comoEstaba = descripcionDe(sancion);
         sancion.revertir(actor.id(), motivoLimpio, ahora);
         sanciones.save(sancion);
         BITACORA.info("Sancion levantada: id={} tipo={} usuario={} por={} ({})", sancion.id(), sancion.tipo(),
                 sancion.usuarioId(), actor.id(), actor.rol());
         salidas.levantamiento(sancion, TextosDeSancion.tituloDelLevantamiento(sancion),
                 TextosDeSancion.cuerpoDelLevantamiento(sancion, motivoLimpio), ahora);
+        bitacora.registrar(TipoDeAccion.ACTUALIZACION, sancion.usuarioId().toString(), comoEstaba,
+                "Suspensión levantada antes de su fin", motivoLimpio);
         return sancion;
     }
 
@@ -445,6 +467,7 @@ public class SancionesService {
         Sancion sancion = sanciones.findById(apelacion.sancionId()).orElseThrow();
         exigirJerarquia(actor, sancion.usuarioId(), "resolver la apelacion de");
         OffsetDateTime ahora = ahora();
+        String comoEstaba = descripcionDe(sancion);
         try {
             switch (decision) {
                 case REVERTIDA -> sancion.revertir(actor.id(), motivo, ahora);
@@ -470,6 +493,15 @@ public class SancionesService {
                 TextosDeSancion.cuerpoDeLaResolucion(sancion, decision, motivo,
                         decision == Apelacion.Estado.REDUCIDA ? nuevaVigencia : null),
                 ahora);
+        bitacora.registrar(decision == Apelacion.Estado.MANTENIDA ? TipoDeAccion.RECHAZO : TipoDeAccion.APROBACION,
+                sancion.usuarioId().toString(), "Apelación pendiente · " + comoEstaba,
+                switch (decision) {
+                    case REVERTIDA -> "Apelación estimada: sanción revertida";
+                    case REDUCIDA -> "Apelación estimada en parte: suspensión reducida hasta "
+                            + TextosDeSancion.fecha(nuevaVigencia);
+                    default -> "Apelación desestimada: la sanción se mantiene";
+                },
+                motivo.strip());
         return apelacion;
     }
 
@@ -535,6 +567,27 @@ public class SancionesService {
 
     private static String vacioANulo(String valor) {
         return valor == null || valor.isBlank() ? null : valor.strip();
+    }
+
+    /**
+     * Una sancion dicha para la bitacora central: «Suspensión hasta el 20 de
+     * octubre de 2026, 6:00 p. m. · Causal: Spam o publicidad no autorizada ·
+     * Política: Normas de convivencia», en la hora de Colombia.
+     */
+    static String descripcionDe(Sancion sancion) {
+        StringBuilder texto = new StringBuilder(switch (sancion.tipo()) {
+            case ADVERTENCIA -> "Advertencia";
+            case SUSPENSION -> sancion.vigenteHasta() == null
+                    ? "Suspensión" : "Suspensión hasta el " + TextosDeSancion.fecha(sancion.vigenteHasta());
+            case BANEO -> "Inhabilitación definitiva";
+        });
+        if (sancion.causal() != null) {
+            texto.append(" · Causal: ").append(sancion.causal().etiqueta());
+        }
+        if (sancion.politica() != null) {
+            texto.append(" · Política: ").append(sancion.politica());
+        }
+        return texto.toString();
     }
 
     /**

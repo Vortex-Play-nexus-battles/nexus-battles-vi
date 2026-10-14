@@ -948,6 +948,10 @@ function terminoVetado(i, termino, categoria, modo, cambios = {}) {
   };
 }
 
+/** Las dos cuentas del escenario de auditoría (SA-5): una moderadora y una jugadora. */
+const UID_AUDITORIA_MODERADORA = '5b2e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55';
+const UID_AUDITORIA_JUGADORA = '7a1e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55';
+
 function registroDeAuditoria(i, cambios = {}) {
   return {
     id: `33333333-1111-4111-8111-${String(i).padStart(12, '0')}`,
@@ -1838,48 +1842,87 @@ export const ESCENARIOS = [
   },
   {
     id: 'auditoria-con-registros',
-    titulo: 'registro de auditoría con cinco entradas y paginación',
+    titulo: 'registro de auditoría: cifras, filtros, acciones con nombres y exportación (SA-5)',
     ruta: 'cuentas/auditoria.html',
     sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
     rutas: [
       [
+        '**/api/v1/admin/titulares*',
+        json([
+          {
+            uid: UID_AUDITORIA_MODERADORA,
+            apodo: 'moderadora_qa',
+            estado: 'ACTIVO',
+            rol: 'MODERADOR',
+          },
+          { uid: UID_AUDITORIA_JUGADORA, apodo: 'thar_vex', estado: 'SUSPENDIDO', rol: 'JUGADOR' },
+        ]),
+      ],
+      [
         '**/api/v1/admin/auditoria*',
         json({
           content: [
-            registroDeAuditoria(1, { tipoAccion: 'CAMBIO_ROL' }),
-            registroDeAuditoria(2, {
+            registroDeAuditoria(1, {
+              administrador: UID_AUDITORIA_MODERADORA,
               tipoAccion: 'SANCION',
-              afectado: 'thar_vex',
+              afectado: UID_AUDITORIA_JUGADORA,
               valorAnterior: null,
-              valorNuevo: 'SUSPENSION_7_DIAS',
+              valorNuevo: 'Advertencia · Causal: Lenguaje ofensivo o discriminatorio',
               motivo: 'Lenguaje ofensivo reiterado en el chat de sala.',
+              ocurridoEn: new Date(Date.now() - 5_400_000).toISOString(),
+              referencia: 'moderacion-sanciones:1',
+            }),
+            registroDeAuditoria(2, {
+              administrador: 'qa_superadministrador',
+              tipoAccion: 'CAMBIO_ROL',
+              afectado: UID_AUDITORIA_JUGADORA,
             }),
             registroDeAuditoria(3, {
-              tipoAccion: 'CREACION',
-              afectado: 'Yelmo del Alba',
-              valorAnterior: null,
-              valorNuevo: 'ACTIVO',
-              motivo: 'Alta de producto del catálogo.',
+              administrador: UID_AUDITORIA_MODERADORA,
+              tipoAccion: 'ACTUALIZACION',
+              afectado: 'comentario:44444444-1111-4111-8111-000000000003',
+              valorAnterior: 'Publicado',
+              valorNuevo: 'Oculto',
+              motivo: 'Fuera de tema y con enlaces a sitios externos.',
             }),
             registroDeAuditoria(4, {
-              tipoAccion: 'ELIMINACION_LOGICA',
-              afectado: 'Poción caducada',
-              valorAnterior: 'ACTIVO',
-              valorNuevo: 'SUSPENDIDO',
-              motivo: 'Producto retirado del catálogo.',
+              tipoAccion: 'ACTUALIZACION',
+              afectado: 'parametro:sanciones.suspension.maxima-dias',
+              valorAnterior: '30',
+              valorNuevo: '15',
+              motivo: 'Acuerdo de la Sprint Review con el Product Owner.',
             }),
-            registroDeAuditoria(5, { tipoAccion: 'APROBACION', afectado: 'comentario 44444444' }),
+            registroDeAuditoria(5, {
+              administrador: UID_AUDITORIA_MODERADORA,
+              tipoAccion: 'ELIMINACION',
+              afectado: 'lista-negra:spiderman',
+              valorAnterior: '«spiderman» · Marca registrada · dentro de otras palabras · activo',
+              valorNuevo: null,
+              motivo: 'Repetido con otra forma en la lista.',
+            }),
+            registroDeAuditoria(6, {
+              administrador: 'desconocido',
+              tipoAccion: 'SECURITY_BYPASS_ATTEMPT',
+              afectado: 'GESTIONAR_CUENTAS',
+              valorAnterior: null,
+              valorNuevo: null,
+              motivo: 'CREDENTIAL_MISSING',
+            }),
           ],
           totalElements: 128,
-          totalPages: 13,
+          totalPages: 8,
           number: 0,
-          size: 10,
+          size: 16,
           first: true,
           last: false,
         }),
       ],
     ],
-    exige: ['table tbody tr, .tabla__fila'],
+    exige: [
+      '[data-zona="indicadores"] .indicador, [data-zona="indicadores"] [class*="indicador"]',
+      '[data-zona="tabla"] tbody tr',
+      '[data-accion="exportar-csv"]',
+    ],
   },
   {
     id: 'lista-negra-con-terminos',

@@ -12,6 +12,9 @@ import { readFileSync } from 'node:fs';
 import {
   CATEGORIAS,
   ErrorDeListaNegra,
+  MOTIVO_MAXIMO,
+  MOTIVO_MINIMO,
+  dialogoDeAccion,
   TAMANO_DE_PAGINA,
   accionesDeTermino,
   altaDe,
@@ -156,10 +159,20 @@ describe('presentación', () => {
 
   test('el formulario de edición parte de los valores de ahora y los devuelve tal cual', () => {
     const { elemento, leer } = formularioDeEdicion(termino());
-    expect(leer()).toEqual({ termino: 'spiderman', categoria: 'MARCA', modo: 'SUBCADENA' });
+    expect(leer()).toEqual({
+      termino: 'spiderman',
+      categoria: 'MARCA',
+      modo: 'SUBCADENA',
+      motivo: '',
+    });
     elemento.querySelector('[name="termino"]').value = ' Spider Man ';
     elemento.querySelector('[name="modo"]').value = 'PALABRA';
-    expect(leer()).toEqual({ termino: 'Spider Man', categoria: 'MARCA', modo: 'PALABRA' });
+    expect(leer()).toEqual({
+      termino: 'Spider Man',
+      categoria: 'MARCA',
+      modo: 'PALABRA',
+      motivo: '',
+    });
   });
 
   test('ErrorDeListaNegra toma el problem details', () => {
@@ -356,15 +369,25 @@ describe('vista', () => {
         { 'PUT /api/v1/lista-negra/terminos/coca-cola': { cuerpo: termino({ activo: false }) } },
       ),
     );
-    montarListaNegra(document, { fetchImpl });
+    const confirmar = jest.fn(() => 'Da falsos positivos en el chat');
+    montarListaNegra(document, { fetchImpl, confirmar });
     await asentar();
 
     document.querySelector('[data-accion="alternar"]').click();
     await asentar();
     await asentar();
 
+    // SA-5 (2.2.0): apagar pide el motivo, que va a la bitácora central.
+    expect(confirmar).toHaveBeenCalledWith(
+      expect.objectContaining({ termino: 'coca-cola' }),
+      'apagar',
+    );
     const cambio = fetchImpl.llamadas.find((l) => l.clave.startsWith('PUT'));
-    expect(cambio.cuerpo).toEqual({ termino: 'coca-cola', activo: false });
+    expect(cambio.cuerpo).toEqual({
+      termino: 'coca-cola',
+      activo: false,
+      motivo: 'Da falsos positivos en el chat',
+    });
     expect(document.querySelector('.aviso--exito').textContent).toMatch(/apagado/);
   });
 
@@ -394,6 +417,12 @@ describe('vista', () => {
     const form = document.querySelector('[data-zona="edicion"]');
     form.querySelector('[name="termino"]').value = 'Spider Man';
     form.querySelector('[name="modo"]').value = 'PALABRA';
+    // Sin motivo no se guarda: queda en la bitácora central (SA-5).
+    document.querySelector('[data-accion="guardar-termino"]').click();
+    await asentar();
+    expect(fetchImpl.llamadas.filter((l) => l.clave.startsWith('PUT'))).toHaveLength(0);
+    expect(document.querySelector('[data-zona="error-edicion"]').textContent).toMatch(/motivo/);
+    form.querySelector('[name="motivo"]').value = 'Se escribe separado';
     document.querySelector('[data-accion="guardar-termino"]').click();
     await asentar();
     await asentar();
@@ -402,6 +431,7 @@ describe('vista', () => {
       termino: 'Spider Man',
       categoria: 'MARCA',
       modo: 'PALABRA',
+      motivo: 'Se escribe separado',
     });
     expect(cerrar).toHaveBeenCalled();
     expect(document.querySelector('.aviso--exito').textContent).toMatch(/Spider Man/);
@@ -429,6 +459,7 @@ describe('vista', () => {
 
     document.querySelector('[data-accion="editar"]').click();
     document.querySelector('[data-zona="edicion"] [name="termino"]').value = 'batman';
+    document.querySelector('[data-zona="edicion"] [name="motivo"]').value = 'Cambio de prueba';
     document.querySelector('[data-accion="guardar-termino"]').click();
     await asentar();
 
@@ -438,12 +469,19 @@ describe('vista', () => {
     expect(cerrar).not.toHaveBeenCalled();
   });
 
-  test('quitar pide confirmación: sin ella no borra; con ella DELETE y aviso', async () => {
-    const confirmar = jest.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
+  test('quitar pide confirmación y motivo: sin ella no borra; con ella DELETE con el motivo y aviso', async () => {
+    const confirmar = jest
+      .fn()
+      .mockReturnValueOnce(null)
+      .mockReturnValueOnce('Repetido con otra forma');
     const fetchImpl = servicio(
       rutas(
         { cuerpo: pagina([termino()]) },
-        { 'DELETE /api/v1/lista-negra/terminos/spiderman': { estado: 204 } },
+        {
+          'DELETE /api/v1/lista-negra/terminos/spiderman?motivo=Repetido%20con%20otra%20forma': {
+            estado: 204,
+          },
+        },
       ),
     );
     montarListaNegra(document, { fetchImpl, confirmar });
@@ -452,7 +490,10 @@ describe('vista', () => {
     document.querySelector('[data-accion="eliminar"]').click();
     await asentar();
     expect(fetchImpl.llamadas.filter((l) => l.clave.startsWith('DELETE'))).toHaveLength(0);
-    expect(confirmar).toHaveBeenCalledWith(expect.objectContaining({ termino: 'spiderman' }));
+    expect(confirmar).toHaveBeenCalledWith(
+      expect.objectContaining({ termino: 'spiderman' }),
+      'quitar',
+    );
 
     document.querySelector('[data-accion="eliminar"]').click();
     await asentar();
@@ -523,5 +564,23 @@ describe('vista', () => {
     await asentar();
 
     expect(document.querySelector('[data-panel="terminos"] tbody tr').dataset.fila).toBe('9');
+  });
+
+  describe('SA-5 · los diálogos de cada acción piden el motivo', () => {
+    test('quitar es peligroso; apagar y activar no; los tres dicen qué pasa', () => {
+      const t = termino();
+      expect(dialogoDeAccion(t, 'quitar')).toMatchObject({
+        titulo: '¿Quitar «spiderman» de la lista negra?',
+        textoConfirmar: 'Quitar término',
+        peligro: true,
+      });
+      expect(dialogoDeAccion(t, 'apagar')).toMatchObject({
+        titulo: '¿Apagar «spiderman»?',
+        peligro: false,
+      });
+      expect(dialogoDeAccion(t, 'activar').mensaje).toMatch(/Vuelve a filtrarse/);
+      expect(MOTIVO_MINIMO).toBe(5);
+      expect(MOTIVO_MAXIMO).toBe(500);
+    });
   });
 });

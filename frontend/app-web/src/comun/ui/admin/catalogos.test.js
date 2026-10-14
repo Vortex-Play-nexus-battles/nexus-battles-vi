@@ -96,6 +96,8 @@ describe('acciones de auditoría', () => {
       'APROBACION',
       'RECHAZO',
       'SECURITY_BYPASS_ATTEMPT',
+      'ELIMINACION',
+      'EXPORTACION',
       'OTRO',
     ]) {
       expect(NOMBRE_DE_ACCION[tipo]).toBeTruthy();
