@@ -87,6 +87,16 @@ describe('tarjeta en la tienda', () => {
     expect(tarjeta.querySelector('.product-card__distintivos')).toBeNull();
   });
 
+  test('un producto exclusivo de moneda real queda identificado como premium', () => {
+    const premium = tarjetaDeProducto(dto({ precioCreditos: null }));
+    const ordinario = tarjetaDeProducto(dto({ precioCreditos: 300 }));
+
+    expect(premium.dataset.idProducto).toBe(UUID);
+    // SA-13 añade al distintivo lo que significa, para lectores de pantalla.
+    expect(premium.querySelector('.producto-premium').textContent).toContain('Premium');
+    expect(ordinario.querySelector('.producto-premium')).toBeNull();
+  });
+
   test('sin imagen, el símbolo del tipo; con imagen, la imagen', () => {
     expect(tarjetaDeProducto(dto()).querySelector('.product-image svg')).not.toBeNull();
     const conImagen = tarjetaDeProducto(dto({ imagenUrl: '/img/yelmo.png' }));

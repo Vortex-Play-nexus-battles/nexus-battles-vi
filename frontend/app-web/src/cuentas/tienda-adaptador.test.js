@@ -149,6 +149,15 @@ describe('aProductoDeVitrina', () => {
     expect(vm.enListaDeseos).toBe(true);
     expect(aProductoDeVitrina({ esPropio: 'si' }).esPropio).toBe(false);
   });
+
+  test('identifica como premium el producto que solo se adquiere con moneda real', () => {
+    expect(aProductoDeVitrina({ precioFinal: 20000, precioCreditos: null }).premium).toBe(true);
+    expect(aProductoDeVitrina({ precioFinal: 20000, precioCreditos: 300 }).premium).toBe(false);
+    expect(aProductoDeVitrina({ premium: true, precioFinal: 20000 }).premium).toBe(true);
+    expect(
+      aProductoDeVitrina({ premium: false, precioFinal: 20000, precioCreditos: null }).premium,
+    ).toBe(false);
+  });
 });
 
 describe('aFilaDeCarrito', () => {
