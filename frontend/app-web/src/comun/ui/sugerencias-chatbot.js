@@ -10,6 +10,13 @@
  * Si el servicio no responde, las preguntas rápidas simplemente no aparecen y
  * el autocompletado no sugiere nada: el chat sigue funcionando igual.
  *
+ * 1.15.0 (§7.4.3 «sugerencias proactivas: recomendaciones basadas en el
+ * comportamiento del usuario») — «Quizá te interese»: lo que el asistente le
+ * propone a quien abre la ventana (`GET /chat/sugerencias/para-ti`), sacado
+ * de lo que esa persona ya le preguntó, de la sección donde está o, si aún no
+ * preguntó nada, de lo más consultado. Cada grupo dice por qué sale, para que
+ * no parezca adivinación (D-CHA-14).
+ *
  * @module comun/ui/sugerencias-chatbot
  */
 
@@ -23,8 +30,17 @@ export const TEXTOS_SUGERENCIAS = Object.freeze({
   sugerencias: 'Sugerencias',
 });
 
-/** Cuántas preguntas rápidas y cuántas sugerencias de autocompletado. */
-export const CUANTAS = Object.freeze({ rapidas: 4, porTema: 6, autocompletar: 5 });
+/** Cuántas preguntas rápidas, sugerencias de autocompletado y sugerencias para ti. */
+export const CUANTAS = Object.freeze({ rapidas: 4, porTema: 6, autocompletar: 5, paraTi: 3 });
+
+/** 1.15.0 — «Quizá te interese» y por qué sale cada grupo (el `motivo` del contrato). */
+export const TEXTOS_PARA_TI = Object.freeze({
+  titulo: 'Quizá te interese:',
+  porLoQuePreguntaste: (tema) => `Porque preguntaste por «${tema}»`,
+  porLoQueYaPreguntaste: 'Por lo que ya me preguntaste',
+  porDondeEstas: 'Por la sección donde estás',
+  paraEmpezar: 'Lo más consultado',
+});
 
 /** Letras mínimas para empezar a sugerir mientras se escribe (contrato). */
 export const MINIMO_PARA_AUTOCOMPLETAR = 2;
@@ -266,4 +282,85 @@ export function conectarAutocompletado({ entrada, cliente, alElegir, esperaMs = 
   entrada.addEventListener('blur', () => cerrar());
 
   return { elemento: lista, cerrar };
+}
+
+/**
+ * 1.15.0 — por qué sale una sugerencia para ti, en palabras del jugador.
+ *
+ * @param {{motivo?: string, relacionadoCon?: string|null}} sugerencia
+ * @returns {string}
+ */
+export function motivoParaTi({ motivo, relacionadoCon } = {}) {
+  if (motivo === 'POR_LO_QUE_PREGUNTASTE') {
+    return relacionadoCon
+      ? TEXTOS_PARA_TI.porLoQuePreguntaste(relacionadoCon)
+      : TEXTOS_PARA_TI.porLoQueYaPreguntaste;
+  }
+  if (motivo === 'POR_DONDE_ESTAS') {
+    return TEXTOS_PARA_TI.porDondeEstas;
+  }
+  return TEXTOS_PARA_TI.paraEmpezar;
+}
+
+/**
+ * 1.15.0 — las sugerencias agrupadas por su motivo (las de lo que preguntó,
+ * por el tema que las trajo), en el orden en que llegan.
+ *
+ * @param {Array<{motivo?: string, relacionadoCon?: string|null}>|null|undefined} sugerencias
+ * @returns {Array<{titulo: string, sugerencias: Array<object>}>}
+ */
+export function gruposParaTi(sugerencias) {
+  const grupos = new Map();
+  for (const sugerencia of sugerencias ?? []) {
+    const titulo = motivoParaTi(sugerencia);
+    if (!grupos.has(titulo)) {
+      grupos.set(titulo, []);
+    }
+    grupos.get(titulo).push(sugerencia);
+  }
+  return [...grupos].map(([titulo, deEste]) => ({ titulo, sugerencias: deEste }));
+}
+
+/**
+ * 1.15.0 — lo que dice la burbuja «Quizá te interese»: el título y, por cada
+ * motivo, su explicación y sus preguntas, botones que la envían como si el
+ * jugador la hubiera escrito. `null` si no hay ninguna que mostrar.
+ *
+ * @param {Array<{clave?: string, titulo?: string, pregunta?: string, motivo?: string,
+ *          relacionadoCon?: string|null}>|null|undefined} sugerencias
+ * @param {{alElegir: (pregunta: string) => void}} opciones
+ * @returns {HTMLElement|null}
+ */
+export function contenidoParaTi(sugerencias, { alElegir }) {
+  const validas = (sugerencias ?? []).filter(
+    (sugerencia) => sugerencia?.pregunta || sugerencia?.titulo,
+  );
+  if (validas.length === 0) {
+    return null;
+  }
+  const grupos = gruposParaTi(validas).map((grupo) => {
+    contador += 1;
+    const motivo = h('p', { clase: 'chatbot-para-ti__motivo', texto: grupo.titulo });
+    motivo.id = `chatbot-para-ti-${contador}`;
+    const botones = grupo.sugerencias.map((sugerencia) => {
+      const pregunta = sugerencia.pregunta ?? sugerencia.titulo;
+      const boton = h('button', {
+        clase: 'chatbot-rapidas__opcion',
+        texto: sugerencia.titulo ?? pregunta,
+        atributos: { type: 'button' },
+        datos: { accion: 'sugerencia-para-ti', clave: sugerencia.clave ?? '' },
+      });
+      boton.addEventListener('click', () => alElegir(pregunta));
+      return boton;
+    });
+    return h('div', {
+      clase: 'chatbot-para-ti__grupo',
+      atributos: { role: 'group', 'aria-labelledby': motivo.id },
+      hijos: [motivo, h('div', { clase: 'chatbot-rapidas__lista', hijos: botones })],
+    });
+  });
+  return h('div', {
+    clase: 'chatbot-para-ti',
+    hijos: [h('p', { clase: 'chatbot-ventana__texto', texto: TEXTOS_PARA_TI.titulo }), ...grupos],
+  });
 }

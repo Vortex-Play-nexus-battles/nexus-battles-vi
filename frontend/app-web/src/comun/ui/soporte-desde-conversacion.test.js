@@ -159,14 +159,32 @@ describe('el panel de soporte', () => {
     );
   });
 
-  test('sin pregunta sin resolver, o para un visitante, no se ofrece', async () => {
+  test('sin pregunta sin resolver no se ofrece', async () => {
     const sinPregunta = await abrirPanel();
     expect(botonCrear(sinPregunta.el)).toBeNull();
     expect(sinPregunta.el.querySelector('form')).not.toBeNull();
+  });
 
-    document.body.replaceChildren();
-    const visitante = await abrirPanel({ autenticado: false, opciones: { conConversacion: true } });
-    expect(botonCrear(visitante.el)).toBeNull();
+  // ms-chatbot.yaml 1.12.0 (RF-CHA-007, actor Visitante): el visitante también.
+  test('a un visitante también se le ofrece, con la nota de su sesión, y la crea', async () => {
+    const cliente = clienteFalso({ misTickets: jest.fn(async () => [CREADA]) });
+    const { el, panel } = await abrirPanel({
+      cliente,
+      autenticado: false,
+      opciones: { conConversacion: true, vista: 'INICIO' },
+    });
+
+    expect(el.querySelector('[data-zona="visitante"]').textContent).toContain(
+      TEXTOS_SOPORTE.visitante,
+    );
+    panel.enfocar();
+    expect(document.activeElement).toBe(botonCrear(el));
+
+    botonCrear(el).click();
+    await esperar();
+
+    expect(cliente.abrirTicketDesdeConversacion).toHaveBeenCalledWith({ vista: 'INICIO' });
+    expect(el.querySelector('[data-ticket-id="t-9"]')).not.toBeNull();
   });
 
   test('al volver a abrir sin la pregunta, ya no se ofrece', async () => {

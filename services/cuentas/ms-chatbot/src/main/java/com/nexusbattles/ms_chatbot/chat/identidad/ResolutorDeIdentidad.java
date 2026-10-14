@@ -63,6 +63,19 @@ public class ResolutorDeIdentidad {
         return new Resultado(IdentidadDelChat.visitante(emitida.sesion()), emitida.identificador());
     }
 
+    // 1.12.0: para abrir una solicitud de soporte. Como resolverOEmitir, pero
+    // sin emitir una sesion nueva (la respuesta de una solicitud no la
+    // entregaria): un visitante que aun no escribio al asistente registra la
+    // que declara su navegador. Vacio si no hay usuario ni sesion con forma.
+    public Optional<IdentidadDelChat> resolverODeclarar(Authentication autenticacion, String cabeceraDeSesion,
+                                                        String origen) {
+        Optional<IdentidadDelChat> conocida = resolver(autenticacion, cabeceraDeSesion);
+        if (conocida.isPresent() || !SesionesAnonimas.esDeclarada(cabeceraDeSesion)) {
+            return conocida;
+        }
+        return Optional.of(IdentidadDelChat.visitante(sesiones.declarar(cabeceraDeSesion, origen)));
+    }
+
     /**
      * 7.4.9 (contracts/websocket/chatbot.yaml 1.0.0): quien abre el canal en
      * tiempo real, con las reglas de arriba y sin registrar nada. El nombre lo

@@ -32,11 +32,13 @@ import java.util.regex.Pattern;
 // Una contrasena se reconoce por la palabra que la anuncia:
 //   * con ":" o "=" ("contrasena: x", "token=x"), siempre;
 //   * con "es"/"is" ("mi contrasena es x"), salvo que siga una palabra
-//     corriente ("es incorrecta", "is wrong"). Solo para las palabras
-//     inequivocas (contrasena, password, pin, clave de acceso): "la clave es
-//     practicar" o "el token es valido" no traen ningun secreto;
-//   * sin separador ("mi contrasena Hunter2"), si parece una contrasena:
-//     lleva cifras, simbolos o mayusculas por dentro.
+//     corriente ("es incorrecta", "is wrong"), si la palabra es inequivoca
+//     (contrasena, password, pin, clave de acceso);
+//   * con una palabra ambigua (clave, token, secret...) y "es"/"is", o sin
+//     separador ("mi contrasena Hunter2", "mi clave es Hunter2024!"), solo si
+//     el valor parece una contrasena: lleva cifras, simbolos o mayusculas por
+//     dentro. "la clave es practicar" o "el token es valido" no traen ningun
+//     secreto.
 // Entre la palabra y el separador caben hasta tres palabras ("la contrasena
 // de mi cuenta es x").
 @Component
@@ -278,10 +280,15 @@ public class RedactorDeDatosSensibles implements RedaccionDeDatosSensibles {
         if (m.group("asigna") != null) {
             return true;
         }
-        if (m.group("inequivoca") == null) {
-            return false;
+        if (m.group("inequivoca") != null) {
+            return m.group("verbo") != null ? !esPalabraCorriente(valor) : pareceContrasena(valor);
         }
-        return m.group("verbo") != null ? !esPalabraCorriente(valor) : pareceContrasena(valor);
+        // Una palabra ambigua ("clave", "token", "secret") con "es"/"is" o sin
+        // separador solo anuncia un secreto si lo que sigue lo parece: "mi
+        // clave es Hunter2024!" se tapa; "la clave es practicar", no. Hasta la
+        // 1.11.0 nunca se tapaba y "mi clave es Hunter2024!" se guardaba tal
+        // cual (segunda auditoria del 7.4).
+        return pareceContrasena(valor);
     }
 
     // Entre comillas se tapa lo de dentro; si no, el valor ENTERO, tambien la

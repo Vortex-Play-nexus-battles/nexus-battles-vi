@@ -12,7 +12,12 @@
  * @module cuentas/cliente-panel-chatbot
  */
 
-import { ErrorDelChatbot, leerProblema, rutaDelChatbot } from '../comun/cliente-chatbot.js';
+import {
+  ErrorDelChatbot,
+  imagenDeCaptura,
+  leerProblema,
+  rutaDelChatbot,
+} from '../comun/cliente-chatbot.js';
 import { leerSesion } from '../comun/sesion.js';
 
 const PANEL = '/chatbot/admin';
@@ -105,8 +110,8 @@ export function crearClientePanelChatbot({
   almacenLocal,
   sesion = () => leerSesion(),
 } = {}) {
-  async function enviar(metodo, recurso, cuerpo) {
-    const cabeceras = { Accept: 'application/json' };
+  async function enviar(metodo, recurso, cuerpo, aceptar = 'application/json') {
+    const cabeceras = { Accept: aceptar };
     const token = sesion()?.token;
     if (token) {
       cabeceras.Authorization = `Bearer ${token}`;
@@ -202,6 +207,17 @@ export function crearClientePanelChatbot({
     obtenerTicket: (ticketId) => json('GET', `${PANEL}/tickets/${encodeURIComponent(ticketId)}`),
     atenderTicket: (ticketId, datos) =>
       json('PATCH', `${PANEL}/tickets/${encodeURIComponent(ticketId)}`, datos),
+    // ms-chatbot.yaml 1.14.0 (§7.4.6): el contenido de una captura de la
+    // solicitud, como `Blob` de imagen, para pintarla con un enlace de objeto.
+    leerCaptura: async (ticketId, capturaId) =>
+      imagenDeCaptura(
+        await enviar(
+          'GET',
+          `${PANEL}/tickets/${encodeURIComponent(ticketId)}/capturas/${encodeURIComponent(capturaId)}`,
+          undefined,
+          'image/png, image/jpeg, application/problem+json',
+        ),
+      ),
   };
 }
 

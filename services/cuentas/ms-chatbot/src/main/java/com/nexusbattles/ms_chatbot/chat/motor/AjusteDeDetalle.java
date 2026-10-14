@@ -33,7 +33,8 @@ public final class AjusteDeDetalle {
             return texto;
         }
         return switch (nivel) {
-            case NORMAL -> texto;
+            // AUTOMATICO llega ya traducido (ExperienciaDelChat); si no, como NORMAL.
+            case NORMAL, AUTOMATICO -> texto;
             case BREVE -> tipo == TipoRespuesta.PASO_A_PASO ? texto : primeraOracion(texto);
             case DETALLADO -> conRelacionados(texto, relacionados, ingles);
         };

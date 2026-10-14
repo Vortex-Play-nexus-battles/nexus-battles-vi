@@ -6,6 +6,13 @@
  * jugador con sesión lo siguen a otros dispositivos; las de un visitante duran
  * lo que su visita. Se aplican desde la siguiente pregunta.
  *
+ * 1.15.0 (7.4.5 «adaptar el nivel de detalle según la experiencia»): el nivel
+ * «Automático» es el de quien nunca eligió. El servidor lo traduce con lo que
+ * esa persona ya le preguntó al asistente (D-CHA-13) y lo dice en
+ * `nivelDetalleEfectivo`; aquí se cuenta con qué nivel se le responde hoy.
+ * «Restablecer» (RF-CHA-010, flujo alternativo «restablecer sus preferencias
+ * conversacionales») las devuelve a las de quien nunca eligió.
+ *
  * Los errores se deciden por el `motivo` y el estado, nunca por el texto del
  * servidor.
  *
@@ -26,13 +33,25 @@ export const IDIOMAS = Object.freeze([
 
 /** Los niveles del contrato (`PreferenciasDelChat.nivelDetalle`). */
 export const NIVELES = Object.freeze([
+  { valor: 'AUTOMATICO', texto: 'Automático: según tu experiencia con el asistente' },
   { valor: 'BREVE', texto: 'Breve: solo lo esencial' },
   { valor: 'NORMAL', texto: 'Normal' },
   { valor: 'DETALLADO', texto: 'Detallado: con temas relacionados' },
 ]);
 
-/** Las que tiene quien nunca las cambió; responden como siempre. */
-export const POR_DEFECTO = Object.freeze({ idioma: 'AUTOMATICO', nivelDetalle: 'NORMAL' });
+/** Las que tiene quien nunca las cambió (1.15.0: también el nivel, automático). */
+export const POR_DEFECTO = Object.freeze({ idioma: 'AUTOMATICO', nivelDetalle: 'AUTOMATICO' });
+
+/**
+ * 1.15.0 — con el nivel automático, cómo se le responde hoy, por el
+ * `nivelDetalleEfectivo` que manda el servidor (D-CHA-13).
+ */
+export const NIVEL_EFECTIVO = Object.freeze({
+  DETALLADO:
+    'Ahora te respondo con todo el detalle y los temas relacionados, porque estás empezando.',
+  NORMAL: 'Ahora te respondo con la respuesta completa.',
+  BREVE: 'Ya conoces el asistente: te respondo con lo esencial y «Más detalle» a un clic.',
+});
 
 /** Todo lo que lee el usuario, en un solo sitio. */
 export const TEXTOS_PREFERENCIAS = Object.freeze({
@@ -42,9 +61,12 @@ export const TEXTOS_PREFERENCIAS = Object.freeze({
   idioma: 'Idioma de las respuestas',
   pistaIdioma: 'Si un tema no está en inglés, te respondo en español.',
   nivel: 'Nivel de detalle',
-  pistaNivel: 'Las guías paso a paso siempre muestran todos sus pasos.',
+  pistaNivel:
+    'Automático cambia según lo que ya me preguntaste. Las guías paso a paso siempre muestran todos sus pasos.',
   guardar: 'Guardar preferencias',
   guardando: 'Guardando…',
+  restablecer: 'Restablecer',
+  restableciendo: 'Restableciendo…',
   guardadas: 'Listo: guardamos tus preferencias.',
   guardadasJugador: 'Se aplican desde tu próxima pregunta, también en tus otros dispositivos.',
   guardadasVisitante: 'Se aplican desde tu próxima pregunta, mientras dure tu visita.',
@@ -88,6 +110,8 @@ function valorConocido(valor, opciones, porDefecto) {
   return opciones.some((opcion) => opcion.valor === valor) ? valor : porDefecto;
 }
 
+let contador = 0;
+
 /**
  * @param {{cliente: {preferencias: Function, guardarPreferencias: Function},
  *          sesion: () => {autenticado?: boolean}, alVolver: () => void}} opciones
@@ -120,15 +144,53 @@ export function crearPanelPreferencias({ cliente, sesion, alVolver }) {
     valor: POR_DEFECTO.nivelDetalle,
     pista: TEXTOS_PREFERENCIAS.pistaNivel,
   });
+  // 1.15.0 — con «Automático», el nivel de hoy. Solo cuenta lo guardado: si
+  // se elige otro nivel sin guardar, se oculta.
+  let efectivoGuardado = null;
+  const efectivo = h('p', {
+    clase: 'chatbot-preferencias__efectivo',
+    atributos: { hidden: true },
+    datos: { nivelEfectivo: '' },
+  });
+  contador += 1;
+  efectivo.id = `chatbot-preferencias-efectivo-${contador}`;
+  nivel.elemento.append(efectivo);
+  nivel.control.setAttribute(
+    'aria-describedby',
+    [nivel.control.getAttribute('aria-describedby'), efectivo.id].filter(Boolean).join(' '),
+  );
+  nivel.control.addEventListener('change', () => pintarEfectivo());
   const botonGuardar = boton({
     texto: TEXTOS_PREFERENCIAS.guardar,
     tipo: 'submit',
     nombre: 'guardar-preferencias',
   });
+  // RF-CHA-010: volver a las de quien nunca eligió, y guardarlas.
+  const botonRestablecer = boton({
+    texto: TEXTOS_PREFERENCIAS.restablecer,
+    variante: 'secundario',
+    nombre: 'restablecer-preferencias',
+    alPulsar: () => {
+      if (guardando) {
+        return;
+      }
+      idioma.control.value = POR_DEFECTO.idioma;
+      nivel.control.value = POR_DEFECTO.nivelDetalle;
+      pintarEfectivo();
+      guardar(botonRestablecer, TEXTOS_PREFERENCIAS.restableciendo);
+    },
+  });
   const formulario = h('form', {
     clase: 'chatbot-preferencias__formulario',
     atributos: { novalidate: true },
-    hijos: [idioma.elemento, nivel.elemento, botonGuardar],
+    hijos: [
+      idioma.elemento,
+      nivel.elemento,
+      h('div', {
+        clase: 'chatbot-preferencias__acciones',
+        hijos: [botonGuardar, botonRestablecer],
+      }),
+    ],
   });
   formulario.addEventListener('submit', (evento) => {
     evento.preventDefault();
@@ -153,15 +215,27 @@ export function crearPanelPreferencias({ cliente, sesion, alVolver }) {
     ],
   });
 
-  function mostrar({ idioma: elegido, nivelDetalle } = POR_DEFECTO) {
+  function mostrar({ idioma: elegido, nivelDetalle, nivelDetalleEfectivo } = POR_DEFECTO) {
     idioma.control.value = valorConocido(elegido, IDIOMAS, POR_DEFECTO.idioma);
     nivel.control.value = valorConocido(nivelDetalle, NIVELES, POR_DEFECTO.nivelDetalle);
+    efectivoGuardado = nivel.control.value === 'AUTOMATICO' ? (nivelDetalleEfectivo ?? null) : null;
+    pintarEfectivo();
+  }
+
+  function pintarEfectivo() {
+    const texto =
+      nivel.control.value === 'AUTOMATICO' && Object.hasOwn(NIVEL_EFECTIVO, efectivoGuardado ?? '')
+        ? NIVEL_EFECTIVO[efectivoGuardado]
+        : '';
+    efectivo.textContent = texto;
+    efectivo.hidden = !texto;
   }
 
   function habilitar(activo) {
     idioma.control.disabled = !activo;
     nivel.control.disabled = !activo;
     botonGuardar.disabled = !activo;
+    botonRestablecer.disabled = !activo;
   }
 
   async function cargar() {
@@ -179,13 +253,17 @@ export function crearPanelPreferencias({ cliente, sesion, alVolver }) {
     }
   }
 
-  async function guardar() {
+  /**
+   * @param {HTMLButtonElement} [conQue] el botón que lo pidió, que muestra la espera
+   * @param {string} [texto] lo que dice mientras guarda
+   */
+  async function guardar(conQue = botonGuardar, texto = TEXTOS_PREFERENCIAS.guardando) {
     if (guardando) {
       return;
     }
     guardando = true;
     limpiarAviso(zonaAviso);
-    conCarga(botonGuardar, true, TEXTOS_PREFERENCIAS.guardando);
+    conCarga(conQue, true, texto);
     try {
       const guardadas = await cliente.guardarPreferencias({
         idioma: idioma.control.value,
@@ -195,7 +273,7 @@ export function crearPanelPreferencias({ cliente, sesion, alVolver }) {
     } catch (error) {
       pintarAviso(zonaAviso, avisoDeErrorAlGuardar(error));
     } finally {
-      terminarGuardado();
+      terminarGuardado(conQue);
     }
   }
 
@@ -214,9 +292,9 @@ export function crearPanelPreferencias({ cliente, sesion, alVolver }) {
     });
   }
 
-  function terminarGuardado() {
+  function terminarGuardado(conQue) {
     guardando = false;
-    conCarga(botonGuardar, false);
+    conCarga(conQue, false);
   }
 
   // Se relee al abrir: pudieron cambiarse en otro dispositivo.

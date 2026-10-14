@@ -8,6 +8,7 @@ import { ErrorDelChatbot } from '../cliente-chatbot.js';
 import {
   IDIOMAS,
   NIVELES,
+  NIVEL_EFECTIVO,
   POR_DEFECTO,
   TEXTOS_PREFERENCIAS,
   avisoDeErrorAlGuardar,
@@ -53,8 +54,9 @@ beforeEach(() => {
 
 test('ofrece los valores del contrato, con etiquetas', () => {
   expect(IDIOMAS.map((i) => i.valor)).toEqual(['AUTOMATICO', 'ES', 'EN']);
-  expect(NIVELES.map((n) => n.valor)).toEqual(['BREVE', 'NORMAL', 'DETALLADO']);
-  expect(POR_DEFECTO).toEqual({ idioma: 'AUTOMATICO', nivelDetalle: 'NORMAL' });
+  // 1.15.0 (D-CHA-13): «Automático», el de quien nunca eligió.
+  expect(NIVELES.map((n) => n.valor)).toEqual(['AUTOMATICO', 'BREVE', 'NORMAL', 'DETALLADO']);
+  expect(POR_DEFECTO).toEqual({ idioma: 'AUTOMATICO', nivelDetalle: 'AUTOMATICO' });
 });
 
 test('al abrir carga las guardadas y las muestra', async () => {
@@ -77,7 +79,7 @@ test('un valor que no conoce se muestra como el de por defecto', async () => {
     }),
   });
   expect(vista.idioma.value).toBe('AUTOMATICO');
-  expect(vista.nivel.value).toBe('NORMAL');
+  expect(vista.nivel.value).toBe('AUTOMATICO');
 });
 
 test('si no se pueden cargar, lo dice y deja elegir con las de por defecto', async () => {
@@ -162,4 +164,109 @@ test('«Volver al chat» avisa a la ventana y el foco empieza en el idioma', asy
 
   vista.el.querySelector('[data-accion="volver-al-chat"]').click();
   expect(vista.alVolver).toHaveBeenCalledTimes(1);
+});
+
+// 1.15.0 (7.4.5, D-CHA-13): con «Automático», el nivel con que se le responde hoy.
+test('con «Automático» dice con qué nivel se le responde hoy, y solo de lo guardado', async () => {
+  const vista = await montar({
+    cliente: clienteFalso({
+      preferencias: jest.fn(async () => ({
+        idioma: 'AUTOMATICO',
+        nivelDetalle: 'AUTOMATICO',
+        nivelDetalleEfectivo: 'DETALLADO',
+      })),
+      guardarPreferencias: jest.fn(async (datos) => ({
+        ...datos,
+        nivelDetalleEfectivo: datos.nivelDetalle === 'AUTOMATICO' ? 'BREVE' : datos.nivelDetalle,
+      })),
+    }),
+  });
+  const efectivo = vista.el.querySelector('[data-nivel-efectivo]');
+
+  expect(vista.nivel.value).toBe('AUTOMATICO');
+  expect(efectivo.hidden).toBe(false);
+  expect(efectivo.textContent).toBe(NIVEL_EFECTIVO.DETALLADO);
+  // El lector de pantalla lo oye con el campo.
+  expect(vista.nivel.getAttribute('aria-describedby').split(' ')).toContain(efectivo.id);
+
+  // Otro nivel elegido (aún sin guardar): ya no es verdad, se oculta.
+  vista.nivel.value = 'NORMAL';
+  vista.nivel.dispatchEvent(new Event('change'));
+  expect(efectivo.hidden).toBe(true);
+  vista.nivel.value = 'AUTOMATICO';
+  vista.nivel.dispatchEvent(new Event('change'));
+  expect(efectivo.textContent).toBe(NIVEL_EFECTIVO.DETALLADO);
+
+  // Guardado: el que diga el servidor.
+  vista.formulario.dispatchEvent(new Event('submit', { cancelable: true }));
+  await esperar();
+  expect(efectivo.textContent).toBe(NIVEL_EFECTIVO.BREVE);
+
+  vista.nivel.value = 'BREVE';
+  vista.formulario.dispatchEvent(new Event('submit', { cancelable: true }));
+  await esperar();
+  expect(efectivo.hidden).toBe(true);
+  vista.nivel.value = 'AUTOMATICO';
+  vista.nivel.dispatchEvent(new Event('change'));
+  expect(efectivo.hidden).toBe(true);
+});
+
+test('un nivel efectivo que no conoce, o que no llega, no se cuenta', async () => {
+  const desconocido = await montar({
+    cliente: clienteFalso({
+      preferencias: jest.fn(async () => ({
+        idioma: 'ES',
+        nivelDetalle: 'AUTOMATICO',
+        nivelDetalleEfectivo: 'constructor',
+      })),
+    }),
+  });
+  expect(desconocido.el.querySelector('[data-nivel-efectivo]').hidden).toBe(true);
+
+  document.body.replaceChildren();
+  const sinEl = await montar({
+    cliente: clienteFalso({
+      preferencias: jest.fn(async () => ({ idioma: 'ES', nivelDetalle: 'AUTOMATICO' })),
+    }),
+  });
+  expect(sinEl.nivel.value).toBe('AUTOMATICO');
+  expect(sinEl.el.querySelector('[data-nivel-efectivo]').hidden).toBe(true);
+});
+
+// RF-CHA-010, flujo alternativo: «restablecer sus preferencias conversacionales».
+test('«Restablecer» vuelve a las de quien nunca eligió y las guarda', async () => {
+  const vista = await montar();
+  expect(vista.idioma.value).toBe('EN');
+  const restablecer = vista.el.querySelector('[data-accion="restablecer-preferencias"]');
+  expect(restablecer.textContent).toBe(TEXTOS_PREFERENCIAS.restablecer);
+  expect(restablecer.type).toBe('button');
+
+  restablecer.click();
+  await esperar();
+
+  expect(vista.cliente.guardarPreferencias).toHaveBeenCalledWith(POR_DEFECTO);
+  expect(vista.idioma.value).toBe('AUTOMATICO');
+  expect(vista.nivel.value).toBe('AUTOMATICO');
+  expect(vista.aviso.textContent).toContain(TEXTOS_PREFERENCIAS.guardadas);
+});
+
+test('mientras guarda, «Restablecer» no cambia nada ni manda otra vez', async () => {
+  let resolver;
+  const guardarPreferencias = jest.fn(
+    () =>
+      new Promise((r) => {
+        resolver = r;
+      }),
+  );
+  const vista = await montar({ cliente: clienteFalso({ guardarPreferencias }) });
+  vista.nivel.value = 'DETALLADO';
+  vista.formulario.dispatchEvent(new Event('submit', { cancelable: true }));
+
+  vista.el.querySelector('[data-accion="restablecer-preferencias"]').click();
+  expect(guardarPreferencias).toHaveBeenCalledTimes(1);
+  expect(vista.nivel.value).toBe('DETALLADO');
+
+  resolver({ idioma: 'EN', nivelDetalle: 'DETALLADO' });
+  await esperar();
+  expect(vista.nivel.value).toBe('DETALLADO');
 });

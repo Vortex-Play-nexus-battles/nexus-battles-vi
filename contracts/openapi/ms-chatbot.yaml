@@ -48,6 +48,20 @@ openapi: 3.1.0
 #               preguntar, la navegacion a secciones publicas es para todos,
 #               las reglas del juego tienen su tema (V15) y la base dice lo
 #               que el juego hace hoy (V16)
+#   7.4.2, 7.4.3 y 7.4.8 (1.12.0) segunda auditoria del 7.4: la solicitud
+#               de soporte se abre sola cuando el asistente no resuelve
+#               (RF-CHA-007), tambien para un visitante; la redaccion tapa
+#               las claves anunciadas con «es» (V17) y la base entiende mas
+#               formas de preguntar y errores de escritura (V18)
+#   7.4.3 (1.13.0) respuestas enriquecidas con imagenes: las tarjetas de los
+#               productos del catalogo llevan la imagen del propio catalogo
+#   7.4.6 (1.14.0) capturas de pantalla para soporte tecnico: quien abrio
+#               una solicitud le adjunta hasta tres capturas (PNG o JPEG, sin
+#               metadatos) que solo ven su dueno y soporte
+#   7.4.3 y 7.4.5 (1.15.0) sugerencias para ti y nivel de detalle segun la
+#               experiencia: el asistente propone, por lo que la persona ya
+#               pregunto y por donde esta, y su nivel de detalle automatico
+#               sigue a su experiencia con el asistente
 #   7.4 (1.3.0) lo que faltaba del modulo 7.4: tickets y soporte humano
 #               (RF-CHA-007, RF-ADM-004), sugerencias y autocompletado,
 #               respuestas enriquecidas sin imagenes, vista del jugador y
@@ -142,7 +156,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.11.0
+  version: 1.15.0
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -152,6 +166,162 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.15.0 — 7.4.3 y 7.4.5: sugerencias para ti y detalle segun la experiencia
+
+    Compatible: una operacion nueva, un valor nuevo en `nivelDetalle` y un
+    campo nuevo en `PreferenciasDelChat`. Cambia el nivel de detalle de quien
+    nunca eligio uno: antes `NORMAL`, ahora `AUTOMATICO`.
+
+    * **Sugerencias proactivas (§7.4.3 «recomendaciones basadas en el
+      comportamiento del usuario», RF-CHA-006).** `GET
+      /chat/sugerencias/para-ti` da, a quien abre la ventana y antes de que
+      pregunte, hasta tres preguntas que el asistente sabe responder, cada una
+      con su motivo: otros temas de la categoria de los que ya le
+      respondieron (`POR_LO_QUE_PREGUNTASTE`, con el titulo del que la trajo),
+      los de la seccion donde esta (`POR_DONDE_ESTAS`) y, a quien aun no
+      pregunto nada, lo mas consultado (`PARA_EMPEZAR`). Nunca uno que ya le
+      respondieron. El comportamiento que se mira es solo el suyo con el
+      asistente, en su propia conversacion: no se guarda nada, no se registra
+      ningun evento y no se consulta otro servicio (D-CHA-14).
+    * **Nivel de detalle segun la experiencia (§7.4.5 «adaptar el nivel de
+      detalle segun la experiencia del usuario», RF-CHA-010).** `nivelDetalle`
+      admite `AUTOMATICO`, que es el de quien nunca eligio. Se traduce al
+      responder con cuantas preguntas suyas resolvio ya el asistente (las que
+      cuentan en la tasa de resolucion, D-CHA-07): menos de 5, `DETALLADO`;
+      menos de 30, `NORMAL`; desde 30, `BREVE` (D-CHA-13). Sin historial (nuevo
+      o borrado) cuenta cero. Un nivel elegido a mano siempre manda; quien ya
+      habia guardado preferencias conserva el suyo (V20). Las preferencias
+      traen tambien `nivelDetalleEfectivo`, el nivel con el que se responde
+      hoy.
+    * **«Más detalle» en un clic.** Una respuesta recortada por el nivel
+      `BREVE` lleva delante, en `respuestasRapidas`, «Más detalle» («More
+      detail»), el seguimiento de 1.5.0 que la da entera.
+
+    ### 1.14.0 — 7.4.6: capturas de pantalla para soporte tecnico
+
+    Compatible: tres operaciones nuevas y un campo opcional en
+    `TicketDeSoporte` (y con el, en `TicketDeSoporteAdmin` y en el aviso del
+    canal en tiempo real, `chatbot.yaml` 1.2.0). Nada de lo que ya habia
+    cambia de forma.
+
+    * **El §7.4.6 dice que la interfaz «debe incluir» la «opcion de adjuntar
+      capturas de pantalla para soporte tecnico».** Hasta 1.13.0 no habia
+      ninguna forma de mandar un archivo. Las capturas no van en la
+      conversacion con el asistente (`adjuntoUrl` sigue obsoleto: el chat no
+      recibe imagenes) sino en la solicitud de soporte, que es lo que lee una
+      persona del equipo: `POST /chat/tickets/{ticketId}/capturas`.
+    * **Quien**: solo quien abrio la solicitud, con la identidad con la que la
+      abrio (el `uid` del token o, para un visitante, su sesion vigente), y
+      mientras siga abierta (ABIERTO o EN_PROCESO; despues, 409
+      SOLICITUD_CERRADA). La de otra persona responde 404 igual que una que
+      no existe. Un administrador las ve todas desde el panel.
+    * **Que se acepta** (D-CHA-12): hasta tres por solicitud (409
+      CAPTURAS_COMPLETAS), PNG o JPEG de hasta 2 MB y 4096 pixeles por lado
+      (413 CAPTURA_DEMASIADO_GRANDE). El tipo lo dice la firma de bytes, no
+      el nombre ni el `Content-Type` que declara el cliente, y el archivo
+      tiene que acabar donde su formato dice (un PNG en `IEND` con cada CRC
+      en orden, un JPEG en su marcador de fin): uno cortado o con otro
+      documento pegado detras (un poliglota) es 415 CAPTURA_NO_ADMITIDA. Las
+      mismas comprobaciones que las imagenes de comentarios
+      (`comentarios.yaml` 1.5.0), sin WebP. La imagen nunca se decodifica en
+      el servidor: las medidas se leen de su cabecera.
+    * **Sin metadatos**: antes de guardarla se le quita lo que no hace falta
+      para verla. Del PNG quedan solo los bloques con los que se pinta
+      (cabecera, paleta, datos, transparencia, color, fondo y densidad) y se
+      van el texto (`tEXt`, `zTXt`, `iTXt`), el EXIF (`eXIf`), la fecha
+      (`tIME`) y cualquier otro; del JPEG, los segmentos EXIF y XMP (APP1),
+      IPTC (APP13), los comentarios (COM) y los demas APPn salvo JFIF, el
+      perfil de color y Adobe. No se vuelve a codificar: se ve igual. Una
+      foto del movil puede llevar la ubicacion en su EXIF: no llega a la
+      base. El nombre del archivo tampoco se guarda.
+    * **Como se sirve**: solo a traves del servicio
+      (`GET /chat/tickets/{ticketId}/capturas/{capturaId}` a su dueno,
+      `GET /chatbot/admin/tickets/{ticketId}/capturas/{capturaId}` al panel),
+      con el tipo comprobado, `X-Content-Type-Options: nosniff`,
+      `Content-Security-Policy: default-src 'none'; sandbox`,
+      `Cache-Control: no-store, private` y un nombre propio
+      (`captura-<id>.png`). Las listas (`GET /chat/tickets`, el panel y el
+      aviso del canal) traen de cada una sus datos (`CapturaDeSoporte`),
+      nunca el contenido.
+    * **Lo que no se puede redactar**: a una captura no se le puede aplicar
+      la redaccion de los textos (7.4.8). La ventana avisa antes de elegirla
+      que no se vean contrasenas, codigos ni datos de tarjetas; solo la ven
+      su dueno y soporte, y se borra con su solicitud.
+    * Adjuntar pasa por el mismo limite de frecuencia que un mensaje (429).
+
+    ### 1.13.0 — 7.4.3: respuestas enriquecidas con imagenes
+
+    Compatible: un campo opcional nuevo en `TarjetaInformativa`.
+
+    * **El §7.4.3 dice que el chatbot «debe» dar respuestas enriquecidas
+      «incluyendo imagenes, enlaces y tarjetas informativas».** Desde 1.3.0
+      no habia imagenes, por una decision del cliente de la que no hay
+      registro escrito (D-CHA-02): solo el mensaje de un commit, sin cuerpo,
+      ni acta ni issue. Sin esa evidencia, el requisito vuelve a aplicar.
+    * **Las respuestas del catalogo** (precio, ficha y listado, desde 1.10.0)
+      llevan una `TarjetaInformativa` por producto nombrado, con su nombre,
+      su tipo y su precio y, en `imagen`, la imagen del producto. El texto
+      sigue siendo completo: quien no pinte las tarjetas no pierde nada.
+    * **Que imagen pasa**: la que ensena la tienda, y solo en dos formas: un
+      recurso grafico del catalogo (`/api/v1/productos/recursos/{id}`,
+      `productos.yaml` 1.10.0, comprobado al subirlo y servido con `nosniff`)
+      o una imagen incrustada pequena (`data:image/png|jpeg|webp|gif|svg+xml`,
+      como mucho 8192 caracteres; asi son las de la semilla). Nunca una URL
+      de otro sitio ni un nombre suelto que nadie sirve: entonces la tarjeta
+      va sin imagen.
+    * El asistente sigue sin **recibir** imagenes: `adjuntoUrl` sigue
+      obsoleto. Las capturas para soporte tecnico (§7.4.6) se tratan aparte.
+
+    ### 1.12.0 — 7.4.2, 7.4.3 y 7.4.8: segunda auditoria
+
+    Compatible: se anaden un campo a dos respuestas (`enriquecido.solicitud`,
+    `TicketDeSoporteAdmin.deVisitante`) y el visitante puede usar tres
+    operaciones que antes le respondian 401. Cambia lo que se responde y lo
+    que se guarda.
+
+    * **La solicitud de soporte se abre sola (7.4.3, RF-CHA-007 «generar
+      automaticamente un ticket de soporte»).** Cuando el asistente no
+      entiende una pregunta (`resultado` ESCALADO) o le dicen «no me sirvio»
+      (NO_SIRVIO), abre una solicitud con la pregunta y la conversacion, ya
+      redactadas, igual que `POST /chat/tickets/desde-conversacion`. Si la
+      persona ya tiene una abierta, la pregunta y su respuesta se suman a su
+      contexto (los 20 mensajes mas recientes): nunca hay mas de una abierta
+      por persona. La respuesta lo dice al final y trae
+      `enriquecido.solicitud`. Si no se puede abrir (la lista negra no
+      responde, un error de la base), la respuesta lo dice y ofrece el
+      formulario y el centro de ayuda: la respuesta nunca falla por eso. El
+      texto del escalamiento ya no dice que alguien escribira: dice que la
+      pregunta quedo registrada.
+    * **Tambien para el visitante (RF-CHA-007, actores Visitante y
+      Jugador).** `POST /chat/tickets`, `POST /chat/tickets/desde-conversacion`
+      y `GET /chat/tickets` aceptan la sesion de visitante
+      (`X-Id-Sesion-Anonima`) con las reglas de `POST /chat/mensajes`: con un
+      token valido se ignora, y una sesion declarada que aun no escribio se
+      registra al abrir (nunca se emite una). Sus solicitudes son de la clave
+      de su conversacion (`anonimo:<sesion>`, ningun uid puede ocuparla) y
+      las ve mientras dure esa sesion. Al listar, una sesion con forma que no
+      esta registrada o ya vencio recibe una lista vacia. Sin token ni
+      sesion, 401 SESION_REQUERIDA como antes.
+    * **`TicketDeSoporteAdmin.deVisitante`**: la abrio un visitante; su
+      `uid` es entonces la clave de su conversacion, no una cuenta.
+    * **Avisos en vivo** (`contracts/websocket/chatbot.yaml` 1.1.0): el
+      visitante tambien recibe en `/user/queue/soporte/tickets` los cambios
+      de las suyas.
+    * **Redaccion (7.4.8).** Con «es»/«is» o sin separador, una palabra
+      ambigua (clave, token, secret, pin) tambien anuncia un secreto si el
+      valor lo parece: «mi clave es Hunter2024!», «mi token es abc123XYZ»,
+      «my secret is P4ssw0rd!» y «mi clave Hunter2024 no sirve» se guardan
+      tapados; «la clave es atacar primero» o «el token es valido», igual.
+      V17 vuelve a redactar lo guardado con la regla nueva.
+    * **La base entiende mas formas de preguntar (7.4.2, 7.4.4).** Un error
+      de una letra en una palabra de 6 o mas letras dentro de una frase
+      («como funsionan las subatsas», «terminos de servisio») ya no deja sin
+      respuesta, sin confundir una
+      palabra que la base ya conoce con otra (salvo su plural). V18 publica
+      una version nueva con dos temas («Terminos del servicio», que no
+      inventa un documento que no existe, y «Como funciona la subasta»),
+      mas formas de preguntar y sus casos de evaluacion.
 
     ### 1.11.0 — 7.4.4 y 7.4.8: lo que se vio en DEV
 
@@ -683,6 +853,13 @@ paths:
         4. Si la pregunta no se entiende, se escala: la respuesta ofrece
            soporte humano y temas relacionados, y la pregunta se registra
            como brecha de conocimiento (HU-CHA-011).
+        5. Desde 1.12.0 (RF-CHA-007), con un escalamiento o un «no me
+           sirvio», el asistente abre la solicitud de soporte de quien
+           pregunta (jugador o visitante) con la conversacion, o suma la
+           pregunta a la que ya tiene abierta, y lo dice al final de la
+           respuesta, con `enriquecido.solicitud`. Si no se puede abrir, lo
+           dice y ofrece el formulario y el centro de ayuda; la respuesta no
+           falla por eso.
 
         Desde 1.5.0 la respuesta va en el idioma de la pregunta, o en el de
         las preferencias del chat si no son AUTOMATICO.
@@ -974,6 +1151,58 @@ paths:
         '400':
           $ref: '#/components/responses/PeticionInvalida'
 
+  /chat/sugerencias/para-ti:
+    get:
+      tags: [ chat ]
+      operationId: sugerenciasParaTiDelChatbot
+      summary: Lo que el asistente le propone a quien abre la ventana (1.15.0)
+      description: |
+        §7.4.3 «Sugerencias proactivas: recomendaciones basadas en el
+        comportamiento del usuario». Hasta `limite` preguntas que la version
+        en produccion sabe responder, cada una con su `motivo`, en este orden:
+        otros temas de la categoria de los que ya le respondieron, del mas
+        reciente hacia atras y dos por tema como mucho
+        (`POR_LO_QUE_PREGUNTASTE`); los de la categoria de `vista`
+        (`POR_DONDE_ESTAS`); y, solo si aun no pregunto nada, los mas
+        consultados (`PARA_EMPEZAR`). Nunca uno que ya le respondieron ni uno
+        de cortesia.
+
+        Lo que se mira es solo su propia conversacion, con la misma identidad
+        que el chat: el `uid` del token o una sesion de visitante vigente y
+        registrada (aqui nunca se emite una). Sin identidad, solo los de la
+        vista y los de quien empieza. Se calcula al pedirlo: no se guarda nada
+        (D-CHA-14).
+      security:
+        - { }
+        - tokenDeUsuario: [ ]
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
+        - name: vista
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/VistaDelChat'
+        - name: limite
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+            default: 3
+      responses:
+        '200':
+          description: Las sugerencias, en orden. Lista vacia si no hay ninguna.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 5
+                items:
+                  $ref: '#/components/schemas/SugerenciaParaTi'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+
   /chat/preferencias:
     get:
       tags: [ chat ]
@@ -982,9 +1211,10 @@ paths:
       description: |
         El idioma y el nivel de detalle con que responde el chatbot (7.4.5).
         Quien nunca las cambio, o no tiene token valido ni una sesion de
-        visitante vigente y registrada, recibe las de por defecto
-        (`AUTOMATICO`, `NORMAL`), que responden exactamente como antes de
-        1.3.6. Un `uid` en la cabecera no abre las preferencias de nadie.
+        visitante vigente y registrada, recibe las de por defecto: hasta
+        1.14.0 (`AUTOMATICO`, `NORMAL`); desde 1.15.0 (`AUTOMATICO`,
+        `AUTOMATICO`), con `nivelDetalleEfectivo` segun su experiencia
+        (D-CHA-13). Un `uid` en la cabecera no abre las preferencias de nadie.
       security:
         - { }
         - tokenDeUsuario: [ ]
@@ -999,7 +1229,8 @@ paths:
                 $ref: '#/components/schemas/PreferenciasDelChat'
               example:
                 idioma: AUTOMATICO
-                nivelDetalle: NORMAL
+                nivelDetalle: AUTOMATICO
+                nivelDetalleEfectivo: DETALLADO
     put:
       tags: [ chat ]
       operationId: guardarPreferenciasDelChatbot
@@ -1046,12 +1277,15 @@ paths:
     post:
       tags: [soporte]
       operationId: abrirTicketDeSoporteDelChatbot
-      summary: Abre un ticket de soporte humano (1.3.0)
+      summary: Abre un ticket de soporte humano (1.3.0; visitantes desde 1.12.0)
       description: |
-        Solo para jugadores con sesion: el ticket queda a nombre del `uid`
-        del token. A un visitante se le responde 401 (`motivo`
-        SESION_REQUERIDA) y la ventana le explica que necesita una cuenta y
-        le ofrece iniciar sesion o crear una.
+        Un jugador con sesion: el ticket queda a nombre del `uid` del token.
+        Desde 1.12.0 (RF-CHA-007, actor Visitante) tambien un visitante con
+        su sesion (`X-Id-Sesion-Anonima`, las mismas reglas que `POST
+        /chat/mensajes`; una declarada que aun no escribio se registra aqui,
+        nunca se emite una): el ticket es de la clave de su conversacion y lo
+        ve mientras dure la sesion. Sin token valido ni sesion con forma, 401
+        (`motivo` SESION_REQUERIDA).
 
         El servidor guarda con el ticket el contexto de la conversacion
         actual (los ultimos mensajes, ya redactados: sin contrasenas,
@@ -1063,7 +1297,10 @@ paths:
         limite de frecuencia (429) y la misma lista negra (422 y 503) que
         `POST /chat/mensajes`.
       security:
+        - {}
         - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
       requestBody:
         required: true
         content:
@@ -1084,7 +1321,7 @@ paths:
         '400':
           $ref: '#/components/responses/PeticionInvalida'
         '401':
-          description: Sin token valido (`motivo` SESION_REQUERIDA).
+          description: Sin token valido ni sesion de visitante con forma (`motivo` SESION_REQUERIDA).
           content:
             application/problem+json:
               schema:
@@ -1115,12 +1352,22 @@ paths:
     get:
       tags: [soporte]
       operationId: listarMisTicketsDelChatbot
-      summary: Tickets del propio jugador, el mas reciente primero (1.3.0)
+      summary: Tickets propios, el mas reciente primero (1.3.0; visitantes desde 1.12.0)
+      description: |
+        Los del `uid` del token o, desde 1.12.0, los de la sesion de
+        visitante (`X-Id-Sesion-Anonima`, ignorada con un token valido). Una
+        sesion con forma que aun no esta registrada o ya vencio no tiene
+        ninguno: lista vacia. Sin token valido ni sesion con forma, 401.
+        Desde 1.14.0 cada uno trae sus `capturas` (sin el contenido) si
+        tiene alguna.
       security:
+        - {}
         - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
       responses:
         '200':
-          description: Tickets del `uid` del token, con su estado y la respuesta de soporte si ya la hay.
+          description: Tickets propios, con su estado y la respuesta de soporte si ya la hay.
           content:
             application/json:
               schema:
@@ -1128,7 +1375,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/TicketDeSoporte'
         '401':
-          description: Sin token valido (`motivo` SESION_REQUERIDA).
+          description: Sin token valido ni sesion de visitante con forma (`motivo` SESION_REQUERIDA).
           content:
             application/problem+json:
               schema:
@@ -1141,9 +1388,12 @@ paths:
       summary: Abre un ticket con la pregunta que el chatbot no resolvio (1.8.0)
       description: |
         La «solicitud en un clic» de la ventana despues de un escalamiento o
-        de un «no me sirvio». El servidor arma el ticket con la conversacion
-        de QUIEN LLAMA (el `uid` del token; ningun identificador del cuerpo
-        elige la conversacion):
+        de un «no me sirvio». Desde 1.12.0 el asistente ya la abre solo al no
+        resolver (ver `POST /chat/mensajes`); este boton queda para cuando
+        eso fallo o para una pregunta respondida que no sirvio de otra forma.
+        El servidor arma el ticket con la conversacion de QUIEN LLAMA (el
+        `uid` del token o, desde 1.12.0, la sesion de visitante; ningun
+        identificador del cuerpo elige la conversacion):
 
         * Pregunta: la ultima sin resolver, es decir, la que el chatbot no
           entendio (escalada) o la que respondio con algo que «no le sirvio»
@@ -1158,13 +1408,16 @@ paths:
         * El contexto (los ultimos mensajes, redactados), igual que
           `POST /chat/tickets`.
 
-        Mismas reglas que `POST /chat/tickets`: solo jugadores (401
-        SESION_REQUERIDA), mismo limite de frecuencia (429), el asunto y el
+        Mismas reglas que `POST /chat/tickets`: jugador o visitante (401
+        SESION_REQUERIDA sin ninguno), mismo limite de frecuencia (429), el asunto y el
         mensaje pasan por la revision (422 INYECCION_DETECTADA) y la lista
         negra (422 CONTENIDO_BLOQUEADO, 503 MODERACION_NO_DISPONIBLE), y una
         sola solicitud abierta (409 TICKET_ABIERTO).
       security:
+        - {}
         - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
       requestBody:
         required: false
         content:
@@ -1183,7 +1436,7 @@ paths:
         '400':
           $ref: '#/components/responses/PeticionInvalida'
         '401':
-          description: Sin token valido (`motivo` SESION_REQUERIDA).
+          description: Sin token valido ni sesion de visitante con forma (`motivo` SESION_REQUERIDA).
           content:
             application/problem+json:
               schema:
@@ -1211,6 +1464,150 @@ paths:
           $ref: '#/components/responses/DemasiadasPeticiones'
         '503':
           description: La lista negra no responde (`motivo` MODERACION_NO_DISPONIBLE). No se guarda nada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /chat/tickets/{ticketId}/capturas:
+    parameters:
+      - name: ticketId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [soporte]
+      operationId: adjuntarCapturaDeSoporte
+      summary: Adjunta una captura de pantalla a una solicitud propia y abierta (1.14.0)
+      description: |
+        §7.4.6 «Opcion de adjuntar capturas de pantalla para soporte
+        tecnico». `multipart/form-data` con la captura en la parte `archivo`.
+        Adjunta quien abrio la solicitud, con la misma identidad: el `uid`
+        del token o, para un visitante, su sesion vigente
+        (`X-Id-Sesion-Anonima`, ignorada con un token valido; aqui nunca se
+        registra una sesion). La solicitud de otra persona, o una que no
+        existe, responde 404 igual.
+
+        Un PNG o un JPEG de hasta 2 MB y 4096 pixeles por lado, reconocido
+        por su firma de bytes y comprobado hasta su final; se guarda sin
+        metadatos y sin su nombre (D-CHA-12, changelog de 1.14.0). Hasta
+        tres por solicitud, y solo mientras esta ABIERTO o EN_PROCESO. Pasa
+        por el mismo limite de frecuencia que `POST /chat/mensajes`.
+      security:
+        - {}
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo:
+                  type: string
+                  format: binary
+                  description: La captura, PNG o JPEG, de hasta 2 MB.
+            encoding:
+              archivo:
+                contentType: image/png, image/jpeg
+      responses:
+        '201':
+          description: Captura guardada, ya sin metadatos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapturaDeSoporte'
+        '400':
+          description: Falta la parte `archivo` o el cuerpo multipart no se puede leer (`motivo` CAPTURA_AUSENTE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '401':
+          description: Sin token valido ni sesion de visitante vigente (`motivo` SESION_REQUERIDA).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: La solicitud no existe o no es de quien adjunta (`motivo` SOLICITUD_NO_ENCONTRADA).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: |
+            La solicitud ya se respondio o se cerro (`motivo`
+            SOLICITUD_CERRADA), o ya tiene tres capturas (`motivo`
+            CAPTURAS_COMPLETAS). No se guarda nada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '413':
+          description: Pesa mas de 2 MB o mide mas de 4096 pixeles por algun lado (`motivo` CAPTURA_DEMASIADO_GRANDE).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '415':
+          description: |
+            No es un PNG ni un JPEG bien formado: otra firma, un archivo
+            vacio, cortado o con otro documento pegado detras (`motivo`
+            CAPTURA_NO_ADMITIDA).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+
+  /chat/tickets/{ticketId}/capturas/{capturaId}:
+    parameters:
+      - name: ticketId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: capturaId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [soporte]
+      operationId: leerCapturaDeSoporte
+      summary: El contenido de una captura de una solicitud propia (1.14.0)
+      description: |
+        Solo a quien abrio la solicitud, con la identidad con la que la
+        abrio. Con el tipo que se comprobo al guardarla y cabeceras que
+        impiden interpretarla como otra cosa, ejecutar nada si se abre sola
+        o guardarla en una cache compartida.
+      security:
+        - {}
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
+      responses:
+        '200':
+          $ref: '#/components/responses/ContenidoDeCaptura'
+        '401':
+          description: Sin token valido ni sesion de visitante vigente (`motivo` SESION_REQUERIDA).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: |
+            La solicitud o la captura no existen, o no son de quien la pide
+            (`motivo` SOLICITUD_NO_ENCONTRADA).
           content:
             application/problem+json:
               schema:
@@ -2064,7 +2461,7 @@ paths:
     get:
       tags: [admin-soporte]
       operationId: consultarTicketDelChatbot
-      summary: Un ticket con el contexto de la conversacion (1.3.0)
+      summary: Un ticket con el contexto de la conversacion (1.3.0) y sus capturas (1.14.0)
       security:
         - tokenDeAdministrador: []
       responses:
@@ -2127,6 +2524,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
 
+  /chatbot/admin/tickets/{ticketId}/capturas/{capturaId}:
+    parameters:
+      - name: ticketId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: capturaId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [admin-soporte]
+      operationId: leerCapturaDeTicketDelChatbot
+      summary: El contenido de una captura de la solicitud, para atenderla (1.14.0)
+      description: |
+        Cualquier captura de cualquier solicitud, solo para el panel. Las
+        mismas cabeceras que al dueno. Una captura que no es de esa
+        solicitud responde 404.
+      security:
+        - tokenDeAdministrador: []
+      responses:
+        '200':
+          $ref: '#/components/responses/ContenidoDeCaptura'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
 components:
   securitySchemes:
     tokenDeUsuario:
@@ -2187,6 +2618,43 @@ components:
       example: '2026-09-30'
 
   responses:
+    ContenidoDeCaptura:
+      description: |
+        1.14.0. La captura, ya sin metadatos, con el tipo que dijo su firma de
+        bytes al guardarla.
+      headers:
+        Cache-Control:
+          description: Es de una persona; ningun intermediario la guarda.
+          schema:
+            type: string
+            const: no-store, private
+        X-Content-Type-Options:
+          schema:
+            type: string
+            const: nosniff
+        Content-Security-Policy:
+          description: Abierta sola en una pestana, no ejecuta ni carga nada.
+          schema:
+            type: string
+            const: default-src 'none'; sandbox
+        Cross-Origin-Resource-Policy:
+          schema:
+            type: string
+            const: same-origin
+        Content-Disposition:
+          description: Con un nombre propio, nunca el del archivo que se subio.
+          schema:
+            type: string
+            example: inline; filename="captura-9e8d7c6b-5a49-4382-9716-05f4e3d2c1b0.png"
+      content:
+        image/png:
+          schema:
+            type: string
+            format: binary
+        image/jpeg:
+          schema:
+            type: string
+            format: binary
     PeticionInvalida:
       description: Cuerpo invalido.
       content:
@@ -2423,8 +2891,9 @@ components:
       type: object
       description: |
         1.3.0. Partes de la respuesta que la ventana pinta como elementos
-        interactivos (7.4.3, 7.4.6). Sin imagenes (decision del cliente).
-        Todas las listas pueden venir vacias.
+        interactivos (7.4.3, 7.4.6). Hasta 1.12.0, sin imagenes; desde
+        1.13.0 las tarjetas de productos llevan la del catalogo
+        (`TarjetaInformativa.imagen`). Todas las listas pueden venir vacias.
       required: [pasos, enlaces, tarjetas, respuestasRapidas, ofrecerSoporteHumano]
       properties:
         pasos:
@@ -2455,6 +2924,37 @@ components:
         ofrecerSoporteHumano:
           type: boolean
           description: true cuando conviene ofrecer abrir un ticket (escalamiento).
+        solicitud:
+          description: |
+            1.12.0 (RF-CHA-007). La solicitud de soporte que el asistente
+            abrio, o a la que sumo la pregunta, porque no pudo responder.
+            null (o ausente) en cualquier otra respuesta y en las guardadas
+            antes de 1.12.0. Cuando viene, la ventana enseña «Ver solicitud»
+            en lugar de «Hablar con soporte».
+          oneOf:
+            - $ref: '#/components/schemas/SolicitudAbierta'
+            - type: 'null'
+
+    SolicitudAbierta:
+      type: object
+      description: |
+        1.12.0. Lo minimo para enseñar la solicitud en la respuesta; el
+        detalle y su estado al dia estan en `GET /chat/tickets`.
+      required: [id, asunto, estado, nueva]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: El `ticketId` de la solicitud.
+        asunto:
+          type: string
+          maxLength: 150
+          description: Ya redactado.
+        estado:
+          $ref: '#/components/schemas/EstadoDeTicket'
+        nueva:
+          type: boolean
+          description: true si se abrio con esta pregunta; false si se sumo a la que ya estaba abierta.
 
     EnlaceInterno:
       type: object
@@ -2486,7 +2986,9 @@ components:
 
     TarjetaInformativa:
       type: object
-      description: 1.3.0. Bloque de texto con titulo y, opcionalmente, un enlace interno.
+      description: |
+        1.3.0. Bloque de texto con titulo y, opcionalmente, un enlace interno.
+        Desde 1.13.0, la de un producto del catalogo puede traer su imagen.
       required: [titulo, texto]
       properties:
         titulo:
@@ -2499,6 +3001,16 @@ components:
           oneOf:
             - $ref: '#/components/schemas/EnlaceInterno'
             - type: 'null'
+        imagen:
+          type: string
+          maxLength: 8192
+          pattern: '^(/api/v1/productos/recursos/[0-9a-fA-F-]{36}|data:image/(png|jpeg|webp|gif|svg\+xml)(;base64)?,.+)$'
+          description: |
+            1.13.0 (7.4.3). La imagen del producto, tal como la guarda el
+            catalogo, solo si es un recurso grafico del propio catalogo o una
+            imagen incrustada pequena; si no, no viene. La ventana la pinta en
+            un `<img>` (texto alternativo vacio: el nombre del producto ya esta
+            al lado) y la quita si no carga.
 
     SugerenciaDePregunta:
       type: object
@@ -2534,11 +3046,50 @@ components:
             respuesta en ingles; si no, en espanol.
         nivelDetalle:
           type: string
-          enum: [ BREVE, NORMAL, DETALLADO ]
+          enum: [ AUTOMATICO, BREVE, NORMAL, DETALLADO ]
           description: |
             `BREVE`: solo la primera oracion (los temas paso a paso conservan
-            sus pasos). `NORMAL`: la respuesta completa. `DETALLADO`: la
-            respuesta completa y, al final, los temas relacionados.
+            sus pasos), con «Más detalle» a un clic desde 1.15.0. `NORMAL`: la
+            respuesta completa. `DETALLADO`: la respuesta completa y, al
+            final, los temas relacionados. 1.15.0: `AUTOMATICO`, el de quien
+            nunca eligio: segun su experiencia con el asistente (D-CHA-13).
+        nivelDetalleEfectivo:
+          type: string
+          readOnly: true
+          enum: [ BREVE, NORMAL, DETALLADO ]
+          description: |
+            1.15.0. Solo en las respuestas (en el `PUT` se ignora): el nivel
+            con el que se le responde hoy, el elegido o, con `AUTOMATICO`, el
+            de su experiencia. Nunca `AUTOMATICO`.
+
+    SugerenciaParaTi:
+      type: object
+      description: |
+        1.15.0 (§7.4.3, D-CHA-14). Una pregunta que el asistente propone a
+        quien abre la ventana, con por que sale. Como `SugerenciaDePregunta`:
+        pulsarla envia `pregunta`.
+      required: [ clave, titulo, categoria, pregunta, motivo ]
+      properties:
+        clave:
+          type: string
+          description: Clave estable del tema.
+        titulo:
+          type: string
+        categoria:
+          $ref: '#/components/schemas/Categoria'
+        pregunta:
+          type: string
+          description: El titulo del tema, listo para enviar como pregunta.
+        motivo:
+          type: string
+          enum: [ POR_LO_QUE_PREGUNTASTE, POR_DONDE_ESTAS, PARA_EMPEZAR ]
+          description: |
+            `POR_LO_QUE_PREGUNTASTE`: otro tema de la categoria de uno que ya
+            le respondieron. `POR_DONDE_ESTAS`: de la categoria de la vista.
+            `PARA_EMPEZAR`: aun no pregunto nada; de lo mas consultado.
+        relacionadoCon:
+          type: [ string, 'null' ]
+          description: Con `POR_LO_QUE_PREGUNTASTE`, el titulo del tema que la trajo; null en los demas.
 
     EstadoDeTicket:
       type: string
@@ -2669,6 +3220,49 @@ components:
         actualizadoEn:
           type: string
           format: date-time
+        capturas:
+          type: array
+          maxItems: 3
+          description: |
+            1.14.0 (§7.4.6). Las capturas adjuntas, en el orden en que se
+            subieron, sin su contenido. Al jugador solo le llega si hay
+            alguna; en `TicketDeSoporteAdmin` va siempre (vacia si no hay).
+          items:
+            $ref: '#/components/schemas/CapturaDeSoporte'
+
+    CapturaDeSoporte:
+      type: object
+      description: |
+        1.14.0 (§7.4.6). Una captura de pantalla de una solicitud de soporte,
+        sin su contenido: se pide aparte, en
+        `GET /chat/tickets/{ticketId}/capturas/{capturaId}` (su dueno) o
+        `GET /chatbot/admin/tickets/{ticketId}/capturas/{capturaId}` (el
+        panel).
+      required: [capturaId, tipo, tamano, ancho, alto, subidaEn]
+      properties:
+        capturaId:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+          enum: [image/png, image/jpeg]
+          description: El que dijo su firma de bytes, no el que declaro el cliente.
+        tamano:
+          type: integer
+          minimum: 1
+          maximum: 2097152
+          description: En bytes, ya sin metadatos.
+        ancho:
+          type: integer
+          minimum: 1
+          maximum: 4096
+        alto:
+          type: integer
+          minimum: 1
+          maximum: 4096
+        subidaEn:
+          type: string
+          format: date-time
 
     TicketDeSoporteAdmin:
       description: 1.3.0. El ticket como lo ve el administrador.
@@ -2679,7 +3273,13 @@ components:
           properties:
             uid:
               type: string
-              description: Jugador que lo abrio (claim `uid` de su token). Sin email, nombre ni telefono.
+              description: |
+                Jugador que lo abrio (claim `uid` de su token). Sin email,
+                nombre ni telefono. Desde 1.12.0, si la abrio un visitante,
+                la clave de su conversacion (`anonimo:<sesion>`).
+            deVisitante:
+              type: boolean
+              description: 1.12.0. true si la abrio un visitante (sin cuenta); `uid` no es entonces una cuenta.
             asignadoA:
               type: [string, 'null']
               description: '`uid` del administrador que lo atiende.'

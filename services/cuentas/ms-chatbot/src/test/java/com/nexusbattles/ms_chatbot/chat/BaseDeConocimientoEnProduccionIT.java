@@ -82,8 +82,8 @@ class BaseDeConocimientoEnProduccionIT {
     @DisplayName("ninguna respuesta enlaza a una vista de administracion ni promete logros, mazos o transmisiones")
     void nadaEnlazaAdministracionNiPrometeLoQueNoHay() {
         List<TemaConocimiento> enProduccion = temas.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION);
-        // 59 de V11 y «Reglas básicas del juego» de V15.
-        assertThat(enProduccion).hasSize(60);
+        // 59 de V11, «Reglas básicas del juego» de V15 y los dos de V18.
+        assertThat(enProduccion).hasSize(62);
         for (TemaConocimiento tema : enProduccion) {
             ResultadoMotor resultado = motor.responderTema(tema.getClave(), null, false).orElseThrow();
             List<String> destinos = resultado.enriquecido() == null ? List.of()
