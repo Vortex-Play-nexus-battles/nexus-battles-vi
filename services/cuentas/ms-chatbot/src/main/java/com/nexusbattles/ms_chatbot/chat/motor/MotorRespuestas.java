@@ -216,9 +216,9 @@ public class MotorRespuestas {
         Set<String> vocabulario = vocabularioCacheado(temasRecibidos);
         Categoria preferida = vista == null ? null : vista.categoria();
         String mensajeNormalizado = NormalizadorTexto.normalizar(mensajeUsuario);
-        Optional<TemaConocimiento> porTitulo = temaConElTitulo(mensajeNormalizado, temas);
+        Optional<PorTitulo> porTitulo = temaConElTitulo(mensajeNormalizado, temas);
         if (porTitulo.isPresent()) {
-            return deTema(porTitulo.get(), false, temas, preferencias);
+            return deTema(porTitulo.get().tema(), porTitulo.get().enIngles(), temas, preferencias);
         }
         List<String> palabrasMensaje = List.of(mensajeNormalizado.split(" "));
 
@@ -248,21 +248,21 @@ public class MotorRespuestas {
             return deTema(mejor.tema(), mejor.esIngles(), temas, preferencias);
         }
 
-        // Los temas de cortesia (saludo, despedida) no son "preguntas
-        // relacionadas": nadie necesita que le sugieran decir "hola".
-        List<String> sugerencias = todas.stream()
-            .filter(c -> !Enriquecedor.esDeCortesia(c.tema()))
-            .sorted(Comparator.comparingInt(Coincidencia::puntaje).reversed())
-            .map(c -> c.tema().getTitulo())
-            .distinct()
-            .limit(3)
-            .toList();
-
         boolean ingles = switch (preferencias.idioma()) {
             case ES -> false;
             case EN -> true;
             case AUTOMATICO -> IdiomaDelTexto.esIngles(mensajeNormalizado);
         };
+        // Los temas de cortesia (saludo, despedida) no son "preguntas
+        // relacionadas": nadie necesita que le sugieran decir "hola".
+        // 1.17.0: con su titulo en el idioma de la respuesta.
+        List<String> sugerencias = todas.stream()
+            .filter(c -> !Enriquecedor.esDeCortesia(c.tema()))
+            .sorted(Comparator.comparingInt(Coincidencia::puntaje).reversed())
+            .map(c -> c.tema().titulo(ingles))
+            .distinct()
+            .limit(3)
+            .toList();
         return ResultadoMotor.escalado(ingles ? ESCALAMIENTO_EN : ESCALAMIENTO_ES, sugerencias)
             .conEnriquecido(Enriquecedor.paraEscalamiento(sugerencias, temas, vista, ingles))
             .enIngles(ingles);
@@ -307,15 +307,29 @@ public class MotorRespuestas {
     // ventana al pulsar una sugerencia (GET /chat/sugerencias) o una de las
     // "preguntas relacionadas" de un escalamiento, que tambien son titulos.
     // Sin esto, pulsar una sugerencia podia no alcanzar el umbral y escalar.
-    private static Optional<TemaConocimiento> temaConElTitulo(String mensajeNormalizado,
-                                                              List<TemaConocimiento> temas) {
+    // 1.17.0 (7.4.2): tambien su titulo en ingles, y entonces la respuesta va
+    // en ingles (con la preferencia AUTOMATICO): pulsar una relacionada de una
+    // respuesta en ingles no cambia la conversacion al espanol.
+    private record PorTitulo(TemaConocimiento tema, boolean enIngles) {
+    }
+
+    private static Optional<PorTitulo> temaConElTitulo(String mensajeNormalizado, List<TemaConocimiento> temas) {
         if (mensajeNormalizado.isEmpty()) {
             return Optional.empty();
         }
-        return temas.stream()
+        Optional<TemaConocimiento> enEspanol = temas.stream()
             .filter(TemaConocimiento::isActivo)
             .filter(tema -> mensajeNormalizado.equals(NormalizadorTexto.normalizar(tema.getTitulo())))
             .max(Comparator.comparingInt(TemaConocimiento::getPrioridad));
+        if (enEspanol.isPresent()) {
+            return enEspanol.map(tema -> new PorTitulo(tema, false));
+        }
+        return temas.stream()
+            .filter(TemaConocimiento::isActivo)
+            .filter(tema -> tema.getTituloEn() != null
+                && mensajeNormalizado.equals(NormalizadorTexto.normalizar(tema.getTituloEn())))
+            .max(Comparator.comparingInt(TemaConocimiento::getPrioridad))
+            .map(tema -> new PorTitulo(tema, true));
     }
 
     // HU-CHA-012: a igual puntaje gana el tema de mayor prioridad. Sin esto,

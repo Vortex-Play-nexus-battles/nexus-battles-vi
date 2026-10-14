@@ -1,7 +1,7 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
-**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.16.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.2.0 (canal en tiempo real, 7.4.9)
-**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V20) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
+**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.17.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.2.0 (canal en tiempo real, 7.4.9)
+**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V21) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
 ## Qué hace
@@ -59,7 +59,7 @@ servisio»), salvo que lo escrito sea
 otra palabra que la base ya conoce, con la excepción de su plural.
 
 `contenido/base-de-conocimiento.json` es la misma base en el formato de importación del
-panel (62 temas y 139 casos): sirve para restaurarla en otro entorno sin tocar la base de
+panel (62 temas y 139 casos; desde 1.17.0, con el título en inglés de cada tema): sirve para restaurarla en otro entorno sin tocar la base de
 datos. `BaseDeConocimientoEnProduccionIT` comprueba que cada caso activo lo responde su
 tema, que ningún tema enlaza a una vista de administración y que una pregunta en inglés se
 responde en inglés.
@@ -360,6 +360,38 @@ suya; y se borran con su solicitud.
   detalle» (un seguimiento: la da entera). El motor y la caché solo ven el nivel ya traducido;
   `GET`/`PUT /chat/preferencias` devuelven también `nivelDetalleEfectivo`. Un nivel elegido a
   mano manda; las filas guardadas antes de V20 no cambian.
+
+## Preguntas relacionadas en inglés (7.4.2, 1.17.0)
+
+§7.4.2 «comprensión de consultas en lenguaje natural en español/english» y «sugerencias de
+preguntas relacionadas basadas en el contexto» (RF-CHA-004, HU-CHA-004). Hasta 1.16.0 una
+pregunta en inglés se respondía en inglés, pero sus preguntas relacionadas (los botones, los
+«Related topics» del nivel detallado y las sugerencias al escalar) salían con el título en
+español, y pulsar una cambiaba la conversación al español.
+
+- **El título en inglés de cada tema**: `temas_conocimiento.titulo_en` (V21, opcional, hasta
+  150), `tituloEn` en `DatosDeTema`. El panel lo pide como «Título en inglés (opcional)» y lo
+  enseña en la lista; exportar e importar lo llevan (un archivo sin el campo entra igual).
+  Sin título en inglés, el tema usa el de siempre.
+- **V21** lo pone a los 62 temas que despliegan las migraciones, en todas sus versiones, y
+  solo donde el tema conserva su título de siempre: lo que un administrador cambió y lo
+  creado desde la consola se quedan sin él hasta que se lo pongan en el panel.
+- **En una respuesta en inglés**, las relacionadas (`Enriquecedor.relacionadosCon`), los
+  «Related topics» (`AjusteDeDetalle`) y las sugerencias del escalamiento salen con el título
+  en inglés. Pulsar uno (`MotorRespuestas.temaConElTitulo`: primero el título en español,
+  luego el inglés) responde ese tema en inglés; si quien pregunta eligió el español, en
+  español: la preferencia manda.
+- **Autocompletado** (`GET /chat/sugerencias?q=`, `SugerenciasService`): el título en inglés
+  cuenta como el español, y si lo escrito se parece más al lado inglés del tema (su título o
+  sus variantes en inglés) la sugerencia trae el título en inglés: quien escribe en inglés no
+  recibe una pregunta en español que, al pulsarla, cambie la conversación de idioma.
+- **Sin duplicados**: el título en inglés tampoco puede repetir el título (en español o en
+  inglés) de otro tema de la candidata, ni dentro del archivo que se importa: 409
+  `TEMA_DUPLICADO`.
+- La interfaz de la ventana, las preguntas frecuentes al abrirla y «Quizá te interese»
+  siguen en español, como el resto del sistema (la ficha de RF-CHA-004 no precisa si el
+  resto del sistema es bilingüe; #508 lo remite a INC-17): lo que sigue el idioma es la
+  conversación. Pulsar una pregunta en español con el inglés elegido responde en inglés.
 
 ## Diálogo (1.5.0)
 
@@ -710,6 +742,10 @@ pregunta. Si la conversación cambia de alto mientras se leía lo último, lo ú
 vista. En «Preferencias», el nivel «Automático» dice con qué nivel se le responde hoy, y
 «Restablecer» vuelve a las de quien nunca eligió (RF-CHA-010).
 
+1.17.0 (§7.4.2): el formulario del tema en el panel (`panel-chatbot-base.js`) tiene «Título en
+inglés (opcional)»; si repite el título en español, el formulario lo dice antes de enviar. La
+lista de temas enseña el título en inglés o «Sin título en inglés».
+
 ## Pruebas
 
 `./gradlew :services:cuentas:ms-chatbot:check` — unitarias (`ChatServiceTest`,
@@ -728,4 +764,5 @@ de 7.4.9; `CatalogoEnVivoIT`: el catálogo de 1.10.0; `RedactarLaPuntuacionDeLos
 `RedactarLasClavesAnunciadasIT` y `SolicitudesAutomaticasIT`: V17 y la solicitud automática de
 1.12.0; `CapturasDeSoporteIT`: V19 y las capturas de 1.14.0; `NivelDeDetalleAutomaticoIT` y
 `SugerenciasYExperienciaIT`: V20, el nivel por experiencia y las sugerencias para ti de
-1.15.0). JaCoCo ≥ 80 %.
+1.15.0; `TituloEnInglesIT` y `PreguntasRelacionadasEnInglesIT`: V21 y las preguntas
+relacionadas en inglés de 1.17.0). JaCoCo ≥ 80 %.

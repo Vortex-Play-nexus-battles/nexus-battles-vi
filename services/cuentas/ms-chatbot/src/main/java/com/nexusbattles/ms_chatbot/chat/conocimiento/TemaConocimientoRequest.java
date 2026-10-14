@@ -22,11 +22,14 @@ import java.util.List;
 //                se guardan una sola vez.
 //   prioridad  = desempate cuando dos temas empatan en puntaje (mayor gana).
 //   activo     = null se toma como true.
+//   tituloEn   = (1.17.0, 7.4.2) el titulo en ingles, opcional: el que ve
+//                quien conversa en ingles. Tampoco puede repetir el de otro tema.
 public record TemaConocimientoRequest(
     @NotNull Categoria categoria,
     List<Categoria> intencionesAdicionales,
     @NotNull TipoRespuesta tipoRespuesta,
     @NotBlank @Size(max = 150) String titulo,
+    @Size(max = 150) String tituloEn,
     @NotEmpty List<@NotBlank @Size(max = 200) String> variantesEs,
     List<@NotBlank @Size(max = 200) String> variantesEn,
     @NotBlank @Size(max = 4000) String respuestaEs,
@@ -34,4 +37,13 @@ public record TemaConocimientoRequest(
     @PositiveOrZero int prioridad,
     Boolean activo
 ) {
+
+    /** Sin titulo en ingles, como antes de 1.17.0. */
+    public TemaConocimientoRequest(Categoria categoria, List<Categoria> intencionesAdicionales,
+                                   TipoRespuesta tipoRespuesta, String titulo, List<String> variantesEs,
+                                   List<String> variantesEn, String respuestaEs, String respuestaEn, int prioridad,
+                                   Boolean activo) {
+        this(categoria, intencionesAdicionales, tipoRespuesta, titulo, null, variantesEs, variantesEn, respuestaEs,
+            respuestaEn, prioridad, activo);
+    }
 }

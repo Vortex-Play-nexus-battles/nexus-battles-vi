@@ -6,6 +6,7 @@
       "categoria": "PRODUCTO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Héroes disponibles",
+      "tituloEn": "Available heroes",
       "variantesEs": [
         "heroes",
         "personajes",
@@ -48,6 +49,7 @@
       "categoria": "PRODUCTO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Estadísticas y nivel de un héroe",
+      "tituloEn": "A hero's stats and level",
       "variantesEs": [
         "estadisticas",
         "nivel",
@@ -88,6 +90,7 @@
       "categoria": "PRODUCTO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Armas, armaduras e ítems",
+      "tituloEn": "Weapons, armor and items",
       "variantesEs": [
         "armas",
         "armaduras",
@@ -124,6 +127,7 @@
       "categoria": "PRODUCTO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Habilidades épicas",
+      "tituloEn": "Epic abilities",
       "variantesEs": [
         "epicas",
         "epica",
@@ -158,6 +162,7 @@
       "categoria": "MECANICA_JUEGO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Cómo funciona el combate por turnos",
+      "tituloEn": "How turn-based combat works",
       "variantesEs": [
         "combate",
         "turnos",
@@ -194,6 +199,7 @@
       "categoria": "MECANICA_JUEGO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Sistema de efectos aleatorios en combate",
+      "tituloEn": "Random effects in combat",
       "variantesEs": [
         "efectos aleatorios",
         "tabla de efectos",
@@ -227,6 +233,7 @@
       "categoria": "MODALIDAD_JUEGO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Modo Batalla (JcJ y cooperativo)",
+      "tituloEn": "Battle mode (PvP and co-op)",
       "variantesEs": [
         "batalla",
         "jugar online",
@@ -269,6 +276,7 @@
       "categoria": "MODALIDAD_JUEGO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Cómo completar una misión (modo JcE)",
+      "tituloEn": "How to complete a mission (PvE mode)",
       "variantesEs": [
         "mision",
         "como hago una mision",
@@ -305,6 +313,7 @@
       "categoria": "MODALIDAD_JUEGO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Cómo funciona el Torneo",
+      "tituloEn": "How the Tournament works",
       "variantesEs": [
         "torneo",
         "como funciona el torneo",
@@ -337,6 +346,7 @@
       "categoria": "CUENTA_Y_REGISTRO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Cómo crear una cuenta",
+      "tituloEn": "How to create an account",
       "variantesEs": [
         "registrarme",
         "crear cuenta",
@@ -371,6 +381,7 @@
       "categoria": "CUENTA_Y_REGISTRO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Recuperar mi contraseña",
+      "tituloEn": "Recover my password",
       "variantesEs": [
         "olvide mi contraseña",
         "recuperar contraseña",
@@ -405,6 +416,7 @@
       "categoria": "CUENTA_Y_REGISTRO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Gestionar mi cuenta y mi perfil",
+      "tituloEn": "Manage my account and profile",
       "variantesEs": [
         "mi cuenta",
         "mi perfil",
@@ -440,6 +452,7 @@
       "categoria": "SUBASTA_Y_COMERCIO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Cómo publicar un producto en subasta",
+      "tituloEn": "How to put a product up for auction",
       "variantesEs": [
         "subasta",
         "quiero vender algo",
@@ -474,6 +487,7 @@
       "categoria": "SUBASTA_Y_COMERCIO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Cómo pujar o comprar en una subasta",
+      "tituloEn": "How to bid or buy in an auction",
       "variantesEs": [
         "pujar",
         "como pujo",
@@ -509,6 +523,7 @@
       "categoria": "SUBASTA_Y_COMERCIO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Créditos y moneda del juego",
+      "tituloEn": "Credits and in-game currency",
       "variantesEs": [
         "creditos",
         "moneda del juego",
@@ -542,6 +557,7 @@
       "categoria": "SOPORTE_TECNICO",
       "tipoRespuesta": "CONTEXTUAL",
       "titulo": "Problema técnico general",
+      "tituloEn": "General technical problem",
       "variantesEs": [
         "no puedo entrar",
         "error",
@@ -584,6 +600,7 @@
       "categoria": "POLITICAS_Y_TERMINOS",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Sistema de sanciones",
+      "tituloEn": "Sanctions system",
       "variantesEs": [
         "sancion",
         "baneo",
@@ -614,6 +631,7 @@
       "categoria": "POLITICAS_Y_TERMINOS",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Cómo apelar una sanción",
+      "tituloEn": "How to appeal a sanction",
       "variantesEs": [
         "apelar",
         "apelacion",
@@ -653,6 +671,7 @@
       "categoria": "FAQ_GENERAL",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Saludo",
+      "tituloEn": "Greeting",
       "variantesEs": [
         "hola",
         "buenas",
@@ -683,6 +702,7 @@
       "categoria": "FAQ_GENERAL",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Despedida",
+      "tituloEn": "Farewell",
       "variantesEs": [
         "adios",
         "chao",
@@ -713,6 +733,7 @@
       "categoria": "FAQ_GENERAL",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Qué es THE NEXUS BATTLES VI",
+      "tituloEn": "What THE NEXUS BATTLES VI is",
       "variantesEs": [
         "de que trata el juego",
         "que es nexus battles",
@@ -742,6 +763,7 @@
       "categoria": "FAQ_GENERAL",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Guía para nuevos jugadores",
+      "tituloEn": "Guide for new players",
       "variantesEs": [
         "soy nuevo",
         "nuevo jugador",
@@ -775,6 +797,7 @@
       "categoria": "PRODUCTO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Equipar a tu héroe («mazo completo»)",
+      "tituloEn": "Equip your hero (complete «deck»)",
       "variantesEs": [
         "mazo",
         "armar mazo",
@@ -812,6 +835,7 @@
       "categoria": "MECANICA_JUEGO",
       "tipoRespuesta": "SUGERENCIA_PROACTIVA",
       "titulo": "Estrategias básicas de combate",
+      "tituloEn": "Basic combat strategies",
       "variantesEs": [
         "estrategia",
         "estrategias",
@@ -841,6 +865,7 @@
       "categoria": "MECANICA_JUEGO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Sinergias y combinaciones de equipo",
+      "tituloEn": "Team synergies and combinations",
       "variantesEs": [
         "sinergia",
         "sinergias",
@@ -870,6 +895,7 @@
       "categoria": "PRODUCTO",
       "tipoRespuesta": "SUGERENCIA_PROACTIVA",
       "titulo": "Consejos para organizar tus objetos",
+      "tituloEn": "Tips for organizing your items",
       "variantesEs": [
         "consejos de inventario",
         "organizar inventario",
@@ -901,6 +927,7 @@
       "categoria": "MECANICA_JUEGO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Qué pierdes al ser derrotado",
+      "tituloEn": "What you lose when you are defeated",
       "variantesEs": [
         "si me derrotan",
         "heroe derrotado",
@@ -932,6 +959,7 @@
       "categoria": "MODALIDAD_JUEGO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Tipos de misiones: Historia, Desafío y Exploración",
+      "tituloEn": "Mission types: Story, Challenge and Exploration",
       "variantesEs": [
         "tipos de misiones",
         "misiones de historia",
@@ -964,6 +992,7 @@
       "categoria": "MODALIDAD_JUEGO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Recompensas de las misiones",
+      "tituloEn": "Mission rewards",
       "variantesEs": [
         "recompensas de las misiones",
         "recompensa de mision",
@@ -998,6 +1027,7 @@
       "categoria": "MODALIDAD_JUEGO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Niveles de dificultad de las misiones",
+      "tituloEn": "Mission difficulty levels",
       "variantesEs": [
         "dificultad",
         "dificultades",
@@ -1030,6 +1060,7 @@
       "categoria": "MECANICA_JUEGO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Logros, títulos e insignias",
+      "tituloEn": "Achievements, titles and badges",
       "variantesEs": [
         "logros",
         "logro",
@@ -1060,6 +1091,7 @@
       "categoria": "PRODUCTO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Precios y disponibilidad de productos",
+      "tituloEn": "Product prices and availability",
       "variantesEs": [
         "precio",
         "precios",
@@ -1096,6 +1128,7 @@
       "categoria": "SOPORTE_TECNICO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Requisitos del sistema",
+      "tituloEn": "System requirements",
       "variantesEs": [
         "requisitos del sistema",
         "requisitos minimos",
@@ -1126,6 +1159,7 @@
       "categoria": "SOPORTE_TECNICO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Mantenimiento y actualizaciones",
+      "tituloEn": "Maintenance and updates",
       "variantesEs": [
         "mantenimiento",
         "actualizacion",
@@ -1158,6 +1192,7 @@
       "categoria": "SOPORTE_TECNICO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Hablar con soporte humano",
+      "tituloEn": "Talk to human support",
       "variantesEs": [
         "hablar con soporte",
         "soporte humano",
@@ -1191,6 +1226,7 @@
       "categoria": "MODALIDAD_JUEGO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Cómo crear una sala de batalla",
+      "tituloEn": "How to create a battle room",
       "variantesEs": [
         "crear sala",
         "crear una sala",
@@ -1228,6 +1264,7 @@
       "categoria": "MODALIDAD_JUEGO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Cómo entrar a una sala de batalla",
+      "tituloEn": "How to join a battle room",
       "variantesEs": [
         "unirme a una sala",
         "entrar a una sala",
@@ -1264,6 +1301,7 @@
       "categoria": "MODALIDAD_JUEGO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Cómo inscribirte en un torneo",
+      "tituloEn": "How to sign up for a tournament",
       "variantesEs": [
         "inscribirme en un torneo",
         "inscribirse en un torneo",
@@ -1300,6 +1338,7 @@
       "categoria": "SUBASTA_Y_COMERCIO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Cómo comprar en la tienda (créditos o pago simulado)",
+      "tituloEn": "How to buy in the store (credits or simulated payment)",
       "variantesEs": [
         "comprar en la tienda",
         "como compro",
@@ -1337,6 +1376,7 @@
       "categoria": "CUENTA_Y_REGISTRO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "No me llegó el código para confirmar mi correo",
+      "tituloEn": "I didn't get the code to confirm my email",
       "variantesEs": [
         "no me llego el codigo",
         "codigo de verificacion",
@@ -1372,6 +1412,7 @@
       "categoria": "CUENTA_Y_REGISTRO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Cuenta bloqueada por intentos fallidos",
+      "tituloEn": "Account locked after failed attempts",
       "variantesEs": [
         "cuenta bloqueada",
         "cuenta bloqueada temporalmente",
@@ -1402,6 +1443,7 @@
       "categoria": "SOPORTE_TECNICO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Mi sesión se cerró sola",
+      "tituloEn": "My session ended on its own",
       "variantesEs": [
         "se cerro mi sesion",
         "mi sesion termino",
@@ -1433,6 +1475,7 @@
       "categoria": "CUENTA_Y_REGISTRO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Verificación en dos pasos de tu cuenta",
+      "tituloEn": "Two-step verification for your account",
       "variantesEs": [
         "verificacion en dos pasos",
         "doble factor",
@@ -1464,6 +1507,7 @@
       "categoria": "CUENTA_Y_REGISTRO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Preguntas de seguridad de tu cuenta",
+      "tituloEn": "Your account's security questions",
       "variantesEs": [
         "preguntas de seguridad",
         "pregunta de seguridad",
@@ -1491,6 +1535,7 @@
       "categoria": "CUENTA_Y_REGISTRO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Cómo cambiar tu clave en Mi Cuenta",
+      "tituloEn": "How to change your password in My Account",
       "variantesEs": [
         "cambiar contraseña",
         "cambiar mi contraseña",
@@ -1521,6 +1566,7 @@
       "categoria": "CUENTA_Y_REGISTRO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Cambiar tu apodo en tu perfil",
+      "tituloEn": "Change your nickname in your profile",
       "variantesEs": [
         "cambiar apodo",
         "cambiar mi apodo",
@@ -1552,6 +1598,7 @@
       "categoria": "POLITICAS_Y_TERMINOS",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Normas de conducta y filtro de palabras",
+      "tituloEn": "Code of conduct and word filter",
       "variantesEs": [
         "normas",
         "normas de conducta",
@@ -1587,6 +1634,7 @@
       "categoria": "POLITICAS_Y_TERMINOS",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Tus datos y cerrar tu cuenta",
+      "tituloEn": "Your data and closing your account",
       "variantesEs": [
         "mis datos",
         "descargar mis datos",
@@ -1624,6 +1672,7 @@
       "categoria": "SUBASTA_Y_COMERCIO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Cómo cancelar una subasta",
+      "tituloEn": "How to cancel an auction",
       "variantesEs": [
         "cancelar subasta",
         "cancelar una subasta",
@@ -1655,6 +1704,7 @@
       "categoria": "SUBASTA_Y_COMERCIO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Puja automática en una subasta",
+      "tituloEn": "Automatic bidding in an auction",
       "variantesEs": [
         "puja automatica",
         "tope de puja automatica",
@@ -1681,6 +1731,7 @@
       "categoria": "SUBASTA_Y_COMERCIO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Recoger lo que ganaste en una subasta",
+      "tituloEn": "Collect what you won in an auction",
       "variantesEs": [
         "recoger",
         "recoger lo que gane",
@@ -1717,6 +1768,7 @@
       "categoria": "SUBASTA_Y_COMERCIO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Límites de subastas y pujas",
+      "tituloEn": "Auction and bid limits",
       "variantesEs": [
         "limites de subastas",
         "cuantas subastas puedo publicar",
@@ -1747,6 +1799,7 @@
       "categoria": "MECANICA_JUEGO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Acciones especiales y poder en combate",
+      "tituloEn": "Special actions and power in combat",
       "variantesEs": [
         "acciones especiales",
         "habilidades del heroe",
@@ -1784,6 +1837,7 @@
       "categoria": "MECANICA_JUEGO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Recompensas de las batallas en línea",
+      "tituloEn": "Online battle rewards",
       "variantesEs": [
         "recompensas de batalla",
         "recompensa por ganar",
@@ -1816,6 +1870,7 @@
       "categoria": "MECANICA_JUEGO",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Cofres de recompensa",
+      "tituloEn": "Reward chests",
       "variantesEs": [
         "cofre",
         "cofres",
@@ -1845,6 +1900,7 @@
       "categoria": "FAQ_GENERAL",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Mensajes privados y chat",
+      "tituloEn": "Private messages and chat",
       "variantesEs": [
         "mensajes privados",
         "mensaje privado",
@@ -1880,6 +1936,7 @@
       "categoria": "FAQ_GENERAL",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Cómo funcionan las notificaciones",
+      "tituloEn": "How notifications work",
       "variantesEs": [
         "notificaciones",
         "notificacion",
@@ -1910,6 +1967,7 @@
       "categoria": "FAQ_GENERAL",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Comentar y calificar productos",
+      "tituloEn": "Comment on and rate products",
       "variantesEs": [
         "comentarios",
         "comentar",
@@ -1947,6 +2005,7 @@
       "categoria": "FAQ_GENERAL",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Preferencias del asistente",
+      "tituloEn": "Assistant preferences",
       "variantesEs": [
         "preferencias",
         "idioma",
@@ -1983,6 +2042,7 @@
       "categoria": "MECANICA_JUEGO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Reglas básicas del juego",
+      "tituloEn": "Basic game rules",
       "variantesEs": [
         "reglas del juego",
         "cuales son las reglas",
@@ -2016,6 +2076,7 @@
       "categoria": "POLITICAS_Y_TERMINOS",
       "tipoRespuesta": "DIRECTA",
       "titulo": "Términos del servicio y reglas de uso",
+      "tituloEn": "Terms of service and rules of use",
       "variantesEs": [
         "terminos de servicio",
         "terminos del servicio",
@@ -2044,6 +2105,7 @@
       "categoria": "SUBASTA_Y_COMERCIO",
       "tipoRespuesta": "PASO_A_PASO",
       "titulo": "Cómo funciona la Subasta",
+      "tituloEn": "How the Auction works",
       "variantesEs": [
         "como funciona la subasta",
         "como funcionan las subastas",

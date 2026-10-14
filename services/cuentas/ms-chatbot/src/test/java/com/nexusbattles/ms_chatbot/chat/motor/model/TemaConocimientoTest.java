@@ -102,4 +102,23 @@ class TemaConocimientoTest {
             "creditos", null, "Respuesta", null, 0, true, List.of(Categoria.PRODUCTO)))
             .isInstanceOf(IllegalArgumentException.class);
     }
+
+    // 1.17.0 (7.4.2): el titulo en ingles, opcional.
+    @Test
+    void elTituloEnInglesEsOpcionalYLaCopiaLoConserva() {
+        TemaConocimiento creditos = tema(Categoria.SUBASTA_Y_COMERCIO);
+        assertThat(creditos.titulo(true)).isEqualTo("Créditos");
+        assertThat(creditos.titulo(false)).isEqualTo("Créditos");
+
+        creditos.asignarTituloEn("  Credits  ");
+        assertThat(creditos.getTituloEn()).isEqualTo("Credits");
+        assertThat(creditos.titulo(true)).isEqualTo("Credits");
+        assertThat(creditos.titulo(false)).isEqualTo("Créditos");
+        assertThat(creditos.copiarA(null).getTituloEn()).isEqualTo("Credits");
+
+        creditos.asignarTituloEn("   ");
+        assertThat(creditos.getTituloEn()).isNull();
+        creditos.asignarTituloEn(null);
+        assertThat(creditos.titulo(true)).isEqualTo("Créditos");
+    }
 }

@@ -121,10 +121,12 @@ public class BaseConocimientoAdminService {
         validarVariantes(datos.variantesEs(), datos.variantesEn());
         List<Categoria> intenciones = intencionesValidas(datos.categoria(), datos.intencionesAdicionales(), "");
         VersionBaseConocimiento candidata = bloquearCandidata();
-        exigirTituloLibre(candidata, datos.titulo(), null);
-        return temaRepository.save(nuevoTema(candidata, UUID.randomUUID().toString(),
+        exigirTituloLibre(candidata, datos.titulo(), datos.tituloEn(), null);
+        TemaConocimiento tema = nuevoTema(candidata, UUID.randomUUID().toString(),
             datos.categoria(), intenciones, datos.tipoRespuesta(), datos.titulo(), datos.variantesEs(),
-            datos.variantesEn(), datos.respuestaEs(), datos.respuestaEn(), datos.prioridad(), datos.activo()));
+            datos.variantesEn(), datos.respuestaEs(), datos.respuestaEn(), datos.prioridad(), datos.activo());
+        tema.asignarTituloEn(datos.tituloEn());
+        return temaRepository.save(tema);
     }
 
     @Transactional
@@ -133,12 +135,13 @@ public class BaseConocimientoAdminService {
         List<Categoria> intenciones = intencionesValidas(datos.categoria(), datos.intencionesAdicionales(), "");
         VersionBaseConocimiento candidata = bloquearCandidata();
         TemaConocimiento tema = requerirTemaDe(candidata, temaId);
-        exigirTituloLibre(candidata, datos.titulo(), tema);
+        exigirTituloLibre(candidata, datos.titulo(), datos.tituloEn(), tema);
         tema.actualizar(datos.categoria(), datos.tipoRespuesta(), datos.titulo(),
             VariantesDePregunta.unirSinRepetir(datos.variantesEs()),
             VariantesDePregunta.unirSinRepetir(datos.variantesEn()),
             datos.respuestaEs(), datos.respuestaEn(), datos.prioridad(), activoPorDefecto(datos.activo()),
             intenciones);
+        tema.asignarTituloEn(datos.tituloEn());
         return tema;
     }
 
@@ -183,12 +186,16 @@ public class BaseConocimientoAdminService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "La clave '" + tema.clave() + "' aparece mas de una vez en el archivo.");
             }
-            Integer anterior = posicionPorTitulo.putIfAbsent(NormalizadorTexto.normalizar(tema.titulo()), posicion);
-            if (anterior != null) {
-                throw new TemaDuplicadoException("Los temas " + anterior + " y " + posicion
-                    + " del archivo tienen el mismo titulo ('" + temas.get(anterior - 1).titulo() + "' y '"
-                    + tema.titulo() + "', sin contar tildes, mayusculas ni signos). Una version no puede tener "
-                    + "dos temas con el mismo titulo: cambia uno o quitalo del archivo.");
+            // 1.17.0: el titulo en ingles tampoco puede repetir uno de otro tema.
+            for (String titulo : titulosDe(tema.titulo(), tema.tituloEn())) {
+                Integer anterior = posicionPorTitulo.putIfAbsent(titulo, posicion);
+                if (anterior != null) {
+                    throw new TemaDuplicadoException("Los temas " + anterior + " y " + posicion
+                        + " del archivo tienen el mismo titulo ('" + temas.get(anterior - 1).titulo() + "' y '"
+                        + tema.titulo() + "', sin contar tildes, mayusculas ni signos, en espanol o en ingles). "
+                        + "Una version no puede tener dos temas con el mismo titulo: cambia uno o quitalo del "
+                        + "archivo.");
+                }
             }
         }
 
@@ -202,10 +209,12 @@ public class BaseConocimientoAdminService {
         List<TemaConocimiento> nuevos = new ArrayList<>();
         for (int i = 0; i < temas.size(); i++) {
             TemaIntercambio t = temas.get(i);
-            nuevos.add(nuevoTema(candidata,
+            TemaConocimiento nuevo = nuevoTema(candidata,
                 t.clave() == null || t.clave().isBlank() ? UUID.randomUUID().toString() : t.clave(),
                 t.categoria(), intenciones.get(i), t.tipoRespuesta(), t.titulo(), t.variantesEs(), t.variantesEn(),
-                t.respuestaEs(), t.respuestaEn(), t.prioridad(), t.activo()));
+                t.respuestaEs(), t.respuestaEn(), t.prioridad(), t.activo());
+            nuevo.asignarTituloEn(t.tituloEn());
+            nuevos.add(nuevo);
         }
         return temaRepository.saveAll(nuevos);
     }
@@ -250,15 +259,43 @@ public class BaseConocimientoAdminService {
     // agregan el mismo tema a la vez no lo duplican: el segundo recibe el 409.
     // `excepto` es el tema que se edita: en la misma transaccion JPA devuelve
     // la misma instancia para el mismo tema, asi que basta compararla.
-    private void exigirTituloLibre(VersionBaseConocimiento candidata, String titulo, TemaConocimiento excepto) {
+    // 1.17.0: lo mismo con el titulo en ingles: ninguno de los dos titulos
+    // del tema puede ser el de otro tema, en espanol o en ingles (pulsar una
+    // pregunta relacionada responde el tema de ese titulo).
+    private void exigirTituloLibre(VersionBaseConocimiento candidata, String titulo, String tituloEn,
+                                   TemaConocimiento excepto) {
         String buscado = NormalizadorTexto.normalizar(titulo);
+        String buscadoEn = tituloEn == null || tituloEn.isBlank() ? null : NormalizadorTexto.normalizar(tituloEn);
         for (TemaConocimiento otro : temaRepository.findByVersionIdOrderByTituloAsc(candidata.getId())) {
-            if (otro != excepto && buscado.equals(NormalizadorTexto.normalizar(otro.getTitulo()))) {
-                throw new TemaDuplicadoException("El titulo '" + titulo.strip() + "' es el mismo que el del tema '"
-                    + otro.getTitulo() + "' de la version candidata (sin contar tildes, mayusculas ni signos). "
-                    + "Cambialo o edita ese tema.");
+            if (otro == excepto) {
+                continue;
+            }
+            Set<String> delOtro = titulosDe(otro.getTitulo(), otro.getTituloEn());
+            if (delOtro.contains(buscado)) {
+                // El mensaje de siempre si chocan los dos titulos en espanol.
+                boolean conElDeIngles = !buscado.equals(NormalizadorTexto.normalizar(otro.getTitulo()));
+                throw duplicado("El titulo '" + titulo.strip() + "'", otro, conElDeIngles);
+            }
+            if (buscadoEn != null && delOtro.contains(buscadoEn)) {
+                throw duplicado("El titulo en ingles '" + tituloEn.strip() + "'", otro, true);
             }
         }
+    }
+
+    private static TemaDuplicadoException duplicado(String cual, TemaConocimiento otro, boolean enLosDosIdiomas) {
+        return new TemaDuplicadoException(cual + " es el mismo que el del tema '" + otro.getTitulo()
+            + "' de la version candidata (sin contar tildes, mayusculas ni signos"
+            + (enLosDosIdiomas ? ", en espanol o en ingles" : "") + "). Cambialo o edita ese tema.");
+    }
+
+    // Los titulos de un tema, normalizados (el de ingles, si lo tiene).
+    private static Set<String> titulosDe(String titulo, String tituloEn) {
+        Set<String> titulos = new HashSet<>();
+        titulos.add(NormalizadorTexto.normalizar(titulo));
+        if (tituloEn != null && !tituloEn.isBlank()) {
+            titulos.add(NormalizadorTexto.normalizar(tituloEn));
+        }
+        return titulos;
     }
 
     private VersionBaseConocimiento bloquearCandidata() {

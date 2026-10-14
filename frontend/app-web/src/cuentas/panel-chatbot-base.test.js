@@ -328,6 +328,18 @@ describe('con candidata', () => {
     expect(fila.textContent).toContain('Subastas y comercio');
     expect(fila.textContent).toContain('Activo');
     expect(fila.textContent).not.toContain('También:');
+    // 1.17.0: dice si le falta el título en inglés.
+    expect(fila.querySelector('[data-titulo-en="no"]').textContent).toBe('Sin título en inglés');
+  });
+
+  test('con título en inglés, lo muestra en la lista', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({
+        listarTemas: jest.fn(async () => [{ ...TEMA, tituloEn: 'How to bid' }]),
+      }),
+    });
+    const fila = vista.raiz.querySelector('[data-zona="temas-candidata"] tbody tr');
+    expect(fila.querySelector('[data-titulo-en="si"]').textContent).toBe('En inglés: How to bid');
   });
 
   // 1.6.0: la columna «Intención» dice también las intenciones adicionales.
@@ -521,6 +533,7 @@ describe('formulario de un tema', () => {
     await expect(resultado).resolves.toBe(true);
     expect(guardar).toHaveBeenCalledWith({
       titulo: 'Horario de soporte',
+      tituloEn: null,
       categoria: 'SOPORTE_TECNICO',
       intencionesAdicionales: [],
       tipoRespuesta: 'DIRECTA',
@@ -564,6 +577,40 @@ describe('formulario de un tema', () => {
         intencionesAdicionales: ['CUENTA_Y_REGISTRO'],
       }),
     );
+  });
+
+  // 1.17.0 (§7.4.2): el título en inglés, opcional, debajo del de español.
+  test('envía el título en inglés y, al editar, lo muestra', async () => {
+    const guardar = jest.fn(async () => undefined);
+    const { resultado, dialogo } = abrir(guardar, { ...TEMA, tituloEn: 'How to bid' });
+    const enIngles = dialogo.querySelector('input[name="tituloEn"]');
+    expect(enIngles.value).toBe('How to bid');
+    expect(enIngles.maxLength).toBe(150);
+    const etiquetas = [...dialogo.querySelectorAll('.campo__etiqueta')].map((e) => e.textContent);
+    expect(etiquetas.indexOf('Título en inglés (opcional)')).toBe(etiquetas.indexOf('Título') + 1);
+
+    enIngles.value = '  How to place a bid  ';
+    dialogo.querySelector('[data-accion="guardar-tema"]').click();
+
+    await expect(resultado).resolves.toBe(true);
+    expect(guardar).toHaveBeenCalledWith(
+      expect.objectContaining({ titulo: 'Cómo pujar', tituloEn: 'How to place a bid' }),
+    );
+  });
+
+  test('un título en inglés igual al de español no se envía', async () => {
+    const guardar = jest.fn();
+    const { dialogo } = abrir(guardar, TEMA);
+    dialogo.querySelector('input[name="tituloEn"]').value = 'cómo PUJAR';
+
+    dialogo.querySelector('[data-accion="guardar-tema"]').click();
+    await esperar();
+
+    expect(guardar).not.toHaveBeenCalled();
+    expect(dialogo.textContent).toContain('Es el mismo título en español');
+    expect(
+      erroresDelTema({ ...TEMA, tituloEn: 'Otro', variantesEs: ['x'], variantesEn: [] }),
+    ).toEqual({});
   });
 
   test('al editar marca las intenciones que el tema ya tiene', () => {

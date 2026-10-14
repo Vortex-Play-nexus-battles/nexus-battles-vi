@@ -63,7 +63,8 @@ class SugerenciasControllerTest {
 
     @Test
     void sinTokenDevuelveLasSugerencias() throws Exception {
-        when(servicio.sugerir("torn", Categoria.MODALIDAD_JUEGO, 3)).thenReturn(List.of(torneo()));
+        when(servicio.sugerencias("torn", Categoria.MODALIDAD_JUEGO, 3))
+            .thenReturn(List.of(SugerenciaResponse.desde(torneo())));
 
         mockMvc.perform(get("/chat/sugerencias")
                 .param("q", "torn")
@@ -78,7 +79,7 @@ class SugerenciasControllerTest {
 
     @Test
     void sinParametrosUsaLosValoresPorOmision() throws Exception {
-        when(servicio.sugerir(isNull(), isNull(), isNull())).thenReturn(List.of());
+        when(servicio.sugerencias(isNull(), isNull(), isNull())).thenReturn(List.of());
 
         mockMvc.perform(get("/chat/sugerencias"))
             .andExpect(status().isOk())

@@ -53,6 +53,6 @@ public class SugerenciasController {
     public List<SugerenciaResponse> sugerir(@RequestParam(required = false) @Size(max = 100) String q,
                                             @RequestParam(required = false) Categoria categoria,
                                             @RequestParam(required = false) @Min(1) @Max(10) Integer limite) {
-        return servicio.sugerir(q, categoria, limite).stream().map(SugerenciaResponse::desde).toList();
+        return servicio.sugerencias(q, categoria, limite);
     }
 }

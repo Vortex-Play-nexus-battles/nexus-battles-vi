@@ -516,6 +516,78 @@ class MotorRespuestasTest {
             prioridad, true);
     }
 
+    // --- 1.17.0 (7.4.2): las preguntas relacionadas, tambien en ingles ---------------
+
+    private static TemaConocimiento conTituloEn(TemaConocimiento tema, String tituloEn) {
+        tema.asignarTituloEn(tituloEn);
+        return tema;
+    }
+
+    private static TemaConocimiento temaRecuperar() {
+        return new TemaConocimiento(null, "clave-recuperar", Categoria.CUENTA_Y_REGISTRO, TipoRespuesta.DIRECTA,
+            "Recuperar mi contraseña", "olvide mi contrasena", "forgot my password",
+            "Para recuperarla, ve al inicio.", "To recover it, go to the start screen.", 0, true);
+    }
+
+    @Test
+    void enInglesLasRelacionadasVanConSuTituloEnInglesYSinElConElDeSiempre() {
+        TemaConocimiento cuenta = new TemaConocimiento(null, "clave-cuenta", Categoria.CUENTA_Y_REGISTRO,
+            TipoRespuesta.DIRECTA, "Mi cuenta", "mi perfil", "profile settings", "Tu perfil.", "Your profile.", 0,
+            true);
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(temaRegistro(0), conTituloEn(temaRecuperar(), "Recover my password"), cuenta));
+
+        ResultadoMotor enIngles = motorRespuestas.generarRespuesta("how do i sign up for an account");
+        ResultadoMotor enEspanol = motorRespuestas.generarRespuesta("como me registro");
+
+        assertThat(enIngles.enriquecido().respuestasRapidas()).containsExactly("Mi cuenta", "Recover my password");
+        assertThat(enEspanol.enriquecido().respuestasRapidas())
+            .containsExactly("Mi cuenta", "Recuperar mi contraseña");
+        // DETALLADO: «Related topics» con los mismos titulos.
+        assertThat(motorRespuestas.generarRespuesta("how do i sign up for an account", null,
+            new PreferenciasDeRespuesta(IdiomaPreferido.AUTOMATICO, NivelDeDetalle.DETALLADO)).texto())
+            .endsWith("Related topics: Mi cuenta | Recover my password.");
+    }
+
+    // Pulsar una relacionada de una respuesta en ingles (su titulo en
+    // ingles) se responde en ingles; su titulo en espanol, en espanol.
+    @Test
+    void elTituloEnInglesEsUnaPreguntaDeEseTemaQueSeRespondeEnIngles() {
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(temaRegistro(0), conTituloEn(temaRecuperar(), "Recover my password")));
+
+        ResultadoMotor porSuTitulo = motorRespuestas.generarRespuesta("Recover my password");
+        assertThat(porSuTitulo.temaClave()).isEqualTo("clave-recuperar");
+        assertThat(porSuTitulo.ingles()).isTrue();
+        assertThat(porSuTitulo.texto()).isEqualTo("To recover it, go to the start screen.");
+
+        ResultadoMotor enEspanol = motorRespuestas.generarRespuesta("Recuperar mi contraseña");
+        assertThat(enEspanol.ingles()).isFalse();
+        assertThat(enEspanol.texto()).isEqualTo("Para recuperarla, ve al inicio.");
+
+        // La preferencia ES manda sobre el titulo en ingles.
+        assertThat(motorRespuestas.generarRespuesta("recover my password", null,
+            new PreferenciasDeRespuesta(IdiomaPreferido.ES, NivelDeDetalle.NORMAL)).texto())
+            .isEqualTo("Para recuperarla, ve al inicio.");
+    }
+
+    @Test
+    void alEscalarEnInglesLasSugerenciasVanConSuTituloEnIngles() {
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(temaRegistro(0), conTituloEn(temaSubasta(), "How to put up an auction")));
+
+        ResultadoMotor escalado = motorRespuestas.generarRespuesta("what is the meaning of life",
+            VistaDelChat.SUBASTAS);
+        ResultadoMotor enEspanol = motorRespuestas.generarRespuesta("xk fmk qzr blublu", VistaDelChat.SUBASTAS);
+
+        assertThat(escalado.requiereEscalamiento()).isTrue();
+        assertThat(escalado.enriquecido().respuestasRapidas()).containsExactly("How to put up an auction");
+        assertThat(enEspanol.enriquecido().respuestasRapidas()).containsExactly("Cómo publicar en subasta");
+        // Sus enlaces a la seccion salen igual que con el titulo en espanol.
+        assertThat(escalado.enriquecido().enlaces()).extracting(e -> e.destino())
+            .isEqualTo(enEspanol.enriquecido().enlaces().stream().map(e -> e.destino()).toList());
+    }
+
     private static TemaConocimiento temaSubasta() {
         return new TemaConocimiento(null, "clave-subasta",
             Categoria.SUBASTA_Y_COMERCIO,
