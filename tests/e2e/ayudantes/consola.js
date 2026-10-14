@@ -38,6 +38,99 @@ export const SECCIONES_DE_LA_CONSOLA = Object.freeze([
 ]);
 
 /**
+ * Lo que abre cada rol, según 7.3.1 y la matriz de permisos del documento
+ * (Tabla 24): el Moderador modera, advierte y suspende; el Administrador
+ * además gestiona productos, usuarios y configuración; solo el Super
+ * Administrador crea cuentas administrativas y lee la auditoría (RF-RBAC-003,
+ * RF-AUD-001).
+ *
+ * Se escribe aquí y no se importa de la matriz de la interfaz
+ * (`comun/matriz-acceso.js`): si la interfaz se equivoca, esta lista no se
+ * equivoca con ella.
+ */
+const DE_MODERACION = Object.freeze([
+  '/consola',
+  '/consola/comentarios',
+  '/consola/sanciones',
+  '/consola/lista-negra',
+]);
+const SOLO_DEL_SUPER_ADMINISTRADOR = Object.freeze([
+  '/consola/usuarios/nueva-cuenta',
+  '/consola/auditoria',
+]);
+
+/**
+ * Las secciones de la consola que un rol abre.
+ *
+ * @param {string} rol
+ * @returns {ReadonlyArray<readonly [string, string]>}
+ */
+export function seccionesDeRol(rol) {
+  return SECCIONES_DE_LA_CONSOLA.filter(([ruta]) => {
+    switch (rol) {
+      case 'SUPER_ADMINISTRADOR':
+        return true;
+      case 'ADMINISTRADOR':
+        return !SOLO_DEL_SUPER_ADMINISTRADOR.includes(ruta);
+      case 'MODERADOR':
+        return DE_MODERACION.includes(ruta);
+      default:
+        return false;
+    }
+  });
+}
+
+/**
+ * Las que no abre.
+ *
+ * @param {string} rol
+ * @returns {ReadonlyArray<readonly [string, string]>}
+ */
+export function seccionesVetadasA(rol) {
+  const abiertas = new Set(seccionesDeRol(rol).map(([ruta]) => ruta));
+  return SECCIONES_DE_LA_CONSOLA.filter(([ruta]) => !abiertas.has(ruta));
+}
+
+/**
+ * Las secciones que ofrece la barra de la consola, por su ruta.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @returns {Promise<string[]>}
+ */
+export async function seccionesDeLaBarra(page) {
+  const barra = page.locator('nav[aria-label="Herramientas de operación"]');
+  await expect(barra).toBeAttached({ timeout: 30_000 });
+  const enlaces = await barra
+    .locator('a[href]')
+    .evaluateAll((lista) => lista.map((enlace) => enlace.getAttribute('href') ?? ''));
+  return enlaces.map((href) => new URL(href, page.url()).pathname);
+}
+
+/**
+ * Cada sección vetada se explica con palabras y no enseña nada de la
+ * herramienta (RF-INV-008, «no rebota»): la página queda marcada como
+ * denegada, dice «No tienes acceso a esta sección.», ofrece volver al inicio
+ * y no pinta ni la barra de la consola ni una sola tabla.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {ReadonlyArray<readonly [string, string]>} secciones
+ * @param {{base?: string}} [opciones]
+ */
+export async function comprobarSinAcceso(page, secciones, { base = '' } = {}) {
+  for (const [ruta] of secciones) {
+    await page.goto(`${base}${ruta}`);
+    const aviso = page.locator('[data-zona="sin-permiso"]');
+    await expect(aviso, ruta).toBeVisible({ timeout: 30_000 });
+    await expect(aviso, ruta).toContainText('No tienes acceso a esta sección.');
+    await expect(page.locator('html'), ruta).toHaveAttribute('data-acceso', 'denegado');
+    await expect(aviso.getByRole('link', { name: 'Volver a mi inicio' }), ruta).toBeVisible();
+    await expect(page.locator('nav[aria-label="Herramientas de operación"]'), ruta).toHaveCount(0);
+    await expect(page.locator('main table'), ruta).toHaveCount(0);
+    expect(new URL(page.url()).pathname, `${ruta} no rebota a otra página`).toBe(ruta);
+  }
+}
+
+/**
  * Deja la sesión en la pestaña como la deja el login (una sola vez por
  * pestaña: si la consola la cierra, no vuelve sola).
  *
