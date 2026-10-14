@@ -262,7 +262,7 @@ class AuditLogEventosTest {
                     "a,c".getBytes(StandardCharsets.UTF_8), AuditLogService.Formato.CSV);
 
             assertThat(una).isEqualTo(igual).hasSameHashCodeAs(igual);
-            assertThat(una).isNotEqualTo(otroFormato).isNotEqualTo(otroContenido).isNotEqualTo("a,b");
+            assertThat(una).isNotEqualTo(otroFormato).isNotEqualTo(otroContenido).isNotEqualTo(null);
             assertThat(una.toString()).isEqualTo("Exportacion[formato=CSV, bytes=3]");
             assertThat(new AuditLogService.Exportacion(null, null).toString())
                     .isEqualTo("Exportacion[formato=null, bytes=0]");
