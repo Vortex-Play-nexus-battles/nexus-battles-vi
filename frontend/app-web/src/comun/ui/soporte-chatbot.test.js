@@ -80,23 +80,33 @@ beforeEach(() => {
 describe('visitante', () => {
   // #506 — antes: «necesitas iniciar sesión», un enlace al login sin vuelta y
   // el chat general, que también pide sesión. Quien no tenía cuenta no tenía
-  // salida.
-  test('no ve el formulario: se le explica que necesita una cuenta, con entrar y crearla', async () => {
+  // salida. ms-chatbot.yaml 1.12.0 (RF-CHA-007, actor Visitante): ahora pide
+  // ayuda como cualquiera, y la cuenta queda como salida secundaria.
+  test('ve el formulario y sus solicitudes, con la nota de su sesión y la cuenta como salida', async () => {
     const vista = await montar({ autenticado: false });
 
-    expect(vista.formulario).toBeNull();
-    expect(vista.el.textContent).toContain(TEXTOS_SOPORTE.visitante);
-    expect(TEXTOS_SOPORTE.visitante).toBe(
-      'Para hablar con una persona del equipo necesitas una cuenta: inicia sesión o crea una.',
-    );
-    const entrar = vista.el.querySelector('[data-accion="iniciar-sesion"]');
-    const crear = vista.el.querySelector('[data-accion="crear-cuenta"]');
+    expect(vista.formulario).not.toBeNull();
+    expect(vista.cliente.misTickets).toHaveBeenCalled();
+    const nota = vista.el.querySelector('[data-zona="visitante"]');
+    expect(nota.textContent).toContain(TEXTOS_SOPORTE.visitante);
+    expect(TEXTOS_SOPORTE.visitante).toContain('mientras sigas en esta sesión del navegador');
+    const entrar = nota.querySelector('[data-accion="iniciar-sesion"]');
+    const crear = nota.querySelector('[data-accion="crear-cuenta"]');
     expect(entrar.getAttribute('href')).toBe('/login');
     expect(entrar.textContent).toBe(TEXTOS_SOPORTE.iniciarSesion);
+    expect(entrar.classList.contains('boton--secundario')).toBe(true);
     expect(crear.getAttribute('href')).toBe('/registro');
     expect(crear.textContent).toBe('Crear cuenta');
     expect(vista.el.querySelector('[data-accion="chat-general"]')).toBeNull();
-    expect(vista.cliente.misTickets).not.toHaveBeenCalled();
+    // Nada de «null» pintado como texto.
+    expect(vista.el.textContent).not.toContain('null');
+  });
+
+  test('un jugador no ve la nota del visitante', async () => {
+    const vista = await montar({ autenticado: true });
+
+    expect(vista.el.querySelector('[data-zona="visitante"]')).toBeNull();
+    expect(vista.el.textContent).not.toContain('null');
   });
 
   test('las rutas pueden darse como funciones, que se leen al abrir el panel', async () => {

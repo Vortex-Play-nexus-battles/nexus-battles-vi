@@ -339,7 +339,7 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
   function pintarSolicitudes({ visitante }) {
     contenido.append(
       h('p', { clase: 'chatbot-soporte__texto', texto: TEXTOS_SOPORTE.intro }),
-      visitante ? notaDeVisitante() : null,
+      ...(visitante ? [notaDeVisitante()] : []),
       zonaDesdeConversacion,
       formulario,
       h('h4', { clase: 'chatbot-soporte__subtitulo', texto: TEXTOS_SOPORTE.tuyas }),
