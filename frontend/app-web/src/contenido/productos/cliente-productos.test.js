@@ -1,8 +1,11 @@
 import { jest } from '@jest/globals';
 import {
   consultarHistorialProducto,
+  consultarVersionesDiseno,
   consultarEstadisticasCatalogo,
   crearProducto,
+  exportarPlantillaDiseno,
+  importarPlantillaDiseno,
   revertirProducto,
   RUTA_ESTADISTICAS,
   RUTA_PRODUCTOS,
@@ -120,5 +123,45 @@ test('envía la reversión elegida y devuelve el producto restaurado', async () 
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ respaldoId: 'respaldo-1' }),
+  });
+});
+
+test('consulta las versiones del diseño de un producto', async () => {
+  const versiones = [{ version: 3, autor: 'admin-uid', actual: true }];
+  const fetchImpl = jest.fn(async () => respuesta(200, versiones));
+
+  await expect(consultarVersionesDiseno('producto 1', { fetchImpl })).resolves.toEqual(versiones);
+  expect(fetchImpl).toHaveBeenCalledWith('/api/v1/productos/producto%201/diseno/versiones', {
+    method: 'GET',
+  });
+});
+
+test('exporta la plantilla portable del diseño actual', async () => {
+  const plantilla = { formato: 'nexus-producto-diseno', versionFormato: 1 };
+  const fetchImpl = jest.fn(async () => respuesta(200, plantilla));
+
+  await expect(exportarPlantillaDiseno('producto-1', { fetchImpl })).resolves.toEqual(plantilla);
+  expect(fetchImpl).toHaveBeenCalledWith('/api/v1/productos/producto-1/diseno/plantilla', {
+    method: 'GET',
+  });
+});
+
+test('importa una plantilla sobre el producto destino', async () => {
+  const plantilla = {
+    formato: 'nexus-producto-diseno',
+    versionFormato: 1,
+    imagen: 'producto.webp',
+    descripcion: 'Diseño importado',
+  };
+  const actualizado = { id: 'producto-2', version: 4, ...plantilla };
+  const fetchImpl = jest.fn(async () => respuesta(200, actualizado));
+
+  await expect(importarPlantillaDiseno('producto-2', plantilla, { fetchImpl })).resolves.toEqual(
+    actualizado,
+  );
+  expect(fetchImpl).toHaveBeenCalledWith('/api/v1/productos/producto-2/diseno/importaciones', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(plantilla),
   });
 });

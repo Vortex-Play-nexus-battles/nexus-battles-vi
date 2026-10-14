@@ -2,6 +2,21 @@
 
 ## API
 
+### Versiones del diseño
+
+HU-PRD-011 reutiliza el historial auditado del catálogo para mostrar las
+versiones del diseño con fecha y autor. Un administrador puede exportar el
+diseño actual como JSON mediante
+`GET /api/v1/productos/{id}/diseno/plantilla` e importarlo sobre otro producto
+con `POST /api/v1/productos/{id}/diseno/importaciones`.
+
+La versión 1 de la plantilla contiene únicamente `imagen` y `descripcion`.
+Importarla no cambia el identificador, nombre, tipo, precios, tiraje ni reglas
+de combate. El documento declara `formato` y `versionFormato` para que los
+recursos gráficos de HU-PRD-009 puedan incorporarse en una versión posterior
+sin reinterpretar archivos existentes. Una plantilla inválida se rechaza antes
+de invocar la escritura del producto.
+
 - `GET /api/v1/productos?page=0&size=20&tipo=…&estado=…` (R16, `contracts/openapi/productos.yaml` 1.2.0): listado público y paginado del catálogo, sin token. Por omisión solo ACTIVO y UNICO (SUSPENDIDO únicamente con `estado=SUSPENDIDO`, y desde 1.4.0 solo para un servicio o un administrador), `size` entre 1 y 50 y orden estable (`creadoEn`, luego `id`); responde `{content, page, size, totalElements, totalPages}` y lo consume ms-ecommerce para proyectar su vitrina. Desde R16 el borde manda todo `/api/v1/productos` a este servicio (la vitrina vive en `/api/v1/vitrina`).
 
 ## Despliegue

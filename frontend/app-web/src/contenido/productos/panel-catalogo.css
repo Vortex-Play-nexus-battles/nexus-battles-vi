@@ -382,7 +382,8 @@
   border-top: 1px solid var(--borde);
 }
 
-.hoja-producto__historial {
+.hoja-producto__historial,
+.hoja-producto__diseno {
   display: grid;
   gap: 12px;
   padding-top: 18px;
@@ -390,8 +391,28 @@
 }
 
 .hoja-producto__historial h3,
-.hoja-producto__historial p {
+.hoja-producto__historial p,
+.hoja-producto__diseno h3,
+.hoja-producto__diseno p {
   margin: 0;
+}
+
+.hoja-producto__acciones-diseno {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hoja-producto__versiones {
+  display: grid;
+  gap: 8px;
+  padding-left: 24px;
+  margin: 0;
+}
+
+.hoja-producto__versiones li {
+  display: grid;
+  gap: 2px;
 }
 
 .hoja-producto__cambios {

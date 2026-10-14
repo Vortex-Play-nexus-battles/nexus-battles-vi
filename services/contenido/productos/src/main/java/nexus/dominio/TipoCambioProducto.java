@@ -6,5 +6,6 @@ public enum TipoCambioProducto {
         MODIFICACION,
         SUSPENSION,
         REACTIVACION,
-        REVERSION
+        REVERSION,
+        IMPORTACION_DISENO
 }
