@@ -1,16 +1,30 @@
 /**
  * Tablero de metricas tecnicas (HU-MET-004) y de usuarios y moderacion
- * (HU-MET-001), sobre contracts/openapi/metricas-plataforma.yaml 1.5.0.
+ * (HU-MET-001 y el panel principal de §7.3.8), sobre
+ * contracts/openapi/metricas-plataforma.yaml 1.11.0.
  *
  * **No calcula nada.** Alertas, brechas y agregados vienen del servicio; esta
- * pantalla los pinta y los deja exportar (CA-02 de las dos historias).
+ * pantalla los pinta y los deja exportar (CA-02 de las dos historias). Lo
+ * unico que hace con una serie por dia es poner a cero los dias que el
+ * servicio no publica (un dia sin sanciones no sale en `porDia`), para que el
+ * grafico no junte dos dias separados.
  * Sigue `shared/ui-kit/MAPEO-ERRORES.md`: se decide por `type`, nunca por el
  * texto.
  */
 
 import { baseDeApi, ErrorDeMetricas } from './cliente-metricas.js';
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
-import { nodo } from '../../comun/ui/dom.js';
+import { h, nodo } from '../../comun/ui/dom.js';
+import { fecha as fechaLocal, numero } from '../../comun/ui/formato.js';
+import { graficoDeBarras } from '../../comun/ui/admin/grafico.js';
+import { rejillaDeIndicadores, tarjetaDeIndicador } from '../../comun/ui/admin/indicador.js';
+import { tablaDeDatos } from '../../comun/ui/admin/tabla-de-datos.js';
+import { diaCompleto, diaCorto, serieDiaria } from '../../comun/ui/admin/fechas.js';
+import { NOMBRE_DE_CATEGORIA_DE_REPORTE } from '../../comun/ui/admin/nombres.js';
+import {
+  fraseDeNoDisponible,
+  pintarAlertasDeModeracion,
+} from '../../comun/ui/admin/alertas-de-moderacion.js';
 
 async function pedir(
   ruta,
@@ -86,11 +100,24 @@ export function filaDe(metricas, umbrales) {
   };
 }
 
+/** «1 sanción», «4 sanciones». */
+function cuantas(cantidad, singular, plural) {
+  const n = Number.isFinite(cantidad) ? cantidad : 0;
+  return `${numero(n)} ${n === 1 ? singular : plural}`;
+}
+
 /** Resumen de una linea del tablero de moderacion. */
 export function resumenDeModeracion(tablero) {
   const s = tablero.sanciones;
   const tipos = s.porTipo ?? {};
-  return `${s.total} sanciones (${tipos.ADVERTENCIA ?? 0} advertencias, ${tipos.SUSPENSION ?? 0} suspensiones, ${tipos.BANEO ?? 0} baneos) · ${s.moderadoresActivos} moderadores activos · ${s.revertidas} revertidas`;
+  return (
+    `${cuantas(s.total, 'sanción', 'sanciones')}: ` +
+    `${cuantas(tipos.ADVERTENCIA ?? 0, 'advertencia', 'advertencias')}, ` +
+    `${cuantas(tipos.SUSPENSION ?? 0, 'suspensión', 'suspensiones')} y ` +
+    `${cuantas(tipos.BANEO ?? 0, 'baneo', 'baneos')} · ` +
+    `${cuantas(s.moderadoresActivos, 'moderador sancionó', 'moderadores sancionaron')} · ` +
+    `${cuantas(s.revertidas, 'revertida', 'revertidas')}`
+  );
 }
 
 /**
@@ -99,7 +126,212 @@ export function resumenDeModeracion(tablero) {
  */
 export function resumenDeCuentas(cuentas) {
   const e = cuentas.porEstado ?? {};
-  return `${cuentas.total} cuentas (${e.ACTIVO ?? 0} activas, ${e.SUSPENDIDO ?? 0} suspendidas, ${e.BANEADO ?? 0} baneadas, ${e.PENDIENTE_VERIFICACION ?? 0} sin verificar, ${e.INACTIVO ?? 0} inactivas) · ${cuentas.registros?.total ?? 0} altas en el periodo`;
+  return (
+    `${cuantas(cuentas.total, 'cuenta', 'cuentas')} ahora: ` +
+    `${numero(e.ACTIVO ?? 0)} activas, ${numero(e.SUSPENDIDO ?? 0)} suspendidas, ` +
+    `${numero(e.BANEADO ?? 0)} baneadas, ${numero(e.PENDIENTE_VERIFICACION ?? 0)} sin verificar ` +
+    `y ${numero(e.INACTIVO ?? 0)} pendientes de activar · ` +
+    `${cuantas(cuentas.registros?.total ?? 0, 'cuenta nueva', 'cuentas nuevas')} en el periodo`
+  );
+}
+
+/** Un numero publicado o null: nunca un 0 que nadie dio. */
+function cifra(valor) {
+  return typeof valor === 'number' && Number.isFinite(valor) ? valor : null;
+}
+
+/** Todas las apelaciones del periodo, sumando sus estados. */
+function apelacionesDelPeriodo(apelaciones) {
+  return Object.values(apelaciones ?? {})
+    .map(cifra)
+    .reduce((suma, n) => suma + (n ?? 0), 0);
+}
+
+/**
+ * Las cifras de arriba del tablero de moderacion. Lo que no llego (cuentas o
+ * reportes) sale como «sin dato», nunca como cero.
+ */
+export function indicadoresDeModeracion(tablero) {
+  const s = tablero.sanciones ?? {};
+  const reportes = tablero.reportes ?? null;
+  const cuentas = tablero.registroDeUsuarios ?? null;
+  const pendientes = cifra(s.apelaciones?.PENDIENTE);
+  return rejillaDeIndicadores(
+    [
+      tarjetaDeIndicador({
+        etiqueta: 'Sanciones',
+        valor: cifra(s.total),
+        detalle: `${cuantas(s.moderadoresActivos, 'moderador', 'moderadores')} · ${cuantas(
+          s.revertidas,
+          'revertida',
+          'revertidas',
+        )}`,
+      }),
+      tarjetaDeIndicador({
+        etiqueta: 'Reportes de comentarios',
+        valor: cifra(reportes?.total),
+        detalle: reportes
+          ? `${cuantas(reportes.comentariosReportados, 'comentario', 'comentarios')} · ${cuantas(
+              reportes.reportantes,
+              'persona',
+              'personas',
+            )}`
+          : 'No disponible ahora',
+      }),
+      tarjetaDeIndicador({
+        etiqueta: 'Apelaciones pendientes',
+        valor: pendientes,
+        tono: pendientes > 0 ? 'advertencia' : null,
+        detalle: `de ${cuantas(apelacionesDelPeriodo(s.apelaciones), 'apelación', 'apelaciones')} del periodo`,
+      }),
+      tarjetaDeIndicador({
+        etiqueta: 'Cuentas nuevas',
+        valor: cifra(cuentas?.registros?.total),
+        detalle: cuentas ? 'registradas en el periodo' : 'No disponible ahora',
+      }),
+    ],
+    { zona: 'indicadores-moderacion' },
+  );
+}
+
+/** Una serie por dia, con los dias vacios a cero, como grafico de barras. */
+function graficoPorDia({ titulo, desde, hasta, porDia, valor, unidad, zona }) {
+  const grafico = graficoDeBarras({
+    titulo: `${titulo} · del ${fechaLocal(desde)} al ${fechaLocal(hasta)}`,
+    datos: serieDiaria(desde, hasta, porDia, valor).map((dia) => ({
+      etiqueta: diaCorto(dia.fecha),
+      valor: dia.valor,
+    })),
+    unidad,
+    columnaEtiqueta: 'Día',
+  });
+  grafico.dataset.zona = zona;
+  return grafico;
+}
+
+/** Los reportes del periodo por categoria, en el orden de §7.3.3. */
+export function tablaDeCategorias(reportes) {
+  const porCategoria = reportes?.porCategoria ?? {};
+  return tablaDeDatos({
+    titulo: 'Reportes por categoría',
+    claveDeFila: (fila) => fila.categoria,
+    columnas: [
+      { clave: 'nombre', titulo: 'Categoría', principal: true },
+      { clave: 'reportes', titulo: 'Reportes', tipo: 'numero' },
+    ],
+    filas: Object.entries(NOMBRE_DE_CATEGORIA_DE_REPORTE).map(([categoria, nombre]) => ({
+      categoria,
+      nombre,
+      reportes: cifra(porCategoria[categoria]) ?? 0,
+    })),
+  });
+}
+
+/**
+ * Pinta el tablero de moderacion en su zona: periodo, cifras, alertas, lo que
+ * no se pudo leer, las tres series por dia y los reportes por categoria.
+ *
+ * @param {HTMLElement} zona
+ * @param {object} tablero lo que publica `GET /moderacion` (1.11.0)
+ */
+export function pintarModeracion(zona, tablero) {
+  const s = tablero.sanciones;
+  zona.replaceChildren();
+  zona.append(
+    h('p', {
+      clase: 't-meta',
+      datos: { zona: 'periodo-consultado' },
+      texto: `Del ${fechaLocal(s.desde)} al ${fechaLocal(s.hasta)}`,
+    }),
+    indicadoresDeModeracion(tablero),
+    h('p', {
+      clase: 't-cuerpo',
+      datos: { zona: 'resumen-moderacion' },
+      texto: resumenDeModeracion(tablero),
+    }),
+  );
+
+  zona.append(h('h3', { texto: 'Alertas' }), ...pintarAlertasDeModeracion(tablero));
+
+  const faltas = Array.isArray(tablero.noDisponibles) ? tablero.noDisponibles : [];
+  if (faltas.length > 0) {
+    zona.append(
+      h('ul', {
+        clase: 'pila pila--ajustada',
+        datos: { zona: 'no-disponibles' },
+        hijos: faltas.map((falta) =>
+          h('li', { clase: 'aviso aviso--info', texto: fraseDeNoDisponible(falta) }),
+        ),
+      }),
+    );
+  }
+
+  const graficos = [
+    graficoPorDia({
+      titulo: 'Sanciones por día',
+      desde: s.desde,
+      hasta: s.hasta,
+      porDia: s.porDia,
+      valor: (d) => cifra(d.emitidas) ?? 0,
+      unidad: 'sanciones',
+      zona: 'por-dia',
+    }),
+  ];
+  if (tablero.reportes) {
+    graficos.push(
+      graficoPorDia({
+        titulo: 'Reportes por día',
+        desde: tablero.reportes.desde ?? s.desde,
+        hasta: tablero.reportes.hasta ?? s.hasta,
+        porDia: tablero.reportes.porDia,
+        valor: (d) => cifra(d.reportes) ?? 0,
+        unidad: 'reportes',
+        zona: 'reportes-por-dia',
+      }),
+    );
+  }
+  zona.append(h('div', { clase: 'rejilla-graficos-admin', hijos: graficos }));
+  if (tablero.reportes) {
+    const categorias = tablaDeCategorias(tablero.reportes);
+    categorias.dataset.zona = 'reportes-por-categoria';
+    zona.append(categorias);
+  }
+
+  // Cuentas por estado y altas por dia (ms-identidad). Si identidad no las
+  // dio, no se pinta ningun numero (ni un 0 que nadie dio): se dice que no
+  // estan, con su motivo arriba (CA-03), y lo de moderacion sigue completo.
+  zona.append(h('h3', { texto: 'Usuarios' }));
+  const cuentas = tablero.registroDeUsuarios;
+  if (!cuentas) {
+    zona.append(
+      h('p', {
+        clase: 't-meta',
+        datos: { zona: 'usuarios-no-disponibles' },
+        texto: 'Cuentas por estado y cuentas nuevas por día: no disponibles ahora.',
+      }),
+    );
+    return;
+  }
+  zona.append(
+    h('p', {
+      clase: 't-cuerpo',
+      datos: { zona: 'resumen-usuarios' },
+      texto: resumenDeCuentas(cuentas),
+    }),
+  );
+  const altas = graficoDeBarras({
+    titulo: `Cuentas nuevas por día · del ${diaCompleto(cuentas.registros?.desde)} al ${diaCompleto(
+      cuentas.registros?.hasta,
+    )}`,
+    datos: (cuentas.registros?.porDia ?? []).map((d) => ({
+      etiqueta: diaCorto(d.fecha),
+      valor: cifra(d.cuentas),
+    })),
+    unidad: 'cuentas nuevas',
+    columnaEtiqueta: 'Día',
+  });
+  altas.dataset.zona = 'altas-por-dia';
+  zona.append(altas);
 }
 
 /* ---- DOM ---- */
@@ -258,74 +490,7 @@ export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
     zonaModeracion.replaceChildren(nodo('p', 't-meta', 'Consultando moderación…'));
     try {
       ultimaModeracion = await api.moderacion(desde, hasta, fetchImpl);
-      zonaModeracion.replaceChildren();
-      const s = ultimaModeracion.sanciones;
-      zonaModeracion.appendChild(
-        nodo(
-          'p',
-          't-meta',
-          `Periodo ${new Date(s.desde).toLocaleDateString('es-CO')} – ${new Date(s.hasta).toLocaleDateString('es-CO')}`,
-        ),
-      );
-      const resumen = nodo('p', 't-cuerpo', resumenDeModeracion(ultimaModeracion));
-      resumen.dataset.zona = 'resumen-moderacion';
-      zonaModeracion.appendChild(resumen);
-      const dias = nodo('ul', 'pila pila--ajustada');
-      dias.dataset.zona = 'por-dia';
-      if ((s.porDia ?? []).length === 0) {
-        dias.appendChild(nodo('li', 't-meta', 'Sin sanciones en el periodo.'));
-      }
-      (s.porDia ?? []).forEach((d) =>
-        dias.appendChild(nodo('li', undefined, `${d.fecha}: ${d.emitidas}`)),
-      );
-      zonaModeracion.appendChild(dias);
-      const ap = s.apelaciones ?? {};
-      zonaModeracion.appendChild(
-        nodo(
-          'p',
-          't-meta',
-          `Apelaciones: ${ap.PENDIENTE ?? 0} pendientes, ${ap.MANTENIDA ?? 0} mantenidas, ${ap.REDUCIDA ?? 0} reducidas, ${ap.REVERTIDA ?? 0} revertidas`,
-        ),
-      );
-      // Cuentas por estado y altas por dia (ms-identidad). Si identidad no las dio, no se pinta
-      // ningun numero (ni un 0 que nadie dio): se dice que no estan, el motivo real viene en
-      // `pendientes` (CA-03) y lo de moderacion sigue completo.
-      const cuentas = ultimaModeracion.registroDeUsuarios;
-      zonaModeracion.appendChild(nodo('h3', undefined, 'Usuarios'));
-      if (!cuentas) {
-        const sinCuentas = nodo(
-          'p',
-          't-meta',
-          'Cuentas por estado y altas por día: no disponibles. El motivo está abajo, en «Pendiente».',
-        );
-        sinCuentas.dataset.zona = 'usuarios-no-disponibles';
-        zonaModeracion.appendChild(sinCuentas);
-      } else {
-        const resumenCuentas = nodo('p', 't-cuerpo', resumenDeCuentas(cuentas));
-        resumenCuentas.dataset.zona = 'resumen-usuarios';
-        zonaModeracion.appendChild(resumenCuentas);
-        const altas = nodo('ul', 'pila pila--ajustada');
-        altas.dataset.zona = 'altas-por-dia';
-        (cuentas.registros?.porDia ?? []).forEach((d) =>
-          altas.appendChild(nodo('li', undefined, `${d.fecha}: ${d.cuentas}`)),
-        );
-        zonaModeracion.appendChild(altas);
-      }
-      zonaModeracion.appendChild(nodo('h3', undefined, 'Alertas'));
-      zonaModeracion.appendChild(
-        listaDeAlertas(
-          ultimaModeracion.alertas,
-          ultimaModeracion.alertasConfiguradas
-            ? 'Sin alertas: ningún día llega al umbral.'
-            : 'Sin umbral configurado: se publican los conteos, pero no se evalúa ninguna alerta.',
-        ),
-      );
-      const pendientes = nodo('ul', 'pila pila--ajustada');
-      pendientes.dataset.zona = 'pendientes';
-      (ultimaModeracion.pendientes ?? []).forEach((p) =>
-        pendientes.appendChild(nodo('li', 't-meta', `Pendiente: ${p}`)),
-      );
-      zonaModeracion.appendChild(pendientes);
+      pintarModeracion(zonaModeracion, ultimaModeracion);
     } catch (error) {
       pintarError(zonaModeracion, error, {
         informe: 'la actividad de usuarios y moderación',

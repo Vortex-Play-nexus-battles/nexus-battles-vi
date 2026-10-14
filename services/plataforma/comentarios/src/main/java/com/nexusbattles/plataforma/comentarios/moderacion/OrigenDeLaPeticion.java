@@ -3,23 +3,19 @@ package com.nexusbattles.plataforma.comentarios.moderacion;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
- * La IP de origen de una peticion, para el asiento de moderacion — B3, 7.3.3.
+ * La IP de origen de una peticion, para el asiento de moderacion — B3, 7.3.3,
+ * y la bitacora central — §7.3.5 (SA-5).
  *
- * <p>Detras del borde (nginx) la direccion remota del socket es la del propio
- * borde, asi que se toma el primer valor de {@code X-Forwarded-For}, que es
- * donde el borde deja la del cliente; sin esa cabecera (una llamada directa
- * al servicio, las pruebas), la remota.
+ * <p>Primero {@code X-Real-IP}: el borde (nginx) la escribe en toda peticion
+ * con {@code $remote_addr} y sustituye lo que trajera el cliente, asi que es la
+ * unica que no se puede falsear desde fuera. Despues, el primer valor de
+ * {@code X-Forwarded-For} (el borde de desarrollo AÑADE la IP que ve a lo que
+ * declara el cliente, asi que ese primer valor es el declarado) y, sin
+ * cabeceras (una llamada directa al servicio, las pruebas), la remota.
  *
  * <p>Solo se aceptan caracteres de una IP ({@code 0-9 a-f A-F : .}) y como
- * mucho 45, el largo de la columna: la cabecera la puede escribir cualquiera,
- * y un valor que no parece una IP no se guarda como si lo fuera. En ese caso
- * se cae a la remota.
- *
- * <p>Ojo, y queda dicho en el resumen de B3: el borde de desarrollo AÑADE la
- * IP que ve a la cabecera que trae el cliente ({@code
- * $proxy_add_x_forwarded_for}), no la sustituye. El primer valor es por tanto
- * el que declaro el cliente. Para una auditoria que no se pueda falsear, el
- * borde tendria que sobrescribirla ({@code X-Forwarded-For $remote_addr}).
+ * mucho 45, el largo de la columna: un valor que no parece una IP no se guarda
+ * como si lo fuera, y se pasa al siguiente.
  */
 public final class OrigenDeLaPeticion {
 
@@ -31,6 +27,10 @@ public final class OrigenDeLaPeticion {
 
     /** @return la IP de origen, o nula si ni la cabecera ni la remota lo parecen */
     public static String ipDe(HttpServletRequest peticion) {
+        String delBorde = peticion.getHeader("X-Real-IP");
+        if (delBorde != null && pareceUnaIp(delBorde.strip())) {
+            return delBorde.strip();
+        }
         String reenviada = peticion.getHeader("X-Forwarded-For");
         if (reenviada != null) {
             String primera = reenviada.split(",", 2)[0].strip();

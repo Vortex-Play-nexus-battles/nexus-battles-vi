@@ -573,7 +573,7 @@ test.describe('Tienda sobre el catálogo maestro (R16, #421)', () => {
       await ficha.locator('[data-accion="entrar-para-comprar"]').click();
       await expect(page).toHaveURL(/\/login\?/, { timeout: 20_000 });
       await expect(page.locator('#email')).toBeVisible();
-      expect(new URL(page.url()).searchParams.get('volver')).toMatch(/tienda\.html$/);
+      expect(new URL(page.url()).searchParams.get('volver')).toMatch(/^\/tienda$|tienda\.html$/);
     } finally {
       await contexto.close();
     }

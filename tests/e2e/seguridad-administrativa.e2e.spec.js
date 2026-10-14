@@ -438,16 +438,22 @@ test.describe('7.3.9 · seguridad de las cuentas administrativas', () => {
 
     await page.goto(CONSOLA);
     await expect(page.locator('header[data-cabecera-app]')).not.toBeEmpty();
-    const tokenInicial = await page.evaluate(() => sessionStorage.getItem('nexus.token'));
 
     // a) Abrir la página es actividad: al entrar en los últimos 5 minutos,
     //    la consola renueva sola.
     let renovada = page.waitForResponse(esRenovacion);
     await page.clock.runFor(Math.max(0, (await restante()) - 5 * 60_000) + 20_000);
-    expect((await renovada).status()).toBe(200);
+    const primeraRenovacion = await renovada;
+    expect(primeraRenovacion.status()).toBe(200);
+    // La consola guarda el token que le dio la renovación. No basta con
+    // «otro distinto del inicial»: `iat` y `exp` van al segundo y la firma
+    // RS256 es determinista, así que una renovación en el mismo segundo que
+    // el inicio de sesión devuelve un token idéntico.
+    const { token: renovado } = await primeraRenovacion.json();
+    expect(renovado).toBeTruthy();
     await expect
       .poll(() => page.evaluate(() => sessionStorage.getItem('nexus.token')))
-      .not.toBe(tokenInicial);
+      .toBe(renovado);
 
     // b) Sin tocar nada, un minuto antes del fin sale el aviso con la cuenta atrás.
     const aviso = page.locator('[data-zona="aviso-de-inactividad"]');

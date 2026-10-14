@@ -87,11 +87,17 @@
       <section class="pila pila--compacta" data-zona="detalle-contenedor" aria-live="polite">
         <p class="t-meta">Elige un comentario de la cola para revisarlo.</p>
       </section>
+
+      <!-- SA-4 (§7.3.3, comentarios.yaml 1.14.0): el histórico de todas las
+           decisiones de moderación, con filtros. «Abrir» lleva el comentario
+           al panel de revisión de arriba. -->
+      <section class="tarjeta pila pila--compacta" data-zona="historial-moderacion"></section>
     </main>
 
     <script type="module">
       import { montarAsistente } from '../../comun/ui/asistente.js';
       import { montarModeracion } from './moderar-comentarios.js';
+      import { montarHistorialDeModeracion } from './historial-moderacion.js';
       import { montarCabecera } from '../../comun/cabecera-app.js';
       import { exigirAcceso } from '../../comun/acceso.js';
 
@@ -109,9 +115,20 @@
       // HU-USR-010 (CA-02): con el rol, cada autor lleva «Ver ficha» si este
       // rol puede abrirla (administración).
       const productoId = new URLSearchParams(location.search).get('producto');
-      montarModeracion(document.querySelector('[data-vista="moderar-comentarios"]'), {
-        productoId,
-        rol: sesion.rol,
+      const moderacion = montarModeracion(
+        document.querySelector('[data-vista="moderar-comentarios"]'),
+        {
+          productoId,
+          rol: sesion.rol,
+        },
+      );
+      montarHistorialDeModeracion(document.querySelector('[data-zona="historial-moderacion"]'), {
+        alAbrirComentario: (id) => {
+          moderacion.abrir(id);
+          document
+            .querySelector('[data-zona="detalle-contenedor"]')
+            .scrollIntoView({ block: 'start' });
+        },
       });
 
       montarAsistente(document);

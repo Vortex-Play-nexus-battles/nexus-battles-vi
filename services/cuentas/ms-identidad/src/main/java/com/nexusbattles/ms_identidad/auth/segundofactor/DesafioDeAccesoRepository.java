@@ -30,6 +30,18 @@ public interface DesafioDeAccesoRepository extends JpaRepository<DesafioDeAcceso
             + " and (d.usadoEn is not null or d.expiraEn < :ahora)")
     int borrarGastados(@Param("usuarioId") Long usuarioId, @Param("ahora") LocalDateTime ahora);
 
+    /**
+     * SA-4: la limpieza al emitir un codigo de apelacion, solo de los de ese
+     * proposito. No toca los del segundo paso: uno puede estar bloqueado por
+     * el canje en curso de la misma cuenta.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("delete from DesafioDeAcceso d where d.usuarioId = :usuarioId and d.proposito = :proposito"
+            + " and (d.usadoEn is not null or d.expiraEn < :ahora)")
+    int borrarGastadosDe(@Param("usuarioId") Long usuarioId,
+                         @Param("proposito") DesafioDeAcceso.Proposito proposito,
+                         @Param("ahora") LocalDateTime ahora);
+
     /** Al desactivar el segundo factor: los desafios a medias de la cuenta dejan de valer. */
     @Modifying(flushAutomatically = true)
     @Query("delete from DesafioDeAcceso d where d.usuarioId = :usuarioId")

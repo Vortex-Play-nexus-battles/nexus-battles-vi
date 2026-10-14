@@ -28,7 +28,21 @@ info:
     consulta la suya (el contador de tiempo restante del 7.3.2); un token de
     servicio o de MODERADOR, ADMINISTRADOR o SUPER_ADMINISTRADOR, la de
     cualquiera. La forma de la respuesta no cambia.
-  version: 1.4.0
+
+    1.5.0 (SA-4, aditivo — apelacion sin sesion). §7.3.2 da a todo
+    sancionado el derecho a apelar, y una cuenta suspendida o baneada no puede
+    iniciar sesion (RF-USR-007 deja sin decir si conserva el portal: no lo
+    conserva). Cuando escribe bien su contrasena, ms-identidad le entrega un
+    codigo opaco de un solo uso (`ms-identidad-auth.yaml` 2.4.0) y con el
+    consulta y apela aqui EN SU NOMBRE, con su credencial de servicio. Dos
+    rutas internas: `GET /internal/sanciones/usuarios/{usuarioId}/apelacion`
+    (la sancion que le impide entrar, hasta cuando se apela y la ultima
+    apelacion) y `POST /internal/sanciones/usuarios/{usuarioId}/apelaciones`
+    (la presenta, con las mismas reglas que `POST
+    /sanciones/{sancionId}/apelaciones`, y solo sobre esa sancion). Solo las
+    llama ms-identidad: token de servicio y `azp` = `ms-identidad`; cualquier
+    otro token, 403. El borde no publica `/api/v1/internal`.
+  version: 1.5.0
 servers:
   - url: http://localhost:8086/api/v1
     description: Entorno local de desarrollo
@@ -135,7 +149,106 @@ paths:
         '401':
           description: Sin sesion.
 
+  /internal/sanciones/usuarios/{usuarioId}/apelacion:
+    get:
+      summary: La apelacion de una cuenta que no puede iniciar sesion (1.5.0, solo ms-identidad)
+      operationId: estadoDeApelacionSinSesion
+      description: |
+        La sancion que hoy impide entrar a la cuenta (el baneo antes que la
+        suspension, como `GET /sanciones/usuarios/{usuarioId}/activa`), el
+        ultimo instante para apelarla (emision + plazo de apelacion vigente),
+        si se puede apelar ahora y por que no, y la ultima apelacion de esa
+        sancion, abierta o resuelta, con su plazo de decision (§7.3.2, 15 dias
+        habiles). Sin sancion que restrinja: `sancion` nula y `SIN_SANCION`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UsuarioId'
+      responses:
+        '200':
+          description: El estado de la apelacion de esa cuenta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoDeApelacionSinSesion'
+        '401':
+          description: Sin token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: Un token que no es el de servicio de ms-identidad (`permiso-insuficiente`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /internal/sanciones/usuarios/{usuarioId}/apelaciones:
+    post:
+      summary: Presenta la apelacion de una cuenta que no puede iniciar sesion (1.5.0, solo ms-identidad)
+      operationId: apelarSinSesion
+      description: |
+        Las reglas de `POST /sanciones/{sancionId}/apelaciones`
+        (`moderacion-sanciones-admin.yaml`): dentro del plazo, con argumento y
+        sin otra abierta sobre la misma sancion. Y una mas: por esta via solo
+        se apela la sancion que impide entrar. El sancionado recibe el aviso
+        `APELACION_RECIBIDA` con la fecha limite de la decision.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UsuarioId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sancionId, argumento]
+              properties:
+                sancionId: { type: string, format: uuid }
+                argumento: { type: string, maxLength: 2000 }
+      responses:
+        '201':
+          description: Apelacion abierta y asignada al panel.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApelacionSinSesion'
+        '400':
+          description: Sin argumento (`solicitud-invalida`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '401':
+          description: Sin token.
+        '403':
+          description: Un token que no es el de servicio de ms-identidad (`permiso-insuficiente`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: >-
+            No procede: no es la sancion que impide entrar, ya no restringe,
+            fuera de plazo o ya hay una abierta (`apelacion-no-procede`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
 components:
+  parameters:
+    UsuarioId:
+      name: usuarioId
+      in: path
+      required: true
+      description: Claim `uid` de la cuenta sancionada.
+      schema:
+        type: string
+        format: uuid
+
   securitySchemes:
     bearerAuth:
       type: http
@@ -231,6 +344,74 @@ components:
           type: string
         instance:
           type: string
+
+    SancionQueImpideEntrar:
+      type: object
+      description: 1.5.0 — la forma `Sancion` de `moderacion-sanciones-admin.yaml` 1.4.0.
+      required: [id, usuarioId, tipo, motivo, emitidaEn, vigente]
+      properties:
+        id: { type: string, format: uuid }
+        usuarioId: { type: string, format: uuid }
+        tipo: { type: string, enum: [ADVERTENCIA, SUSPENSION, BANEO] }
+        causal:
+          type: [string, 'null']
+          enum: [LENGUAJE_OFENSIVO, ACOSO, FRAUDE, SOFTWARE_NO_AUTORIZADO, SUPLANTACION_DE_IDENTIDAD,
+                 VIOLACION_DE_PRIVACIDAD, INCUMPLIMIENTO_DE_TERMINOS, TERMINACION_DE_RELACION_LEGAL, null]
+        motivo: { type: string }
+        politica: { type: [string, 'null'] }
+        comentarioId: { type: [string, 'null'] }
+        emitidaPor: { type: string, format: uuid }
+        rolEmisor: { type: string }
+        emitidaEn: { type: string, format: date-time }
+        vigenteHasta: { type: [string, 'null'], format: date-time }
+        revertidaEn: { type: [string, 'null'], format: date-time }
+        motivoReversion: { type: [string, 'null'] }
+        vigente: { type: boolean }
+
+    ApelacionSinSesion:
+      type: object
+      description: 1.5.0 — la forma `Apelacion` de `moderacion-sanciones-admin.yaml` 1.4.0.
+      required: [id, sancionId, usuarioId, argumento, creadaEn, estado, decisionAntesDe, vencida]
+      properties:
+        id: { type: string, format: uuid }
+        sancionId: { type: string, format: uuid }
+        usuarioId: { type: string, format: uuid }
+        argumento: { type: string }
+        creadaEn: { type: string, format: date-time }
+        estado: { type: string, enum: [PENDIENTE, MANTENIDA, REDUCIDA, REVERTIDA] }
+        decisionMotivo: { type: [string, 'null'] }
+        resueltaPor: { type: [string, 'null'], format: uuid }
+        resueltaEn: { type: [string, 'null'], format: date-time }
+        nuevaVigencia: { type: [string, 'null'], format: date-time }
+        decisionAntesDe:
+          type: string
+          format: date-time
+          description: Final del decimoquinto dia habil desde `creadaEn` (§7.3.2), hora de Colombia.
+        vencida: { type: boolean, description: Sigue PENDIENTE y ya paso `decisionAntesDe`. }
+
+    EstadoDeApelacionSinSesion:
+      type: object
+      required: [puedeApelar]
+      properties:
+        sancion:
+          description: La sancion que impide entrar; `null` si ya no hay ninguna.
+          oneOf:
+            - $ref: '#/components/schemas/SancionQueImpideEntrar'
+            - type: 'null'
+        apelableHasta:
+          type: [string, 'null']
+          format: date-time
+          description: Ultimo instante para apelarla (emision + plazo de apelacion vigente).
+        puedeApelar: { type: boolean }
+        motivoNoApelable:
+          type: [string, 'null']
+          enum: [SIN_SANCION, FUERA_DE_PLAZO, APELACION_ABIERTA, null]
+          description: Por que no se puede apelar ahora; `null` si se puede.
+        apelacion:
+          description: La ultima apelacion de esa sancion, abierta o resuelta; `null` si no hay.
+          oneOf:
+            - $ref: '#/components/schemas/ApelacionSinSesion'
+            - type: 'null'
 
     MetricasDeModeracion:
       type: object

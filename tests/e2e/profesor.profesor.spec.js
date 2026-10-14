@@ -60,7 +60,9 @@ const EN = {
   subastas: /\/subastas(?:[?#]|$)/,
   // 6-oct — el tablón de misiones también tiene dirección limpia.
   misiones: /\/misiones(?:[?#]|$)/,
-  sala: /sala-batalla\.html\?sala=/,
+  // SA-7 — la sala, crear sala y publicar subasta también tienen dirección limpia.
+  sala: /(?:\/jugar\/sala|sala-batalla\.html)\?sala=/,
+  crearSala: /\/jugar\/nueva-sala(?:[?#]|$)|crear-sala\.html/,
 };
 
 const NORMAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
@@ -549,7 +551,7 @@ test.describe('R17 · la prueba del profesor', () => {
       const apuesta = apuestaSegura(aprendido.saldoInicial);
       await paso(13, 'Crear una sala (contra la IA, con una apuesta segura)', async () => {
         await page.getByRole('link', { name: 'Crear sala' }).first().click();
-        await expect(page).toHaveURL(/crear-sala\.html/);
+        await expect(page).toHaveURL(EN.crearSala);
         await page.locator('#modalidad-ia').check();
         await expect(page.locator('[data-zona="nota-contra-ia"]')).toBeVisible();
         // «Recompensa en créditos»: lo que se aparta de la cuenta al crear la

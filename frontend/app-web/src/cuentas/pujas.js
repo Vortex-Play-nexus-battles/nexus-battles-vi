@@ -27,6 +27,7 @@ import { iconoHtml } from '../comun/ui/icono.js';
 import { esc } from '../comun/ui/escapar.js';
 import { nombreDelTipo } from '../comun/ui/formato.js';
 import { urlDeLogin } from '../comun/sesion.js';
+import { urlDeVista } from '../comun/acceso.js';
 import { acusar } from '../comun/ui/acuse.js';
 import { textoDeError } from '../comun/ui/texto-de-fallo.js';
 import { confirmar } from '../comun/ui/dialogo.js';
@@ -2000,8 +2001,11 @@ export class ControladorSubastas {
     if (!sub) {
       return false;
     }
-    const base = globalThis.location?.href ?? 'http://localhost/';
-    const enlace = new URL(`./pujas.html?id=${encodeURIComponent(sub.id)}`, base).href;
+    // SA-7 — el enlace que se comparte es la dirección pública de la subasta
+    // (`/subastas/pujar?id=…` detrás del borde), no una ruta relativa a la
+    // URL actual: desde `/subastas/pujar` esa ruta apuntaba a una página que
+    // no existe.
+    const enlace = new URL(`?id=${encodeURIComponent(sub.id)}`, urlDeVista('pujas')).href;
     const boton = this.contenedor?.querySelector('#btn-compartir');
     const navegador = globalThis.navigator;
     try {
@@ -3412,17 +3416,21 @@ export class ControladorSubastas {
     }
     const cuantas = (lista) =>
       Array.isArray(lista) ? ` <span class="cifra">(${lista.length})</span>` : '';
+    // SA-7 — servida en su dirección limpia, la página lleva un <base> hacia
+    // su carpeta y un «#seccion» suelto se resolvería contra ella (otra
+    // página). El ancla va con la ruta de ESTA página.
+    const aqui = esc(`${globalThis.location?.pathname ?? ''}${globalThis.location?.search ?? ''}`);
     const enlaces = [
-      `<a class="indice-mis-subastas__enlace" href="#seccion-pujas">Donde pujas <span class="cifra">(${pujando})</span></a>`,
+      `<a class="indice-mis-subastas__enlace" href="${aqui}#seccion-pujas">Donde pujas <span class="cifra">(${pujando})</span></a>`,
       this.pendientes.length
-        ? `<a class="indice-mis-subastas__enlace" href="#seccion-pendientes">Pendientes de recoger <span class="cifra">(${this.pendientes.length})</span></a>`
+        ? `<a class="indice-mis-subastas__enlace" href="${aqui}#seccion-pendientes">Pendientes de recoger <span class="cifra">(${this.pendientes.length})</span></a>`
         : '',
-      `<a class="indice-mis-subastas__enlace" href="#seccion-publicaciones">Tus publicaciones${cuantas(this.panel.publicadas)}</a>`,
+      `<a class="indice-mis-subastas__enlace" href="${aqui}#seccion-publicaciones">Tus publicaciones${cuantas(this.panel.publicadas)}</a>`,
       this.panelDisponible('misSeguidas')
-        ? `<a class="indice-mis-subastas__enlace" href="#seccion-seguidas">Siguiendo${cuantas(this.panel.seguidas)}</a>`
+        ? `<a class="indice-mis-subastas__enlace" href="${aqui}#seccion-seguidas">Siguiendo${cuantas(this.panel.seguidas)}</a>`
         : '',
       this.panelDisponible('miHistorial')
-        ? '<a class="indice-mis-subastas__enlace" href="#seccion-historial">Historial</a>'
+        ? `<a class="indice-mis-subastas__enlace" href="${aqui}#seccion-historial">Historial</a>`
         : '',
     ];
     return `

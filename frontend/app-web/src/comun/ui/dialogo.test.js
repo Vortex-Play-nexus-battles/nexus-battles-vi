@@ -5,6 +5,7 @@ import {
   bloquearDesplazamiento,
   confirmar,
   confirmarConMotivo,
+  confirmarConMotivoYSeleccion,
   confirmarCritico,
   esElModalDeArriba,
   pedirTexto,
@@ -304,5 +305,66 @@ describe('confirmarConMotivo (7.3.5, 7.3.9)', () => {
     const segunda = confirmarConMotivo({ titulo: 'x' });
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     await expect(segunda).resolves.toBeNull();
+  });
+});
+
+describe('confirmarConMotivoYSeleccion (SA-4, §7.3.2)', () => {
+  const SELECCION = {
+    etiqueta: 'Causal',
+    vacio: 'Elige la causal',
+    opciones: [
+      ['ACOSO', 'Acoso a otros jugadores'],
+      ['FRAUDE', 'Intentos de fraude o manipulación del sistema'],
+    ],
+    pista: 'La cuenta la recibe en el aviso.',
+  };
+  const escribir = (campo, valor) => {
+    campo.value = valor;
+    campo.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  const elegir = (desplegable, valor) => {
+    desplegable.value = valor;
+    desplegable.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  test('sin elegir no se confirma; elegida y con motivo, devuelve las dos cosas', async () => {
+    const promesa = confirmarConMotivoYSeleccion({ titulo: 'Suspender', seleccion: SELECCION });
+    const desplegable = document.querySelector('select');
+    const aceptar = document.querySelector('[data-accion="confirmar"]');
+
+    expect(document.activeElement).toBe(desplegable);
+    expect(document.querySelector(`label[for="${desplegable.id}"]`).textContent).toBe('Causal');
+    expect(document.getElementById(desplegable.getAttribute('aria-describedby')).textContent).toBe(
+      'La cuenta la recibe en el aviso.',
+    );
+    expect([...desplegable.options].map((o) => o.textContent)).toEqual([
+      'Elige la causal',
+      'Acoso a otros jugadores',
+      'Intentos de fraude o manipulación del sistema',
+    ]);
+    escribir(document.querySelector('textarea'), 'Mensajes de acoso por privado');
+    expect(aceptar.disabled).toBe(true);
+    elegir(desplegable, 'ACOSO');
+    expect(aceptar.disabled).toBe(false);
+
+    aceptar.click();
+    await expect(promesa).resolves.toEqual({
+      seleccion: 'ACOSO',
+      motivo: 'Mensajes de acoso por privado',
+    });
+  });
+
+  test('cancelar resuelve null', async () => {
+    const promesa = confirmarConMotivoYSeleccion({ titulo: 'x', seleccion: SELECCION });
+    document.querySelector('[data-accion="cancelar"]').click();
+    await expect(promesa).resolves.toBeNull();
+  });
+
+  test('sin selección es el diálogo de siempre y confirmarConMotivo sigue devolviendo el texto', async () => {
+    const promesa = confirmarConMotivo({ titulo: 'x' });
+    expect(document.querySelector('select')).toBeNull();
+    escribir(document.querySelector('textarea'), 'Motivo suficiente');
+    document.querySelector('[data-accion="confirmar"]').click();
+    await expect(promesa).resolves.toBe('Motivo suficiente');
   });
 });

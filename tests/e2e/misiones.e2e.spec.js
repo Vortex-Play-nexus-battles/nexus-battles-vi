@@ -358,9 +358,10 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
     await page.goto(`${BORDE}${VISTA}#historial`);
     const fila = page.locator('.mision-historial__tabla tbody tr', { hasText: PRUEBA.nombre });
     await expect(fila).toBeVisible({ timeout: 20_000 });
+    // SA-7 — detrás del borde el enlace muestra la dirección limpia del tablón.
     await expect(fila.getByRole('link', { name: /Ver el reporte/ })).toHaveAttribute(
       'href',
-      `misiones.html?reporte=${ejecucionId}`,
+      new RegExp(`/misiones\\?reporte=${ejecucionId}$`),
     );
   });
 

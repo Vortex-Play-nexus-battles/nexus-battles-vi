@@ -106,16 +106,31 @@ disponibilidad:
 # consulta). La URL de identidad es el servidor SIN /api/v1: la ruta del
 # contrato ya lo lleva (misma convencion que IDENTIDAD_URL de los demas).
 # umbral-sanciones-por-dia: sanciones en un dia A PARTIR DE las que se alerta
-# «alta frecuencia» (D-25). El PO lo fijo en 3 el 2026-10-05 y ese valor lo pone
-# el despliegue (docker-compose.deploy.yml). Aqui queda SIN valor a proposito:
-# un entorno que no lo defina (local, banco E2E) publica los conteos y dice que
-# no hay umbral, en vez de alertar con una cifra que nadie le pidio.
+# «alta frecuencia» (D-25). El PO lo fijo en 3 el 2026-10-05: desde SA-4 lo
+# dice el catalogo (V6 de admin-parametros) y el despliegue conserva
+# METRICAS_UMBRAL_SANCIONES_POR_DIA=3 como respaldo. Aqui queda SIN valor a
+# proposito: un entorno sin catalogo ni variable (local) publica los conteos y
+# dice que no hay umbral, en vez de alertar con una cifra que nadie le pidio.
+#
+# SA-4 (§7.3.8): la frecuencia de reportes sale de comentarios
+# (GET /api/v1/comentarios/moderacion/reportes/frecuencia, con el token de quien
+# mira el tablero); COMENTARIOS_URL es el servidor SIN /api/v1, como
+# IDENTIDAD_URL. Los dos umbrales se leen del catalogo de admin-parametros
+# (metricas.umbral-sanciones-por-dia, metricas.umbral-reportes-por-dia) y las
+# variables de abajo quedan de RESPALDO, por si el catalogo no responde o no
+# tiene valor. El de reportes no tiene cifra del PO (D-25): vacio a proposito.
 metricas:
   moderacion:
     url: ${SANCIONES_URL:http://localhost:8086/api/v1}
     umbral-sanciones-por-dia: ${METRICAS_UMBRAL_SANCIONES_POR_DIA:}
+    umbral-reportes-por-dia: ${METRICAS_UMBRAL_REPORTES_POR_DIA:}
   usuarios:
     url: ${IDENTIDAD_URL:http://localhost:8089}
+  reportes:
+    url: ${COMENTARIOS_URL:http://localhost:8081}
+  parametros:
+    url: ${PARAMETROS_URL:}
+    vigencia-segundos: ${METRICAS_PARAMETROS_VIGENCIA_SEGUNDOS:30}
 
 # Regla 3 de plataforma: este servicio tambien expone su propia salud.
 management:

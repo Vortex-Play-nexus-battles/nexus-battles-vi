@@ -17,7 +17,8 @@ parámetro con `valor: null` es una decisión que el PO no ha tomado.
 ## Catálogo (V1)
 
 Editables: `sanciones.suspension.*`, `sanciones.apelacion.plazo-dias`,
-`metricas.umbral-sanciones-por-dia`, `torneos.costo-inscripcion-por-defecto`,
+`metricas.umbral-sanciones-por-dia` y `metricas.umbral-reportes-por-dia` (V6),
+`torneos.costo-inscripcion-por-defecto`,
 `chat.*`, `salas.apuestas.si-gana-la-maquina`, `subastas.*` (los que ms-subastas
 declara configurables desde aquí). Inalterables: 91 días entre torneos, 8 cupos, 2
 por equipo, créditos 2/4/1, 6 por batalla, 75 % CPU, 500 ms, 99,95 %.
@@ -26,9 +27,12 @@ por equipo, créditos 2/4/1, 6 por batalla, 75 % CPU, 500 ms, 99,95 %.
 
 - `moderacion-sanciones` (`PARAMETROS_URL`): rango de la suspensión y plazo de apelación,
   con caché corta y las variables de entorno como respaldo.
+- `metricas-plataforma` (`PARAMETROS_URL`, SA-4): los umbrales de alta frecuencia del tablero de
+  moderación, `metricas.umbral-sanciones-por-dia` (3, decisión del PO que escribe `V6`) y
+  `metricas.umbral-reportes-por-dia` (sin cifra del PO), con caché de 30 s.
 
 Pendientes de conectar (ya tienen parámetro): salas-partidas (D-02, D-16), torneos
-(D-23), metricas-plataforma (D-25).
+(D-23).
 
 ## Auditoría
 
