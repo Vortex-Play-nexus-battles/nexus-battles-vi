@@ -21,12 +21,23 @@
  * ms-chatbot.yaml 1.15.0 (§7.4.3 «sugerencias proactivas»): al abrirlo, el
  * asistente le propone algo y dice por qué; antes de preguntar, por la sección
  * donde está, y al volver, por lo que ya preguntó.
+ *
+ * ms-chatbot.yaml 1.17.0 (§7.4.2 «español/english» y «preguntas relacionadas
+ * basadas en el contexto»): a quien pregunta en inglés, las preguntas
+ * relacionadas le salen en inglés, pulsar una sigue en inglés y el
+ * autocompletado le sugiere en inglés.
  */
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 
-import { abrirAsistente, destinosDe, enlaceA, preguntar } from './ayudantes/asistente.js';
+import {
+  ESPERA_DE_RESPUESTA_MS,
+  abrirAsistente,
+  destinosDe,
+  enlaceA,
+  preguntar,
+} from './ayudantes/asistente.js';
 import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
 import { conLaPaginaQuieta } from './ayudantes/movimiento.js';
 
@@ -133,6 +144,43 @@ test.describe('Asistente · visitante (§7.4)', () => {
     await expect(transacciones).toContainText(SIN_SESION);
     // No es una pregunta sin respuesta: no ofrece soporte humano.
     await expect(transacciones.locator('[data-accion="ofrecer-soporte"]')).toHaveCount(0);
+  });
+
+  test('en inglés: las relacionadas, pulsarlas y el autocompletado siguen en inglés', async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    await page.goto(`${BORDE}/login`);
+    const asistente = await abrirAsistente(page);
+
+    // 1. Una pregunta en inglés: sus preguntas relacionadas, con el título en inglés (V21).
+    const torneo = await preguntar(page, 'How does the tournament work?');
+    await expect(torneo).toContainText('Related topics:');
+    const relacionadas = torneo.locator('[data-accion="respuesta-rapida"]');
+    await expect(relacionadas).toHaveText([
+      'How to complete a mission (PvE mode)',
+      'Battle mode (PvP and co-op)',
+      'How to create a battle room',
+    ]);
+
+    // 2. Pulsar una sigue la conversación en inglés.
+    const antes = await asistente.respuestas.count();
+    await relacionadas.nth(1).click();
+    await expect(asistente.respuestas).toHaveCount(antes + 1, { timeout: ESPERA_DE_RESPUESTA_MS });
+    await expect(asistente.preguntas.last()).toHaveText('Battle mode (PvP and co-op)');
+    const batalla = asistente.respuestas.nth(antes);
+    await expect(batalla).toContainText('Related topics:');
+    await expect(batalla).not.toContainText('Temas relacionados');
+
+    // 3. El autocompletado sugiere en el idioma de lo escrito.
+    await asistente.entrada.fill('how the tourn');
+    await expect(asistente.ventana.locator('.chatbot-autocompletar__opcion').first()).toHaveText(
+      'How the Tournament works',
+    );
+    await asistente.entrada.fill('como funciona el tor');
+    await expect(asistente.ventana.locator('.chatbot-autocompletar__opcion').first()).toHaveText(
+      'Cómo funciona el Torneo',
+    );
   });
 
   test('sin respuesta: su solicitud se abre sola, la ve en «Tus solicitudes» y nadie más', async ({
