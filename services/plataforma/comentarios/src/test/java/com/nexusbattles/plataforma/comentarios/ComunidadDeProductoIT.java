@@ -766,6 +766,49 @@ class ComunidadDeProductoIT {
                     "un reporte posterior a la decision lo vuelve a poner en la cola");
         }
 
+        /**
+         * SA-4 (§7.3.3, contrato 1.14.0) contra PostgreSQL real: el historico de
+         * toda la moderacion, con sus filtros escritos como consulta (accion,
+         * apodo del moderador sin distinguir mayusculas, periodo) y el
+         * comentario de cada asiento leido en una sola consulta.
+         */
+        @Test
+        @DisplayName("1.14.0: el historico lista las decisiones de todos, la mas reciente primero, con su comentario y sin la IP")
+        void historicoDeModeracion() throws Exception {
+            Instant antes = Instant.now().minusSeconds(1);
+            String producto = productoNuevo();
+            String id = leer(comentar(producto, jugador(UUID.randomUUID()), "un comentario a revisar", null), "$.id");
+            String decision = "/api/v1/comentarios/moderacion/" + id + "/decision";
+            assertEquals(200, pedir("POST", decision, moderadora(),
+                    "{\"accion\":\"OCULTAR\",\"motivo\":\"lenguaje inadecuado\"}",
+                    "X-Forwarded-For", "198.51.100.9").statusCode());
+            Thread.sleep(5);
+            assertEquals(200, pedir("POST", decision, moderadora(),
+                    "{\"accion\":\"RESTAURAR\",\"motivo\":\"era un malentendido\"}").statusCode());
+
+            String base = "/api/v1/comentarios/moderacion/historial?moderador=adalajus&desde=" + antes;
+            HttpResponse<String> todo = pedir("GET", base, moderadora(), null);
+            assertEquals(200, todo.statusCode(), todo.body());
+            List<String> deEste = leer(todo, "$.contenido[?(@.comentarioId == '" + id + "')].accion");
+            assertEquals(List.of("RESTAURAR", "OCULTAR"), deEste, "la mas reciente primero");
+            assertEquals(List.of("un comentario a revisar"),
+                    leer(todo, "$.contenido[?(@.comentarioId == '" + id + "' && @.accion == 'OCULTAR')].extracto"));
+            assertEquals(List.of(producto),
+                    leer(todo, "$.contenido[?(@.comentarioId == '" + id + "' && @.accion == 'OCULTAR')].productoId"));
+            assertFalse(todo.body().contains("198.51.100.9"), "la IP de origen no sale del servicio");
+
+            HttpResponse<String> soloOcultar = pedir("GET", base + "&accion=OCULTAR", moderadora(), null);
+            assertEquals(List.of("OCULTAR"), leer(soloOcultar, "$.contenido[?(@.comentarioId == '" + id + "')].accion"));
+
+            HttpResponse<String> otroModerador = pedir("GET",
+                    "/api/v1/comentarios/moderacion/historial?moderador=nadie-con-este-apodo&desde=" + antes,
+                    moderadora(), null);
+            assertEquals(0, (Integer) leer(otroModerador, "$.total"));
+
+            assertEquals(403, pedir("GET", "/api/v1/comentarios/moderacion/historial",
+                    jugador(UUID.randomUUID()), null).statusCode(), "un jugador no lee el historico");
+        }
+
         @Test
         @DisplayName("MARCAR lo pone en la lista de seguimiento aunque este publicado; DESMARCAR lo saca")
         void marcar() throws Exception {

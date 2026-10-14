@@ -1005,7 +1005,7 @@ describe('SA-3 — reportes realizados y recibidos', () => {
 
     const realizados = panelDe(raiz, 'reportes-realizados');
     const fila = realizados.querySelector('tbody tr').textContent;
-    expect(fila).toContain('Spam o publicidad');
+    expect(fila).toContain('Spam o publicidad no solicitada');
     expect(fila).toContain('Bruno');
     expect(fila).toContain('Compra monedas baratas');
     expect(fila).toContain('Oculto');
@@ -1016,8 +1016,8 @@ describe('SA-3 — reportes realizados y recibidos', () => {
     expect(encabezados).not.toContain('Autor del comentario');
     const filas = [...recibidos.querySelectorAll('tbody tr')].map((tr) => tr.textContent);
     expect(filas).toHaveLength(2);
-    expect(filas[0]).toContain('Acoso a otra persona');
-    expect(filas[1]).toContain('Violación de derechos');
+    expect(filas[0]).toContain('Acoso o intimidación');
+    expect(filas[1]).toContain('Violación de derechos de autor');
     expect(filas[1]).toContain('El comentario ya no existe');
     expect(filas[0]).toContain('Sin descripción');
     expect(recibidos.textContent).not.toMatch(UUID);
@@ -1214,7 +1214,7 @@ describe('SA-3 — el historial completo de actividad', () => {
 
     const recibidos = hechosDeReportes(REPORTES_RECIBIDOS, 'RECIBIDOS');
     expect(recibidos).toHaveLength(2);
-    expect(recibidos[0].detalle).toContain('Acoso a otra persona');
+    expect(recibidos[0].detalle).toContain('Acoso o intimidación');
     expect(JSON.stringify(recibidos)).not.toMatch(/reportante/i);
     expect(hechosDeReportes(null, 'REALIZADOS')).toEqual([]);
 

@@ -18,6 +18,7 @@ import { jest } from '@jest/globals';
 
 import {
   enlazadorDeFicha,
+  enlazadorDeSancion,
   montarModeracion,
   panelDeDetalle,
   tarjetaDeEntrada,
@@ -2032,5 +2033,50 @@ describe('HU-COM-007 CA-01: la detección automática en la cola y el detalle', 
     const motivo = tarjeta.querySelector('[data-campo="deteccion-motivo"]');
     expect(motivo.textContent).toBe('<img src=x onerror="robar()">');
     expect(motivo.querySelector('img')).toBeNull();
+  });
+});
+
+describe('SA-4 — del comentario a la sanción de su autor', () => {
+  test('los tres roles de moderación tienen el enlace; un jugador, no', () => {
+    for (const rol of ['MODERADOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR']) {
+      const enlazar = enlazadorDeSancion(rol);
+      expect(typeof enlazar).toBe('function');
+      const url = new URL(enlazar('aut-1', 'com-1'));
+      expect(url.pathname).toMatch(/moderacion-sanciones\/sanciones-admin\.html$/);
+      expect(url.searchParams.get('usuario')).toBe('aut-1');
+      expect(url.searchParams.get('comentario')).toBe('com-1');
+    }
+    expect(enlazadorDeSancion('JUGADOR')).toBeNull();
+    expect(enlazadorDeSancion(null)).toBeNull();
+  });
+
+  test('el detalle ofrece «Sancionar al autor» solo si se le pasa el enlace', () => {
+    const conEnlace = panelDeDetalle(detalle(), () => {}, {
+      hrefDeSancion: 'https://x/sanciones-admin.html?usuario=aut-1&comentario=com-1',
+    });
+    const enlace = conEnlace.querySelector('[data-accion="sancionar-autor"]');
+    expect(enlace.textContent).toBe('Sancionar al autor');
+    expect(enlace.getAttribute('href')).toContain('usuario=aut-1');
+    expect(
+      panelDeDetalle(detalle(), () => {}).querySelector('[data-accion="sancionar-autor"]'),
+    ).toBeNull();
+  });
+
+  test('los reportes del detalle dicen su categoría con el nombre de §7.3.3, no la constante', () => {
+    const panel = panelDeDetalle(
+      detalle({
+        reportes: [
+          { id: 'r-1', categoria: 'VIOLACION_DE_DERECHOS', descripcion: null, fecha: AHORA },
+          { id: 'r-2', categoria: 'CATEGORIA_NUEVA', descripcion: 'otra', fecha: AHORA },
+        ],
+      }),
+      () => {},
+    );
+    const lineas = [...panel.querySelectorAll('[data-zona="reportes"] li')].map(
+      (l) => l.textContent,
+    );
+    expect(lineas[0]).toMatch(/^Violación de derechos de autor · /);
+    expect(lineas[1]).toMatch(/^Categoria nueva · /);
+    expect(panel.textContent).not.toContain('VIOLACION_DE_DERECHOS');
   });
 });

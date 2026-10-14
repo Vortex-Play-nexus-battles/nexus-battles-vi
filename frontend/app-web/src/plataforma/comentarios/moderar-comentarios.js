@@ -244,6 +244,40 @@ function lineasDeDeteccion(deteccion) {
 }
 
 /**
+ * SA-4 — la dirección para sancionar al autor de un comentario desde su
+ * detalle: la consola de sanciones con la cuenta ya elegida y el comentario
+ * ligado a la sanción. `null` si este rol no puede abrir la consola.
+ *
+ * @param {string|null} rol
+ * @returns {((autorId: string, comentarioId: string) => string)|null}
+ */
+export function enlazadorDeSancion(rol) {
+  if (!destinoVisible('sanciones-admin', { autenticado: true, rol })) {
+    return null;
+  }
+  return (autorId, comentarioId) => {
+    const destino = new URL(urlDeVista('sanciones-admin'));
+    destino.searchParams.set('usuario', autorId);
+    if (comentarioId) {
+      destino.searchParams.set('comentario', comentarioId);
+    }
+    return destino.href;
+  };
+}
+
+/** El nombre de una categoría de reporte (§7.3.3); una desconocida, humanizada. */
+function nombreDeCategoria(categoria) {
+  const conocida = CATEGORIAS.find((c) => c.valor === categoria);
+  if (conocida) {
+    return conocida.etiqueta;
+  }
+  const texto = String(categoria ?? '')
+    .replaceAll('_', ' ')
+    .toLowerCase();
+  return texto ? texto.charAt(0).toUpperCase() + texto.slice(1) : 'Sin categoría';
+}
+
+/**
  * Una entrada de la cola, como tarjeta pulsable.
  *
  * @param {object} entrada `EntradaDeCola` del contrato
@@ -628,6 +662,7 @@ export function panelDeDetalle(
     crearUrl = (blob) => globalThis.URL?.createObjectURL?.(blob) ?? '',
     prioridadElevada = false,
     cargarHistorialDelAutor = null,
+    hrefDeSancion = null,
   } = {},
 ) {
   const comentario = detalle.comentario ?? {};
@@ -644,6 +679,23 @@ export function panelDeDetalle(
     }),
     h('p', { clase: 't-cuerpo', datos: { campo: 'texto' }, texto: comentario.texto ?? '' }),
   );
+  // SA-4 — de la decisión sobre el comentario a la sanción de su autor, sin
+  // copiar su identificador: la consola abre con la cuenta y el comentario.
+  if (hrefDeSancion) {
+    panel.append(
+      h('p', {
+        clase: 'fila fila--envuelta',
+        hijos: [
+          h('a', {
+            clase: 'boton boton--contorno boton--pequeno',
+            texto: 'Sancionar al autor',
+            atributos: { href: hrefDeSancion },
+            datos: { accion: 'sancionar-autor' },
+          }),
+        ],
+      }),
+    );
+  }
   const imagenes = imagenesDelComentario(comentario, { cargarImagen, crearUrl });
   if (imagenes) {
     panel.append(h('h3', { texto: 'Imágenes' }), imagenes);
@@ -671,7 +723,8 @@ export function panelDeDetalle(
       hijos: reportes.map((r) =>
         h('li', {
           clase: 't-meta',
-          texto: `${String(r.categoria ?? '').replaceAll('_', ' ')} · ${fechaHora(r.fecha)}${
+          // SA-4 — la categoría con su nombre de §7.3.3, no la constante.
+          texto: `${nombreDeCategoria(r.categoria)} · ${fechaHora(r.fecha)}${
             r.descripcion ? ` · ${r.descripcion}` : ''
           }`,
         }),
@@ -1211,6 +1264,7 @@ export function montarModeracion(
   { api = null, productoId = null, crearUrl, rol = null } = {},
 ) {
   const hrefDeFicha = enlazadorDeFicha(rol);
+  const sancionDe = enlazadorDeSancion(rol);
   const cliente = {
     consultarCola,
     consultarDetalle,
@@ -1595,6 +1649,10 @@ export function montarModeracion(
           cargarHistorialDelAutor: (autorId, paginacion) =>
             cliente.historialDelAutor(autorId, paginacion),
           prioridadElevada: prioridadPorComentario.get(comentarioId) === true,
+          hrefDeSancion:
+            sancionDe && detalle.comentario?.autorId
+              ? sancionDe(detalle.comentario.autorId, comentarioId)
+              : null,
           ...(crearUrl ? { crearUrl } : {}),
         }),
       );
@@ -1668,5 +1726,7 @@ export function montarModeracion(
   filtroCategoria?.addEventListener('change', alCambiarFiltro);
   filtroPrioridad?.addEventListener('change', alCambiarFiltro);
   recargar();
-  return { recargar };
+  // SA-4 — `abrir` lo usa el historial de moderación: «Abrir» lleva el
+  // comentario al panel de revisión de esta misma pantalla.
+  return { recargar, abrir };
 }

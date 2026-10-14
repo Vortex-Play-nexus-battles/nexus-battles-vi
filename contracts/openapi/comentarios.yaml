@@ -174,7 +174,15 @@ info:
     `deteccion` lo dice con `servicioNoDisponible: true` y sin reglas. Ausente
     cuando el comentario llego a la cola por reportes y no por el filtro.
     Un objeto opcional en dos respuestas que ya existian: menor.
-  version: 1.13.0
+
+    1.14.0 (§7.3.3 «Histórico de moderación», SA-4): nueva `GET
+    /comentarios/moderacion/historial` (`historialDeModeracion`), todas las
+    acciones de moderacion de la mas reciente a la mas antigua, con filtros
+    por accion, por el apodo de quien decidio (o parte) y por periodo, y con
+    lo minimo del comentario para reconocerlo (producto, autor, extracto). La
+    IP de origen que guarda cada asiento no sale. Misma guarda que el resto de
+    la moderacion. Solo anade una operacion y esquemas: es menor.
+  version: 1.14.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -833,6 +841,88 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HistorialDelAutorResponse"
+        "401":
+          description: Sin token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
+          description: El rol no modera.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+
+  /comentarios/moderacion/historial:
+    get:
+      summary: Historico de moderacion (§7.3.3)
+      operationId: historialDeModeracion
+      description: >
+        1.14.0 — Solo MODERADOR, ADMINISTRADOR y SUPER_ADMINISTRADOR. Todas las
+        acciones de moderacion, de la mas reciente a la mas antigua: quien
+        decidio (su apodo), que accion, con que motivo, entre que estados y si
+        cambio el texto, con el comentario sobre el que se decidio (producto,
+        autor y un extracto de hasta 160 caracteres). Los filtros se combinan.
+        La IP de origen que guarda cada asiento no sale por aqui. Sin
+        resultados es `200` con lista vacia y `total: 0`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: accion
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/AccionDeModeracion"
+        - name: moderador
+          in: query
+          required: false
+          description: El apodo de quien decidio, o parte de el, sin distinguir mayusculas.
+          schema:
+            type: string
+            maxLength: 100
+        - name: desde
+          in: query
+          required: false
+          description: Desde este instante (incluido), ISO-8601.
+          schema:
+            type: string
+            format: date-time
+        - name: hasta
+          in: query
+          required: false
+          description: Antes de este instante (excluido), ISO-8601; posterior a `desde`.
+          schema:
+            type: string
+            format: date-time
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: tamano
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 16
+      responses:
+        "200":
+          description: Pagina del historico (puede venir vacia).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginaDeHistorialDeModeracion"
+        "400":
+          description: Una accion fuera del enumerado, una fecha que no es ISO o un periodo al reves.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
         "401":
           description: Sin token.
           content:
@@ -1704,6 +1794,42 @@ components:
           type: integer
         tamano:
           type: integer
+
+    AsientoDelHistorial:
+      type: object
+      description: >
+        1.14.0 — un asiento del historico de moderacion, sin la IP de origen,
+        con lo minimo del comentario. Si el comentario ya no se pudiera leer,
+        sus campos (`productoId`, `autorId`, `apodoAutor`, `extracto`) van a
+        `null`.
+      required: [id, fecha, accion, moderadorId, apodoModerador, motivo, estadoAnterior, estadoNuevo, textoEditado, comentarioId, productoId, autorId, apodoAutor, extracto]
+      properties:
+        id: { type: string }
+        fecha: { type: string, format: date-time }
+        accion: { $ref: "#/components/schemas/AccionDeModeracion" }
+        moderadorId: { type: string }
+        apodoModerador: { type: string }
+        motivo: { type: string }
+        estadoAnterior: { type: string }
+        estadoNuevo: { type: string }
+        textoEditado: { type: boolean, description: "true si la accion cambio el texto (EDITAR)." }
+        comentarioId: { type: string }
+        productoId: { type: [string, "null"] }
+        autorId: { type: [string, "null"] }
+        apodoAutor: { type: [string, "null"] }
+        extracto: { type: [string, "null"], maxLength: 160 }
+
+    PaginaDeHistorialDeModeracion:
+      type: object
+      required: [contenido, pagina, tamano, total, totalPaginas]
+      properties:
+        contenido:
+          type: array
+          items: { $ref: "#/components/schemas/AsientoDelHistorial" }
+        pagina: { type: integer, minimum: 0 }
+        tamano: { type: integer, minimum: 1 }
+        total: { type: integer, minimum: 0 }
+        totalPaginas: { type: integer, minimum: 0 }
 
     ItemDelHistorial:
       type: object
