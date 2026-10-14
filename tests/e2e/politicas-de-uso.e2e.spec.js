@@ -249,7 +249,8 @@ test.describe('Cambios en las políticas de uso (SA-11, §7.3.7)', () => {
     await entrarEnLaPagina(page, superAdmin);
     await page.goto(`${BORDE}/consola/parametros`);
 
-    const panel = page.locator('#politicas-de-uso');
+    // El panel del kit se marca con data-panel (su id lo lleva el título).
+    const panel = page.locator('[data-panel="politicas-de-uso"]');
     await expect(panel).toBeVisible({ timeout: 20_000 });
     await panel.locator('[data-accion="publicar-cambio-de-politica"]').click();
 
