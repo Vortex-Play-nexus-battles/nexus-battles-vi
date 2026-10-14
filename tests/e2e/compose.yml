@@ -196,7 +196,7 @@ services:
       # B9: misiones bloquea y libera al heroe en inventario, pide la IA de cada
       # turno a heroes, los golpes al motor y los creditos a ms-finanzas.
       # HU-NOT-001: notificaciones lee los cambios del catalogo en productos.
-      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios;admin-parametros=e2e-secreto-de-admin-parametros;ms-ecommerce=e2e-secreto-de-ecommerce;misiones=e2e-secreto-de-misiones;ms-finanzas=e2e-secreto-de-finanzas;notificaciones=e2e-secreto-de-notificaciones;ms-cumplimiento=e2e-secreto-de-cumplimiento
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios;admin-parametros=e2e-secreto-de-admin-parametros;ms-ecommerce=e2e-secreto-de-ecommerce;misiones=e2e-secreto-de-misiones;ms-finanzas=e2e-secreto-de-finanzas;notificaciones=e2e-secreto-de-notificaciones;ms-cumplimiento=e2e-secreto-de-cumplimiento;ms-chatbot=e2e-secreto-del-asistente
       # HU-AUT-007 — clave AES-256 con la que se cifra el secreto TOTP de cada
       # cuenta. Es la del BANCO DE PRUEBAS, no la de ningun entorno: base64 de
       # "e2e-clave-2fa-banco-de-pruebas!!" (32 bytes). Sin clave, enrolar
@@ -660,6 +660,13 @@ services:
       # latencia (esa se mide contra DEV, 7.4.11).
       CHATBOT_HTTP_TIMEOUT_CONEXION_MS: "3000"
       CHATBOT_HTTP_TIMEOUT_LECTURA_MS: "5000"
+      # ms-chatbot.yaml 1.18.0: cada consulta del asistente a los datos de una
+      # persona, a la bitacora central de este banco, con su credencial de
+      # servicio (registrada arriba en AUTH_CLIENTES_SERVICIO).
+      AUDITORIA_URL: http://srv-ms-cumplimiento:8091/api/v1/admin/auditoria/eventos
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: ms-chatbot
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-del-asistente
     depends_on:
       e2e-chatbot-db: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }

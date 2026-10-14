@@ -44,6 +44,12 @@ import java.util.stream.Stream;
 //
 // 1.6.0 (7.4.10): con `categoria`, tambien salen los temas que la atienden
 // como intencion adicional.
+//
+// 1.17.0 (7.4.2): el autocompletado tambien mira el titulo en ingles, y si lo
+// escrito se parece mas al lado ingles del tema (su titulo o sus variantes en
+// ingles) que al español, la sugerencia sale con el titulo en ingles: quien
+// escribe en ingles no recibe una pregunta en español que, al pulsarla,
+// cambie la conversacion de idioma.
 @Service
 public class SugerenciasService {
 
@@ -61,6 +67,16 @@ public class SugerenciasService {
         this.temas = temas;
         this.mensajes = mensajes;
         this.reloj = reloj;
+    }
+
+    /** Lo que responde {@code GET /chat/sugerencias}: cada tema con el titulo en el idioma de lo escrito. */
+    @Transactional(readOnly = true)
+    public List<SugerenciaResponse> sugerencias(String texto, Categoria categoria, Integer limite) {
+        String buscado = NormalizadorTexto.normalizar(texto);
+        boolean autocompleta = buscado.length() >= MINIMO_PARA_AUTOCOMPLETAR;
+        return sugerir(texto, categoria, limite).stream()
+            .map(tema -> SugerenciaResponse.desde(tema, autocompleta && enIngles(tema, buscado)))
+            .toList();
     }
 
     @Transactional(readOnly = true)
@@ -89,20 +105,39 @@ public class SugerenciasService {
     }
 
     // 3: el titulo empieza por lo escrito; 2: lo contiene; 1: alguna variante
-    // (en espanol o en ingles) lo contiene; 0: no aparece.
+    // lo contiene; 0: no aparece. Lo mejor de los dos idiomas (1.17.0: el
+    // titulo en ingles cuenta como el de español).
     static int relevancia(TemaConocimiento tema, String buscado) {
-        String titulo = NormalizadorTexto.normalizar(tema.getTitulo());
-        if (titulo.startsWith(buscado)) {
-            return 3;
+        return Math.max(relevanciaEnEspanol(tema, buscado), relevanciaEnIngles(tema, buscado));
+    }
+
+    static int relevanciaEnEspanol(TemaConocimiento tema, String buscado) {
+        return relevancia(tema.getTitulo(), tema.getPalabrasClaveEs(), buscado);
+    }
+
+    static int relevanciaEnIngles(TemaConocimiento tema, String buscado) {
+        return relevancia(tema.getTituloEn(), tema.getPalabrasClaveEn(), buscado);
+    }
+
+    /** 1.17.0: el tema tiene titulo en ingles y lo escrito se parece mas a su lado ingles. */
+    static boolean enIngles(TemaConocimiento tema, String buscado) {
+        return tema.getTituloEn() != null && relevanciaEnIngles(tema, buscado) > relevanciaEnEspanol(tema, buscado);
+    }
+
+    private static int relevancia(String titulo, String variantes, String buscado) {
+        if (titulo != null) {
+            String normalizado = NormalizadorTexto.normalizar(titulo);
+            if (normalizado.startsWith(buscado)) {
+                return 3;
+            }
+            if (normalizado.contains(buscado)) {
+                return 2;
+            }
         }
-        if (titulo.contains(buscado)) {
-            return 2;
-        }
-        boolean enVariantes = Stream.of(tema.getPalabrasClaveEs(), tema.getPalabrasClaveEn())
-            .filter(lista -> lista != null && !lista.isBlank())
-            .flatMap(lista -> Arrays.stream(lista.split(",")))
-            .map(NormalizadorTexto::normalizar)
-            .anyMatch(variante -> variante.contains(buscado));
+        boolean enVariantes = variantes != null && !variantes.isBlank()
+            && Arrays.stream(variantes.split(","))
+                .map(NormalizadorTexto::normalizar)
+                .anyMatch(variante -> variante.contains(buscado));
         return enVariantes ? 1 : 0;
     }
 

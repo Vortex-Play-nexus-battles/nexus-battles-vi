@@ -6,9 +6,13 @@ import { jest } from '@jest/globals';
 
 import {
   CUANTAS,
+  TEXTOS_PARA_TI,
   TEXTOS_SUGERENCIAS,
   conectarAutocompletado,
+  contenidoParaTi,
   crearPreguntasRapidas,
+  gruposParaTi,
+  motivoParaTi,
 } from './sugerencias-chatbot.js';
 
 const esperar = () => new Promise((resolver) => setTimeout(resolver, 0));
@@ -273,5 +277,104 @@ describe('autocompletado', () => {
     auto.cerrar();
     expect(lista.hidden).toBe(true);
     expect(entrada.hasAttribute('aria-activedescendant')).toBe(false);
+  });
+});
+
+// 1.15.0 (§7.4.3 «sugerencias proactivas», D-CHA-14).
+describe('sugerencias para ti', () => {
+  const COMISION = {
+    clave: 'comision',
+    titulo: 'Comisión de la subasta',
+    categoria: 'SUBASTA_Y_COMERCIO',
+    pregunta: 'Comisión de la subasta',
+    motivo: 'POR_LO_QUE_PREGUNTASTE',
+    relacionadoCon: 'Cómo funciona la Subasta',
+  };
+  const PUJAR = { ...COMISION, clave: 'pujar', titulo: 'Cómo pujar', pregunta: 'Cómo pujar' };
+  const MISION = {
+    clave: 'mision',
+    titulo: 'Qué es una misión',
+    categoria: 'MODALIDAD_JUEGO',
+    pregunta: 'Qué es una misión',
+    motivo: 'POR_DONDE_ESTAS',
+    relacionadoCon: null,
+  };
+
+  test('cada motivo se explica en palabras del jugador', () => {
+    expect(motivoParaTi(COMISION)).toBe('Porque preguntaste por «Cómo funciona la Subasta»');
+    expect(motivoParaTi({ motivo: 'POR_LO_QUE_PREGUNTASTE' })).toBe(
+      TEXTOS_PARA_TI.porLoQueYaPreguntaste,
+    );
+    expect(motivoParaTi(MISION)).toBe(TEXTOS_PARA_TI.porDondeEstas);
+    expect(motivoParaTi({ motivo: 'PARA_EMPEZAR' })).toBe(TEXTOS_PARA_TI.paraEmpezar);
+    // Un motivo que esta vista aún no conoce no rompe nada.
+    expect(motivoParaTi({ motivo: 'OTRO' })).toBe(TEXTOS_PARA_TI.paraEmpezar);
+    expect(motivoParaTi()).toBe(TEXTOS_PARA_TI.paraEmpezar);
+    expect(CUANTAS.paraTi).toBe(3);
+  });
+
+  test('se agrupan por motivo, en el orden en que llegan', () => {
+    const otraConsulta = { ...PUJAR, clave: 'torneo', relacionadoCon: 'Cómo funciona el Torneo' };
+    const grupos = gruposParaTi([COMISION, MISION, PUJAR, otraConsulta]);
+
+    expect(grupos.map((g) => g.titulo)).toEqual([
+      'Porque preguntaste por «Cómo funciona la Subasta»',
+      TEXTOS_PARA_TI.porDondeEstas,
+      'Porque preguntaste por «Cómo funciona el Torneo»',
+    ]);
+    expect(grupos[0].sugerencias.map((s) => s.clave)).toEqual(['comision', 'pujar']);
+    expect(gruposParaTi(null)).toEqual([]);
+  });
+
+  test('la burbuja dice por qué y cada botón manda su pregunta', () => {
+    const alElegir = jest.fn();
+    const contenido = contenidoParaTi([COMISION, PUJAR, MISION], { alElegir });
+    document.body.append(contenido);
+
+    expect(contenido.querySelector('.chatbot-ventana__texto').textContent).toBe(
+      TEXTOS_PARA_TI.titulo,
+    );
+    const grupos = [...contenido.querySelectorAll('[role="group"]')];
+    expect(grupos).toHaveLength(2);
+    const motivo = document.getElementById(grupos[0].getAttribute('aria-labelledby'));
+    expect(motivo.textContent).toBe('Porque preguntaste por «Cómo funciona la Subasta»');
+    const botones = [...contenido.querySelectorAll('[data-accion="sugerencia-para-ti"]')];
+    expect(botones.map((b) => b.textContent)).toEqual([
+      'Comisión de la subasta',
+      'Cómo pujar',
+      'Qué es una misión',
+    ]);
+    expect(botones.every((b) => b.type === 'button')).toBe(true);
+
+    botones[2].click();
+    expect(alElegir).toHaveBeenCalledWith('Qué es una misión');
+  });
+
+  test('el texto del servidor nunca entra como HTML; sin título manda la pregunta', () => {
+    const alElegir = jest.fn();
+    const contenido = contenidoParaTi(
+      [
+        {
+          clave: 'x',
+          pregunta: '<img src=x onerror=alert(1)>',
+          motivo: 'POR_LO_QUE_PREGUNTASTE',
+          relacionadoCon: '<b>tema</b>',
+        },
+      ],
+      { alElegir },
+    );
+
+    expect(contenido.querySelector('img, b')).toBeNull();
+    const boton = contenido.querySelector('button');
+    expect(boton.textContent).toBe('<img src=x onerror=alert(1)>');
+    boton.click();
+    expect(alElegir).toHaveBeenCalledWith('<img src=x onerror=alert(1)>');
+    expect(contenido.textContent).toContain('«<b>tema</b>»');
+  });
+
+  test('sin ninguna que mostrar no hay burbuja', () => {
+    expect(contenidoParaTi([], { alElegir: jest.fn() })).toBeNull();
+    expect(contenidoParaTi(null, { alElegir: jest.fn() })).toBeNull();
+    expect(contenidoParaTi([null, { clave: 'vacia' }], { alElegir: jest.fn() })).toBeNull();
   });
 });

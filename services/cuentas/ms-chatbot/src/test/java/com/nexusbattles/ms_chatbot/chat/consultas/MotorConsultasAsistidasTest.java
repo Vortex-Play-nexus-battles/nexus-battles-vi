@@ -1,15 +1,20 @@
 package com.nexusbattles.ms_chatbot.chat.consultas;
 
+import com.nexusbattles.ms_chatbot.chat.auditoria.AuditoriaDeAccesos;
+import com.nexusbattles.ms_chatbot.chat.auditoria.DatoConsultado;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.AvisoDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.BandejaResponseDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.ElementoInventarioDto;
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.MiPublicacionDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.MiResumenDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.MisionActivaDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.PaginaInventarioDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.PaginaMovimientosDto;
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.ParticipacionDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoDetalleDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoResumenDto;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.EnlaceInterno;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.TarjetaInformativa;
 import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.ResultadoMotor;
 import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
@@ -29,7 +34,10 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -83,7 +91,79 @@ class MotorConsultasAsistidasTest {
         Optional<ResultadoMotor> resultado = motor.generarRespuesta("como van mis subastas", TOKEN, UID);
 
         assertThat(resultado).isPresent();
-        assertThat(resultado.get().texto()).contains("2 subasta(s)").contains("300.00");
+        assertThat(resultado.get().texto()).contains("2 subasta(s)").contains("con 150 créditos retenidos")
+            .contains("Tu saldo disponible es de 300 créditos.");
+    }
+
+    // 1.16.0 (7.4.4 «estado de productos en la subasta»): cada subasta abierta
+    // en la que puja y cada una que publico, las que cierran antes primero.
+    @Test
+    void susSubastasTraenCadaUnaAbiertaEnTarjetasLasQueCierranAntesPrimero() {
+        when(subastasClient.consultarMiResumen(TOKEN)).thenReturn(new MiResumenDto("120.00", "380.00", 1));
+        when(subastasClient.misParticipaciones(TOKEN)).thenReturn(List.of(
+            new ParticipacionDto("Orbe de manos ardientes", "ACTIVA", "SUPERADA", "60.00", "75.00", 4,
+                Instant.parse("2026-10-16T02:00:00Z")),
+            new ParticipacionDto("Hacha del Norte", "ACTIVA", "GANANDO", "120.00", "120.00", 2,
+                Instant.parse("2026-10-15T17:30:00Z")),
+            new ParticipacionDto("Arco viejo", "ADJUDICADA", "GANADA", "40.00", "40.00", 1,
+                Instant.parse("2026-10-01T10:00:00Z")),
+            new ParticipacionDto("Daga", "ACTIVA", "AUTOMATICA", null, "15.00", 0, null)));
+        when(subastasClient.misPublicacionesActivas(TOKEN)).thenReturn(List.of(
+            new MiPublicacionDto("Escudo de roble", "ACTIVA", "80.00", 3, Instant.parse("2026-10-15T20:00:00Z"))));
+
+        ResultadoMotor resultado = motor.generarRespuesta("como van mis subastas", TOKEN, UID).orElseThrow();
+
+        assertThat(resultado.texto())
+            .startsWith("Vas ganando 1 subasta(s) en este momento, con 120 créditos retenidos en pujas activas.")
+            .contains("Pujas en 3 subasta(s) abierta(s) y tienes 1 publicada(s); las que cierran antes, abajo.");
+        assertThat(resultado.resultado()).isEqualTo(ResultadoDeRespuesta.CONSULTA_EN_VIVO);
+        // La cerrada (adjudicada) no sale; la que no tiene fecha, al final.
+        assertThat(resultado.enriquecido().tarjetas()).extracting(TarjetaInformativa::titulo)
+            .containsExactly("Hacha del Norte", "Escudo de roble", "Orbe de manos ardientes", "Daga");
+        assertThat(resultado.enriquecido().tarjetas()).extracting(TarjetaInformativa::texto).containsExactly(
+            "Vas ganando con 120 créditos · 2 puja(s) · cierra el 15/10 a las 12:30.",
+            "Tu subasta: oferta vigente 80 créditos · 3 puja(s) · cierra el 15/10 a las 15:00.",
+            "Te superaron: la oferta vigente es 75 y tu mejor puja, 60 · 4 puja(s) · cierra el 15/10 a las 21:00.",
+            "Tu puja automática aún no ha pujado; la oferta vigente es 15 · 0 puja(s) · sin fecha de cierre.");
+        assertThat(resultado.enriquecido().enlaces()).extracting(EnlaceInterno::destino).containsExactly("subastas");
+    }
+
+    @Test
+    void susSubastasEnInglesYSinNingunaAbierta() {
+        when(subastasClient.consultarMiResumen(TOKEN)).thenReturn(new MiResumenDto("0", null, 0));
+        when(subastasClient.misParticipaciones(TOKEN)).thenReturn(List.of(new ParticipacionDto("Arco", "CANCELADA",
+            "CERRADA", "10", "10", 1, Instant.parse("2026-10-01T10:00:00Z"))));
+        when(subastasClient.misPublicacionesActivas(TOKEN)).thenReturn(List.of());
+
+        ResultadoMotor resultado = motor.generarRespuesta("how are my auctions", TOKEN, UID).orElseThrow();
+
+        assertThat(resultado.texto()).isEqualTo("You're winning 0 auction(s) right now, with 0 credits held in "
+            + "active bids. You have no bids or listings in auctions that are still open.");
+        assertThat(resultado.enriquecido().tarjetas()).isEmpty();
+    }
+
+    @Test
+    void sinElDetalleDeSusSubastasDaElResumenYDondeVerlas() {
+        when(subastasClient.consultarMiResumen(TOKEN)).thenReturn(new MiResumenDto("0.00", "10.00", 0));
+        when(subastasClient.misParticipaciones(TOKEN)).thenThrow(new ResourceAccessException("caido"));
+        when(subastasClient.misPublicacionesActivas(TOKEN)).thenReturn(List.of());
+
+        ResultadoMotor resultado = motor.generarRespuesta("como van mis subastas", TOKEN, UID).orElseThrow();
+
+        assertThat(resultado.texto()).endsWith("No pude traer el detalle de cada una: lo ves en «Subasta», en «Mis "
+            + "subastas».");
+        assertThat(resultado.resultado()).isEqualTo(ResultadoDeRespuesta.CONSULTA_EN_VIVO);
+        assertThat(resultado.enriquecido().tarjetas()).isEmpty();
+    }
+
+    // 1.16.0: «¿cuántas subastas hay?» pregunta por lo que hay (ConsultaDeSubastas), no por lo suyo.
+    @Test
+    void cuantasSubastasHayNoEsUnaConsultaDeLoSuyo() {
+        assertThat(motor.generarRespuesta("cuantas subastas hay", TOKEN, UID)).isEmpty();
+        assertThat(motor.generarRespuesta("muestrame las subastas activas", TOKEN, UID)).isEmpty();
+        assertThat(motor.pideDatosDeSuCuenta("¿Cuántas subastas hay?")).isFalse();
+        assertThat(motor.pideDatosDeSuCuenta("¿Cuántas subastas tengo?")).isTrue();
+        verifyNoInteractions(subastasClient);
     }
 
     @Test
@@ -781,5 +861,83 @@ class MotorConsultasAsistidasTest {
     @Test
     void sinMensajeNoPideNada() {
         assertThat(motor.pideDatosDeSuCuenta(null)).isFalse();
+    }
+
+    // ---- 1.18.0: cada consulta a sus datos queda auditada (RF-CHA-008) ------
+
+    private static final String ORIGEN = "203.0.113.7";
+
+    private MotorConsultasAsistidas motorAuditado(AuditoriaDeAccesos auditoria) {
+        return new MotorConsultasAsistidas(inventarioClient, subastasClient, notificacionesClient, torneosClient,
+            finanzasClient, misionesClient, auditoria);
+    }
+
+    @Test
+    void cadaConsultaASusDatosQuedaAuditadaConSuUidYSuOrigen() {
+        AuditoriaDeAccesos auditoria = mock(AuditoriaDeAccesos.class);
+        MotorConsultasAsistidas auditado = motorAuditado(auditoria);
+        when(inventarioClient.consultarInventario(TOKEN, 0)).thenReturn(new PaginaInventarioDto(List.of(), 0));
+        when(inventarioClient.buscar(TOKEN, "espada")).thenReturn(new PaginaInventarioDto(List.of(), 0));
+        when(subastasClient.consultarMiResumen(TOKEN)).thenThrow(new ResourceAccessException("caido"));
+        when(misionesClient.enCurso(TOKEN)).thenReturn(List.of());
+
+        auditado.generarRespuesta("que tengo en mi inventario", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+        auditado.generarRespuesta("busca la espada en mi inventario", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+        auditado.generarRespuesta("como van mis subastas", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+        auditado.generarRespuesta("mis misiones activas", TOKEN, UID, IdiomaPreferido.AUTOMATICO, null);
+
+        verify(auditoria).registrar(UID, DatoConsultado.INVENTARIO, ResultadoDeRespuesta.CONSULTA_EN_VIVO, ORIGEN);
+        verify(auditoria).registrar(UID, DatoConsultado.BUSQUEDA_EN_INVENTARIO, ResultadoDeRespuesta.CONSULTA_EN_VIVO,
+            ORIGEN);
+        // Tambien lo que se intento y no llego: el acceso se pidio con su token.
+        verify(auditoria).registrar(UID, DatoConsultado.SUBASTAS, ResultadoDeRespuesta.NO_DISPONIBLE, ORIGEN);
+        verify(auditoria).registrar(UID, DatoConsultado.MISIONES, ResultadoDeRespuesta.CONSULTA_EN_VIVO, null);
+        verifyNoMoreInteractions(auditoria);
+    }
+
+    @Test
+    void avisosMovimientosEInformeTambienQuedanAuditados() {
+        AuditoriaDeAccesos auditoria = mock(AuditoriaDeAccesos.class);
+        MotorConsultasAsistidas auditado = motorAuditado(auditoria);
+        when(notificacionesClient.consultarBandeja(TOKEN, UID)).thenThrow(new ResourceAccessException("caido"));
+        when(finanzasClient.movimientos(TOKEN, UID, 5)).thenThrow(new ResourceAccessException("caido"));
+        when(inventarioClient.consultarInventario(TOKEN, 0)).thenThrow(new ResourceAccessException("caido"));
+        when(subastasClient.consultarMiResumen(TOKEN)).thenThrow(new ResourceAccessException("caido"));
+        when(misionesClient.enCurso(TOKEN)).thenReturn(List.of());
+
+        auditado.generarRespuesta("mis notificaciones", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+        auditado.generarRespuesta("mis ultimas transacciones", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+        auditado.generarRespuesta("dame un informe de mi actividad", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+
+        verify(auditoria).registrar(UID, DatoConsultado.NOTIFICACIONES, ResultadoDeRespuesta.NO_DISPONIBLE, ORIGEN);
+        verify(auditoria).registrar(UID, DatoConsultado.MOVIMIENTOS, ResultadoDeRespuesta.NO_DISPONIBLE, ORIGEN);
+        verify(auditoria).registrar(UID, DatoConsultado.INFORME_DE_ACTIVIDAD, ResultadoDeRespuesta.CONSULTA_EN_VIVO,
+            ORIGEN);
+        verifyNoMoreInteractions(auditoria);
+    }
+
+    // Ir a una seccion, una busqueda demasiado corta y los torneos (listado
+    // publico, sin su token) no leen nada suyo: no hay asiento.
+    @Test
+    void loQueNoLeeSusDatosNoSeAudita() {
+        AuditoriaDeAccesos auditoria = mock(AuditoriaDeAccesos.class);
+        MotorConsultasAsistidas auditado = motorAuditado(auditoria);
+        when(torneosClient.listar()).thenThrow(new ResourceAccessException("caido"));
+
+        auditado.generarRespuesta("llevame a mi inventario", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+        auditado.generarRespuesta("busca as en mi inventario", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+        auditado.generarRespuesta("hay torneos en curso", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+        auditado.generarRespuesta("hola", TOKEN, UID, IdiomaPreferido.AUTOMATICO, ORIGEN);
+
+        verify(auditoria, never()).registrar(any(), any(), any(), any());
+    }
+
+    // Sin bitacora central (el constructor de las pruebas) no se rompe nada.
+    @Test
+    void sinBitacoraCentralLaConsultaSigueIgual() {
+        when(inventarioClient.consultarInventario(TOKEN, 0)).thenReturn(new PaginaInventarioDto(List.of(), 0));
+
+        assertThat(motor.generarRespuesta("que tengo en mi inventario", TOKEN, UID, IdiomaPreferido.AUTOMATICO,
+            ORIGEN).orElseThrow().resultado()).isEqualTo(ResultadoDeRespuesta.CONSULTA_EN_VIVO);
     }
 }

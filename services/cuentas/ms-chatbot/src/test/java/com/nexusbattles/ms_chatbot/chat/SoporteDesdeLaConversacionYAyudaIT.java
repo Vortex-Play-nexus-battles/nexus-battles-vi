@@ -37,10 +37,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * ms-chatbot.yaml 1.8.0 (7.4.3) contra PostgreSQL real con V1-V13: la
- * solicitud desde la conversacion (redaccion, conversacion propia, 409, 401
- * del visitante) y el centro de ayuda (solo produccion, solo activos, nada
- * interno, en cache).
+ * ms-chatbot.yaml 1.8.0 (7.4.3) contra PostgreSQL real: la solicitud desde la
+ * conversacion (redaccion, conversacion propia, 409, y desde 1.12.0 tambien
+ * la de un visitante) y el centro de ayuda (solo produccion, solo activos,
+ * nada interno, en cache). La que se abre sola al no resolver una pregunta
+ * esta en SolicitudesAutomaticasIT.
  */
 @Testcontainers
 @SpringBootTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
@@ -82,8 +83,10 @@ class SoporteDesdeLaConversacionYAyudaIT {
     void cadaJugadorConSuPreguntaRedactadaYUnaSolaALaVez() throws Exception {
         UUID ana = UUID.randomUUID();
         UUID beto = UUID.randomUUID();
-        escribir(jugador(ana), "zxqwv plorf 4111 1111 1111 1111");
-        escribir(jugador(beto), "qwzx vbnm grrr");
+        // Conversaciones guardadas antes de 1.12.0 (sin solicitud automatica);
+        // la de Ana, con la tarjeta a la vista.
+        sinResolver(ana, "zxqwv plorf 4111 1111 1111 1111");
+        sinResolver(beto, "qwzx vbnm grrr");
 
         String deAna = mvc.perform(post(DESDE_CONVERSACION).with(jugador(ana))
                 .contentType(MediaType.APPLICATION_JSON)
@@ -149,18 +152,30 @@ class SoporteDesdeLaConversacionYAyudaIT {
     }
 
     @Test
-    @DisplayName("un visitante recibe 401 y un jugador sin preguntas 409 SIN_CONVERSACION; nada se guarda")
-    void visitante401YSinConversacion409() throws Exception {
+    @DisplayName("1.12.0: un visitante tambien la abre desde su conversacion; sin identidad 401 y sin preguntas 409")
+    void elVisitanteTambienSinIdentidad401YSinPreguntas409() throws Exception {
         String sesion = "visitante-" + UUID.randomUUID();
-        escribirComoVisitante(sesion, "zxqwv plorf");
+        escribirComoVisitante(sesion, "como funciona la subasta");
 
         mvc.perform(post(DESDE_CONVERSACION).header("X-Id-Sesion-Anonima", sesion))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.estado").value("ABIERTO"))
+            .andExpect(jsonPath("$.asunto").value("Sin respuesta del asistente: como funciona la subasta"))
+            .andExpect(jsonPath("$.uid").doesNotExist());
+        mvc.perform(get("/chat/tickets").header("X-Id-Sesion-Anonima", sesion))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(1));
+
+        mvc.perform(post(DESDE_CONVERSACION))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.motivo").value("SESION_REQUERIDA"));
+        mvc.perform(post(DESDE_CONVERSACION).header("X-Id-Sesion-Anonima", "visitante-" + UUID.randomUUID()))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.motivo").value("SIN_CONVERSACION"));
         mvc.perform(post(DESDE_CONVERSACION).with(jugador(UUID.randomUUID())))
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.motivo").value("SIN_CONVERSACION"));
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM chatbot.tickets_soporte", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM chatbot.tickets_soporte", Integer.class)).isEqualTo(1);
     }
 
     // ------------------------------------------------------- centro de ayuda
@@ -192,8 +207,8 @@ class SoporteDesdeLaConversacionYAyudaIT {
             .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
 
         List<String> titulos = JsonPath.read(json, "$.categorias[*].temas[*].titulo");
-        // 60 publicados (V11 y V15), sin saludo ni despedida, sin el desactivado.
-        assertThat(titulos).hasSize(57)
+        // 62 publicados (V11, V15 y V18), sin saludo ni despedida, sin el desactivado.
+        assertThat(titulos).hasSize(59)
             .doesNotContain("Tema solo de la candidata", "Saludo", "Despedida");
         assertThat(jdbc.queryForObject("""
             SELECT titulo FROM chatbot.temas_conocimiento WHERE clave = 'cancelar-subasta'
@@ -216,11 +231,13 @@ class SoporteDesdeLaConversacionYAyudaIT {
 
     // ------------------------------------------------------------- auxiliares
 
-    private void escribir(RequestPostProcessor quien, String texto) throws Exception {
-        mvc.perform(post("/chat/mensajes").with(quien)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"contenido\":\"" + texto + "\"}"))
-            .andExpect(status().isOk());
+    // Una pregunta que el asistente no entendio, guardada como antes de 1.12.0.
+    private void sinResolver(UUID uid, String pregunta) {
+        UUID conversacion = conversacion(uid.toString());
+        Instant inicio = Instant.parse("2026-10-14T15:00:00Z");
+        mensaje(conversacion, "USUARIO", pregunta, inicio, null, null);
+        mensaje(conversacion, "BOT", "No estoy seguro de haber entendido tu consulta.", inicio.plusSeconds(1),
+            "ESCALADO", null);
     }
 
     private void escribirComoVisitante(String sesion, String texto) throws Exception {
@@ -247,6 +264,7 @@ class SoporteDesdeLaConversacionYAyudaIT {
               categoria)
             VALUES (gen_random_uuid(), ?, ?, ?, ?, ?, ?, ?)
             """, conversacion, remitente, contenido, Timestamp.from(cuando),
-            "BOT".equals(remitente) ? "NO_SIRVIO".equals(resultado) : null, resultado, categoria);
+            "BOT".equals(remitente) ? "NO_SIRVIO".equals(resultado) || "ESCALADO".equals(resultado) : null, resultado,
+            categoria);
     }
 }

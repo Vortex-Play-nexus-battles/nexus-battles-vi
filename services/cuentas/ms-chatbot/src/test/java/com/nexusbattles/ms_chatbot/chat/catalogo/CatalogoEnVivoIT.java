@@ -52,6 +52,8 @@ class CatalogoEnVivoIT {
     static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17-alpine");
 
     private static final List<String> AUTORIZACIONES_RECIBIDAS = new CopyOnWriteArrayList<>();
+    // 1.13.0: un recurso grafico del catalogo pasa a la tarjeta; un nombre suelto, no.
+    private static final String IMAGEN = "/api/v1/productos/recursos/6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f";
     private static final HttpServer CATALOGO = catalogo();
 
     private static HttpServer catalogo() {
@@ -61,9 +63,10 @@ class CatalogoEnVivoIT {
                 String autorizacion = intercambio.getRequestHeaders().getFirst("Authorization");
                 AUTORIZACIONES_RECIBIDAS.add(autorizacion == null ? "ninguna" : autorizacion);
                 byte[] cuerpo = ("{\"content\":[{\"id\":\"p-1\",\"nombre\":\"Espada de una mano\",\"tipo\":\"ARMA\","
-                    + "\"descripcion\":\"+1 ataque\",\"precioCreditos\":120,\"premium\":false,\"estado\":\"ACTIVO\"},"
+                    + "\"descripcion\":\"+1 ataque\",\"precioCreditos\":120,\"premium\":false,\"estado\":\"ACTIVO\","
+                    + "\"imagen\":\"" + IMAGEN + "\"},"
                     + "{\"id\":\"p-2\",\"nombre\":\"Magma Ardiente\",\"tipo\":\"ARMADURA\",\"descripcion\":\"+2 defensa\","
-                    + "\"precioCreditos\":80,\"premium\":false,\"estado\":\"ACTIVO\"}],"
+                    + "\"precioCreditos\":80,\"premium\":false,\"estado\":\"ACTIVO\",\"imagen\":\"magma.png\"}],"
                     + "\"page\":0,\"size\":50,\"totalElements\":2,\"totalPages\":1}").getBytes(StandardCharsets.UTF_8);
                 intercambio.getResponseHeaders().add("Content-Type", "application/json");
                 intercambio.sendResponseHeaders(200, cuerpo.length);
@@ -111,10 +114,31 @@ class CatalogoEnVivoIT {
             .isEqualTo("«Espada de una mano» (arma) cuesta 120 créditos. Lo encuentras en la «Tienda».");
         List<String> destinos = JsonPath.read(respuesta, "$.enriquecido.enlaces[*].destino");
         assertThat(destinos).containsExactly("tienda");
+        // 1.13.0 (§7.4.3): la tarjeta del producto, con la imagen del catalogo.
+        assertThat((String) JsonPath.read(respuesta, "$.enriquecido.tarjetas[0].titulo")).isEqualTo("Espada de una mano");
+        assertThat((String) JsonPath.read(respuesta, "$.enriquecido.tarjetas[0].imagen")).isEqualTo(IMAGEN);
         assertThat(jdbc.queryForObject(
             "SELECT resultado FROM chatbot.mensajes WHERE remitente = 'BOT' AND contenido LIKE '«Espada de una mano»%'",
             String.class)).isEqualTo("CONSULTA_EN_VIVO");
         assertThat(AUTORIZACIONES_RECIBIDAS).isNotEmpty().containsOnly("ninguna");
+    }
+
+    @Test
+    @DisplayName("1.13.0: el listado lleva una tarjeta por producto; una imagen que nadie sirve no pasa")
+    void elListadoLlevaTarjetasConLaImagenSoloSiEsDelCatalogo() throws Exception {
+        String respuesta = mvc.perform(post("/chat/mensajes").header("X-Id-Sesion-Anonima", "visitante-" + UUID.randomUUID())
+                .contentType("application/json").content("{\"contenido\":\"¿Qué productos hay en la tienda?\"}"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        List<String> titulos = JsonPath.read(respuesta, "$.enriquecido.tarjetas[*].titulo");
+        assertThat(titulos).containsExactly("Espada de una mano", "Magma Ardiente");
+        List<Object> imagenes = JsonPath.read(respuesta, "$.enriquecido.tarjetas[*].imagen");
+        assertThat(imagenes).containsExactly(IMAGEN);
+        // Y se guarda igual: el historial la ensena con su tarjeta.
+        assertThat(jdbc.queryForObject("SELECT enriquecido FROM chatbot.mensajes WHERE remitente = 'BOT' "
+            + "AND contenido LIKE 'En el catálogo hay 2 productos%'", String.class)).contains(IMAGEN)
+            .doesNotContain("magma.png");
     }
 
     @Test

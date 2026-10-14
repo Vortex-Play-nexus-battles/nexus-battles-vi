@@ -116,3 +116,17 @@ título en DEV | qué decía mal | evidencia
 ¿Puedo vender en la subasta por dinero real? | que lo del Maestro de Juego se paga en dinero real; esa cuenta no existe | SUB/seguridad/IdentidadDesdeToken.java:23-31; SUB/subastas/dto/SubastaDetalleResponse.java:83-85
 ¿Quién es el Maestro de Juego? | un vendedor activo con épicas y paquetes en dinero real; no existe y las épicas no se venden | SUB/seguridad/IdentidadDesdeToken.java:23-31; SUB/subastas/port/IdentidadClient.java:11-13; FE/cuentas/subastas-filtros.js:38-41
 ¿Qué hago si tengo un problema con una subasta? | que soporte media o revierte la transacción; soporte revisa, responde y cierra | FE/cuentas/panel-chatbot-soporte.js:4-8; OA/ms-subastas-panel.yaml y OA/ms-subastas-pujas.yaml (sin reversión); OA/creditos.yaml:51-59; FE/comun/ui/soporte-chatbot.js:30,53-63
+
+## V18 (1.12.0)
+
+`src/main/resources/db/contenido/V18__la_base_entiende_mas_formas_de_preguntar.json`. Dos temas que la base no tenía,
+sin afirmaciones nuevas: cada una sale de un tema ya verificado (sus claves, en la tabla de arriba) o de la fuente que
+se cita. Un tema solo se crea si su clave no existe; las variantes nuevas solo se suman si faltan.
+
+terminos-del-servicio | no hay un documento de términos aparte (ninguna vista ni ruta lo publica); rigen las normas de conducta (normas-de-conducta); las ocho causales de sanción con su texto; cómo apelarlas (apelar-sancion); los datos propios en «Mi Cuenta» › «Privacidad» (privacidad-y-datos); los créditos no se cambian por dinero real (creditos) | FE/comun/matriz-acceso.js (sin vista de términos); services/plataforma/moderacion-sanciones/src/main/java/com/nexusbattles/plataforma/moderacionsanciones/sanciones/Causal.java:16-23; PI2 §7.3.2 p. 39
+como-funciona-la-subasta | resumen en cinco pasos de publicar-subasta (comisión 1 crédito por 24 h y 3 por 48 h, objeto propio no equipado, no en misión y no premium), pujar-o-comprar (desde el mínimo, luego el incremento mínimo; créditos retenidos y liberados al ser superado; «Comprarla ya»), puja-automatica, recoger-subasta-ganada (7 días, «Mis subastas» › «Pendientes de recoger»), cancelar-subasta (sin pujas y a más de 6 h del cierre, 50 % de la comisión) y limites-de-subastas (topes que fija la administración; no se puja en las propias) | las de esas claves en esta tabla
+
+Variantes sumadas: `modo-batalla` («formas de jugar», «de qué formas puedo jugar», «ways to play»…) y
+`problema-tecnico` en inglés («won't load», «stuck loading»…). De los 13 casos de evaluación nuevos, la mayoría llevan
+erratas («como funsionan las subatsas», «cuales son los terminos de servisio», «quiero crear una cuneta») y se
+comprueban con los demás en `BaseDeConocimientoEnProduccionIT`.

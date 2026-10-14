@@ -189,3 +189,33 @@ test('un 404 sin cuerpo del servicio es «no disponible»; uno con cuerpo no', a
   expect(sinCuerpo.noDisponible).toBe(true);
   expect(conCuerpo.noDisponible).toBe(false);
 });
+
+// ms-chatbot.yaml 1.14.0 (§7.4.6): el contenido de una captura de la solicitud.
+test('leerCaptura pide la imagen con el token del administrador y la da como Blob de su tipo', async () => {
+  const fetch = jest.fn(async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: (nombre) => (nombre === 'Content-Type' ? 'image/png' : null) },
+    blob: async () => new Blob(['png'], { type: 'application/octet-stream' }),
+  }));
+
+  const imagen = await cliente(fetch).leerCaptura('t-1', 'c-1');
+
+  const [url, opciones] = fetch.mock.calls[0];
+  expect(url).toBe('/api/v1/chatbot/admin/tickets/t-1/capturas/c-1');
+  expect(opciones.method).toBe('GET');
+  expect(opciones.headers.Authorization).toBe('Bearer token-admin');
+  expect(opciones.headers.Accept).toBe('image/png, image/jpeg, application/problem+json');
+  expect(imagen.type).toBe('image/png');
+});
+
+test('leerCaptura no da por captura lo que no es una imagen, ni un 404', async () => {
+  const html = jest.fn(async () => respuesta('<script>', 200, { 'Content-Type': 'text/html' }));
+  await expect(cliente(html).leerCaptura('t-1', 'c-1')).rejects.toBeInstanceOf(Error);
+
+  const noEsta = jest.fn(async () => respuesta({ title: 'Not Found', status: 404 }, 404));
+  const error = await cliente(noEsta)
+    .leerCaptura('t-1', 'c-9')
+    .catch((e) => e);
+  expect(error.estado).toBe(404);
+});

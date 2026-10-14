@@ -9,9 +9,11 @@ import {
   CLAVE_SESION_ANONIMA,
   ErrorDelChatbot,
   TIEMPO_DE_ESPERA_MS,
+  TIEMPO_DE_SUBIDA_MS,
   baseDelChatbot,
   crearClienteChatbot,
   idDeSesionAnonima,
+  imagenDeCaptura,
   rutaDelChatbot,
   segundosDeEspera,
 } from './cliente-chatbot.js';
@@ -269,6 +271,26 @@ describe('operaciones', () => {
       '/api/v1/chat/sugerencias?q=c%C3%B3mo&categoria=PRODUCTO&limite=3',
     );
     expect(fetch.mock.calls[0][1].method).toBe('GET');
+  });
+
+  // 1.15.0 (§7.4.3): con la identidad de siempre (token o sesión de
+  // visitante); el servidor decide de quién son, nunca un parámetro.
+  test('sugerenciasParaTi pide las de esta persona, con la sección si la hay', async () => {
+    const fetch = jest
+      .fn()
+      .mockResolvedValueOnce(respuestaJson([{ clave: 'k-1', motivo: 'PARA_EMPEZAR' }]))
+      .mockResolvedValueOnce(respuestaJson(null));
+    const chat = cliente({ fetch, sesion: JUGADOR });
+
+    expect(await chat.sugerenciasParaTi()).toEqual([{ clave: 'k-1', motivo: 'PARA_EMPEZAR' }]);
+    expect(await chat.sugerenciasParaTi({ vista: 'SUBASTAS', limite: 2 })).toEqual([]);
+
+    expect(fetch.mock.calls[0][0]).toBe('/api/v1/chat/sugerencias/para-ti?limite=3');
+    expect(fetch.mock.calls[1][0]).toBe('/api/v1/chat/sugerencias/para-ti?vista=SUBASTAS&limite=2');
+    const [, opciones] = fetch.mock.calls[0];
+    expect(opciones.method).toBe('GET');
+    expect(opciones.headers.Authorization).toBe('Bearer token-del-jugador');
+    expect(opciones.headers['X-Id-Sesion-Anonima']).toBe('visitante-fijo');
   });
 
   test('un 409 al abrir un ticket conserva el motivo del servidor', async () => {
@@ -533,4 +555,134 @@ test('el identificador de visitante se guarda en la clave que olvida la sesión'
   const almacen = almacenEnMemoria();
   idDeSesionAnonima(almacen, () => 'abc');
   expect(almacen.getItem(CLAVE_EN_SESION)).toBe('visitante-abc');
+});
+
+// --- ms-chatbot.yaml 1.14.0 (§7.4.6): capturas de una solicitud -----------
+
+function respuestaImagen(contenido, tipo = 'image/png', status = 200) {
+  return {
+    ok: true,
+    status,
+    headers: { get: (nombre) => (String(nombre).toLowerCase() === 'content-type' ? tipo : null) },
+    blob: async () => new Blob([contenido], { type: tipo }),
+  };
+}
+
+describe('capturas (1.14.0)', () => {
+  test('subirCaptura manda un formulario multipart con la parte «archivo», sin su nombre ni Content-Type propio', async () => {
+    const guardada = { capturaId: 'c-1', tipo: 'image/png', tamano: 3, ancho: 1, alto: 1 };
+    const fetch = jest.fn(async () => respuestaJson(guardada, 201));
+    const archivo = new File(['png'], 'Mi pantallazo con mi nombre.png', { type: 'image/png' });
+
+    const respuesta = await cliente({ fetch, sesion: JUGADOR }).subirCaptura('t 1', archivo);
+
+    expect(respuesta).toEqual(guardada);
+    const [url, opciones] = fetch.mock.calls[0];
+    expect(url).toBe('/api/v1/chat/tickets/t%201/capturas');
+    expect(opciones.method).toBe('POST');
+    expect(opciones.body).toBeInstanceOf(FormData);
+    const parte = opciones.body.get('archivo');
+    expect(parte.name).toBe('captura');
+    expect(parte.size).toBe(3);
+    // El navegador pone el Content-Type con su frontera; uno propio la rompería.
+    expect(opciones.headers['Content-Type']).toBeUndefined();
+    expect(opciones.headers.Authorization).toBe('Bearer token-del-jugador');
+    expect(opciones.headers['X-Id-Sesion-Anonima']).toBe('visitante-fijo');
+  });
+
+  test('una subida tiene un minuto, no los diez segundos de una pregunta', () => {
+    expect(TIEMPO_DE_SUBIDA_MS).toBe(60_000);
+  });
+
+  test('un rechazo trae su motivo, y un 404 de la solicitud no es «el asistente no está»', async () => {
+    const fetch = jest.fn(async () =>
+      respuestaJson({ title: 'x', status: 404, motivo: 'SOLICITUD_NO_ENCONTRADA' }, 404),
+    );
+
+    const error = await cliente({ fetch })
+      .subirCaptura('t-1', new Blob(['x']))
+      .catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDelChatbot);
+    expect(error.motivo).toBe('SOLICITUD_NO_ENCONTRADA');
+    expect(error.noDisponible).toBe(false);
+  });
+
+  test('leerCaptura pide la imagen con la identidad y la devuelve como Blob de su tipo', async () => {
+    const fetch = jest.fn(async () => respuestaImagen('jpeg', 'image/jpeg'));
+
+    const imagen = await cliente({ fetch }).leerCaptura('t-1', 'c/1');
+
+    const [url, opciones] = fetch.mock.calls[0];
+    expect(url).toBe('/api/v1/chat/tickets/t-1/capturas/c%2F1');
+    expect(opciones.method).toBe('GET');
+    expect(opciones.headers.Accept).toBe('image/png, image/jpeg, application/problem+json');
+    expect(opciones.headers['X-Id-Sesion-Anonima']).toBe('visitante-fijo');
+    expect(imagen).toBeInstanceOf(Blob);
+    expect(imagen.type).toBe('image/jpeg');
+    expect(imagen.size).toBe(4);
+  });
+
+  test('una respuesta que no es una imagen no se devuelve como captura', async () => {
+    const fetch = jest.fn(async () => respuestaImagen('<script>', 'text/html'));
+
+    const error = await cliente({ fetch })
+      .leerCaptura('t-1', 'c-1')
+      .catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDelChatbot);
+  });
+
+  test('imagenDeCaptura fija el tipo comprobado, con o sin parámetros', async () => {
+    const imagen = await imagenDeCaptura(respuestaImagen('png', 'IMAGE/PNG; charset=binary'));
+    expect(imagen.type).toBe('image/png');
+    await expect(imagenDeCaptura(respuestaImagen('x', 'image/svg+xml'))).rejects.toBeInstanceOf(
+      ErrorDelChatbot,
+    );
+    await expect(
+      imagenDeCaptura({ ok: true, status: 200, headers: {}, blob: async () => new Blob() }),
+    ).rejects.toBeInstanceOf(ErrorDelChatbot);
+  });
+
+  test('si el contenido se atasca, cuenta como fallo de red', async () => {
+    const fetch = jest.fn(async (_url, { signal }) => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'image/png' },
+      blob: () =>
+        new Promise((_resolver, rechazar) => {
+          signal.addEventListener('abort', () => rechazar(new DOMException('x', 'AbortError')));
+        }),
+    }));
+    const chat = crearClienteChatbot({
+      fetch,
+      almacen: almacenEnMemoria(),
+      almacenLocal: almacenEnMemoria(),
+      sesion: () => VISITANTE,
+      tiempoDeEspera: 5,
+    });
+
+    const error = await chat.leerCaptura('t-1', 'c-1').catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDelChatbot);
+    expect(error.estado).toBe(0);
+    expect(error.tiempoAgotado).toBe(true);
+  });
+
+  test('un fallo al leer que no es la espera sigue tal cual', async () => {
+    const fetch = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'image/png' },
+      blob: async () => {
+        throw new TypeError('roto');
+      },
+    }));
+
+    const error = await cliente({ fetch })
+      .leerCaptura('t-1', 'c-1')
+      .catch((e) => e);
+
+    expect(error).toBeInstanceOf(TypeError);
+  });
 });

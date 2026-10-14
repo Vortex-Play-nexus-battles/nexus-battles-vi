@@ -38,7 +38,7 @@ import java.util.UUID;
 @RequestMapping("/chat")
 public class ChatController {
 
-    static final String CABECERA_SESION_ANONIMA = "X-Id-Sesion-Anonima";
+    public static final String CABECERA_SESION_ANONIMA = "X-Id-Sesion-Anonima";
 
     // Detras del borde, nginx fija X-Real-IP con la direccion real del cliente
     // (borde-dev.conf); sin borde, la del socket.

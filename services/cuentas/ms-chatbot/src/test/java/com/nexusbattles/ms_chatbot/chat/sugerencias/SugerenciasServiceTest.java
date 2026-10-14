@@ -149,6 +149,61 @@ class SugerenciasServiceTest {
         assertThat(SugerenciasService.relevancia(torneo, "subasta")).isZero();
     }
 
+    // --- 1.17.0 (7.4.2): el autocompletado en ingles ---------------------------
+
+    private TemaConocimiento conTituloEn(TemaConocimiento tema, String tituloEn) {
+        tema.asignarTituloEn(tituloEn);
+        return tema;
+    }
+
+    @Test
+    void elTituloEnInglesCuentaComoElDeEspanol() {
+        conTituloEn(torneo, "How the Tournament works");
+
+        assertThat(SugerenciasService.relevancia(torneo, "how the")).isEqualTo(3);
+        assertThat(SugerenciasService.relevancia(torneo, "tournament")).isEqualTo(2);
+        assertThat(SugerenciasService.relevanciaEnEspanol(torneo, "tournament")).isZero();
+        // Sin titulo en ingles, sus variantes en ingles siguen contando como antes.
+        assertThat(SugerenciasService.relevancia(subasta, "bid")).isEqualTo(1);
+        assertThat(SugerenciasService.enIngles(subasta, "bid")).isFalse();
+    }
+
+    @Test
+    void loEscritoEnInglesSugiereElTituloEnIngles() {
+        conTituloEn(torneo, "How the Tournament works");
+        conTituloEn(subasta, "How to put a product up for auction");
+
+        List<SugerenciaResponse> sugerencias = servicio.sugerencias("how t", null, 6);
+
+        assertThat(sugerencias).extracting(SugerenciaResponse::titulo)
+            .containsExactly("How the Tournament works", "How to put a product up for auction");
+        assertThat(sugerencias).extracting(SugerenciaResponse::pregunta)
+            .containsExactly("How the Tournament works", "How to put a product up for auction");
+    }
+
+    @Test
+    void enEspanolOSinTextoLasDeSiempre() {
+        conTituloEn(torneo, "How the Tournament works");
+        when(mensajes.contarRespuestasPorTemaEntre(any(), any(), any(), any())).thenReturn(List.of());
+
+        assertThat(servicio.sugerencias("torneo", null, 6)).extracting(SugerenciaResponse::titulo)
+            .containsExactly("Cómo funciona el Torneo");
+        // Sin texto no hay idioma que seguir: el de la ventana.
+        assertThat(servicio.sugerencias(null, Categoria.MODALIDAD_JUEGO, 6)).extracting(SugerenciaResponse::titulo)
+            .containsExactly("Cómo funciona el Torneo");
+        // Lo que coincide igual en los dos idiomas se queda en español.
+        assertThat(SugerenciasService.enIngles(torneo, "o")).isFalse();
+    }
+
+    @Test
+    void laRespuestaEnInglesUsaElTituloEnInglesComoPregunta() {
+        conTituloEn(torneo, "How the Tournament works");
+
+        assertThat(SugerenciaResponse.desde(torneo, true).pregunta()).isEqualTo("How the Tournament works");
+        assertThat(SugerenciaResponse.desde(torneo, false).pregunta()).isEqualTo("Cómo funciona el Torneo");
+        assertThat(SugerenciaResponse.desde(subasta, true).titulo()).isEqualTo("Cómo publicar un producto en subasta");
+    }
+
     @Test
     void laRespuestaUsaElTituloComoPregunta() {
         SugerenciaResponse respuesta = SugerenciaResponse.desde(torneo);

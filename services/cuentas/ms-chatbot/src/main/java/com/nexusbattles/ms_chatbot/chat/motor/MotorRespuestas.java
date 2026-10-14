@@ -8,6 +8,7 @@ import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TipoRespuesta;
 import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
+import com.nexusbattles.ms_chatbot.chat.preferencias.NivelDeDetalle;
 import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.texto.DistanciaDeEdicion;
 import com.nexusbattles.ms_chatbot.chat.texto.IdiomaDelTexto;
@@ -50,9 +51,15 @@ public class MotorRespuestas {
     private static final int PUNTAJE_PALABRA_CORTA = 1;
     private static final int PUNTAJE_PALABRA_LARGA = 2;
 
-    private static final int DISTANCIA_MAXIMA_PALABRA_LARGA = 1;
-    private static final int DISTANCIA_MAXIMA_PALABRA_CORTA = 1;
     private static final int LONGITUD_PALABRA_LARGA = 5;
+
+    /**
+     * En una frase, una palabra con un error de tecleo solo cuenta si tiene al
+     * menos estas letras: «registor» es «registro» mal escrito, pero «duela»
+     * no es «duelo» (son palabras distintas y la frase entera vale 3 puntos,
+     * lo que basta para responder).
+     */
+    private static final int LONGITUD_TOLERADA_EN_FRASE = 6;
 
     /**
      * Palabras gramaticales (stopwords) en español e inglés que no aportan
@@ -85,12 +92,12 @@ public class MotorRespuestas {
             .thenComparing(TemaConocimiento::getClave, Comparator.nullsLast(Comparator.naturalOrder()));
 
     // 7.4.3 «cuando el chatbot no pueda proporcionar una respuesta satisfactoria».
+    // 1.12.0: el contacto con soporte humano ya no se ofrece aqui: la
+    // solicitud se abre sola y ChatService lo dice al final (RF-CHA-007).
     static final String ESCALAMIENTO_ES = "No estoy seguro de haber entendido tu consulta. "
-        + "Puedo ponerte en contacto con soporte humano para resolverla; "
-        + "mientras tanto, esta pregunta quedó registrada para mejorar mis respuestas.";
+        + "Esta pregunta quedó registrada para mejorar mis respuestas.";
     static final String ESCALAMIENTO_EN = "I'm not sure I understood your question. "
-        + "I can put you in touch with human support to solve it; "
-        + "meanwhile, your question was recorded to improve my answers.";
+        + "Your question was recorded to improve my answers.";
 
     private final FuenteDeLaBase fuente;
     private final CacheDeRespuestas cache;
@@ -185,14 +192,33 @@ public class MotorRespuestas {
         return copia;
     }
 
+    // El vocabulario de la ultima lista de temas: la de produccion es la misma
+    // instancia mientras no cambie la version (TemasEnProduccion), asi que no
+    // se recalcula en cada mensaje.
+    private record Vocabulario(List<TemaConocimiento> de, Set<String> palabras) {
+    }
+
+    private volatile Vocabulario ultimoVocabulario;
+
+    private Set<String> vocabularioCacheado(List<TemaConocimiento> temas) {
+        Vocabulario actual = ultimoVocabulario;
+        if (actual != null && actual.de() == temas) {
+            return actual.palabras();
+        }
+        Set<String> palabras = Set.copyOf(vocabularioDe(temas));
+        ultimoVocabulario = new Vocabulario(temas, palabras);
+        return palabras;
+    }
+
     private ResultadoMotor responderCon(String mensajeUsuario, List<TemaConocimiento> temasRecibidos,
                                         VistaDelChat vista, PreferenciasDeRespuesta preferencias) {
         List<TemaConocimiento> temas = ordenados(temasRecibidos);
+        Set<String> vocabulario = vocabularioCacheado(temasRecibidos);
         Categoria preferida = vista == null ? null : vista.categoria();
         String mensajeNormalizado = NormalizadorTexto.normalizar(mensajeUsuario);
-        Optional<TemaConocimiento> porTitulo = temaConElTitulo(mensajeNormalizado, temas);
+        Optional<PorTitulo> porTitulo = temaConElTitulo(mensajeNormalizado, temas);
         if (porTitulo.isPresent()) {
-            return deTema(porTitulo.get(), false, temas, preferencias);
+            return deTema(porTitulo.get().tema(), porTitulo.get().enIngles(), temas, preferencias);
         }
         List<String> palabrasMensaje = List.of(mensajeNormalizado.split(" "));
 
@@ -203,8 +229,8 @@ public class MotorRespuestas {
             if (!tema.isActivo()) {
                 continue;
             }
-            int puntajeEs = puntuar(palabrasMensaje, mensajeNormalizado, tema.getPalabrasClaveEs());
-            int puntajeEn = puntuar(palabrasMensaje, mensajeNormalizado, tema.getPalabrasClaveEn());
+            int puntajeEs = puntuar(palabrasMensaje, mensajeNormalizado, tema.getPalabrasClaveEs(), vocabulario);
+            int puntajeEn = puntuar(palabrasMensaje, mensajeNormalizado, tema.getPalabrasClaveEn(), vocabulario);
 
             boolean esIngles = puntajeEn > puntajeEs;
             int puntaje = esIngles ? puntajeEn : puntajeEs;
@@ -222,21 +248,21 @@ public class MotorRespuestas {
             return deTema(mejor.tema(), mejor.esIngles(), temas, preferencias);
         }
 
-        // Los temas de cortesia (saludo, despedida) no son "preguntas
-        // relacionadas": nadie necesita que le sugieran decir "hola".
-        List<String> sugerencias = todas.stream()
-            .filter(c -> !Enriquecedor.esDeCortesia(c.tema()))
-            .sorted(Comparator.comparingInt(Coincidencia::puntaje).reversed())
-            .map(c -> c.tema().getTitulo())
-            .distinct()
-            .limit(3)
-            .toList();
-
         boolean ingles = switch (preferencias.idioma()) {
             case ES -> false;
             case EN -> true;
             case AUTOMATICO -> IdiomaDelTexto.esIngles(mensajeNormalizado);
         };
+        // Los temas de cortesia (saludo, despedida) no son "preguntas
+        // relacionadas": nadie necesita que le sugieran decir "hola".
+        // 1.17.0: con su titulo en el idioma de la respuesta.
+        List<String> sugerencias = todas.stream()
+            .filter(c -> !Enriquecedor.esDeCortesia(c.tema()))
+            .sorted(Comparator.comparingInt(Coincidencia::puntaje).reversed())
+            .map(c -> c.tema().titulo(ingles))
+            .distinct()
+            .limit(3)
+            .toList();
         return ResultadoMotor.escalado(ingles ? ESCALAMIENTO_EN : ESCALAMIENTO_ES, sugerencias)
             .conEnriquecido(Enriquecedor.paraEscalamiento(sugerencias, temas, vista, ingles))
             .enIngles(ingles);
@@ -259,6 +285,10 @@ public class MotorRespuestas {
         RespuestaEnriquecida enriquecida = Enriquecedor.paraTema(tema, texto, temas, ingles);
         String mostrado = AjusteDeDetalle.aplicar(texto, tema.getTipoRespuesta(), preferencias.nivelDetalle(),
             enriquecida.respuestasRapidas(), ingles);
+        // 1.15.0 (D-CHA-13): recortada, «Más detalle» la da entera en un clic.
+        if (preferencias.nivelDetalle() == NivelDeDetalle.BREVE && !mostrado.equals(texto.strip())) {
+            enriquecida = Enriquecedor.conMasDetalle(enriquecida, ingles);
+        }
         return ResultadoMotor.deTema(mostrado, tema.getCategoria(), tema.getTipoRespuesta(), tema.getClave())
             .conEnriquecido(enriquecida)
             .enIngles(ingles);
@@ -277,15 +307,29 @@ public class MotorRespuestas {
     // ventana al pulsar una sugerencia (GET /chat/sugerencias) o una de las
     // "preguntas relacionadas" de un escalamiento, que tambien son titulos.
     // Sin esto, pulsar una sugerencia podia no alcanzar el umbral y escalar.
-    private static Optional<TemaConocimiento> temaConElTitulo(String mensajeNormalizado,
-                                                              List<TemaConocimiento> temas) {
+    // 1.17.0 (7.4.2): tambien su titulo en ingles, y entonces la respuesta va
+    // en ingles (con la preferencia AUTOMATICO): pulsar una relacionada de una
+    // respuesta en ingles no cambia la conversacion al espanol.
+    private record PorTitulo(TemaConocimiento tema, boolean enIngles) {
+    }
+
+    private static Optional<PorTitulo> temaConElTitulo(String mensajeNormalizado, List<TemaConocimiento> temas) {
         if (mensajeNormalizado.isEmpty()) {
             return Optional.empty();
         }
-        return temas.stream()
+        Optional<TemaConocimiento> enEspanol = temas.stream()
             .filter(TemaConocimiento::isActivo)
             .filter(tema -> mensajeNormalizado.equals(NormalizadorTexto.normalizar(tema.getTitulo())))
             .max(Comparator.comparingInt(TemaConocimiento::getPrioridad));
+        if (enEspanol.isPresent()) {
+            return enEspanol.map(tema -> new PorTitulo(tema, false));
+        }
+        return temas.stream()
+            .filter(TemaConocimiento::isActivo)
+            .filter(tema -> tema.getTituloEn() != null
+                && mensajeNormalizado.equals(NormalizadorTexto.normalizar(tema.getTituloEn())))
+            .max(Comparator.comparingInt(TemaConocimiento::getPrioridad))
+            .map(tema -> new PorTitulo(tema, true));
     }
 
     // HU-CHA-012: a igual puntaje gana el tema de mayor prioridad. Sin esto,
@@ -311,7 +355,13 @@ public class MotorRespuestas {
         return candidata.tema().getPrioridad() > actual.tema().getPrioridad();
     }
 
-    private int puntuar(List<String> palabrasMensaje, String mensajeNormalizado, String palabrasClaveCrudas) {
+    // Segunda auditoria del 7.4 (7.4.2 «errores ortograficos comunes»): una
+    // variante cuenta como frase tambien con un error de tecleo en sus
+    // palabras largas («como me registor», «como funsionan las subatsas»).
+    // Antes solo la frase exacta sumaba 3 y una palabra aproximada sola sumaba
+    // 2, por debajo del umbral: la pregunta mal escrita escalaba.
+    private int puntuar(List<String> palabrasMensaje, String mensajeNormalizado, String palabrasClaveCrudas,
+                        Set<String> vocabulario) {
         if (palabrasClaveCrudas == null || palabrasClaveCrudas.isBlank()) {
             return 0;
         }
@@ -325,7 +375,7 @@ public class MotorRespuestas {
                 continue;
             }
 
-            if (mensajeNormalizado.contains(fraseNormalizada)) {
+            if (contieneFrase(palabrasMensaje, mensajeNormalizado, fraseNormalizada, vocabulario)) {
                 puntaje += PUNTAJE_FRASE_EXACTA;
             }
 
@@ -338,7 +388,7 @@ public class MotorRespuestas {
 
         for (String palabraClave : palabrasClaveUnicas) {
             for (String palabraMensaje : palabrasMensaje) {
-                if (coincidenAproximadamente(palabraClave, palabraMensaje)) {
+                if (coincidenAproximadamente(palabraClave, palabraMensaje, vocabulario)) {
                     puntaje += esPalabraLarga(palabraClave) ? PUNTAJE_PALABRA_LARGA : PUNTAJE_PALABRA_CORTA;
                     break;
                 }
@@ -348,20 +398,78 @@ public class MotorRespuestas {
         return puntaje;
     }
 
-    private boolean coincidenAproximadamente(String palabraClave, String palabraMensaje) {
+    // La frase tal cual, o como palabras seguidas del mensaje que coinciden
+    // una a una (aproximadamente, con la misma regla que las palabras sueltas).
+    private static boolean contieneFrase(List<String> palabrasMensaje, String mensajeNormalizado, String frase,
+                                         Set<String> vocabulario) {
+        if (mensajeNormalizado.contains(frase)) {
+            return true;
+        }
+        String[] palabrasFrase = frase.split(" ");
+        for (int inicio = 0; inicio + palabrasFrase.length <= palabrasMensaje.size(); inicio++) {
+            boolean todas = true;
+            for (int k = 0; k < palabrasFrase.length && todas; k++) {
+                String deLaFrase = palabrasFrase[k];
+                String delMensaje = palabrasMensaje.get(inicio + k);
+                todas = deLaFrase.equals(delMensaje)
+                    || (deLaFrase.length() >= LONGITUD_TOLERADA_EN_FRASE
+                        && coincidenAproximadamente(deLaFrase, delMensaje, vocabulario));
+            }
+            if (todas) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Iguales, o un error de tecleo en una palabra larga (DistanciaDeEdicion:
+    // las cortas solo coinciden exactas). Una palabra del mensaje que ya es
+    // otra palabra de la base no es un error de tecleo: «formas» no es
+    // «normas» mal escrito (segunda auditoria del 7.4: «¿de qué formas puedo
+    // jugar?» caia en las normas de conducta).
+    private static boolean coincidenAproximadamente(String palabraClave, String palabraMensaje,
+                                                    Set<String> vocabulario) {
         if (palabraClave.isBlank() || palabraMensaje.isBlank()) {
             return false;
         }
         if (palabraClave.equals(palabraMensaje)) {
             return true;
         }
-        int distanciaMaxima = esPalabraLarga(palabraClave)
-            ? DISTANCIA_MAXIMA_PALABRA_LARGA
-            : DISTANCIA_MAXIMA_PALABRA_CORTA;
-        return DistanciaDeEdicion.entre(palabraClave, palabraMensaje) <= distanciaMaxima;
+        if (vocabulario.contains(palabraMensaje) && !esSuPlural(palabraClave, palabraMensaje)) {
+            return false;
+        }
+        return DistanciaDeEdicion.coinciden(palabraClave, palabraMensaje);
     }
 
-    private boolean esPalabraLarga(String palabra) {
+    // «recompensa» y «recompensas» son la misma palabra aunque las dos esten
+    // en la base.
+    private static boolean esSuPlural(String una, String otra) {
+        return una.equals(otra + "s") || otra.equals(una + "s");
+    }
+
+    // Las palabras de todas las variantes de los temas activos, en los dos
+    // idiomas: lo que la base ya reconoce como palabra.
+    static Set<String> vocabularioDe(List<TemaConocimiento> temas) {
+        Set<String> vocabulario = new java.util.HashSet<>();
+        for (TemaConocimiento tema : temas) {
+            if (!tema.isActivo()) {
+                continue;
+            }
+            for (String crudas : new String[] {tema.getPalabrasClaveEs(), tema.getPalabrasClaveEn()}) {
+                if (crudas == null || crudas.isBlank()) {
+                    continue;
+                }
+                for (String palabra : NormalizadorTexto.normalizar(crudas.replace(',', ' ')).split(" ")) {
+                    if (!palabra.isBlank()) {
+                        vocabulario.add(palabra);
+                    }
+                }
+            }
+        }
+        return vocabulario;
+    }
+
+    private static boolean esPalabraLarga(String palabra) {
         return palabra.length() >= LONGITUD_PALABRA_LARGA;
     }
 

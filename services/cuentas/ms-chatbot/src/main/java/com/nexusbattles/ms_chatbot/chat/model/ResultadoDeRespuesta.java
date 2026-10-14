@@ -1,5 +1,9 @@
 package com.nexusbattles.ms_chatbot.chat.model;
 
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Set;
+
 /**
  * ms-chatbot.yaml 1.7.0 (7.4.7 «tasa de resolución», V13): cómo terminó una
  * respuesta del bot. Lo decide el motor que la generó y se guarda con ella en
@@ -38,6 +42,17 @@ public enum ResultadoDeRespuesta {
 
     ResultadoDeRespuesta(boolean resuelve) {
         this.resuelve = resuelve;
+    }
+
+    /** 1.15.0 — los que resuelven: con ellos se mide la experiencia de quien pregunta (D-CHA-13). */
+    public static Set<ResultadoDeRespuesta> queResuelven() {
+        EnumSet<ResultadoDeRespuesta> resuelven = EnumSet.noneOf(ResultadoDeRespuesta.class);
+        for (ResultadoDeRespuesta resultado : values()) {
+            if (resultado.resuelve) {
+                resuelven.add(resultado);
+            }
+        }
+        return Collections.unmodifiableSet(resuelven);
     }
 
     /** Si cuenta como consulta resuelta sin intervención humana. */

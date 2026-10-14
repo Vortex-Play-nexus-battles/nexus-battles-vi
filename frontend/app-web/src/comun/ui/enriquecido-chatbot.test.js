@@ -7,13 +7,19 @@ import { jest } from '@jest/globals';
 import { MATRIZ } from '../matriz-acceso.js';
 import { CLAVES } from '../sesion.js';
 import {
+  LARGO_MAXIMO_DE_IMAGEN,
+  TEXTOS_ENRIQUECIDO,
   VISTA_DEL_CHAT,
+  imagenSegura,
   introAntesDePasos,
   pintarEnriquecido,
   vistaDelChat,
 } from './enriquecido-chatbot.js';
 
 const url = (destino) => (destino === 'no-existe' ? null : `/vistas/${destino}.html`);
+
+// Armado por partes para que ESLint (no-script-url) no lo tome por código.
+const URL_JAVASCRIPT = ['javascript', 'alert(1)'].join(':');
 
 function pintar(enriquecido, { visible } = {}) {
   const alPreguntar = jest.fn();
@@ -82,6 +88,167 @@ test('los botones preguntan y «Hablar con soporte» abre el soporte', () => {
 
   expect(alPreguntar).toHaveBeenCalledWith('Cómo funciona el Torneo');
   expect(alPedirSoporte).toHaveBeenCalled();
+});
+
+// ms-chatbot.yaml 1.13.0 (§7.4.3): las tarjetas de productos con su imagen.
+describe('imágenes de los productos', () => {
+  const RECURSO = '/api/v1/productos/recursos/6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f';
+  const SVG =
+    'data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%2F%3E';
+
+  test('solo pasan los recursos del catálogo y las imágenes incrustadas pequeñas', () => {
+    expect(imagenSegura(RECURSO)).toBe(RECURSO);
+    expect(imagenSegura(`  ${SVG} `)).toBe(SVG);
+    expect(imagenSegura('data:image/png;base64,iVBORw0KGgo=')).toBe(
+      'data:image/png;base64,iVBORw0KGgo=',
+    );
+    for (const mala of [
+      null,
+      undefined,
+      42,
+      '',
+      'espada.png',
+      'https://cdn.example.com/a.png',
+      '//evil.example/a.png',
+      URL_JAVASCRIPT,
+      'data:text/html,<script>alert(1)</script>',
+      'data:image/svg+xml,<svg onload=alert(1)>',
+      `${RECURSO}?x=1`,
+      `data:image/png;base64,${'A'.repeat(LARGO_MAXIMO_DE_IMAGEN)}`,
+    ]) {
+      expect(imagenSegura(mala)).toBeNull();
+    }
+  });
+
+  test('una tarjeta con imagen la pinta sin texto alternativo y la quita si no carga', () => {
+    const { el } = pintar({
+      tarjetas: [{ titulo: 'Escudo de roble', texto: 'Armadura · 60 créditos', imagen: RECURSO }],
+    });
+
+    const tarjeta = el.querySelector('.chatbot-enriquecido__tarjeta');
+    expect(tarjeta.classList.contains('chatbot-enriquecido__tarjeta--con-imagen')).toBe(true);
+    const imagen = tarjeta.querySelector('img');
+    expect(imagen.getAttribute('src')).toBe(RECURSO);
+    expect(imagen.getAttribute('alt')).toBe('');
+    expect(imagen.getAttribute('loading')).toBe('lazy');
+    // Una sola tarjeta no necesita carrusel.
+    expect(el.querySelector('.chatbot-enriquecido__carrusel')).toBeNull();
+
+    imagen.dispatchEvent(new Event('error'));
+    expect(tarjeta.querySelector('img')).toBeNull();
+    expect(tarjeta.textContent).toContain('Escudo de roble');
+  });
+
+  test('una imagen que no es segura no se pinta: la tarjeta va sin ella', () => {
+    const { el } = pintar({
+      tarjetas: [{ titulo: 'Espada', texto: 'Arma', imagen: URL_JAVASCRIPT }],
+    });
+
+    expect(el.querySelector('img')).toBeNull();
+    expect(
+      el
+        .querySelector('.chatbot-enriquecido__tarjeta')
+        .classList.contains('chatbot-enriquecido__tarjeta--con-imagen'),
+    ).toBe(false);
+  });
+
+  test('con dos o más productos van en un carrusel que se recorre con sus botones', () => {
+    const { el } = pintar({
+      tarjetas: [
+        { titulo: 'Escudo de roble', texto: 'Armadura · 60 créditos', imagen: RECURSO },
+        { titulo: 'Escudo de hierro', texto: 'Armadura · 70 créditos' },
+        { titulo: 'Espada', texto: 'Arma · 120 créditos', imagen: SVG },
+      ],
+    });
+
+    const carrusel = el.querySelector('.chatbot-enriquecido__carrusel');
+    expect(carrusel.getAttribute('role')).toBe('group');
+    expect(carrusel.getAttribute('aria-label')).toBe(TEXTOS_ENRIQUECIDO.productos);
+    const lista = carrusel.querySelector('.chatbot-enriquecido__carrusel-lista');
+    expect(lista.getAttribute('tabindex')).toBe('0');
+    expect(lista.querySelectorAll('li .chatbot-enriquecido__tarjeta')).toHaveLength(3);
+    expect(lista.querySelectorAll('img')).toHaveLength(2);
+
+    lista.scrollBy = jest.fn();
+    carrusel.querySelector('[data-accion="carrusel-siguiente"]').click();
+    carrusel.querySelector('[data-accion="carrusel-anterior"]').click();
+    expect(lista.scrollBy).toHaveBeenCalledTimes(2);
+    expect(lista.scrollBy.mock.calls[0][0].left).toBeGreaterThan(0);
+    expect(lista.scrollBy.mock.calls[1][0].left).toBeLessThan(0);
+    expect(
+      carrusel.querySelector('[data-accion="carrusel-siguiente"]').getAttribute('aria-label'),
+    ).toBe(TEXTOS_ENRIQUECIDO.siguiente);
+  });
+
+  test('las tarjetas sin imágenes (las misiones) siguen como antes, sin carrusel', () => {
+    const { el } = pintar({
+      tarjetas: [
+        { titulo: 'La Ciudadela', texto: 'En curso' },
+        { titulo: 'El Templo', texto: 'Disponible' },
+      ],
+    });
+
+    expect(el.querySelector('.chatbot-enriquecido__carrusel')).toBeNull();
+    expect(el.querySelectorAll('.chatbot-enriquecido__tarjeta')).toHaveLength(2);
+  });
+});
+
+// ms-chatbot.yaml 1.12.0 (RF-CHA-007): la solicitud que se abrió sola.
+describe('la solicitud de soporte que abrió el asistente', () => {
+  const SOLICITUD = {
+    id: '6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f',
+    asunto: 'Sin respuesta del asistente: zxqwv plorf',
+    estado: 'ABIERTO',
+    nueva: true,
+  };
+
+  test('se avisa con su asunto y «Ver solicitud», en lugar de «Hablar con soporte»', () => {
+    const alVerSolicitud = jest.fn();
+    const el = pintarEnriquecido(
+      { respuestasRapidas: [], ofrecerSoporteHumano: true, solicitud: SOLICITUD },
+      { alPreguntar: jest.fn(), alPedirSoporte: jest.fn(), alVerSolicitud, url },
+    );
+
+    const aviso = el.querySelector('.chatbot-enriquecido__solicitud');
+    expect(aviso.dataset.solicitudId).toBe(SOLICITUD.id);
+    expect(aviso.textContent).toContain(TEXTOS_ENRIQUECIDO.solicitudAbierta);
+    expect(aviso.textContent).toContain('Sin respuesta del asistente: zxqwv plorf');
+    expect(el.querySelector('[data-accion="ofrecer-soporte"]')).toBeNull();
+
+    el.querySelector('[data-accion="ver-solicitud"]').click();
+    expect(alVerSolicitud).toHaveBeenCalledWith(SOLICITUD);
+  });
+
+  test('si la pregunta se sumó a la que ya estaba abierta, lo dice', () => {
+    const { el } = pintar({ solicitud: { ...SOLICITUD, nueva: false } });
+
+    expect(el.querySelector('.chatbot-enriquecido__solicitud-titulo').textContent).toBe(
+      TEXTOS_ENRIQUECIDO.solicitudSumada,
+    );
+  });
+
+  test('sin `alVerSolicitud`, «Ver solicitud» abre el soporte', () => {
+    const { el, alPedirSoporte } = pintar({ solicitud: SOLICITUD });
+
+    el.querySelector('[data-accion="ver-solicitud"]').click();
+    expect(alPedirSoporte).toHaveBeenCalled();
+  });
+
+  test('el asunto entra como texto, nunca como HTML', () => {
+    const { el } = pintar({ solicitud: { ...SOLICITUD, asunto: '<img src=x onerror=alert(1)>' } });
+
+    expect(el.querySelector('img')).toBeNull();
+    expect(el.querySelector('.chatbot-enriquecido__solicitud-asunto').textContent).toBe(
+      '<img src=x onerror=alert(1)>',
+    );
+  });
+
+  test('una solicitud sin id no se pinta y vuelve «Hablar con soporte»', () => {
+    const { el } = pintar({ ofrecerSoporteHumano: true, solicitud: { asunto: 'x' } });
+
+    expect(el.querySelector('.chatbot-enriquecido__solicitud')).toBeNull();
+    expect(el.querySelector('[data-accion="ofrecer-soporte"]')).not.toBeNull();
+  });
 });
 
 test('sin nada que pintar devuelve null', () => {

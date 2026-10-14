@@ -68,6 +68,12 @@ public class TemaConocimiento {
     @Column(nullable = false, length = 150)
     private String titulo;
 
+    // 1.17.0 (V21, 7.4.2 «español/english»): el titulo en ingles, opcional.
+    // Es el que ve quien conversa en ingles en las preguntas relacionadas;
+    // sin el, el de siempre.
+    @Column(name = "titulo_en", length = 150)
+    private String tituloEn;
+
     @Column(name = "palabras_clave_es", nullable = false, columnDefinition = "TEXT")
     private String palabrasClaveEs;
 
@@ -134,6 +140,7 @@ public class TemaConocimiento {
             palabrasClaveEs, palabrasClaveEn, contenidoRespuestaEs, contenidoRespuestaEn,
             prioridad, activo);
         copia.intencionesAdicionales.addAll(intencionesAdicionales);
+        copia.tituloEn = tituloEn;
         return copia;
     }
 
@@ -153,6 +160,16 @@ public class TemaConocimiento {
         this.prioridad = prioridad;
         this.activo = activo;
         asignarIntencionesAdicionales(intencionesAdicionales);
+    }
+
+    /** 1.17.0: el titulo en ingles; vacio o solo espacios es ninguno. */
+    public void asignarTituloEn(String titulo) {
+        this.tituloEn = titulo == null || titulo.isBlank() ? null : titulo.strip();
+    }
+
+    /** 1.17.0: el titulo en el idioma de la respuesta (el de siempre si no hay en ingles). */
+    public String titulo(boolean ingles) {
+        return ingles && tituloEn != null ? tituloEn : titulo;
     }
 
     /**

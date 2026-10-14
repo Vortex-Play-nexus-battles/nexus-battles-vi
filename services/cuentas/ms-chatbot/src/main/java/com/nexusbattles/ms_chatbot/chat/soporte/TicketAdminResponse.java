@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_chatbot.chat.soporte;
 
+import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 
 import java.time.Instant;
@@ -8,6 +9,12 @@ import java.util.UUID;
 
 // ms-chatbot.yaml 1.3.0: TicketDeSoporteAdmin (lo que ve el administrador):
 // lo del jugador mas uid, asignadoA y el contexto ya redactado.
+//
+// 1.12.0: `deVisitante` dice si la abrio un visitante; su `uid` es entonces
+// la clave de su conversacion ('anonimo:<sesion>'), no la de una cuenta.
+//
+// 1.14.0 (§7.4.6): `capturas`, las capturas de pantalla adjuntas, sin su
+// contenido (se pide aparte, solo para un administrador).
 public record TicketAdminResponse(
     UUID ticketId,
     Categoria categoria,
@@ -18,18 +25,22 @@ public record TicketAdminResponse(
     Instant creadoEn,
     Instant actualizadoEn,
     String uid,
+    boolean deVisitante,
     String asignadoA,
-    List<Contexto> contexto
+    List<Contexto> contexto,
+    List<CapturaResponse> capturas
 ) {
     public record Contexto(String remitente, String contenido, Instant fechaEnvio) {
     }
 
-    public static TicketAdminResponse desde(TicketSoporte ticket) {
+    public static TicketAdminResponse desde(TicketSoporte ticket, List<CapturaDeSoporte.Resumen> capturas) {
         return new TicketAdminResponse(ticket.getId(), ticket.getCategoria(), ticket.getAsunto(),
             ticket.getMensaje(), ticket.getEstado(), ticket.getRespuesta(), ticket.getCreadoEn(),
-            ticket.getActualizadoEn(), ticket.getUid(), ticket.getAsignadoA(),
+            ticket.getActualizadoEn(), ticket.getUid(), IdentidadDelChat.esDeVisitante(ticket.getUid()),
+            ticket.getAsignadoA(),
             ticket.getContexto().stream()
                 .map(m -> new Contexto(m.getRemitente(), m.getContenido(), m.getFechaEnvio()))
-                .toList());
+                .toList(),
+            capturas.stream().map(CapturaResponse::desde).toList());
     }
 }

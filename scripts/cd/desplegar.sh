@@ -384,7 +384,7 @@ bajar_imagenes() {
 #
 # La lista de clientes vive en una linea propia, a la izquierda, porque el
 # guardian scripts/cd/comprobar-catalogo-servicios.sh la lee con grep.
-CLIENTES_DE_SERVICIO="salas-partidas comentarios notificaciones ms-subastas ms-finanzas moderacion-sanciones torneos admin-parametros ms-ecommerce misiones ms-cumplimiento"
+CLIENTES_DE_SERVICIO="salas-partidas comentarios notificaciones ms-subastas ms-finanzas moderacion-sanciones torneos admin-parametros ms-ecommerce misiones ms-cumplimiento ms-chatbot"
 
 #   $1 = archivo persistente del host, $2 = .env al que se anaden las lineas.
 # Deja AUTH_CLIENTES_SERVICIO en el shell. Devuelve 1 si una variable de

@@ -374,6 +374,97 @@ class BaseConocimientoAdminServiceTest {
         verify(temaRepository).delete(existente);
     }
 
+    // ------------------------------------------------ 1.17.0: titulo en ingles
+
+    private static TemaConocimientoRequest conTituloEn(TemaConocimientoRequest base, String tituloEn) {
+        return new TemaConocimientoRequest(base.categoria(), base.intencionesAdicionales(), base.tipoRespuesta(),
+            base.titulo(), tituloEn, base.variantesEs(), base.variantesEn(), base.respuestaEs(), base.respuestaEn(),
+            base.prioridad(), base.activo());
+    }
+
+    private static TemaIntercambio conTituloEn(TemaIntercambio base, String tituloEn) {
+        return new TemaIntercambio(base.clave(), base.categoria(), base.intencionesAdicionales(), base.tipoRespuesta(),
+            base.titulo(), tituloEn, base.variantesEs(), base.variantesEn(), base.respuestaEs(), base.respuestaEn(),
+            base.prioridad(), base.activo());
+    }
+
+    @Test
+    void agregarYEditarGuardanElTituloEnIngles() {
+        VersionBaseConocimiento candidata = candidataExistente();
+        when(temaRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(temaRepository.findByVersionIdOrderByTituloAsc(candidata.getId())).thenReturn(List.of());
+
+        TemaConocimiento nuevo = servicio.agregarTema(conTituloEn(solicitud(List.of("registro")),
+            "  How to create an account "));
+        assertThat(nuevo.getTituloEn()).isEqualTo("How to create an account");
+        assertThat(TemaConocimientoResponse.desde(nuevo).tituloEn()).isEqualTo("How to create an account");
+
+        TemaConocimiento existente = conId(tema(candidata, "clave-registro", "Como crear una cuenta"));
+        existente.asignarTituloEn("Old title");
+        when(temaRepository.findByIdAndVersionId(existente.getId(), candidata.getId()))
+            .thenReturn(Optional.of(existente));
+        servicio.editarTema(existente.getId(), conTituloEn(solicitud(List.of("registro")), "  "));
+        assertThat(existente.getTituloEn()).isNull();
+    }
+
+    // Ni el titulo en ingles puede ser un titulo de otro tema, ni el titulo
+    // puede ser el titulo en ingles de otro: pulsarlo responderia el otro.
+    @Test
+    void elTituloEnInglesTampocoRepiteElDeOtroTema() {
+        VersionBaseConocimiento candidata = candidataExistente();
+        TemaConocimiento otro = tema(candidata, "clave-pujas", "Cómo pujar");
+        otro.asignarTituloEn("How to bid");
+        when(temaRepository.findByVersionIdOrderByTituloAsc(candidata.getId())).thenReturn(List.of(otro));
+
+        assertThatThrownBy(() -> servicio.agregarTema(conTituloEn(solicitud(List.of("registro")), "COMO PUJAR")))
+            .isInstanceOf(TemaDuplicadoException.class)
+            .hasMessageStartingWith("El titulo en ingles 'COMO PUJAR' es el mismo que el del tema 'Cómo pujar'")
+            .hasMessageContaining("en espanol o en ingles");
+        assertThatThrownBy(() -> servicio.agregarTema(conTituloEn(solicitud(List.of("registro")), "how to BID?")))
+            .isInstanceOf(TemaDuplicadoException.class)
+            .hasMessageStartingWith("El titulo en ingles 'how to BID?'");
+        assertThatThrownBy(() -> servicio.agregarTema(conTitulo(solicitud(List.of("registro")), "How to bid")))
+            .isInstanceOf(TemaDuplicadoException.class)
+            .hasMessageStartingWith("El titulo 'How to bid' es el mismo que el del tema 'Cómo pujar'")
+            .hasMessageContaining("en espanol o en ingles");
+        // Dos titulos en espanol: el mensaje de siempre.
+        assertThatThrownBy(() -> servicio.agregarTema(conTitulo(solicitud(List.of("registro")), "COMO PUJAR")))
+            .isInstanceOf(TemaDuplicadoException.class)
+            .hasMessage("El titulo 'COMO PUJAR' es el mismo que el del tema 'Cómo pujar' de la version candidata "
+                + "(sin contar tildes, mayusculas ni signos). Cambialo o edita ese tema.");
+        verify(temaRepository, never()).save(any());
+    }
+
+    @Test
+    void importarGuardaElTituloEnInglesYNoAdmiteQueRepitaOtroDelArchivo() {
+        candidataExistente();
+        when(temaRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // El mismo titulo en los dos idiomas, en un solo tema, no es un duplicado.
+        List<TemaConocimiento> importados = servicio.importarEnCandidata(List.of(
+            conTituloEn(intercambio("clave-a", "Tema a"), "Topic a"), conTituloEn(intercambio("clave-b", "Ok"), "OK"),
+            intercambio("clave-c", "Tema c")));
+        assertThat(importados).extracting(TemaConocimiento::getTituloEn).containsExactly("Topic a", "OK", null);
+
+        List<TemaIntercambio> repetido = List.of(conTituloEn(intercambio("clave-a", "Tema a"), "Topic a"),
+            intercambio("clave-b", "topic A"));
+        assertThatThrownBy(() -> servicio.importarEnCandidata(repetido))
+            .isInstanceOf(TemaDuplicadoException.class)
+            .hasMessageStartingWith("Los temas 1 y 2 del archivo tienen el mismo titulo");
+    }
+
+    @Test
+    void exportarIncluyeElTituloEnIngles() {
+        VersionBaseConocimiento version = conId(VersionBaseConocimiento.nuevaCandidata(8, null));
+        TemaConocimiento registro = tema(version, "clave-registro", "Como crear una cuenta");
+        registro.asignarTituloEn("How to create an account");
+        when(versionRepository.findById(version.getId())).thenReturn(Optional.of(version));
+        when(temaRepository.findByVersionIdOrderByTituloAsc(version.getId())).thenReturn(List.of(registro));
+
+        assertThat(servicio.exportar(version.getId()).temas()).singleElement()
+            .satisfies(t -> assertThat(t.tituloEn()).isEqualTo("How to create an account"));
+    }
+
     // ------------------------------------------------ exportar / importar
 
     @Test

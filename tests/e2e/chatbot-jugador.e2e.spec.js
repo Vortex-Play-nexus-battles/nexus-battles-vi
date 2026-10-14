@@ -10,6 +10,16 @@
  * idioma de las respuestas → sale y vuelve a entrar → la conversación y las
  * preferencias siguen ahí, y mientras estuvo fuera nadie las vio.
  *
+ * ms-chatbot.yaml 1.15.0: al volver, el asistente le propone lo que sigue de
+ * lo que preguntó (§7.4.3 «sugerencias proactivas») y su nivel de detalle
+ * automático sigue su experiencia (§7.4.5); elegido «Breve», la respuesta
+ * recortada trae «Más detalle», que la da entera.
+ *
+ * ms-chatbot.yaml 1.18.0 (observación de RF-CHA-008, «quedar auditado»): lo
+ * que el asistente leyó de su cuenta queda en la bitácora central, que el
+ * superadministrador consulta, sin la pregunta ni lo que respondió cada
+ * servicio.
+ *
  * La jugadora es nueva en cada corrida: el alta (R17) le deja 500 créditos,
  * el héroe y el arma del banco. Antes de preguntar, una misión técnica de
  * dos segundos le deja un aviso en la bandeja y 5 créditos más en el libro;
@@ -19,8 +29,14 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
-import { abrirAsistente, destinosDe, preguntar } from './ayudantes/asistente.js';
-import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+import {
+  ESPERA_DE_RESPUESTA_MS,
+  abrirAsistente,
+  asistenteDe,
+  destinosDe,
+  preguntar,
+} from './ayudantes/asistente.js';
+import { cuentaAdministrativaDeRol, sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const CLAVE = 'Contrasena-E2E-2026';
@@ -232,12 +248,83 @@ test.describe('Asistente · jugador (§7.4.4)', () => {
     const sigueEnIngles = await preguntar(page, '¿Cómo van mis subastas?');
     await expect(sigueEnIngles).toContainText("You're winning 0 auction(s)");
 
-    // Lo deja como estaba para que una repetición empiece igual.
+    // Lo deja como estaba para que una repetición empiece igual (1.15.0: el
+    // nivel de quien nunca eligió es el automático).
     const r = await api.put('/api/v1/chat/preferencias', {
       headers: conToken(jugadora.token),
-      data: { idioma: 'AUTOMATICO', nivelDetalle: 'NORMAL' },
+      data: { idioma: 'AUTOMATICO', nivelDetalle: 'AUTOMATICO' },
     });
     expect(r.status()).toBe(200);
+  });
+
+  test('al volver le propone lo que sigue de lo que preguntó, y el detalle sigue su experiencia', async ({
+    page,
+  }) => {
+    test.setTimeout(150_000);
+    await entrarPorLaVista(page, jugadora);
+    const asistente = await abrirAsistente(page);
+
+    // §7.4.3: preguntó cómo equipar a su héroe (un tema de la base); le
+    // propone otros de ese tema y dice por qué.
+    const propuesta = asistente.ventana.locator('[data-proactiva]');
+    const grupo = propuesta.getByRole('group', { name: /^Porque preguntaste por «/ }).first();
+    await expect(grupo).toBeVisible({ timeout: ESPERA_DE_RESPUESTA_MS });
+    const sugerencia = grupo.getByRole('button').first();
+    const elegida = ((await sugerencia.textContent()) ?? '').trim();
+    const antes = await asistente.respuestas.count();
+    await sugerencia.click();
+    await expect(asistente.respuestas).toHaveCount(antes + 1, { timeout: ESPERA_DE_RESPUESTA_MS });
+    await expect(asistente.preguntas.last()).toContainText(elegida);
+    // La responde la base: no es una pregunta sin respuesta.
+    await expect(asistente.respuestas.last()).not.toContainText(
+      'No estoy seguro de haber entendido',
+    );
+    await expect(propuesta).toHaveCount(0);
+
+    // §7.4.5: nunca eligió nivel; con lo que ya le resolvió (más de cinco,
+    // menos de treinta), la respuesta completa.
+    await asistente.preferencias.click();
+    const panel = page.locator('.chatbot-preferencias');
+    await expect(panel.locator('select[name="nivelDetalle"]')).toHaveValue('AUTOMATICO');
+    await expect(panel.locator('[data-nivel-efectivo]')).toHaveText(
+      'Ahora te respondo con la respuesta completa.',
+    );
+
+    // Elige «Breve»: lo esencial, con «Más detalle» a un clic.
+    await panel.locator('select[name="nivelDetalle"]').selectOption('BREVE');
+    await panel.locator('[data-accion="guardar-preferencias"]').click();
+    await expect(panel).toContainText('Listo: guardamos tus preferencias.');
+    await panel.locator('[data-accion="volver-al-chat"]').click();
+    const breve = await preguntar(page, '¿Cómo funciona el Torneo?');
+    const textoBreve = (
+      (await breve.locator('.chatbot-ventana__texto').first().textContent()) ?? ''
+    ).trim();
+    const masDetalle = breve.getByRole('button', { name: 'Más detalle' });
+    await expect(masDetalle).toBeVisible();
+    await masDetalle.click();
+    const entera = asistenteDe(page).respuestas.nth(antes + 2);
+    await expect(entera).toBeVisible({ timeout: ESPERA_DE_RESPUESTA_MS });
+    const textoEntero = (
+      (await entera.locator('.chatbot-ventana__texto').first().textContent()) ?? ''
+    ).trim();
+    expect(textoEntero.startsWith(textoBreve)).toBe(true);
+    expect(textoEntero.length).toBeGreaterThan(textoBreve.length);
+
+    // «Restablecer» (RF-CHA-010) lo devuelve al automático.
+    await asistente.preferencias.click();
+    await panel.locator('[data-accion="restablecer-preferencias"]').click();
+    await expect(panel).toContainText('Listo: guardamos tus preferencias.');
+    await expect(panel.locator('select[name="nivelDetalle"]')).toHaveValue('AUTOMATICO');
+
+    // Lo que le propone es suyo: otra jugadora no recibe nada de lo que preguntó.
+    const otra = await sesionDelBanco(api, `chat_prop_${SUFIJO}`, { clave: CLAVE, base: BORDE });
+    const ajenas = await api.get('/api/v1/chat/sugerencias/para-ti?limite=5', {
+      headers: conToken(otra.token),
+    });
+    expect(ajenas.status()).toBe(200);
+    for (const s of await ajenas.json()) {
+      expect(s.motivo).not.toBe('POR_LO_QUE_PREGUNTASTE');
+    }
   });
 
   test('su conversación no la lee nadie más: ni otra jugadora ni un visitante', async () => {
@@ -252,5 +339,60 @@ test.describe('Asistente · jugador (§7.4.4)', () => {
     });
     expect([200, 400]).toContain(conUid.status());
     expect(JSON.stringify(await conUid.json())).not.toContain('¿Qué tengo en mi inventario?');
+  });
+
+  test('lo que el asistente leyó de su cuenta queda en la bitácora central, sin el contenido', async () => {
+    const superAdmin = await sesionDelBanco(
+      api,
+      cuentaAdministrativaDeRol('SUPER_ADMINISTRADOR').apodo,
+      {
+        clave: CLAVE,
+        base: BORDE,
+      },
+    );
+    let asientos = [];
+    await expect
+      .poll(
+        async () => {
+          const consulta = new URLSearchParams({
+            afectado: jugadora.claims.uid,
+            size: '100',
+            sort: 'fechaHora,desc',
+          });
+          const r = await api.get(`/api/v1/admin/auditoria?${consulta}`, {
+            headers: conToken(superAdmin.token),
+          });
+          expect(r.status(), await r.text()).toBe(200);
+          asientos = ((await r.json()).content ?? []).filter(
+            (a) => a.motivo === 'CONSULTA_DEL_ASISTENTE',
+          );
+          return asientos.map((a) => a.valorNuevo);
+        },
+        { timeout: 30_000, message: 'los asientos del asistente no llegaron a la bitácora' },
+      )
+      .toEqual(
+        expect.arrayContaining([
+          'dato=inventario;resultado=consultado',
+          'dato=misiones;resultado=consultado',
+          'dato=subastas;resultado=consultado',
+          'dato=notificaciones;resultado=consultado',
+          'dato=movimientos-de-creditos;resultado=consultado',
+        ]),
+      );
+    for (const asiento of asientos) {
+      // Ella lo pidió y los datos son suyos; nada de lo que se respondió.
+      expect(asiento.tipoAccion).toBe('OTRO');
+      expect(asiento.administrador).toBe(jugadora.claims.uid);
+      expect(asiento.afectado).toBe(jugadora.claims.uid);
+      expect(asiento.referencia).toMatch(/^ms-chatbot:consulta-/);
+      expect(JSON.stringify(asiento)).not.toContain(heroe.nombrePropio);
+      expect(JSON.stringify(asiento)).not.toContain(TEMPLO.nombre);
+    }
+
+    // La jugadora no lee la bitácora.
+    const propia = await api.get(`/api/v1/admin/auditoria?afectado=${jugadora.claims.uid}`, {
+      headers: conToken(jugadora.token),
+    });
+    expect(propia.status()).toBe(403);
   });
 });
