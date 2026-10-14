@@ -60,6 +60,21 @@ class VitrinaDelCatalogoControllerTest {
     }
 
     @Test
+    @DisplayName("SA-13: la tarjeta lleva las marcas premium y unico del catalogo (contrato 1.8.0)")
+    void marcasDelCatalogo() throws Exception {
+        ProductoEnVentaDto corona = new ProductoEnVentaDto(ESPADA, "Corona del Nexo", "img/corona.png",
+                "Edicion unica", null, "ITEM", new BigDecimal("9000.00"), new BigDecimal("9000.00"), "COP",
+                false, null, false, false, null, true, true);
+        when(vitrina.pagina(ConsultaDeVitrina.de(0, 16, null), null))
+                .thenReturn(PaginaDeVitrina.de(List.of(corona), 0, 16));
+
+        mvc.perform(get("/api/v1/vitrina"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].premium").value(true))
+                .andExpect(jsonPath("$.content[0].unico").value(true));
+    }
+
+    @Test
     @DisplayName("es publica: sin token responde 200 con la pagina, con 16 por omision")
     void publicaSinToken() throws Exception {
         when(vitrina.pagina(ConsultaDeVitrina.de(0, 16, null), null)).thenReturn(paginaConLaEspada());
