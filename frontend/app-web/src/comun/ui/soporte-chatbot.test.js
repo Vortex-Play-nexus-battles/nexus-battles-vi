@@ -226,10 +226,10 @@ describe('avisoDeError', () => {
   ])('%#: se elige el aviso por motivo y estado', (error, titulo, tono) => {
     expect(avisoDeError(error)).toMatchObject({ titulo, tono });
   });
+});
 
-  test('sin revisión del texto, explica que no se envió nada', () => {
-    expect(avisoDeError(con('MODERACION_NO_DISPONIBLE', 503)).detalle).toContain(
-      'no enviamos nada',
-    );
-  });
+// 1.7.0 — el detalle del 503 de la revisión del texto.
+test('sin revisión del texto, explica que no se envió nada', () => {
+  const sinRevision = new ErrorDelChatbot({ title: 'x', motivo: 'MODERACION_NO_DISPONIBLE' }, 503);
+  expect(avisoDeError(sinRevision).detalle).toContain('no enviamos nada');
 });
