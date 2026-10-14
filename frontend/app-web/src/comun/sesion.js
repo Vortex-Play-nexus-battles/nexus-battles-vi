@@ -41,6 +41,25 @@ export const CLAVES = Object.freeze({
 });
 
 /**
+ * Identificador de visitante del asistente, en `sessionStorage`
+ * (`comun/cliente-chatbot.js` lo crea y lo manda en `X-Id-Sesion-Anonima`).
+ *
+ * #506 — vive aquí, y el cliente lo reexporta, para que olvidar la sesión lo
+ * borre sin que este módulo importe el cliente: el cliente ya importa este,
+ * y la dependencia va en un solo sentido.
+ *
+ * Por qué se borra (privacidad): la conversación de un visitante se guarda en
+ * el servidor con este identificador. Si sobrevive al cierre de sesión, la
+ * siguiente persona que use esa pestaña abre el asistente y lee la
+ * conversación de visitante de la anterior. Por eso se olvida al cerrar u
+ * olvidar la sesión (`olvidarSesion`, y con ella `cerrarSesion`, el cierre
+ * desde otra pestaña y la caducidad del vigilante) y también al entrar
+ * (`guardarSesion`): con token el servidor no lo usa, y así ningún final de
+ * sesión resucita la conversación de antes de entrar.
+ */
+export const CLAVE_SESION_ANONIMA = 'nexus.chatbot.sesionAnonima';
+
+/**
  * Por debajo de esto, la diferencia entre relojes es la propia latencia y el
  * redondeo del `iat` a segundos: no se corrige nada.
  */
@@ -253,6 +272,9 @@ export function guardarSesion(
   { token, apodo, rol, uid, recibidoEn, desfase },
   almacen = globalThis.sessionStorage,
 ) {
+  // #506 — la conversación de visitante de esta pestaña no sobrevive a la
+  // entrada (ver `CLAVE_SESION_ANONIMA`).
+  almacen.removeItem(CLAVE_SESION_ANONIMA);
   const anterior = almacen.getItem(CLAVES.token);
   const valores = {
     [CLAVES.token]: token,
@@ -288,11 +310,15 @@ function guardarDesfase(token, anterior, { recibidoEn, desfase }, almacen) {
   almacen.setItem(CLAVES.desfase, JSON.stringify({ iat, ms }));
 }
 
-/** Borra del navegador todo lo que dejó el login. */
+/**
+ * Borra del navegador todo lo que dejó el login, y el identificador de
+ * visitante del asistente (#506, ver `CLAVE_SESION_ANONIMA`).
+ */
 export function olvidarSesion(almacen = globalThis.sessionStorage) {
   for (const clave of Object.values(CLAVES)) {
     almacen.removeItem(clave);
   }
+  almacen.removeItem(CLAVE_SESION_ANONIMA);
 }
 
 /** Por qué se llega al login. Lo lee `login.js` para decirlo con palabras. */
