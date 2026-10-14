@@ -116,6 +116,8 @@ export function textoDePrecio(importe, moneda) {
  *   precioCreditos: number|null,
  *   precioCreditosTexto: string|null,
  *   soloEnCreditos: boolean,
+ *   premium: boolean,
+ *   unico: boolean,
  * }}
  */
 export function aProductoDeVitrina(dto = {}) {
@@ -153,6 +155,10 @@ export function aProductoDeVitrina(dto = {}) {
     // G3 (1.7.0): se vende, pero solo con créditos del juego. Su precio es el
     // de créditos; el de dinero real no existe (null, nunca «0 COP»).
     soloEnCreditos: precio === null && precioCreditos !== null,
+    // SA-13 (1.8.0): las marcas del catálogo, para identificarlo en la
+    // tienda (§7.2.2 premium, §7.2.1 único). Solo si el servicio lo dice.
+    premium: dto.premium === true,
+    unico: dto.unico === true,
   };
 }
 

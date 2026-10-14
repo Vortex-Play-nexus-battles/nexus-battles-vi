@@ -23,7 +23,9 @@ public interface ProductoMapper {
         // el autor de la ultima edicion, el estado anterior a una suspension y
         // las claves de reserva nacen vacios.
         @Mapping(target = "id", expression = "java(java.util.UUID.randomUUID().toString())")
-        @Mapping(target = "estado", constant = "ACTIVO")
+        // SA-13: el estado inicial que pide el alta (ACTIVO o UNICO); sin el, ACTIVO.
+        @Mapping(target = "estado", expression = "java(solicitud.estado() == null"
+                + " ? nexus.dominio.EstadoProducto.ACTIVO : solicitud.estado())")
         @Mapping(target = "version", constant = "1")
         @Mapping(target = "creadoEn", source = "ahora")
         @Mapping(target = "modificadoEn", source = "ahora")

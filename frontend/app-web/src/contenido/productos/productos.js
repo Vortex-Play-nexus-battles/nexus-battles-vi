@@ -16,6 +16,7 @@ import {
   CAMPOS_DE_PROMOCION,
   LIMITES_DE_PROMOCION,
   construirSolicitudProducto,
+  ESTADOS_INICIALES,
   PARTES_ARMADURA,
   PROTOTIPOS,
   TIPOS_PRODUCTO,
@@ -23,6 +24,12 @@ import {
 
 import { h, vaciar } from '../../comun/ui/dom.js';
 import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
+
+/** SA-13: la disponibilidad con la que nace un producto (§7.2.1). */
+const ETIQUETAS_DISPONIBILIDAD = {
+  ACTIVO: 'Activo',
+  UNICO: 'Único',
+};
 
 const ETIQUETAS_TIPO = {
   HEROE: 'Héroe',
@@ -159,6 +166,23 @@ function crearVista(selectorImagen) {
               adicionales: [
                 h('small', {
                   texto: '-1 significa ilimitado; los demás valores deben ser mayores que cero.',
+                }),
+              ],
+            },
+          ),
+          // SA-13 (§7.2.1): la disponibilidad con la que nace. Suspender no
+          // es una opción del alta: tiene su acción en el catálogo.
+          campo(
+            'Disponibilidad ',
+            h('select', {
+              atributos: { name: 'estado' },
+              hijos: opciones(ESTADOS_INICIALES, ETIQUETAS_DISPONIBILIDAD),
+            }),
+            {
+              adicionales: [
+                h('small', {
+                  texto:
+                    'Único: se vende igual que uno activo y se distingue como pieza única en la tienda y en el catálogo.',
                 }),
               ],
             },

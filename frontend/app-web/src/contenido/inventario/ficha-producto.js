@@ -131,6 +131,13 @@ export function construirFicha(
 
   ficha.append(imagen, nombre, tipo);
 
+  // SA-13 (§7.2.2 y §7.2.1): un producto de pago en moneda real y una pieza
+  // única se identifican también en el inventario, no solo en la tienda.
+  const marcas = marcasDelCatalogo(producto);
+  if (marcas) {
+    ficha.append(marcas);
+  }
+
   // Revisión final del módulo (13-oct) — §7.1: la vista de detalle tiene «la
   // información del inventario». Lo que es del jugador (cómo llamó a su
   // objeto, si lo lleva un héroe, si está bloqueado) va aquí, junto a lo que
@@ -160,6 +167,47 @@ export function construirFicha(
   }
 
   return ficha;
+}
+
+/**
+ * Los distintivos del catálogo que el jugador tiene que ver: premium (se paga
+ * en moneda real y no se subasta) y pieza única. Null si no hay ninguno.
+ *
+ * @param {{premium?: boolean, estado?: string}} producto
+ * @returns {HTMLElement|null}
+ */
+export function marcasDelCatalogo(producto) {
+  const marcas = [];
+  if (producto?.premium === true) {
+    const premium = document.createElement('span');
+    premium.className = 'distintivo distintivo--epica producto-premium';
+    premium.title = 'Se paga en moneda real y no se puede subastar';
+    premium.append(icono('moneda', { clase: 'icono', etiqueta: null }));
+    const texto = document.createElement('span');
+    texto.textContent = 'Premium';
+    const explicacion = document.createElement('span');
+    explicacion.className = 'solo-lectores';
+    explicacion.textContent = ': se paga en moneda real y no se puede subastar';
+    premium.append(texto, explicacion);
+    marcas.push(premium);
+  }
+  if (producto?.estado === 'UNICO') {
+    const unico = document.createElement('span');
+    unico.className = 'distintivo distintivo--maestro-juego producto-unico';
+    unico.append(icono('estrella-llena', { clase: 'icono', etiqueta: null }));
+    const texto = document.createElement('span');
+    texto.textContent = 'Pieza única';
+    unico.append(texto);
+    marcas.push(unico);
+  }
+  if (marcas.length === 0) {
+    return null;
+  }
+  const zona = document.createElement('p');
+  zona.className = 'ficha__marcas fila';
+  zona.dataset.zona = 'marcas-del-catalogo';
+  zona.append(...marcas);
+  return zona;
 }
 
 /**
