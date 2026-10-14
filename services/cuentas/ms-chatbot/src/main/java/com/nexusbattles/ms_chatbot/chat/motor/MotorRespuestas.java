@@ -3,6 +3,7 @@ package com.nexusbattles.ms_chatbot.chat.motor;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.Enriquecedor;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.RespuestaEnriquecida;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
+import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TipoRespuesta;
@@ -175,7 +176,7 @@ public class MotorRespuestas {
             .filter(tema -> tema.isActivo() && clave.equals(tema.getClave()))
             .findFirst()
             .map(tema -> new ResultadoMotor(texto, tema.getCategoria(), TipoRespuesta.CONTEXTUAL, true, List.of(),
-                null, Enriquecedor.paraNoSirvio(tema, temas, ingles), ingles));
+                null, Enriquecedor.paraNoSirvio(tema, temas, ingles), ingles, ResultadoDeRespuesta.NO_SIRVIO));
     }
 
     private static List<TemaConocimiento> ordenados(List<TemaConocimiento> temas) {

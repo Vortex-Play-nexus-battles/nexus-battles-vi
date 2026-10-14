@@ -5,6 +5,7 @@ import com.nexusbattles.ms_chatbot.chat.limite.LimiteDeFrecuenciaExcedido;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ContenidoBloqueado;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionNoDisponible;
 import com.nexusbattles.ms_chatbot.chat.soporte.SesionRequeridaException;
+import com.nexusbattles.ms_chatbot.chat.soporte.SinConversacionException;
 import com.nexusbattles.ms_chatbot.chat.soporte.TicketAbiertoException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -62,6 +63,13 @@ public class ManejadorErroresDelChat {
     public ResponseEntity<ProblemDetail> ticketAbierto(TicketAbiertoException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
             .body(problema(HttpStatus.CONFLICT, "Ya tienes un ticket abierto", ex.getMessage(), "TICKET_ABIERTO"));
+    }
+
+    // ms-chatbot.yaml 1.8.0: solicitud desde una conversacion sin preguntas.
+    @ExceptionHandler(SinConversacionException.class)
+    public ResponseEntity<ProblemDetail> sinConversacion(SinConversacionException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(problema(HttpStatus.CONFLICT, "No hay conversacion", ex.getMessage(), "SIN_CONVERSACION"));
     }
 
     private static ProblemDetail problema(HttpStatus estado, String titulo, String detalle, String motivo) {

@@ -1,0 +1,78 @@
+/* Centro de ayuda. Solo lo propio de esta vista; tarjetas, campos, estados y
+   foco vienen del kit. Las tarjetas de los temas son `.tarjeta`, así que su
+   texto ya sale oscuro sobre claro («Superficies claras» en componentes.css). */
+
+.ayuda [data-centro-de-ayuda] > .campo {
+  max-width: 32rem;
+}
+
+.ayuda__resumen:empty {
+  display: none;
+}
+
+.ayuda__indice-lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-1) var(--e-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ayuda__indice-enlace {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--objetivo-tactil);
+}
+
+/* El ancla de una categoría no queda escondida bajo la cabecera fija. */
+.ayuda__categoria {
+  gap: var(--e-3);
+  scroll-margin-top: calc(var(--cabecera-alto) + var(--e-4));
+}
+
+.ayuda__titulo-categoria {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-subtitulo-peso);
+  line-height: var(--t-subtitulo-alto);
+}
+
+.ayuda__tema {
+  padding: var(--e-3) var(--e-4);
+}
+
+.ayuda__pregunta {
+  cursor: pointer;
+  min-height: var(--objetivo-tactil);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  overflow-wrap: anywhere;
+}
+
+.ayuda__cuerpo {
+  margin-top: var(--e-2);
+}
+
+.ayuda__respuesta,
+.ayuda__pasos li {
+  overflow-wrap: anywhere;
+}
+
+.ayuda__respuesta {
+  margin: var(--e-2) 0;
+  white-space: pre-line;
+}
+
+.ayuda__pasos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+  margin: var(--e-2) 0;
+  padding-left: var(--e-5);
+}
+
+.ayuda__ingles summary {
+  cursor: pointer;
+  color: var(--tinta-enlace);
+}

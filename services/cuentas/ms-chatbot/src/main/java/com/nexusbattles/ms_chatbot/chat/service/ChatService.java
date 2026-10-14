@@ -8,6 +8,7 @@ import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.limite.LimitadorDeFrecuencia;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
 import com.nexusbattles.ms_chatbot.chat.model.Remitente;
+import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionDeContenido;
 import com.nexusbattles.ms_chatbot.chat.motor.MotorRespuestas;
 import com.nexusbattles.ms_chatbot.chat.motor.ResultadoMotor;
@@ -225,9 +226,11 @@ public class ChatService {
         };
         if (tipo == Seguimiento.NO_SIRVIO) {
             String texto = ingles ? NO_SIRVIO_EN : NO_SIRVIO;
+            // 1.7.0: se ofrece soporte humano y no cuenta como resuelta.
             return Optional.of(temaAnterior.flatMap(clave -> motorRespuestas.relacionadosCon(clave, texto, ingles))
                 .orElseGet(() -> new ResultadoMotor(texto, null, TipoRespuesta.DIRECTA, true, List.of(), null,
-                    Enriquecedor.soloSoporte(), ingles)));
+                    Enriquecedor.soloSoporte(ingles), ingles))
+                .conResultado(ResultadoDeRespuesta.NO_SIRVIO));
         }
         PreferenciasDeRespuesta pedidas = switch (tipo) {
             case MAS_DETALLE -> new PreferenciasDeRespuesta(preferencias.idioma(), NivelDeDetalle.DETALLADO);
@@ -235,9 +238,10 @@ public class ChatService {
             case EN_ESPANOL -> new PreferenciasDeRespuesta(IdiomaPreferido.ES, preferencias.nivelDetalle());
             default -> preferencias;
         };
+        // 1.7.0: «escribe la pregunta completa» no resuelve nada (PIDE_REFORMULAR).
         return Optional.of(temaAnterior.flatMap(clave -> motorRespuestas.responderTema(clave, pedidas, preguntaEnIngles))
             .orElseGet(() -> ResultadoMotor.deTema(ingles ? SIN_TEMA_ANTERIOR_EN : SIN_TEMA_ANTERIOR, null,
-                TipoRespuesta.DIRECTA).enIngles(ingles)));
+                TipoRespuesta.DIRECTA).enIngles(ingles).conResultado(ResultadoDeRespuesta.PIDE_REFORMULAR)));
     }
 
     // 1.3.6: con preferencias propias (idioma o nivel de detalle), la base
