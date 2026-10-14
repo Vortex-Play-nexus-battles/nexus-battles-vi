@@ -15,7 +15,6 @@ import { jest } from '@jest/globals';
 
 import { RESULTADO } from '../consola/cliente-consola.js';
 import {
-  SIN_FUENTE,
   claveDeLaDireccion,
   hechosDeComentarios,
   hechosDeLaCuenta,
@@ -393,7 +392,8 @@ describe('las secciones de los otros servicios', () => {
     });
 
     const sanciones = panelDe(raiz, 'sanciones');
-    expect(sanciones.textContent).toContain('SERVICIO DEGRADADO');
+    expect(sanciones.querySelector('.panel-admin__estado').textContent).toBe('Sin conexión');
+    expect(sanciones.textContent).not.toMatch(/SERVICIO DEGRADADO|GET \/api|HTTP/);
     expect(sanciones.querySelector('[data-accion="reintentar"]')).not.toBeNull();
     // El identificador de la cuenta no se pinta ni en el detalle técnico.
     expect(sanciones.textContent).not.toMatch(UUID);
@@ -407,23 +407,15 @@ describe('las secciones de los otros servicios', () => {
     });
 
     expect(consultarApi).not.toHaveBeenCalled();
-    expect(panelDe(raiz, 'sanciones').textContent).toContain('no tiene identificador público');
-    expect(panelDe(raiz, 'comentarios').textContent).toContain('no tiene identificador público');
+    expect(panelDe(raiz, 'sanciones').textContent).toContain('Sin identificador público');
+    expect(panelDe(raiz, 'comentarios').textContent).toContain('Sin identificador público');
   });
 
-  test('lo que ningún servicio publica para administración dice «Sin fuente publicada»', async () => {
+  test('SA-2: sin secciones vacías de relleno ni texto de andamio', async () => {
     const { raiz, consultarApi } = await montar();
 
-    for (const seccion of SIN_FUENTE) {
-      const panel = panelDe(raiz, seccion.id);
-      expect(panel).not.toBeNull();
-      expect(panel.textContent).toContain('Sin fuente publicada');
-      expect(panel.querySelector('.sello-estado').textContent).toBe('SIN FUENTE');
-    }
-    expect(SIN_FUENTE.map((s) => s.id).sort()).toEqual(
-      ['auditoria', 'estadisticas', 'misiones', 'reportes', 'subastas', 'transacciones'].sort(),
-    );
-    // Ninguna de esas secciones hace una petición: no hay a quién hacerla.
+    expect(raiz.querySelector('[data-seccion="sin-fuente"]')).toBeNull();
+    expect(raiz.body.textContent).not.toMatch(/Sin fuente publicada|SIN FUENTE|Fuente:|GET \/api/);
     expect(consultarApi).toHaveBeenCalledTimes(2);
   });
 });
@@ -486,7 +478,7 @@ describe('la línea de tiempo', () => {
     expect(titulos).toContain('Suspensión emitida');
     expect(titulos).not.toContain('Publicó un comentario');
     expect(linea.textContent).toContain('Faltan los hechos de: comentarios');
-    expect(linea.querySelector('.sello-estado').textContent).toBe('PARCIAL');
+    expect(linea.querySelector('.panel-admin__estado').textContent).toBe('Incompleta');
   });
 
   test('los hechos de la cuenta y de los comentarios, sin inventar fechas', () => {

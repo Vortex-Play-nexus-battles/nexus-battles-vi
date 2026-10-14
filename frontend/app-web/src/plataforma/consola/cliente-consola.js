@@ -87,7 +87,7 @@ export async function consultar(recurso, { senal, buscar = fetchWithHttpErrorInt
       resultado: RESULTADO.SERVICIO_DEGRADADO,
       datos: null,
       estado: null,
-      motivo: 'No hubo respuesta del servicio.',
+      motivo: 'No pudimos conectar. Revisa tu conexión e inténtalo de nuevo.',
       recurso,
       detalle: error?.message ?? null,
     };
@@ -99,7 +99,7 @@ export async function consultar(recurso, { senal, buscar = fetchWithHttpErrorInt
       resultado: estaVacio(datos) ? RESULTADO.VACIO : RESULTADO.DATOS,
       datos,
       estado: respuesta.status,
-      motivo: estaVacio(datos) ? 'El servicio respondió, pero no hay registros.' : '',
+      motivo: estaVacio(datos) ? 'Todavía no hay registros.' : '',
       recurso,
       detalle: null,
     };
@@ -135,7 +135,7 @@ export async function descargar(recurso, { senal, buscar = fetchWithHttpErrorInt
       contenido: null,
       nombreArchivo: null,
       estado: null,
-      motivo: 'No hubo respuesta del servicio.',
+      motivo: 'No pudimos conectar. Revisa tu conexión e inténtalo de nuevo.',
       recurso,
     };
   }
@@ -215,35 +215,36 @@ function clasificarFallo(estado) {
   if (estado === 401) {
     return {
       resultado: RESULTADO.SIN_PERMISO,
-      motivo: 'Tu sesión ya no es válida. Vuelve a entrar.',
+      motivo: 'Tu sesión terminó. Vuelve a iniciar sesión.',
       detalle: null,
     };
   }
   if (estado === 403) {
     return {
       resultado: RESULTADO.SIN_PERMISO,
-      motivo: 'Tu rol no alcanza para ver esta sección.',
+      motivo: 'Tu rol no tiene acceso a esta información.',
       detalle: null,
     };
   }
   if (estado === 404) {
     return {
       resultado: RESULTADO.NO_IMPLEMENTADO,
-      motivo: 'El servicio está en pie, pero no publica esta consulta.',
+      motivo: 'Esta información no está disponible en este momento.',
       detalle: null,
     };
   }
   if (CAIDO.includes(estado)) {
     return {
       resultado: RESULTADO.SERVICIO_DEGRADADO,
-      motivo: 'El servicio que responde esta consulta no está atendiendo.',
+      motivo: 'No pudimos cargar esta información. Inténtalo de nuevo en unos segundos.',
       detalle: null,
     };
   }
   return {
     resultado: RESULTADO.NO_DISPONIBLE,
-    motivo: 'El servicio respondió algo que la consola no sabe interpretar.',
-    detalle: `HTTP ${estado}`,
+    motivo: 'No pudimos cargar esta información.',
+    // Solo para depurar: no se pinta nunca.
+    detalle: estado,
   };
 }
 
