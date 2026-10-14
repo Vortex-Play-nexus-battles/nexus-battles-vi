@@ -120,6 +120,8 @@ services:
       CORREO_RECUPERACION_CLAVE_URL: ${CORREO_RECUPERACION_CLAVE_URL:-http://srv-correo:8082/api/v1/correos/recuperacion-clave}
       CORREO_CONFIRMACION_CUENTA_URL: ${CORREO_CONFIRMACION_CUENTA_URL:-http://srv-correo:8082/api/v1/correos/confirmacion-cuenta}
       CORREO_CAMBIO_CLAVE_URL: ${CORREO_CAMBIO_CLAVE_URL:-http://srv-correo:8082/api/v1/correos/cambio-clave}
+      # SA-14 (§7.3.6): confirmacion al completar la eliminacion de la cuenta.
+      CORREO_CIERRE_CUENTA_URL: ${CORREO_CIERRE_CUENTA_URL:-http://srv-correo:8082/api/v1/correos/cierre-cuenta}
       NOTIFICACIONES_URL: ${NOTIFICACIONES_URL:-http://srv-notificaciones:8085/api/v1/internal/notifications}
       AUDITORIA_URL: ${AUDITORIA_URL:-http://srv-ms-cumplimiento:8091/api/v1/admin/auditoria/eventos}
       # R17 — alta del jugador: ms-identidad la orquesta y cada dueno hace lo

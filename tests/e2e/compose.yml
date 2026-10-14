@@ -161,6 +161,7 @@ services:
       CORREO_RECUPERACION_CLAVE_URL: http://srv-correo:8082/api/v1/correos/recuperacion-clave
       CORREO_CONFIRMACION_CUENTA_URL: http://srv-correo:8082/api/v1/correos/confirmacion-cuenta
       CORREO_CAMBIO_CLAVE_URL: http://srv-correo:8082/api/v1/correos/cambio-clave
+      CORREO_CIERRE_CUENTA_URL: http://srv-correo:8082/api/v1/correos/cierre-cuenta
       # B2 (BACKEND-02): la lista negra es fail-closed. Sin esta URL el
       # servicio caia a localhost:8086 (su defecto de desarrollo), no llegaba a
       # nadie y, desde B2, el registro responderia 503. Y el panel delega las

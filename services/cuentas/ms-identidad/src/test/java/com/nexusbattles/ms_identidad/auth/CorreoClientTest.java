@@ -5,6 +5,7 @@ import com.nexusbattles.ms_identidad.auth.correo.Enmascarado;
 import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoAvisoAccesoRequest;
 import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoBienvenidaRequest;
 import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoCambioClaveRequest;
+import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoCierreCuentaRequest;
 import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoConfirmacionCuentaRequest;
 import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoRecuperacionClaveRequest;
 import com.nexusbattles.ms_identidad.onboarding.ServidorFalso;
@@ -38,6 +39,7 @@ class CorreoClientTest {
         ReflectionTestUtils.setField(correoClient, "urlRecuperacionClave", base + "recuperacion-clave");
         ReflectionTestUtils.setField(correoClient, "urlConfirmacionCuenta", base + "confirmacion-cuenta");
         ReflectionTestUtils.setField(correoClient, "urlCambioClave", base + "cambio-clave");
+        ReflectionTestUtils.setField(correoClient, "urlCierreCuenta", base + "cierre-cuenta");
     }
 
     @AfterEach
@@ -96,6 +98,18 @@ class CorreoClientTest {
     }
 
     @Test
+    @DisplayName("SA-14 (§7.3.6): la confirmacion del cierre, con la clave de la solicitud")
+    void confirmacionDeCierreDeCuenta() {
+        correoClient.enviarCierreCuenta(
+            new CorreoCierreCuentaRequest("ada@test.com", "ada", "2026-10-14T09:30:00-05:00"), "cierre-cuenta-s1");
+
+        ServidorFalso.Peticion peticion = unica("cierre-cuenta");
+        assertThat(peticion.cuerpo()).contains("\"email\":\"ada@test.com\"").contains("\"apodo\":\"ada\"")
+            .contains("\"fechaHora\":\"2026-10-14T09:30:00-05:00\"");
+        assertThat(peticion.cabecera("Idempotency-Key")).isEqualTo("cierre-cuenta-s1");
+    }
+
+    @Test
     void losRespaldosNoLanzanExcepcionNiImprimenElCorreoEntero() {
         RuntimeException caido = new RuntimeException("Servicio caído");
         assertDoesNotThrow(() -> ReflectionTestUtils.invokeMethod(correoClient, "enviarBienvenidaConFallback",
@@ -108,6 +122,8 @@ class CorreoClientTest {
             new CorreoRecuperacionClaveRequest("ana@test.com", "ana", "X", 30), "k", caido));
         assertDoesNotThrow(() -> ReflectionTestUtils.invokeMethod(correoClient, "enviarConfirmacionCuentaConFallback",
             new CorreoConfirmacionCuentaRequest("ana@test.com", "ana", "X", 30, "ACTIVACION"), "k", caido));
+        assertDoesNotThrow(() -> ReflectionTestUtils.invokeMethod(correoClient, "enviarCierreCuentaConFallback",
+            new CorreoCierreCuentaRequest("ana@test.com", "ana", "x"), "k", caido));
 
         assertThat(Enmascarado.correo("valkiria@upb.edu.co")).isEqualTo("v***a@upb.edu.co");
         assertThat(Enmascarado.correo("v@upb.edu.co")).isEqualTo("v***@upb.edu.co");

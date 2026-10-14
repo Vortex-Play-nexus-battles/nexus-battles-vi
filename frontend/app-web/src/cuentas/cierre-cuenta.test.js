@@ -194,6 +194,8 @@ describe('la sección «Cerrar mi cuenta»', () => {
     expect(solicitar).toHaveBeenCalledWith(UID, 'Clave.Actual-1');
     expect(estado()).toMatch(/^Cierre programado para el /);
     expect(aviso().textContent).toContain('Programaste el cierre de tu cuenta');
+    // §7.3.6: la confirmación llega al correo cuando se completa (SA-14).
+    expect(aviso().textContent).toContain('te llegará una confirmación a tu correo');
     expect(formulario().hidden).toBe(true);
     expect(clave().value).toBe('');
   });
