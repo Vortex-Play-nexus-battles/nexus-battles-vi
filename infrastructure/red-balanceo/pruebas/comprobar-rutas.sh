@@ -386,6 +386,7 @@ for par in \
     inventario:contenido/inventario/inventario.html \
     jugar:plataforma/salas-partidas/batallas.html \
     torneos:plataforma/torneos/torneos.html \
+    ayuda:cuentas/ayuda.html \
     verificar:cuentas/verificar-cuenta.html \
     restablecer:cuentas/restablecer-confirmar.html \
     recuperar:cuentas/restablecer-solicitar.html \
