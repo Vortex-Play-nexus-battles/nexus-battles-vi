@@ -78,3 +78,41 @@ preferencias-del-asistente | «Preferencias»; «Idioma de las respuestas» (Aut
 ## V15 (1.11.0)
 
 reglas-del-juego | resumen, sin afirmaciones nuevas: equipar en «Mi inventario» y al menos un arma, una armadura o un ítem para salir (completar-mazo); turnos sorteados, 2 de poder por turno y una sola acción (combate-por-turnos); la tirada contra la defensa, el último en pie gana, empate si no queda nadie (combate-por-turnos); mismas reglas contra jugador o IA, modos de «Jugar online», misiones y torneo en equipos de 2 (combate-por-turnos, modo-batalla, torneo); perder no quita héroes ni objetos y en línea se pierden los créditos en juego si gana otro (derrota-del-heroe); normas de conducta (normas-de-conducta) | las de esas claves en esta tabla
+
+## V16 (1.11.0)
+
+`src/main/resources/db/contenido/V16__base_de_conocimiento_al_dia.json`. Cada corrección se aplica solo al tema que
+sigue diciendo **exactamente** lo auditado (`antesEs`): lo que un administrador ya editó no se toca, y en una base sin
+esos temas no cambia nada.
+
+**Un tema de V11 que envejeció.** `apelar-sancion` se escribió antes de SA-4a y SA-4b (#962 y #965, fusionados el
+14-oct antes que #967) y decía que una suspensión o un baneo vigentes no se podían apelar desde el juego.
+
+apelar-sancion | toda sanción se apela dentro del plazo que muestra la pantalla (sin cifra); una advertencia, con sesión: «Mis sanciones» › «Apelar» › «Tu argumento» › «Enviar apelación»; una suspensión o un baneo vigentes, sin sesión: correo y contraseña en la entrada › «Apelar esta sanción» › ver la sanción y hasta cuándo se apela › «Por qué crees que la sanción no corresponde» › «Enviar apelación»; una apelación abierta por sanción; un panel de moderadores y administradores responde en 15 días hábiles (fijo, §7.3.2); se mantiene, se reduce o se revierte; la decisión llega al correo y, con sesión, a «Mis apelaciones» | FE/cuentas/login.js:20-22,424-438; FE/cuentas/login.html:114,127,285-324; FE/cuentas/apelacion-sin-sesion.js:1-19,252-254,520-525; FE/plataforma/moderacion-sanciones/mis-sanciones.html:39-51; services/plataforma/moderacion-sanciones/src/main/java/com/nexusbattles/plataforma/moderacionsanciones/sanciones/PlazoDeDecision.java:11-30; OA/moderacion-sanciones-admin.yaml:16,413; PI2 §7.3.2 p. 39 (RF-USR-007, RN-USR-007)
+
+**18 temas creados en DEV.** DEV tenía el 14-oct 176 temas en producción; 119 no están en el repositorio: se crearon
+desde la consola. Se auditaron contra el código y el documento (descargados del centro de ayuda público,
+`GET /api/v1/chat/ayuda`). Estos 18 afirmaban algo que el juego no hace; el texto de antes y el de ahora, con el motivo,
+van en el JSON. Otros 4 escribían cifras de parámetros que hoy coinciden con el documento (topes de subasta, 30 días
+para apelar) y no se tocan. Las afirmaciones nuevas de cada corrección salen de los temas de V11 ya verificados (tabla de
+arriba) y de:
+
+título en DEV | qué decía mal | evidencia
+¿Qué épica tiene cada héroe? | que toda épica tiene un efecto para cualquier héroe; las del Chamán y el Médico no tienen efecto general | HER/EpicasIniciales.java:16-26; COMB/reglas/Reglamento.java:116-120
+¿Cuánta experiencia necesito para el siguiente nivel? | que completar una misión da experiencia según su dificultad; hoy vale 0 | MIS/src/main/resources/application.properties:74-77; MIS/README.md:101
+¿Cómo funciona una habilidad épica en combate? | lo mismo que la primera | HER/EpicasIniciales.java:24-26; COMB/reglas/Reglamento.java:116-120; OA/motor-combate.yaml:581
+¿Cómo juega la inteligencia artificial? | una IA que aprende de las partidas; es por reglas y no está entrenada | DEC D-41, D-B7-13; OA/motor-combate.yaml:47-51; MIS/src/main/resources/application.properties:95
+¿Qué es el daño crítico? | el % de filas como probabilidad real | COMB/IndiceNormal.java:21-28; OA/motor-combate.yaml:310-313; DEC D-B7-01
+¿Qué es la probabilidad de caída? | un botín que cae al derrotar a un enemigo; no existe | COMB/arranque/BotinConfiguration.java:44-47 (sin consumidor); services/contenido/productos/src/main/java/nexus/aplicacion/ProductoMapper.java:45-50
+¿Cada cuánto hay torneos? | un rol «administrador de torneo» que no existe | OA/torneos.yaml:14-17; DEC D-21; OA/rbac.yaml:193
+¿Cómo me inscribo en un torneo? | inscripción en dinero real; solo créditos | OA/torneos.yaml:23-24,78; DEC D-23
+¿Cómo son los equipos del torneo? | «hasta seis jugadores por batalla»; es 2 contra 2 | OA/torneos.yaml:17-19; DEC D-22
+¿De qué trata La Ciudadela de las Sombras? | que vencerla abre El Templo Olvidado; el Templo no tiene requisitos | MIS/src/main/resources/semilla/misiones-del-documento.json:105-106; MISJ/dominio/SituacionDelJugador.java:65-74
+¿Puedo ver las partidas del torneo en vivo? | transmisión y videos; no hay | OA/torneos.yaml:71-75; FE/plataforma/torneos/torneos.js:1173-1180; DEC D-24
+¿Qué es un enemigo Máster? | 0,01–0,1 % para todo Máster y sin tope de nivel; el Templo trae el suyo con otra probabilidad, tope 8 | MIS/src/main/resources/semilla/misiones-del-documento.json:8,129-139; MIS/README.md:13; MISJ/dominio/simulacion/TiradaDeMasters.java:13-21
+¿Qué misiones hay? | que El Templo Olvidado exige la anterior | MIS/src/main/resources/semilla/misiones-del-documento.json:105-106
+¿Dónde veo mis estadísticas y logros? | logros y resumen de torneos en «Mi Cuenta»; no hay | FE/cuentas/estadisticas-cuenta.js:351-356
+¿Cómo compro en la tienda? | solo pago con tarjeta y correo en toda compra; también «Créditos del Nexo», sin correo | FE/cuentas/tienda-pago.js:35-38; DEC D-44
+¿Puedo vender en la subasta por dinero real? | que lo del Maestro de Juego se paga en dinero real; esa cuenta no existe | SUB/seguridad/IdentidadDesdeToken.java:23-31; SUB/subastas/dto/SubastaDetalleResponse.java:83-85
+¿Quién es el Maestro de Juego? | un vendedor activo con épicas y paquetes en dinero real; no existe y las épicas no se venden | SUB/seguridad/IdentidadDesdeToken.java:23-31; SUB/subastas/port/IdentidadClient.java:11-13; FE/cuentas/subastas-filtros.js:38-41
+¿Qué hago si tengo un problema con una subasta? | que soporte media o revierte la transacción; soporte revisa, responde y cierra | FE/cuentas/panel-chatbot-soporte.js:4-8; OA/ms-subastas-panel.yaml y OA/ms-subastas-pujas.yaml (sin reversión); OA/creditos.yaml:51-59; FE/comun/ui/soporte-chatbot.js:30,53-63

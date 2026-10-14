@@ -45,8 +45,9 @@ openapi: 3.1.0
 #               la puntuacion en que termina un secreto (V14), un visitante
 #               que pide datos de su cuenta recibe que hace falta una sesion,
 #               las consultas en vivo se reconocen con mas formas de
-#               preguntar, la navegacion a secciones publicas es para todos y
-#               las reglas del juego tienen su tema (V15)
+#               preguntar, la navegacion a secciones publicas es para todos,
+#               las reglas del juego tienen su tema (V15) y la base dice lo
+#               que el juego hace hoy (V16)
 #   7.4 (1.3.0) lo que faltaba del modulo 7.4: tickets y soporte humano
 #               (RF-CHA-007, RF-ADM-004), sugerencias y autocompletado,
 #               respuestas enriquecidas sin imagenes, vista del jugador y
@@ -181,6 +182,11 @@ info:
       V15 publica una version nueva de la base con el tema «Reglas basicas
       del juego» (`reglas-del-juego`), que resume lo ya verificado en V11, y
       sus casos de evaluacion.
+    * **La base dice lo que el juego hace hoy (7.4.2, 7.4.5).** V16 corrige
+      «Como apelar una sancion» (`apelar-sancion`): desde SA-4 una suspension
+      o un baneo se apelan sin sesion, en la pantalla de entrada. Corrige
+      tambien temas creados en DEV que contradecian el juego, solo si siguen
+      diciendo exactamente lo auditado. Ninguna operacion ni forma cambia.
     * **Navegacion a secciones publicas, para todos (7.4.4).** «Llevame a la
       subasta», «ir al centro de ayuda», «take me to the store»: enlace a la
       vista (`resultado` NAVEGACION). La tienda, el chat general y «Jugar

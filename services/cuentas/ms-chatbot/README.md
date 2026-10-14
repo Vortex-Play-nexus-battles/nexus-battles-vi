@@ -1,7 +1,7 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
 **Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.10.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.0.0 (canal en tiempo real, 7.4.9)
-**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V15) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
+**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V16) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
 ## Qué hace
@@ -36,8 +36,17 @@ V15 publica, como V11, una versión nueva con el tema «Reglas básicas del jueg
 (`reglas-del-juego`, enlace al centro de ayuda), que resume lo ya verificado en los temas de
 V11, y sus casos de evaluación; la copia conserva las intenciones adicionales de V12.
 
+**V16 (1.11.0).** La base dice lo que el juego hace hoy. «Cómo apelar una sanción»
+(`apelar-sancion`, V11) se escribió antes de la apelación sin sesión de SA-4 y decía que una
+suspensión o un baneo no se podían apelar; ahora explica «Apelar esta sanción» en la
+pantalla de entrada. Y 18 temas creados en DEV desde la consola, que el repositorio no
+tiene, contradecían el código o el documento (la evidencia, en `contenido/evidencia-v11.md`).
+Cada corrección se aplica solo al tema que sigue diciendo **exactamente** lo auditado: lo que
+un administrador ya editó no se toca. Si hay algo que corregir en producción, se publica como
+V11 (versión nueva, la anterior retirada y revertible); la candidata recibe lo mismo.
+
 `contenido/base-de-conocimiento.json` es la misma base en el formato de importación del
-panel (60 temas y 123 casos): sirve para restaurarla en otro entorno sin tocar la base de
+panel (60 temas y 126 casos): sirve para restaurarla en otro entorno sin tocar la base de
 datos. `BaseDeConocimientoEnProduccionIT` comprueba que cada caso activo lo responde su
 tema, que ningún tema enlaza a una vista de administración y que una pregunta en inglés se
 responde en inglés.
@@ -523,10 +532,10 @@ en la píldora del kit en modo discreto, y «Tus solicitudes» se actualiza sola
 (`SeguridadDelHistorialIT`: el ataque de la auditoría, límite de frecuencia, mensaje
 bloqueado, restricción de espacios de claves; `BaseDeConocimientoFielAlJuegoIT`: V10 → V11
 con producción, candidata y respuestas guardadas; `BaseDeConocimientoEnProduccionIT`: los
-139 casos de evaluación contra la base publicada; `GestionDeLaBaseDeConocimientoIT` y
+142 casos de evaluación contra la base publicada; `GestionDeLaBaseDeConocimientoIT` y
 `TransicionesDeVersionIT`: V12 y la gestión de la base de 1.6.0; `AprendizajeYAnaliticasIT`:
 V13, preguntas sin respuesta y fórmulas del tablero de 1.7.0;
 `SoporteDesdeLaConversacionYAyudaIT`: la solicitud desde la conversación y el centro de ayuda
 de 1.8.0; `CanalDelChatbotIT` y `RespuestasFrecuentesIT`: el canal en tiempo real y la caché
 de 7.4.9; `CatalogoEnVivoIT`: el catálogo de 1.10.0; `RedactarLaPuntuacionDeLosSecretosIT` y
-`ReglasDelJuegoIT`: V14 y V15 de 1.11.0). JaCoCo ≥ 80 %.
+`ReglasDelJuegoIT` y `BaseDeConocimientoAlDiaIT`: V14, V15 y V16 de 1.11.0). JaCoCo ≥ 80 %.
