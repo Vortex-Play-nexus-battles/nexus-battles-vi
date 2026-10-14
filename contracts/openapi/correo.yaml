@@ -57,7 +57,14 @@ info:
     correo es un servicio entre servicios y nunca lo llama un navegador. Por
     eso el borde tampoco expone `/api/v1/correos`. Es version menor porque
     rutas y cuerpos no cambian.
-  version: 1.5.0
+
+    1.6.0 (SA-4, aditivo): `CorreoSancionRequest` acepta `causal` (la causal
+    de 7.3.2, ya escrita como la dice el documento oficial) y `politica` (la
+    politica violada), las dos opcionales: 7.3.7 pide que cada notificacion de
+    sancion incluya el «motivo especifico» y las «referencias a las politicas
+    violadas». El correo las muestra junto al motivo cuando llegan; sin ellas
+    sale como antes.
+  version: 1.6.0
 servers:
   - url: http://localhost:8082/api/v1
     description: Entorno local de desarrollo
@@ -703,7 +710,17 @@ components:
           enum: [ADVERTENCIA, SUSPENSION, BANEO, APELACION_RESUELTA]
         motivo:
           type: string
-          description: Causal documentada (7.3.2 «Causales de sancion»).
+          description: El hecho concreto que motivo la sancion.
+        causal:
+          type: [string, 'null']
+          maxLength: 120
+          description: >-
+            1.6.0 — la causal de 7.3.2 («Causales de sancion») con el texto del
+            documento oficial, p. ej. «Acoso a otros jugadores». Opcional.
+        politica:
+          type: [string, 'null']
+          maxLength: 200
+          description: 1.6.0 — la politica violada (7.3.7). Opcional.
         hasta:
           type: [string, 'null']
           format: date-time

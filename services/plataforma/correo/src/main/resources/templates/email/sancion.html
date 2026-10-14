@@ -8,7 +8,10 @@
         Aviso de sancion (7.3.2 y 7.3.7 del documento del curso). El 7.3.7 fija
         lo que lleva cada aviso: la accion tomada, el motivo, el proceso de
         apelacion si aplica y la fecha de vigencia si aplica. Los textos de
-        cada tipo repiten lo que el 7.3.2 dice de el, sin anadir politicas.
+        cada tipo repiten lo que el 7.3.2 dice de el. Desde correo.yaml 1.6.0
+        (SA-4) van tambien la causal de 7.3.2 y la politica violada («referencias
+        a las politicas violadas» de 7.3.7) cuando la sancion las trae; sin
+        ellas, el correo sale como antes.
         Comentario de Thymeleaf: no llega al correo.
       */-->
       <tr layout:fragment="contenido">
@@ -45,7 +48,9 @@
             <tbody>
               <tr>
                 <td style="font-family:Arial, Helvetica, sans-serif;font-size:14px;line-height:22px;color:#8A4A00;padding:12px 16px;">
+                  <th:block th:if="${causal != null}">Causal: <strong th:text="${causal}">—</strong><br /></th:block>
                   Motivo: <strong th:text="${motivo}">—</strong>
+                  <th:block th:if="${politica != null}"><br />Política: <strong th:text="${politica}">—</strong></th:block>
                   <th:block th:if="${hasta != null}"><br />Fin de la suspensión: <strong th:text="${hasta}">—</strong></th:block>
                   <th:block th:if="${resultadoApelacion != null}"><br />Resultado:
                     <th:block th:switch="${resultadoApelacion}">

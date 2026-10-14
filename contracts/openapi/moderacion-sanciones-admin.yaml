@@ -65,7 +65,31 @@ info:
     por jerarquia: 403 `jerarquia-insuficiente` (`ProblemDetail.motivo`
     `JERARQUIA_INSUFICIENTE`). Para sancionar a una cuenta administrativa, un
     Super Administrador le cambia el rol primero (y ese cambio queda auditado).
-  version: 1.3.0
+
+    1.4.0 (SA-4, aditivo — causales, listado, plazos). (a) **Causal**: §7.3.2
+    «Causales de sancion» enumera ocho; cada sancion puede llevar la suya
+    (`causal`, enumerado `Causal`), ademas del `motivo` con el hecho concreto.
+    Es opcional en la API para no romper a quien ya emite (la consola la
+    exige) y viaja al aviso y al correo con el texto del documento oficial
+    (§7.3.7). Una causal fuera del enumerado es 400. (b) **Listado global**
+    `GET /sanciones` con filtros por tipo, causal, estado (vigente, cumplida o
+    revertida), cuenta y periodo de emision, paginado de 16 en 16 y de la mas
+    reciente a la mas antigua; solo quien modera. (c) **Plazo de decision**:
+    cada `Apelacion` trae `decisionAntesDe`, el final del decimoquinto dia
+    habil desde que se presento (§7.3.2 «notificacion de la decision final en
+    un plazo de 15 dias habiles»; de lunes a viernes en la hora de Colombia,
+    sin los festivos que se configuren), y `vencida`, si sigue pendiente fuera
+    de ese plazo. Al apelar, el sancionado recibe en la app el aviso
+    `APELACION_RECIBIDA` con esa fecha. (d) `GET /apelaciones?estado=`
+    PENDIENTES (por omision), RESUELTAS o TODAS. (e) **El baneo solo se
+    revierte por apelacion**: §7.3.2 lo define como «inhabilitacion
+    permanente» y RF-USR-007 fija la apelacion como la via para revertirlo.
+    `POST /sanciones/{id}/levantamiento` sobre un baneo responde 409
+    `baneo-solo-por-apelacion`, tambien a un Super Administrador; ms-identidad
+    ya se negaba a reactivar una cuenta baneada. Menor y no mayor porque
+    ninguna operacion, parametro obligatorio ni propiedad de respuesta
+    desaparece: el 409 es un motivo nuevo de un error ya documentado.
+  version: 1.4.0
 servers:
   - url: http://localhost:8086/api/v1
     description: Entorno local de desarrollo
@@ -86,11 +110,11 @@ paths:
               $ref: '#/components/schemas/EmitirSancionRequest'
             examples:
               advertencia:
-                value: { usuarioId: 11111111-1111-1111-1111-111111111111, tipo: ADVERTENCIA, motivo: Lenguaje ofensivo en el chat, politica: Normas de convivencia }
+                value: { usuarioId: 11111111-1111-1111-1111-111111111111, tipo: ADVERTENCIA, causal: LENGUAJE_OFENSIVO, motivo: Lenguaje ofensivo en el chat, politica: Normas de convivencia }
               suspension:
-                value: { usuarioId: 11111111-1111-1111-1111-111111111111, tipo: SUSPENSION, motivo: Reincidencia, duracionHoras: 48 }
+                value: { usuarioId: 11111111-1111-1111-1111-111111111111, tipo: SUSPENSION, causal: ACOSO, motivo: Reincidencia, duracionHoras: 48 }
               baneo:
-                value: { usuarioId: 11111111-1111-1111-1111-111111111111, tipo: BANEO, motivo: Fraude comprobado en subastas, confirmacion: true }
+                value: { usuarioId: 11111111-1111-1111-1111-111111111111, tipo: BANEO, causal: FRAUDE, motivo: Fraude comprobado en subastas, confirmacion: true }
       responses:
         '201':
           description: Sancion emitida y anotada en el historial
@@ -99,7 +123,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Sancion'
         '400':
-          description: Sin motivo, duracion fuera de rango, baneo sin confirmacion, autosancion (`solicitud-invalida`)
+          description: >-
+            Sin motivo, duracion fuera de rango, baneo sin confirmacion,
+            autosancion (`solicitud-invalida`), o 1.4.0, una `causal` que no
+            es de las ocho de §7.3.2.
           content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
         '401':
           description: Sin token o token invalido
@@ -117,6 +144,70 @@ paths:
           content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
         '503':
           $ref: '#/components/responses/IdentidadNoDisponible'
+    get:
+      summary: Listado global de sanciones con filtros (1.4.0)
+      operationId: listarSanciones
+      description: |
+        Todas las sanciones, de la mas reciente a la mas antigua, con los
+        filtros combinados con Y. Solo quien modera (moderador, administrador
+        o super administrador); un jugador recibe 403. `estado` aplica la misma
+        regla que `vigente`: VIGENTE es «no revertida y, si es suspension, no
+        vencida»; CUMPLIDA, una suspension que ya termino; REVERTIDA, la
+        levantada o revertida en apelacion.
+      parameters:
+        - name: tipo
+          in: query
+          required: false
+          schema: { type: string, enum: [ADVERTENCIA, SUSPENSION, BANEO] }
+        - name: causal
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/Causal' }
+        - name: estado
+          in: query
+          required: false
+          schema: { type: string, enum: [VIGENTE, CUMPLIDA, REVERTIDA] }
+        - name: usuarioId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Claim `uid` de la cuenta sancionada.
+        - name: desde
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Emitidas desde este instante (incluido), ISO-8601 con zona.
+        - name: hasta
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: Emitidas antes de este instante (excluido); posterior a `desde`.
+        - name: pagina
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: tamano
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 16 }
+          description: Dieciseis por pagina por omision (RNF-USA-001).
+      responses:
+        '200':
+          description: Una pagina del listado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginaDeSanciones' }
+        '400':
+          description: >-
+            Un filtro fuera de su enumerado, una fecha que no es ISO-8601,
+            `hasta` no posterior a `desde`, o una pagina o un tamano fuera de
+            rango (`solicitud-invalida`).
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '401':
+          description: Sin token o token invalido
+        '403':
+          description: No moderas (`permiso-insuficiente`).
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
 
   /sanciones/usuarios/{usuarioId}:
     get:
@@ -168,7 +259,10 @@ paths:
                 argumento: { type: string, maxLength: 2000 }
       responses:
         '201':
-          description: Apelacion abierta, asignada al panel de revision
+          description: >-
+            Apelacion abierta, asignada al panel de revision. 1.4.0: con su
+            `decisionAntesDe`, y el sancionado recibe en la app el aviso
+            `APELACION_RECIBIDA` con esa fecha.
           content: { application/json: { schema: { $ref: '#/components/schemas/Apelacion' } } }
         '400':
           description: Sin argumento (`solicitud-invalida`)
@@ -190,6 +284,11 @@ paths:
         una sancion ya no vigente (revertida, o suspension vencida) responde
         409. Una apelacion abierta sobre la sancion no se toca: la resuelve el
         panel.
+
+        1.4.0: un baneo no se levanta desde aqui, ni por un Super
+        Administrador (§7.3.2, «inhabilitacion permanente»): solo lo revierte
+        una apelacion favorable del panel. Responde 409
+        `baneo-solo-por-apelacion` y nada cambia.
       security:
         - tokenDeUsuario: []
       parameters:
@@ -219,7 +318,9 @@ paths:
           description: No existe (`no-encontrada`).
           content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
         '409':
-          description: La sancion ya no esta vigente (`sancion-no-vigente`).
+          description: >-
+            La sancion ya no esta vigente (`sancion-no-vigente`), o 1.4.0, es
+            un baneo: solo lo revierte una apelacion (`baneo-solo-por-apelacion`).
           content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
         '503':
           $ref: '#/components/responses/IdentidadNoDisponible'
@@ -233,15 +334,27 @@ paths:
           in: query
           required: false
           schema: { type: boolean, default: false }
-          description: "`true`: las del propio usuario, con su estado. `false` (por omision): las pendientes, solo para quien modera."
+          description: "`true`: las del propio usuario, con su estado. `false` (por omision): el panel, solo para quien modera."
+        - name: estado
+          in: query
+          required: false
+          schema: { type: string, enum: [PENDIENTES, RESUELTAS, TODAS], default: PENDIENTES }
+          description: >-
+            1.4.0, solo el panel (`mias=false`): las pendientes (por omision),
+            las resueltas o todas. Un valor fuera del enumerado es 400.
       responses:
         '200':
-          description: Apelaciones pendientes de resolver, de la mas antigua a la mas reciente.
+          description: >-
+            Las pendientes, de la mas antigua a la mas reciente (el orden en
+            que vencen); las resueltas, de la ultima decision a la primera;
+            todas, de la mas reciente a la mas antigua.
           content:
             application/json:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Apelacion' }
+        '400':
+          description: 1.4.0 — un `estado` fuera de su enumerado.
         '403':
           description: Un jugador pidiendo el panel
 
@@ -321,6 +434,25 @@ components:
       schema: { type: string, format: uuid }
 
   schemas:
+    Causal:
+      type: string
+      description: >-
+        1.4.0 — las ocho causales de §7.3.2, en su orden: uso de lenguaje
+        ofensivo o abusivo en comentarios o chat; acoso a otros jugadores;
+        intentos de fraude o manipulacion del sistema; uso de software no
+        autorizado o trampas; suplantacion de identidad; violacion de
+        politicas de privacidad; incumplimiento de terminos y condiciones del
+        servicio; terminacion de la relacion legal entre las partes.
+      enum:
+        - LENGUAJE_OFENSIVO
+        - ACOSO
+        - FRAUDE
+        - SOFTWARE_NO_AUTORIZADO
+        - SUPLANTACION_DE_IDENTIDAD
+        - VIOLACION_DE_PRIVACIDAD
+        - INCUMPLIMIENTO_DE_TERMINOS
+        - TERMINACION_DE_RELACION_LEGAL
+
     EmitirSancionRequest:
       type: object
       required: [usuarioId, tipo, motivo]
@@ -329,7 +461,10 @@ components:
         tipo:
           type: string
           enum: [ADVERTENCIA, SUSPENSION, BANEO]
-        motivo: { type: string, maxLength: 1000, description: Causal especifica; obligatorio siempre }
+        causal:
+          $ref: '#/components/schemas/Causal'
+          description: 1.4.0 — por cual causal de §7.3.2 se sanciona. Opcional en la API; la consola la exige.
+        motivo: { type: string, maxLength: 1000, description: El hecho concreto; obligatorio siempre }
         politica: { type: string, maxLength: 200, description: Politica violada, si aplica }
         comentarioId: { type: string, maxLength: 64, description: Comentario que origino la sancion (HU-COM-006/008), si aplica }
         duracionHoras:
@@ -348,6 +483,11 @@ components:
         id: { type: string, format: uuid }
         usuarioId: { type: string, format: uuid }
         tipo: { type: string, enum: [ADVERTENCIA, SUSPENSION, BANEO] }
+        causal:
+          description: 1.4.0 — la causal de §7.3.2; `null` en las emitidas sin ella (las anteriores a 1.4.0).
+          oneOf:
+            - $ref: '#/components/schemas/Causal'
+            - type: 'null'
         motivo: { type: string }
         politica: { type: [string, 'null'] }
         comentarioId: { type: [string, 'null'] }
@@ -363,7 +503,7 @@ components:
 
     Apelacion:
       type: object
-      required: [id, sancionId, usuarioId, argumento, creadaEn, estado]
+      required: [id, sancionId, usuarioId, argumento, creadaEn, estado, decisionAntesDe, vencida]
       properties:
         id: { type: string, format: uuid }
         sancionId: { type: string, format: uuid }
@@ -375,6 +515,30 @@ components:
         resueltaPor: { type: [string, 'null'], format: uuid }
         resueltaEn: { type: [string, 'null'], format: date-time }
         nuevaVigencia: { type: [string, 'null'], format: date-time }
+        decisionAntesDe:
+          type: string
+          format: date-time
+          description: >-
+            1.4.0 — el ultimo instante para notificar la decision: el final
+            (23:59:59.999, hora de Colombia) del decimoquinto dia habil
+            siguiente a `creadaEn` (§7.3.2). Dias habiles: de lunes a viernes,
+            sin los festivos configurados.
+        vencida:
+          type: boolean
+          description: 1.4.0 — sigue PENDIENTE y ya paso `decisionAntesDe`. Una resuelta nunca va vencida.
+
+    PaginaDeSanciones:
+      type: object
+      description: 1.4.0 — una pagina del listado global.
+      required: [contenido, pagina, tamano, total, totalPaginas]
+      properties:
+        contenido:
+          type: array
+          items: { $ref: '#/components/schemas/Sancion' }
+        pagina: { type: integer, minimum: 0 }
+        tamano: { type: integer, minimum: 1 }
+        total: { type: integer, minimum: 0, description: Sanciones que cumplen los filtros. }
+        totalPaginas: { type: integer, minimum: 0 }
 
     ProblemDetail:
       type: object
@@ -387,4 +551,4 @@ components:
         detail: { type: string }
         motivo:
           type: string
-          enum: [PERMISO_INSUFICIENTE, SOLICITUD_INVALIDA, USUARIO_BANEADO, NO_ENCONTRADA, APELACION_NO_PROCEDE, APELACION_RESUELTA, SANCION_NO_VIGENTE]
+          enum: [PERMISO_INSUFICIENTE, SOLICITUD_INVALIDA, USUARIO_BANEADO, NO_ENCONTRADA, APELACION_NO_PROCEDE, APELACION_RESUELTA, SANCION_NO_VIGENTE, JERARQUIA_INSUFICIENTE, IDENTIDAD_NO_DISPONIBLE, BANEO_SOLO_POR_APELACION]

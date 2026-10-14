@@ -26,7 +26,8 @@ import java.util.regex.Pattern;
 
 /**
  * Cliente de moderacion-sanciones para las sanciones del panel (B2,
- * moderacion-sanciones-admin.yaml 1.1.0 y -consulta.yaml 1.4.0).
+ * moderacion-sanciones-admin.yaml 1.1.0 —1.4.0 desde SA-4, con la causal— y
+ * -consulta.yaml 1.4.0).
  *
  * <p><b>Con el token de quien actua.</b> Emitir y levantar una sancion viajan
  * con el {@code Authorization} del administrador que pulso el boton: asi
@@ -76,13 +77,29 @@ public class ModeracionSancionesClient {
     public record SancionActiva(boolean sancionActiva, String tipo, UUID sancionId, OffsetDateTime vigenteHasta) {
     }
 
-    /** {@code POST /sanciones} con el token de quien actua. */
+    /** {@code POST /sanciones} con el token de quien actua, sin causal ni politica. */
     public Sancion emitir(String autorizacion, UUID usuarioId, String tipo, String motivo,
                           Long duracionHoras, Boolean confirmacion) {
+        return emitir(autorizacion, usuarioId, tipo, null, motivo, null, duracionHoras, confirmacion);
+    }
+
+    /**
+     * {@code POST /sanciones} con el token de quien actua. SA-4
+     * (moderacion-sanciones-admin.yaml 1.4.0): con la {@code causal} de 7.3.2
+     * y la {@code politica} violada cuando las hay; sin ellas no se envian.
+     */
+    public Sancion emitir(String autorizacion, UUID usuarioId, String tipo, String causal, String motivo,
+                          String politica, Long duracionHoras, Boolean confirmacion) {
         Map<String, Object> cuerpo = new LinkedHashMap<>();
         cuerpo.put("usuarioId", usuarioId);
         cuerpo.put("tipo", tipo);
+        if (causal != null) {
+            cuerpo.put("causal", causal);
+        }
         cuerpo.put("motivo", motivo);
+        if (politica != null) {
+            cuerpo.put("politica", politica);
+        }
         if (duracionHoras != null) {
             cuerpo.put("duracionHoras", duracionHoras);
         }

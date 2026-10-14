@@ -364,6 +364,9 @@ services:
       # HU-ADM-001 (CA-04): rango de la suspension y plazo de apelacion desde
       # admin-parametros, con las variables de entorno como respaldo.
       PARAMETROS_URL: ${PARAMETROS_URL:-http://srv-admin-parametros:8088/api/v1}
+      # SA-4 (7.3.2): festivos que no cuentan en los 15 dias habiles del panel
+      # (fechas ISO separadas por coma). Vacia = de lunes a viernes.
+      SANCIONES_FESTIVOS: ${SANCIONES_FESTIVOS:-}
       # 7.3.2 (B2, sanciones unificadas): la sancion se proyecta sobre la
       # cuenta (PUT /api/v1/internal/usuarios/{uid}/estado-sancion, lo que
       # niega el login) y se avisa al correo (POST /api/v1/correos/sancion, con

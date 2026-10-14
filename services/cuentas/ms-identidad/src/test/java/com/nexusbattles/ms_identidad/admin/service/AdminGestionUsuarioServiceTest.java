@@ -116,12 +116,14 @@ class AdminGestionUsuarioServiceTest {
     @DisplayName("suspender: POST /sanciones con el token de quien actua, horas hacia arriba y la proyeccion de su respuesta")
     void suspenderDelega() {
         OffsetDateTime fin = OffsetDateTime.parse("2026-09-26T13:00:00Z");
-        when(moderacion.emitir(eq(ADMIN), eq(UID), eq("SUSPENSION"), anyString(), eq(25L), isNull()))
+        when(moderacion.emitir(eq(ADMIN), eq(UID), eq("SUSPENSION"), isNull(), anyString(), isNull(), eq(25L),
+                isNull()))
                 .thenReturn(new Sancion(SANCION, "SUSPENSION", fin, true));
 
         service.suspenderCuenta(USUARIO_ID, HOY.plusHours(24).plusMinutes(30), null, ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN);
 
-        verify(moderacion).emitir(ADMIN, UID, "SUSPENSION", AdminGestionUsuarioService.MOTIVO_SUSPENSION, 25L, null);
+        verify(moderacion).emitir(ADMIN, UID, "SUSPENSION", null, AdminGestionUsuarioService.MOTIVO_SUSPENSION, null,
+                25L, null);
         verify(proyecciones).aplicar(cuenta, EstadoCuenta.SUSPENDIDO, fin, SANCION);
         verify(auditoriaClient).registrar(eq("SUSPENSION"), eq(ADMINISTRADOR_ID), eq(UID.toString()), eq("ACTIVO"),
                 anyString(), eq("Suspensión de cuenta (moderacion-sanciones)"), eq(IP_ORIGEN));
@@ -131,14 +133,30 @@ class AdminGestionUsuarioServiceTest {
     @Test
     @DisplayName("suspender: el motivo del panel viaja tal cual; sin fin en la respuesta se usa el pedido")
     void suspenderConMotivo() {
-        when(moderacion.emitir(any(), any(), any(), any(), any(), any()))
+        when(moderacion.emitir(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new Sancion(SANCION, "SUSPENSION", null, true));
 
         service.suspenderCuenta(USUARIO_ID, HOY.plusMinutes(10), "  Spam en el chat  ", ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN);
 
-        verify(moderacion).emitir(ADMIN, UID, "SUSPENSION", "Spam en el chat", 1L, null);
+        verify(moderacion).emitir(ADMIN, UID, "SUSPENSION", null, "Spam en el chat", null, 1L, null);
         verify(proyecciones).aplicar(cuenta, EstadoCuenta.SUSPENDIDO,
                 OffsetDateTime.parse("2026-09-25T12:10:00Z"), SANCION);
+    }
+
+    @Test
+    @DisplayName("SA-4: la causal de 7.3.2 y la politica viajan a moderacion; en blanco no se envian")
+    void conCausalYPolitica() {
+        when(moderacion.emitir(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new Sancion(SANCION, "SUSPENSION", null, true));
+
+        service.suspenderCuenta(USUARIO_ID, HOY.plusHours(2), "Insultos en la sala 12", "ACOSO",
+                "  Normas de convivencia ", ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN);
+        verify(moderacion).emitir(ADMIN, UID, "SUSPENSION", "ACOSO", "Insultos en la sala 12",
+                "Normas de convivencia", 2L, null);
+
+        service.banearCuenta(USUARIO_ID, "Duplico creditos", "FRAUDE", " ", ADMIN, ADMINISTRADOR_ID, ROL_ACTOR,
+                IP_ORIGEN);
+        verify(moderacion).emitir(ADMIN, UID, "BANEO", "FRAUDE", "Duplico creditos", null, null, Boolean.TRUE);
     }
 
     @Test
@@ -158,7 +176,7 @@ class AdminGestionUsuarioServiceTest {
     @Test
     @DisplayName("moderacion caida: la excepcion sube (503) y aqui no se aplica nada")
     void moderacionCaida() {
-        when(moderacion.emitir(any(), any(), any(), any(), any(), any()))
+        when(moderacion.emitir(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenThrow(new ModeracionNoDisponibleException("sin respuesta"));
 
         assertThatThrownBy(() -> service.banearCuenta(USUARIO_ID, null, ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN))
@@ -169,7 +187,8 @@ class AdminGestionUsuarioServiceTest {
     @Test
     @DisplayName("banear: tipo BANEO con confirmacion; si la auditoria falla despues, la sancion no se deshace")
     void banearDelega() {
-        when(moderacion.emitir(ADMIN, UID, "BANEO", AdminGestionUsuarioService.MOTIVO_BANEO, null, Boolean.TRUE))
+        when(moderacion.emitir(ADMIN, UID, "BANEO", null, AdminGestionUsuarioService.MOTIVO_BANEO, null, null,
+                Boolean.TRUE))
                 .thenReturn(new Sancion(SANCION, "BANEO", null, true));
         doThrow(new IllegalStateException("auditoria caida")).when(auditoriaClient)
                 .registrar(any(), any(), any(), any(), any(), any(), any());
@@ -328,7 +347,7 @@ class AdminGestionUsuarioServiceTest {
         @Test
         @DisplayName("el administrador si suspende a un moderador; el super administrador a un administrador")
         void sobreUnRolInferiorSiSePuede() {
-            when(moderacion.emitir(any(), any(), any(), any(), any(), any()))
+            when(moderacion.emitir(any(), any(), any(), any(), any(), any(), any(), any()))
                     .thenReturn(new Sancion(SANCION, "SUSPENSION", null, true));
 
             conRol("MODERADOR");
@@ -339,7 +358,8 @@ class AdminGestionUsuarioServiceTest {
                     "SUPER_ADMINISTRADOR", IP_ORIGEN);
 
             verify(moderacion, org.mockito.Mockito.times(2))
-                    .emitir(eq(ADMIN), eq(UID), eq("SUSPENSION"), eq("Abuso de herramientas"), any(), isNull());
+                    .emitir(eq(ADMIN), eq(UID), eq("SUSPENSION"), isNull(), eq("Abuso de herramientas"), isNull(),
+                            any(), isNull());
         }
 
         @Test

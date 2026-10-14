@@ -26,6 +26,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -53,6 +54,11 @@ class SancionesControllerTest {
         @Bean
         java.time.Clock relojDePrueba() {
             return java.time.Clock.fixed(AHORA.toInstant(), ZoneOffset.UTC);
+        }
+
+        @Bean
+        PlazoDeDecision plazoDePrueba() {
+            return PlazoDeDecision.deLunesAViernes();
         }
     }
 
@@ -226,7 +232,7 @@ class SancionesControllerTest {
     @DisplayName("el panel resuelve con decision y motivo; las pendientes se listan")
     void panel() throws Exception {
         Apelacion a = new Apelacion(UUID.randomUUID(), UUID.randomUUID(), JUGADOR, "x", AHORA);
-        when(servicio.apelacionesPendientes(any())).thenReturn(List.of(a));
+        when(servicio.apelacionesDelPanel(any(), isNull())).thenReturn(List.of(a));
         when(servicio.resolver(any(), eq(a.id()), eq(Apelacion.Estado.REVERTIDA), eq("Tiene razon"), any()))
                 .thenAnswer(inv -> {
                     a.resolver(Apelacion.Estado.REVERTIDA, "Tiene razon", MODERADORA, AHORA, null);
@@ -236,7 +242,9 @@ class SancionesControllerTest {
 
         mvc.perform(get("/api/v1/apelaciones").header(HttpHeaders.AUTHORIZATION, token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].estado").value("PENDIENTE"));
+                .andExpect(jsonPath("$[0].estado").value("PENDIENTE"))
+                .andExpect(jsonPath("$[0].decisionAntesDe").value("2026-10-13T04:59:59.999Z"))
+                .andExpect(jsonPath("$[0].vencida").value(false));
         mvc.perform(post("/api/v1/apelaciones/{id}/resolucion", a.id()).header(HttpHeaders.AUTHORIZATION, token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"decision\":\"REVERTIDA\",\"motivo\":\"Tiene razon\"}"))
@@ -378,5 +386,126 @@ class SancionesControllerTest {
                                 "MODERADOR"))
                         .contentType(MediaType.APPLICATION_JSON).content(cuerpo))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("1.4.0: emitir con causal; la causal vuelve en la respuesta")
+    void emitirConCausal() throws Exception {
+        Sancion conCausal = new Sancion(UUID.randomUUID(), JUGADOR, Sancion.Tipo.SUSPENSION, Causal.ACOSO,
+                "Insultos repetidos a otro jugador", "Normas de convivencia", null, MODERADORA, "MODERADOR", AHORA,
+                AHORA.plusHours(24));
+        when(servicio.emitir(any(), any())).thenReturn(conCausal);
+
+        mvc.perform(post("/api/v1/sanciones")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("mod_ana", MODERADORA, "MODERADOR"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"usuarioId\":\"" + JUGADOR + "\",\"tipo\":\"SUSPENSION\",\"causal\":\"ACOSO\","
+                                + "\"motivo\":\"Insultos repetidos a otro jugador\",\"politica\":\"Normas de convivencia\","
+                                + "\"duracionHoras\":24}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.causal").value("ACOSO"))
+                .andExpect(jsonPath("$.politica").value("Normas de convivencia"));
+
+        ArgumentCaptor<SancionesService.SolicitudDeSancion> solicitud =
+                ArgumentCaptor.forClass(SancionesService.SolicitudDeSancion.class);
+        org.mockito.Mockito.verify(servicio).emitir(any(), solicitud.capture());
+        assertThat(solicitud.getValue().causal()).isEqualTo(Causal.ACOSO);
+        assertThat(solicitud.getValue().duracionHoras()).isEqualTo(24L);
+    }
+
+    @Test
+    @DisplayName("1.4.0: una causal que no es de las ocho de 7.3.2 es 400 y no llega al servicio")
+    void causalDesconocida() throws Exception {
+        mvc.perform(post("/api/v1/sanciones")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("mod_ana", MODERADORA, "MODERADOR"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"usuarioId\":\"" + JUGADOR + "\",\"tipo\":\"ADVERTENCIA\",\"causal\":\"OTRA\","
+                                + "\"motivo\":\"x\"}"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(servicio);
+    }
+
+    @Test
+    @DisplayName("1.4.0: el listado global pasa los filtros al servicio y devuelve la pagina con su total")
+    void listadoGlobal() throws Exception {
+        Sancion s = advertencia();
+        when(servicio.buscar(any(), any(), eq(1), eq(16)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(s),
+                        org.springframework.data.domain.PageRequest.of(1, 16), 17));
+
+        mvc.perform(get("/api/v1/sanciones")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("mod_ana", MODERADORA, "MODERADOR"))
+                        .param("tipo", "ADVERTENCIA").param("causal", "LENGUAJE_OFENSIVO").param("estado", "VIGENTE")
+                        .param("usuarioId", JUGADOR.toString())
+                        .param("desde", "2026-09-01T00:00:00Z").param("hasta", "2026-10-01T00:00:00-05:00")
+                        .param("pagina", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contenido[0].id").value(s.id().toString()))
+                .andExpect(jsonPath("$.pagina").value(1))
+                .andExpect(jsonPath("$.tamano").value(16))
+                .andExpect(jsonPath("$.total").value(17))
+                .andExpect(jsonPath("$.totalPaginas").value(2));
+
+        ArgumentCaptor<FiltroDeSanciones> filtro = ArgumentCaptor.forClass(FiltroDeSanciones.class);
+        ArgumentCaptor<Actor> actor = ArgumentCaptor.forClass(Actor.class);
+        org.mockito.Mockito.verify(servicio).buscar(actor.capture(), filtro.capture(), eq(1), eq(16));
+        assertThat(actor.getValue()).isEqualTo(new Actor(MODERADORA, "MODERADOR"));
+        assertThat(filtro.getValue()).isEqualTo(new FiltroDeSanciones(Sancion.Tipo.ADVERTENCIA,
+                Causal.LENGUAJE_OFENSIVO, FiltroDeSanciones.Estado.VIGENTE, JUGADOR,
+                OffsetDateTime.of(2026, 9, 1, 0, 0, 0, 0, ZoneOffset.UTC),
+                OffsetDateTime.of(2026, 10, 1, 0, 0, 0, 0, ZoneOffset.ofHours(-5))));
+    }
+
+    @Test
+    @DisplayName("1.4.0: un filtro fuera de su enumerado o una fecha que no es ISO es 400; un jugador, 403")
+    void listadoRechazado() throws Exception {
+        String moderadora = "Bearer " + emisor.tokenDeUsuario("mod_ana", MODERADORA, "MODERADOR");
+        mvc.perform(get("/api/v1/sanciones").header(HttpHeaders.AUTHORIZATION, moderadora).param("tipo", "MULTA"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/v1/sanciones").header(HttpHeaders.AUTHORIZATION, moderadora).param("desde", "ayer"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(servicio);
+
+        when(servicio.buscar(any(), any(), eq(0), eq(16))).thenThrow(new SancionRechazada(
+                SancionRechazada.Motivo.PERMISO_INSUFICIENTE, "el listado de sanciones es de moderacion"));
+        mvc.perform(get("/api/v1/sanciones")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeJugador("lyra", JUGADOR)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.motivo").value("PERMISO_INSUFICIENTE"));
+    }
+
+    @Test
+    @DisplayName("7.3.2: levantar un baneo es 409 baneo-solo-por-apelacion, aun siendo Super Administrador")
+    void levantarUnBaneo() throws Exception {
+        when(servicio.levantar(any(), any(), any())).thenThrow(new SancionRechazada(
+                SancionRechazada.Motivo.BANEO_SOLO_POR_APELACION,
+                "el baneo es definitivo: solo lo revierte una apelacion favorable del panel"));
+
+        mvc.perform(post("/api/v1/sanciones/{id}/levantamiento", UUID.randomUUID())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("super", MODERADORA,
+                                "SUPER_ADMINISTRADOR"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"motivo\":\"Error de moderacion\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/baneo-solo-por-apelacion"))
+                .andExpect(jsonPath("$.motivo").value("BANEO_SOLO_POR_APELACION"));
+    }
+
+    @Test
+    @DisplayName("1.4.0: ?estado=RESUELTAS llega al servicio; una pendiente fuera de plazo sale vencida")
+    void panelPorEstado() throws Exception {
+        Apelacion atrasada = new Apelacion(UUID.randomUUID(), UUID.randomUUID(), JUGADOR, "x", AHORA.minusDays(40));
+        Apelacion resuelta = new Apelacion(UUID.randomUUID(), UUID.randomUUID(), JUGADOR, "y", AHORA.minusDays(40));
+        resuelta.resolver(Apelacion.Estado.MANTENIDA, "Se mantiene", MODERADORA, AHORA.minusDays(1), null);
+        when(servicio.apelacionesDelPanel(any(), eq(SancionesService.EstadoDeLaLista.TODAS)))
+                .thenReturn(List.of(atrasada, resuelta));
+        String token = "Bearer " + emisor.tokenDeUsuario("admin", MODERADORA, "ADMINISTRADOR");
+
+        mvc.perform(get("/api/v1/apelaciones").param("estado", "TODAS").header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].vencida").value(true))
+                .andExpect(jsonPath("$[1].estado").value("MANTENIDA"))
+                .andExpect(jsonPath("$[1].vencida").value(false));
+        mvc.perform(get("/api/v1/apelaciones").param("estado", "ARCHIVADAS").header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isBadRequest());
     }
 }

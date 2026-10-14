@@ -75,8 +75,8 @@ public class AdminGestionUsuarioController {
         try {
             String administradorId = (String) request.getAttribute("usuarioActual");
             adminGestionUsuarioService.suspenderCuenta(usuarioId, datos.getSuspendidoHasta(), datos.getMotivo(),
-                request.getHeader(HttpHeaders.AUTHORIZATION), administradorId, rolActual(request),
-                obtenerIpReal(request));
+                datos.getCausal(), datos.getPolitica(), request.getHeader(HttpHeaders.AUTHORIZATION), administradorId,
+                rolActual(request), obtenerIpReal(request));
             return ResponseEntity.noContent().build();
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
@@ -87,15 +87,20 @@ public class AdminGestionUsuarioController {
         }
     }
 
-    /** El cuerpo es opcional (B2): {@code {"motivo": "..."}} para dejar la causal en el historial. */
+    /**
+     * El cuerpo es opcional (B2): {@code {"motivo": "..."}} para dejar el
+     * motivo en el historial; SA-4 suma {@code causal} (una de las ocho de
+     * 7.3.2) y {@code politica}, validadas aqui.
+     */
     @PutMapping("/{usuarioId}/banear")
     @RequirePermission(Action.BANEAR_DEFINITIVAMENTE)
     public ResponseEntity<?> banear(@PathVariable Long usuarioId,
-                                    @RequestBody(required = false) BanearCuentaRequest datos,
+                                    @Valid @RequestBody(required = false) BanearCuentaRequest datos,
                                     HttpServletRequest request) {
         try {
             String administradorId = (String) request.getAttribute("usuarioActual");
             adminGestionUsuarioService.banearCuenta(usuarioId, datos == null ? null : datos.motivo(),
+                datos == null ? null : datos.causal(), datos == null ? null : datos.politica(),
                 request.getHeader(HttpHeaders.AUTHORIZATION), administradorId, rolActual(request),
                 obtenerIpReal(request));
             return ResponseEntity.noContent().build();
