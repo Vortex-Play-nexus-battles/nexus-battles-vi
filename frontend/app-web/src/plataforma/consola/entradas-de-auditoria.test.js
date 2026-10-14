@@ -84,6 +84,26 @@ describe('sobre qué', () => {
     });
   });
 
+  test('SA-18: lo del catálogo, con el nombre que tenía; sin nombre, qué era', () => {
+    expect(sobreDe('producto:p-1', titulares, 'Espada solar')).toEqual({
+      texto: '«Espada solar»',
+      clase: 'Producto',
+      uid: null,
+      referencia: 'p-1',
+    });
+    expect(sobreDe('banner:b-1', titulares, '  Temporada de héroes ')).toMatchObject({
+      texto: '«Temporada de héroes»',
+      clase: 'Banner',
+    });
+    expect(sobreDe('recurso:r-1', titulares, null)).toMatchObject({
+      texto: 'Recurso gráfico',
+      clase: 'Recurso gráfico',
+      referencia: 'r-1',
+    });
+    expect(sobreDe('producto:p-2', titulares)).toMatchObject({ texto: 'Producto del catálogo' });
+    expect(sobreDe('banner:b-2', titulares, '')).toMatchObject({ texto: 'Banner de inicio' });
+  });
+
   test('un permiso (intento de acceso no autorizado) se dice con su nombre; lo demás, tal cual', () => {
     expect(sobreDe('GESTIONAR_CUENTAS', titulares)).toMatchObject({
       texto: 'Gestionar cuentas de otros usuarios',

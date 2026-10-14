@@ -2,6 +2,7 @@ package com.nexusbattles.ms_identidad.admin.controller;
 
 import com.nexusbattles.ms_identidad.admin.directorio.AuditoriaDeExportaciones;
 import com.nexusbattles.ms_identidad.admin.directorio.ConsultaInvalidaException;
+import com.nexusbattles.ms_identidad.admin.directorio.CuentasBloqueadasPorIntentos;
 import com.nexusbattles.ms_identidad.admin.directorio.CuentasDePrueba;
 import com.nexusbattles.ms_identidad.admin.directorio.DirectorioDeCuentas;
 import com.nexusbattles.ms_identidad.admin.directorio.ExportacionDelDirectorio;
@@ -76,9 +77,12 @@ class AdminDirectorioControllerTest {
     @Mock
     private AuditoriaDeExportaciones auditoriaDeExportaciones;
 
+    @Mock
+    private CuentasBloqueadasPorIntentos cuentasBloqueadas;
+
     private AdminDirectorioController controlador() {
         return new AdminDirectorioController(usuarioRepository, directorio, CRITERIO, indicadores, exportacion,
-                auditoriaDeExportaciones);
+                auditoriaDeExportaciones, cuentasBloqueadas);
     }
 
     /** El listado sin los filtros de 1.3.0 (rol, estado, fechas): la llamada de siempre. */

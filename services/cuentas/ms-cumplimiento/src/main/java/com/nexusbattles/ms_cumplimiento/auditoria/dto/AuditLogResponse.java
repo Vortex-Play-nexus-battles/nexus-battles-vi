@@ -6,7 +6,8 @@ import java.time.Instant;
 
 /**
  * Una entrada de la bitacora. {@code ocurridoEn} y {@code referencia} (1.3.0)
- * son nulos en las entradas que no los traian.
+ * y {@code nombreAfectado} (1.4.0, SA-18) son nulos en las entradas que no los
+ * traian.
  */
 public record AuditLogResponse(
         String id,
@@ -19,7 +20,8 @@ public record AuditLogResponse(
         String motivo,
         String ipOrigen,
         Instant ocurridoEn,
-        String referencia
+        String referencia,
+        String nombreAfectado
 ) {
     public static AuditLogResponse from(AuditLog a) {
         return new AuditLogResponse(
@@ -33,7 +35,8 @@ public record AuditLogResponse(
                 a.getMotivo(),
                 a.getIpOrigen(),
                 a.getOcurridoEn(),
-                a.getReferencia()
+                a.getReferencia(),
+                a.getNombreAfectado()
         );
     }
 }
