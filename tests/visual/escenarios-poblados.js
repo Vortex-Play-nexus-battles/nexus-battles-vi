@@ -1883,28 +1883,33 @@ export const ESCENARIOS = [
   },
   {
     id: 'lista-negra-con-terminos',
-    titulo: 'lista negra con términos vetados',
+    titulo: 'lista negra: cifras, alta y la tabla de términos con sus acciones',
     ruta: 'plataforma/moderacion-sanciones/lista-negra-admin.html',
     sesion: () => sesionDe('qa_moderador', 'MODERADOR'),
     rutas: [
       [
         '**/api/v1/lista-negra/terminos*',
-        json({
-          contenido: [
+        (ruta) => {
+          const consulta = new URL(ruta.request().url()).searchParams;
+          const todos = [
             terminoVetado(1, 'spiderman', 'MARCA', 'SUBCADENA'),
             terminoVetado(2, 'hitler', 'DIRIGENTE', 'SUBCADENA'),
             terminoVetado(3, 'messi', 'CELEBRIDAD', 'PALABRA'),
             terminoVetado(4, 'mussolini', 'POLITICO', 'SUBCADENA'),
             terminoVetado(5, 'culo', 'OFENSIVO', 'PALABRA', { activo: false }),
             terminoVetado(6, 'nexus_oficial', 'OTRO', 'SUBCADENA'),
-          ],
-          pagina: 0,
-          tamano: 16,
-          total: 6,
-        }),
+          ];
+          const activo = consulta.get('activo');
+          const contenido =
+            activo === null ? todos : todos.filter((t) => String(t.activo) === activo);
+          return json({ contenido, pagina: 0, tamano: 16, total: contenido.length });
+        },
       ],
     ],
-    exige: ['.lista-terminos__fila, li'],
+    exige: [
+      '[data-panel="terminos"] tbody tr',
+      '[data-zona="cifras-de-la-lista"] .indicador-admin',
+    ],
   },
   {
     id: 'moderacion-con-cola',

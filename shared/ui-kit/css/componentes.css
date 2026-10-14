@@ -11845,6 +11845,55 @@ body:has(.chatbot-flotante) main:not(.combate) {
   flex: 0 1 auto;
 }
 
+/* --- Lista negra (lista-negra-admin.js, SA-4 punto 21) ------------------- */
+/* El alta en una fila en un escritorio —término, categoría, cómo se busca y
+   el botón— alineada por abajo, y de uno en uno en un teléfono. Los
+   desplegables son `desplegable__control`: altura del campo y el texto
+   centrado, como el resto de la consola. */
+.formulario-termino {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--e-3);
+}
+
+.formulario-termino .campo__control,
+.formulario-termino .desplegable__control {
+  width: 100%;
+  min-width: 0;
+}
+
+.formulario-termino .desplegable {
+  gap: var(--e-1);
+}
+
+/* El botón, a la altura de los controles: debajo de la etiqueta. */
+.formulario-termino__accion {
+  display: flex;
+  align-items: flex-end;
+  min-height: calc(var(--campo-alto) + 1.6em);
+}
+
+@media (max-width: 960px) {
+  .formulario-termino {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .formulario-termino {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .formulario-termino__accion {
+    min-height: 0;
+  }
+
+  .formulario-termino__accion .boton {
+    width: 100%;
+  }
+}
+
 /* --- Alertas de moderación (alertas-de-moderacion.js, SA-4 §7.3.8) ------- */
 /* Una caja por serie (sanciones y reportes por día), una junto a otra cuando
    caben y una debajo de otra en un teléfono. Cada caja dice su estado arriba,
