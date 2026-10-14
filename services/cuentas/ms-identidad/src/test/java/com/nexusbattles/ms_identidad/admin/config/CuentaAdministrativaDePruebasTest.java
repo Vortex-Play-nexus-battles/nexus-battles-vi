@@ -204,8 +204,10 @@ class CuentaAdministrativaDePruebasTest {
         assertThat(una).isEqualTo(igual).hasSameHashCodeAs(igual);
         assertThat(una.toString()).contains("a@nexus.test", "MODERADOR")
             .doesNotContain(CLAVE).doesNotContain(SECRETO);
+        // Otro tipo de objeto nunca es la misma cuenta (rama «no es una CuentaQa» del equals).
+        Object deOtroTipo = new Object();
         assertThat(una)
-            .isNotEqualTo("a")
+            .isNotEqualTo(deOtroTipo)
             .isNotEqualTo(CuentaAdministrativaDePruebas.leer("b|a@nexus.test|" + CLAVE + "|" + SECRETO + "|MODERADOR"))
             .isNotEqualTo(CuentaAdministrativaDePruebas.leer("a|b@nexus.test|" + CLAVE + "|" + SECRETO + "|MODERADOR"))
             .isNotEqualTo(CuentaAdministrativaDePruebas.leer("a|a@nexus.test|" + CLAVE + "x|" + SECRETO + "|MODERADOR"))
