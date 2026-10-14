@@ -55,12 +55,15 @@ comentarios:
   # caido no puede impedir que se retire un comentario ofensivo.
   notificaciones:
     url: ${NOTIFICACIONES_URL:}
-  # Lo mismo para el evento de auditoria hacia ms-cumplimiento. Sin URL, el
-  # asiento queda igual en la tabla comentario_moderacion de este servicio
-  # —que es el rastro que exige la ficha— y ademas se escribe en stdout en
-  # una linea AUDITORIA_MODERACION (regla 6).
+  # SA-5 (§7.3.5): la bitacora central de ms-cumplimiento
+  # (.../api/v1/admin/auditoria/eventos). Cada decision sale de su asiento en
+  # comentario_moderacion con reintentos (EnvioDeAuditoria). Sin URL, los
+  # asientos esperan y cada decision queda en stdout como AUDITORIA_MODERACION
+  # (regla 6).
   auditoria:
     url: ${AUDITORIA_URL:}
+    reintento-ms: ${AUDITORIA_REINTENTO_MS:10000}
+    espera-maxima-ms: ${AUDITORIA_ESPERA_MAXIMA_MS:900000}
   # B3 — el catalogo de productos (contenido/productos), por su API publica:
   # GET {url}/api/v1/productos/{id}. Publicar, calificar y leer el resumen de
   # un producto que no existe responde 404; si el catalogo no contesta, las

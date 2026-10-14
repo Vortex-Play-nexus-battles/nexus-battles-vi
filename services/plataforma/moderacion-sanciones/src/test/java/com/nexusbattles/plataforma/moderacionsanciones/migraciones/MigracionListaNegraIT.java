@@ -88,8 +88,9 @@ class MigracionListaNegraIT {
         assertThat(filas.get("culo")).as("la semilla no pisa lo que ya estaba")
                 .isEqualTo(new Fila("culo", "OTRO", "PALABRA", true, null, true));
         assertThat(filas.get("batman")).isEqualTo(new Fila("batman", "MARCA", "SUBCADENA", true, "semilla", true));
-        // 5 filas previas + 22 de V7 (2 chocan con las previas) + 20 de V9 (2-oct).
-        assertThat(filas).hasSize(5 + 22 - 2 + 20);
+        // 5 filas previas + 22 de V7 (2 chocan con las previas) + 20 de V9 (2-oct)
+        // + 228 de V12 (13-oct, SA-4): ninguna choca con lo que habia.
+        assertThat(filas).hasSize(5 + 22 - 2 + 20 + 228);
 
         try (Connection c = conexion(); Statement s = c.createStatement()) {
             assertThatThrownBy(() -> s.executeUpdate("INSERT INTO terminos_prohibidos (termino, normalizado, modo) "

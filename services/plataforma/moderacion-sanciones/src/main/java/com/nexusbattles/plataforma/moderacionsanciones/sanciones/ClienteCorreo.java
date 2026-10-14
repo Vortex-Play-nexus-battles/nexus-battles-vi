@@ -8,7 +8,7 @@ import java.util.Objects;
 
 /**
  * {@code POST /api/v1/correos/sancion} del servicio de correo
- * ({@code contracts/openapi/correo.yaml} 1.4.0), con la credencial de servicio
+ * ({@code contracts/openapi/correo.yaml} 1.6.0), con la credencial de servicio
  * de este modulo: correo solo atiende a {@code rol=SERVICIO}.
  *
  * <p>Va siempre con {@code Idempotency-Key}: la clave estable de la salida
@@ -46,9 +46,19 @@ public class ClienteCorreo {
      * @param hasta              fin de la suspension (o la nueva, si una apelacion la redujo)
      * @param apelableHasta      ultimo momento para apelar (solo en la emision)
      * @param resultadoApelacion MANTENIDA, REDUCIDA o REVERTIDA (solo APELACION_RESUELTA)
+     * @param causal             1.6.0: la causal de 7.3.2 como la escribe el documento oficial
+     *                           ({@link Causal#etiqueta()}); solo en la emision y si la sancion la tiene
+     * @param politica           1.6.0: la politica violada (7.3.7); solo en la emision y si la hay
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record CorreoSancion(String email, String apodo, String tipo, String motivo, OffsetDateTime hasta,
-                                OffsetDateTime apelableHasta, String resultadoApelacion) {
+                                OffsetDateTime apelableHasta, String resultadoApelacion, String causal,
+                                String politica) {
+
+        /** Sin causal ni politica (la resolucion de una apelacion). */
+        public CorreoSancion(String email, String apodo, String tipo, String motivo, OffsetDateTime hasta,
+                             OffsetDateTime apelableHasta, String resultadoApelacion) {
+            this(email, apodo, tipo, motivo, hasta, apelableHasta, resultadoApelacion, null, null);
+        }
     }
 }

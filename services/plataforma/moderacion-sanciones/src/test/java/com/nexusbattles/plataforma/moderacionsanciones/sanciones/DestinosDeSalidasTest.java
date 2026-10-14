@@ -155,6 +155,23 @@ class DestinosDeSalidasTest {
         }
 
         @Test
+        @DisplayName("emision con causal y politica: viajan con el texto del documento oficial (7.3.2, 7.3.7)")
+        void conCausalYPolitica() {
+            Sancion baneo = new Sancion(UUID.randomUUID(), JUGADOR, Sancion.Tipo.BANEO, Causal.FRAUDE,
+                    "Duplico creditos con dos sesiones", "Reglamento de juego limpio", null, ADMIN,
+                    "SUPER_ADMINISTRADOR", EMITIDA, null);
+            when(repositorio.findById(baneo.id())).thenReturn(Optional.of(baneo));
+            conContacto("lyra@nexus.test");
+
+            assertThat(destino().entregar(salida(CanalDeSalida.CORREO, EventoDeSancion.EMISION, baneo, null)))
+                    .isEqualTo(DestinoDeSalidas.Resultado.ENTREGADO);
+
+            verify(correo).enviar("clave-" + baneo.id(), new ClienteCorreo.CorreoSancion("lyra@nexus.test", "Lyra",
+                    "BANEO", "Duplico creditos con dos sesiones", null, EMITIDA.plusDays(30), null,
+                    "Intentos de fraude o manipulación del sistema", "Reglamento de juego limpio"));
+        }
+
+        @Test
         @DisplayName("advertencia y baneo: sin fecha fin")
         void sinFecha() {
             Sancion advertencia = sancion(Sancion.Tipo.ADVERTENCIA);

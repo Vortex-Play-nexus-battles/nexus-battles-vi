@@ -172,7 +172,7 @@ function crearVista() {
         hijos: [
           h('li', {
             texto:
-              'Diseñador visual con vista previa, historial de versiones, importar y exportar: el servicio de productos no los publica. Cada modificación sí guarda en el servidor la versión anterior como respaldo.',
+              'Diseñador visual con vista previa, importar y exportar: el servicio de productos todavía no los publica.',
           }),
           h('li', {
             texto:

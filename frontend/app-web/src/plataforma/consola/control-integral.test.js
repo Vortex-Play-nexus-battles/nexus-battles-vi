@@ -22,6 +22,7 @@ import {
   pintarAlertasDeModeracion,
   pintarMetricasDeSanciones,
   pintarServicios,
+  pintarReincidentes,
 } from './control-integral.js';
 
 const asentar = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -57,6 +58,7 @@ const JUGADORES = {
       ultimoAcceso: '2026-09-20T18:30:00',
       suspendidoHasta: null,
       bloqueada: false,
+      sancionesRegistradas: 2,
     },
     {
       id: 16,
@@ -451,7 +453,7 @@ describe('directorio de jugadores', () => {
     const formulario = directorio.querySelector('form.filtros-admin');
     expect(formulario.firstElementChild.querySelector('input[name="buscar"]')).not.toBeNull();
     expect(directorio.querySelector('input[name="buscar"]').getAttribute('placeholder')).toBe(
-      'Apodo, correo o nombre',
+      'Apodo, correo, nombre o ID',
     );
     directorio.querySelector('input[name="buscar"]').value = '  Ana  ';
     formulario.dispatchEvent(new window.Event('submit', { cancelable: true }));
@@ -491,6 +493,7 @@ describe('directorio de jugadores', () => {
       'Estado',
       'Registro',
       'Última entrada',
+      'Sanciones',
       'Acciones',
     ]);
     const estados = [...directorio.querySelectorAll('tbody .estado-admin')].map((e) =>
@@ -501,6 +504,43 @@ describe('directorio de jugadores', () => {
     // La página la dice la paginación; el resumen, cuántas cuentas hay.
     expect(directorio.querySelector('.tabla-admin__resumen').textContent).toBe('42 cuentas');
     expect(directorio.querySelector('.paginacion').textContent).toContain('Página 1 de 3');
+  });
+
+  test('SA-3: la columna «Sanciones» dice cuántas se le han emitido; sin el dato, no un cero', async () => {
+    const { raiz } = await montar();
+
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
+    const indice = encabezados(directorio).indexOf('Sanciones');
+    const columna = [...directorio.querySelectorAll('tbody tr')].map(
+      (tr) => tr.children[indice].textContent,
+    );
+    expect(columna[0]).toContain('2');
+    // Beto no trae `sancionesRegistradas` (un servicio anterior a 1.7.0).
+    expect(columna[1]).toContain('Sin dato');
+    expect(columna[1]).not.toMatch(/^\s*0\s*$/);
+  });
+
+  test('SA-3: el filtro «Sanciones» pide las cuentas con historial, desde la primera página', async () => {
+    const { raiz, consultarApi } = await montar();
+
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
+    const filtro = directorio.querySelector('select[name="historialSanciones"]');
+    expect([...filtro.options].map((o) => o.textContent)).toEqual([
+      'Todas las cuentas',
+      'Con sanciones',
+      'Sin sanciones',
+    ]);
+    filtro.value = 'CON';
+    filtro.dispatchEvent(new window.Event('change'));
+    await asentar();
+
+    expect(pedidasAlDirectorio(consultarApi).at(-1)).toBe(
+      '/admin/jugadores?page=0&size=16&historialSanciones=CON&ocultarPruebas=true',
+    );
+    const fichas = [...directorio.querySelectorAll('.filtros-admin__ficha')].map((f) =>
+      f.textContent.replace('×', '').trim(),
+    );
+    expect(fichas).toContain('Sanciones: Con sanciones');
   });
 
   test('una cuenta que nunca entró lo dice, no finge una fecha', async () => {
@@ -912,6 +952,51 @@ describe('las consultas son las que el sistema atiende de verdad', () => {
     expect(auditoria.textContent).not.toContain('CAMBIO_ROL');
   });
 
+  test('SA-5: la bitácora dice el apodo de quien actuó y de la cuenta, nunca su uid ni un prefijo técnico', async () => {
+    const moderadora = '5b2e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55';
+    const lyra = '7a1e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55';
+    const { raiz, consultarApi } = await montar({
+      consultarApi: apiSimulada({
+        '/admin/auditoria': conDatos({
+          content: [
+            {
+              id: 'e-1',
+              fechaHora: '2026-10-14T15:00:02Z',
+              ocurridoEn: '2026-10-14T15:00:00Z',
+              administrador: moderadora,
+              tipoAccion: 'SANCION',
+              afectado: lyra,
+              motivo: 'Insultos en el chat general',
+            },
+            {
+              id: 'e-2',
+              fechaHora: '2026-10-14T14:00:00Z',
+              administrador: moderadora,
+              tipoAccion: 'ACTUALIZACION',
+              afectado: 'comentario:c-42',
+              motivo: `Fuera de tema ${'x'.repeat(200)}`,
+            },
+          ],
+        }),
+        '/admin/titulares': conDatos([
+          { uid: moderadora, apodo: 'moderadora_qa', estado: 'ACTIVO' },
+          { uid: lyra, apodo: 'lyra_92', estado: 'ACTIVO' },
+        ]),
+      }),
+    });
+
+    const auditoria = raiz.querySelector('[data-panel="auditoria"]');
+    expect(celdas(auditoria).slice(1, 3)).toEqual(['moderadora_qa', 'Sanción']);
+    expect(auditoria.textContent).toContain('lyra_92');
+    expect(auditoria.textContent).toContain('Comentario');
+    expect(auditoria.textContent).not.toContain(lyra);
+    expect(auditoria.textContent).not.toContain(moderadora);
+    expect(auditoria.textContent).not.toContain('comentario:');
+    expect(auditoria.textContent).toContain('…');
+    const pedidas = consultarApi.mock.calls.map((c) => c[0]);
+    expect(pedidas.filter((r) => r.startsWith('/admin/titulares?uids='))).toHaveLength(1);
+  });
+
   test('la cola de moderación cuenta bien aunque llame a su lista «entradas»', async () => {
     const { raiz } = await montar();
 
@@ -1083,56 +1168,232 @@ describe('alertas de moderación (UXC-9, §7.3.4)', () => {
     return caja;
   };
 
-  test('el panel pinta las alertas del servicio de métricas', async () => {
+  test('el panel pinta las alertas del servicio de métricas, serie por serie', async () => {
     const { raiz, consultarApi } = await montar({
       consultarApi: apiSimulada({
         '/moderacion': conDatos({
           sanciones: {},
           alertasConfiguradas: true,
           umbralSancionesPorDia: 10,
-          alertas: ['2026-09-20: 14 sanciones (umbral 10)'],
+          umbralReportesPorDia: null,
+          avisos: [{ tipo: 'SANCIONES', fecha: '2026-09-20', cantidad: 14, umbral: 10 }],
+          alertas: ['Alta frecuencia de sanciones el 2026-09-20: 14 (umbral: 10 o más por día)'],
           pendientes: [],
+          noDisponibles: [],
+          reportes: { total: 2, porDia: [{ fecha: '2026-09-20', reportes: 2 }] },
         }),
       }),
     });
 
     expect(consultarApi.mock.calls.map((c) => c[0])).toContain('/moderacion');
     const panelDeAlertas = raiz.querySelector('[data-panel="alertas-moderacion"]');
-    expect(panelDeAlertas.querySelector('[data-zona="alertas"]').textContent).toContain(
-      '2026-09-20: 14 sanciones (umbral 10)',
+    const sanciones = panelDeAlertas.querySelector(
+      '[data-zona="alertas"] [data-serie="SANCIONES"]',
     );
+    expect(sanciones.querySelector('[data-zona="avisos"]').textContent).toMatch(/14 sanciones/);
     // Cuántas, de un vistazo y no solo con color.
-    const resumen = panelDeAlertas.querySelector('.estado-admin');
+    const resumen = sanciones.querySelector('.estado-admin');
     expect(resumen.textContent).toBe('1 alerta');
     expect(resumen.dataset.tono).toBe('error');
+    // La de reportes, sin umbral del PO, dice que no se evalúa (no «sin alertas»).
+    const reportes = panelDeAlertas.querySelector('[data-serie="REPORTES"]');
+    expect(reportes.querySelector('.estado-admin').textContent).toBe('Desactivada');
   });
 
-  test('sin umbral configurado lo dice, en vez de un «sin alertas» que no se evaluó', () => {
+  test('sin ningún umbral lo dice en las dos series, en vez de un «sin alertas» que no se evaluó', () => {
     const caja = contenedor(
-      pintarAlertasDeModeracion({ alertasConfiguradas: false, alertas: [], pendientes: [] }),
+      pintarAlertasDeModeracion({
+        alertasConfiguradas: false,
+        avisos: [],
+        alertas: [],
+        pendientes: [],
+      }),
     );
-    expect(caja.querySelector('.estado-admin').textContent).toBe('Desactivadas');
+    const estados = [...caja.querySelectorAll('.estado-admin')].map((e) => e.textContent);
+    expect(estados).toEqual(['Desactivada', 'Desactivada']);
+    expect(caja.querySelectorAll('[data-zona="sin-umbral"]')).toHaveLength(2);
     expect(caja.querySelector('[data-zona="sin-umbral"]').textContent).toMatch(
-      /alertas están desactivadas/,
+      /no se evalúa ninguna alerta/,
     );
     expect(caja.querySelector('[data-zona="sin-alertas"]')).toBeNull();
   });
 
-  test('con umbral y sin días por encima, «sin alertas» con el umbral; las notas internas no se pintan', () => {
+  test('con umbral y sin días que lleguen, «sin alertas» con el umbral; las notas internas no se pintan', () => {
     const caja = contenedor(
       pintarAlertasDeModeracion({
         alertasConfiguradas: true,
         umbralSancionesPorDia: 10,
+        avisos: [],
         alertas: [],
-        pendientes: ['registro de usuarios sin contrato de lectura'],
+        pendientes: ['registro de usuarios: ms-identidad no responde: contrato'],
       }),
     );
-    expect(caja.querySelector('.estado-admin').textContent).toBe('Sin alertas');
-    expect(caja.querySelector('.estado-admin').dataset.tono).toBe('exito');
-    expect(caja.querySelector('[data-zona="sin-alertas"]').textContent).toBe(
+    const sanciones = caja.querySelector('[data-serie="SANCIONES"]');
+    expect(sanciones.querySelector('.estado-admin').textContent).toBe('Sin alertas');
+    expect(sanciones.querySelector('.estado-admin').dataset.tono).toBe('exito');
+    expect(sanciones.querySelector('[data-zona="sin-alertas"]').textContent).toBe(
       'Ningún día llegó a 10 sanciones.',
     );
     expect(caja.textContent).not.toContain('contrato');
+  });
+});
+
+describe('HU-USR-008 — comportamiento sospechoso: usuarios con varias sanciones (D-45, #909)', () => {
+  const ANA = '33333333-4444-5555-6666-777777777777';
+  const BETO = '44444444-5555-6666-7777-888888888888';
+  const REINCIDENTES = {
+    minimo: 3,
+    total: 2,
+    usuarios: [
+      { usuarioId: ANA, sanciones: 5, ultimaEn: '2026-10-05T14:00:00Z' },
+      { usuarioId: BETO, sanciones: 3, ultimaEn: '2026-10-01T09:30:00Z' },
+    ],
+  };
+  const TITULARES = [
+    { uid: ANA, apodo: 'ana_reincide', estado: 'SUSPENDIDO', rol: 'JUGADOR' },
+    { uid: BETO, apodo: 'beto_avisado', estado: 'ACTIVO', rol: 'JUGADOR' },
+  ];
+
+  const contenedor = (partes) => {
+    const caja = document.createElement('div');
+    caja.append(...partes);
+    return caja;
+  };
+
+  test('el panel lista cuántas sanciones sin revertir tiene cada cuenta, por su apodo y sin andamio', async () => {
+    const raiz = pagina();
+    const consultarApi = apiSimulada({
+      '/sanciones/reincidentes': conDatos(REINCIDENTES),
+      '/admin/titulares': conDatos(TITULARES),
+    });
+
+    montarControlIntegral(raiz, {}, { consultarApi });
+    await asentar();
+    await asentar();
+
+    const panelDeLista = raiz.querySelector('[data-panel="reincidentes"]');
+    const filas = panelDeLista.querySelectorAll('tbody tr');
+    expect(filas).toHaveLength(2);
+    expect(filas[0].querySelector('th').textContent).toBe('ana_reincide');
+    expect(filas[0].textContent).toContain('5');
+    expect(filas[1].querySelector('th').textContent).toBe('beto_avisado');
+    expect(panelDeLista.querySelector('[data-zona="resumen-reincidentes"]').textContent).toBe(
+      '2 usuarios con 3 o más sanciones sin revertir.',
+    );
+    expect(panelDeLista.textContent).not.toMatch(ANDAMIO);
+    // Una sola consulta a identidad para nombrarlos a todos.
+    const nombrar = consultarApi.mock.calls.filter(([recurso]) =>
+      recurso.startsWith('/admin/titulares'),
+    );
+    expect(nombrar).toHaveLength(1);
+    expect(nombrar[0][0]).toBe(`/admin/titulares?uids=${ANA},${BETO}`);
+  });
+
+  test('cada fila lleva a la ficha y al historial de esa cuenta, sin pintar su identificador', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(
+      raiz,
+      {},
+      {
+        consultarApi: apiSimulada({
+          '/sanciones/reincidentes': conDatos(REINCIDENTES),
+          '/admin/titulares': conDatos(TITULARES),
+        }),
+      },
+    );
+    await asentar();
+    await asentar();
+
+    const fila = raiz.querySelector('[data-panel="reincidentes"] tbody tr');
+    const historial = fila.querySelector('[data-accion="ver-sanciones"]');
+    const ficha = fila.querySelector('[data-accion="ver-ficha"]');
+    expect(new URL(historial.href).searchParams.get('usuario')).toBe(ANA);
+    expect(new URL(ficha.href).searchParams.get('usuario')).toBe(ANA);
+    expect(ficha.getAttribute('aria-label')).toBe('Ver la ficha de ana_reincide');
+    // RFINAL-06: un UUID a la vista es un dato que nadie puede leer.
+    expect(fila.textContent).not.toMatch(UUID);
+  });
+
+  test('si identidad no responde, la lista sale igual y la cuenta dice «Sin apodo», nunca su uid', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(
+      raiz,
+      {},
+      {
+        consultarApi: apiSimulada({
+          '/sanciones/reincidentes': conDatos(REINCIDENTES),
+          '/admin/titulares': conFallo(RESULTADO.SERVICIO_DEGRADADO, 503, '/admin/titulares'),
+        }),
+      },
+    );
+    await asentar();
+    await asentar();
+
+    const fila = raiz.querySelector('[data-panel="reincidentes"] tbody tr');
+    expect(fila.querySelector('th').textContent).toBe('Sin apodo');
+    expect(fila.textContent).not.toMatch(UUID);
+  });
+
+  test('si nadie llega al mínimo lo dice con el mínimo, no pinta una tabla vacía', () => {
+    const caja = contenedor(pintarReincidentes({ minimo: 3, total: 0, usuarios: [] }));
+
+    expect(caja.querySelector('[data-zona="sin-reincidentes"]').textContent).toBe(
+      'Nadie tiene 3 o más sanciones sin revertir.',
+    );
+    expect(caja.querySelector('table')).toBeNull();
+  });
+
+  test('con un contrato viejo o un cuerpo inesperado no revienta: lo trata como sin datos', () => {
+    expect(() => contenedor(pintarReincidentes([]))).not.toThrow();
+    expect(contenedor(pintarReincidentes(null)).querySelector('table')).toBeNull();
+  });
+
+  test('si la lista se cortó, dice cuántos hay de verdad y cuántos se muestran', () => {
+    const caja = contenedor(
+      pintarReincidentes({ minimo: 3, total: 140, usuarios: REINCIDENTES.usuarios }),
+    );
+
+    expect(caja.querySelector('[data-zona="resumen-reincidentes"]').textContent).toBe(
+      '140 usuarios con 3 o más sanciones sin revertir. Se muestran los 2 con más sanciones.',
+    );
+  });
+
+  test('uno solo va en singular', () => {
+    const caja = contenedor(
+      pintarReincidentes({ minimo: 3, total: 1, usuarios: [REINCIDENTES.usuarios[0]] }),
+    );
+
+    expect(caja.querySelector('[data-zona="resumen-reincidentes"]').textContent).toBe(
+      '1 usuario con 3 o más sanciones sin revertir.',
+    );
+  });
+
+  test('con el servicio caído lo dice ese panel y el resto sigue', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(
+      raiz,
+      {},
+      {
+        consultarApi: apiSimulada({
+          '/sanciones/reincidentes': conFallo(
+            RESULTADO.SERVICIO_DEGRADADO,
+            503,
+            '/sanciones/reincidentes',
+          ),
+        }),
+      },
+    );
+    await asentar();
+
+    expect(raiz.querySelector('[data-panel="reincidentes"] .panel-admin__estado').textContent).toBe(
+      'Sin conexión',
+    );
+    expect(raiz.querySelector('[data-panel="sanciones"] .panel-admin__estado').textContent).toBe(
+      '',
+    );
   });
 });
 
@@ -1196,14 +1457,19 @@ describe('disposición de los paneles', () => {
     expect(usuarios.dataset.ancho).toBe('completo');
   });
 
-  test('moderación: las dos cifras juntas arriba, la bitácora y el recuento en su fila', async () => {
+  test('moderación: las dos cifras juntas arriba; la lista de reincidentes, la bitácora y el recuento en su fila', async () => {
     const { raiz } = await montar();
 
     const rejilla = raiz.querySelector('[data-seccion="moderacion"] .consola-integral__rejilla');
     const orden = [...rejilla.children].map((e) =>
       e.dataset.cifras ? [...e.children].map((p) => p.dataset.panel) : e.dataset.panel,
     );
-    expect(orden).toEqual([['alertas-moderacion', 'comentarios'], 'auditoria', 'sanciones']);
+    expect(orden).toEqual([
+      ['alertas-moderacion', 'comentarios'],
+      'reincidentes',
+      'auditoria',
+      'sanciones',
+    ]);
   });
 
   test('las tablas ocupan la fila entera desde que se arman, también mientras cargan', () => {
@@ -1227,6 +1493,7 @@ describe('disposición de los paneles', () => {
       'salas',
       'subastas',
       'torneos',
+      'reincidentes',
       'auditoria',
       'sanciones',
       'sistema',

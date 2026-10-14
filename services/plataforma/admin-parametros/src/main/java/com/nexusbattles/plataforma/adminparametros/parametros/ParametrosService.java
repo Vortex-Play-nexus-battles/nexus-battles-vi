@@ -45,6 +45,16 @@ public class ParametrosService {
 
     @Transactional
     public Vigente cambiar(Actor actor, String clave, Cambio cambio) {
+        return cambiar(actor, clave, cambio, null);
+    }
+
+    /**
+     * SA-5 (§7.3.5): el cambio con la IP de quien lo hizo. La version es la
+     * cola de la bitacora central: se guarda en esta transaccion y la entrega
+     * despues {@code EnvioDeAuditoria}.
+     */
+    @Transactional
+    public Vigente cambiar(Actor actor, String clave, Cambio cambio, String ipOrigen) {
         if (!actor.puedeConfigurar()) {
             throw new ParametroRechazado(ParametroRechazado.Motivo.PERMISO_INSUFICIENTE,
                     "solo un administrador configura parametros");
@@ -56,6 +66,7 @@ public class ParametrosService {
         String valor = parametro.validar(cambio.valor());
         OffsetDateTime ahora = ahora();
         Version version = parametro.cambiar(valor, cambio.motivo().strip(), actor.id(), ahora, cambio.vigenteDesde());
+        version.registrarOrigen(ipOrigen);
         parametros.save(parametro);
         versiones.save(version);
         BITACORA.info("Parametro {} v{}: {} -> {} por {} (vigente desde {}) motivo={}", clave, version.version(),

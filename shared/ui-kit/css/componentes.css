@@ -11749,6 +11749,195 @@ body:has(.chatbot-flotante) main:not(.combate) {
   }
 }
 
+/* SA-3 — tres cifras (el saldo de la ficha): las tres en una fila y, en un
+   teléfono, una debajo de otra; nunca dos y una suelta. */
+.rejilla-indicadores-admin[data-cantidad='3'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 480px) {
+  .rejilla-indicadores-admin[data-cantidad='3'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --- Consola de sanciones (SA-4) ------------------------------------------
+   Tres pestañas (sanciones, apelaciones, emitir) sobre los paneles de la
+   consola. Lo propio: la barra de filtros dentro del panel, el estado con su
+   fecha fin, la cita del argumento de una apelación y el grupo de la
+   duración (cantidad + unidad) del formulario de emisión. */
+
+.consola-sanciones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+}
+
+.panel-admin__filtros {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+}
+
+.estado-con-fecha {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1) var(--e-2);
+}
+
+.cita-admin {
+  margin: 0;
+  padding: var(--e-2) var(--e-3);
+  border-inline-start: 3px solid var(--borde-int);
+  border-radius: var(--radio-chico);
+  background: var(--superficie-2);
+  color: var(--texto);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.formulario-sancion {
+  max-width: 44rem;
+  margin-block-start: var(--e-4);
+  padding-block-start: var(--e-4);
+  border-block-start: 1px solid var(--borde-tenue);
+}
+
+.formulario-sancion__titulo {
+  margin: 0;
+}
+
+/* Dos líneas en una celda: el dato y, debajo, su detalle en pequeño. */
+.celda-doble {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 10rem;
+}
+
+.campo--grupo {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.campo--grupo .fila {
+  flex-wrap: wrap;
+}
+
+.campo--grupo .fila > .campo__control {
+  flex: 0 1 8rem;
+}
+
+.campo--grupo .fila > .desplegable__control {
+  flex: 0 1 10rem;
+}
+
+.fila--entre {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.fila--entre > * {
+  flex: 0 1 auto;
+}
+
+/* --- Lista negra (lista-negra-admin.js, SA-4 punto 21) ------------------- */
+/* El alta en una fila en un escritorio —término, categoría, cómo se busca y
+   el botón— alineada por abajo, y de uno en uno en un teléfono. Los
+   desplegables son `desplegable__control`: altura del campo y el texto
+   centrado, como el resto de la consola. */
+.formulario-termino {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--e-3);
+}
+
+.formulario-termino .campo__control,
+.formulario-termino .desplegable__control {
+  width: 100%;
+  min-width: 0;
+}
+
+.formulario-termino .desplegable {
+  gap: var(--e-1);
+}
+
+/* El botón, a la altura de los controles: debajo de la etiqueta. */
+.formulario-termino__accion {
+  display: flex;
+  align-items: flex-end;
+  min-height: calc(var(--campo-alto) + 1.6em);
+}
+
+@media (max-width: 960px) {
+  .formulario-termino {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .formulario-termino {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .formulario-termino__accion {
+    min-height: 0;
+  }
+
+  .formulario-termino__accion .boton {
+    width: 100%;
+  }
+}
+
+/* --- Alertas de moderación (alertas-de-moderacion.js, SA-4 §7.3.8) ------- */
+/* Una caja por serie (sanciones y reportes por día), una junto a otra cuando
+   caben y una debajo de otra en un teléfono. Cada caja dice su estado arriba,
+   a la derecha del título, sin depender solo del color. */
+.alertas-moderacion {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--e-3);
+}
+
+.alertas-moderacion__serie {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  min-width: 0;
+  padding: var(--e-3);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.alertas-moderacion__cabeza {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2);
+}
+
+.alertas-moderacion__cabeza .panel-admin__grupo {
+  margin: 0;
+}
+
+.alertas-moderacion__serie .panel-admin__explicacion {
+  margin: 0;
+}
+
+/* Los gráficos de un tablero, de dos en dos cuando caben. */
+.rejilla-graficos-admin {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: var(--e-4);
+}
+
 /* --- Estado (estado.js) -------------------------------------------------- */
 
 .estado-admin {
@@ -12086,4 +12275,18 @@ body:has(.chatbot-flotante) main:not(.combate) {
 .lista-datos-admin__sin-dato {
   color: var(--texto-3);
   font-style: italic;
+}
+
+/* SA-5 — una celda de texto largo (el cambio y el motivo de la bitácora) en
+   dos líneas como mucho: el texto entero queda en el detalle de la fila y en
+   su `title`. Sin esto, una frase larga estiraba la fila o la columna y el
+   resto de la tabla salía del panel. */
+.celda-recortada {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  max-width: 22rem;
+  overflow-wrap: anywhere;
 }
