@@ -1,6 +1,6 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
-**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.12.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.1.0 (canal en tiempo real, 7.4.9)
+**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.13.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.1.0 (canal en tiempo real, 7.4.9)
 **Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V18) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
@@ -479,6 +479,26 @@ información del sistema» de 7.4.5.
 todos) durante 5 minutos y, si el catálogo no responde, sigue usando la última hasta 30
 minutos (D-CHA-10). `PRODUCTOS_BASE_URL` es la raíz del servicio de productos, la misma que
 usa ms-identidad (host de contenido, 8103).
+
+**Imágenes (7.4.3, 1.13.0).** §7.4.3 pide respuestas enriquecidas «incluyendo imágenes,
+enlaces y tarjetas informativas». La decisión que las descartaba no tiene registro escrito
+(D-CHA-02), así que el requisito vuelve a aplicar. Las respuestas del catálogo llevan una
+`TarjetaInformativa` por producto nombrado (los mismos que el texto: hasta cinco en el
+listado, tres en los precios, uno en la ficha), con su nombre, su tipo y su precio y, en
+`imagen`, la imagen del producto, solo si `ImagenDeProducto` la deja pasar:
+
+- un recurso gráfico del catálogo, `/api/v1/productos/recursos/<id>` (HU-PRD-009: comprobado al
+  subirlo y servido con `nosniff` y `Content-Security-Policy: default-src 'none'`);
+- o una imagen incrustada pequeña (`data:image/png|jpeg|webp|gif|svg+xml`, hasta 8192
+  caracteres, sin espacios ni comillas): así son hoy las de la semilla.
+
+Nada más: ni una URL de otro sitio (ni rastreo ni contenido mixto), ni un nombre suelto como
+`espada.png` que nadie sirve (en DEV hay productos así); entonces la tarjeta va sin imagen.
+`imagen` no se escribe si no hay, así que las tarjetas de siempre (las de misiones) se guardan
+igual. La ventana repite la misma regla (`imagenSegura`), pinta la imagen en un `<img>` con
+texto alternativo vacío (el nombre va al lado) y la quita si no carga; con dos o más productos
+los pasa en un carrusel que se recorre con sus botones, la rueda o el teclado. El asistente
+sigue sin **recibir** imágenes en el chat: `adjuntoUrl` sigue obsoleto.
 
 ## Tiempo real (7.4.9, `contracts/websocket/chatbot.yaml` 1.1.0)
 

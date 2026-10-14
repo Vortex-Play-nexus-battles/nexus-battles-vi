@@ -450,6 +450,61 @@ test.describe('Ventana del asistente (#506)', () => {
     ).toEqual([]);
   });
 
+  // ms-chatbot.yaml 1.13.0 (§7.4.3): los productos con su imagen, en carrusel.
+  test('las tarjetas de productos se ven con su imagen y el carrusel se recorre', async ({
+    page,
+  }) => {
+    const svg = (color) =>
+      `data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2064%2064%27%3E%3Crect%20width%3D%2764%27%20height%3D%2764%27%20fill%3D%27%23${color}%27%2F%3E%3C%2Fsvg%3E`;
+    const { ventana, entrada } = await abrirAsistente(page, {
+      alEnviar: (ruta) =>
+        json(ruta, {
+          ...BOT,
+          contenido: 'En el catálogo hay 3 productos a la venta. Los ves todos en la «Tienda».',
+          enriquecido: {
+            pasos: [],
+            enlaces: [],
+            tarjetas: [
+              { titulo: 'Espada de una mano', texto: 'Arma · 120 créditos', imagen: svg('1E3F88') },
+              { titulo: 'Magma Ardiente', texto: 'Armadura · 80 créditos', imagen: svg('582784') },
+              { titulo: 'Escudo de hierro', texto: 'Armadura · 70 créditos', imagen: 'escudo.png' },
+            ],
+            respuestasRapidas: [],
+            ofrecerSoporteHumano: false,
+          },
+        }),
+    });
+
+    await entrada.fill('¿Qué productos venden?');
+    await entrada.press('Enter');
+
+    const carrusel = ventana.locator('.chatbot-enriquecido__carrusel');
+    await expect(carrusel).toBeVisible();
+    const imagenes = carrusel.locator('img');
+    // La de un nombre suelto no se pinta; las dos del catálogo cargan.
+    await expect(imagenes).toHaveCount(2);
+    expect(await imagenes.first().evaluate((img) => img.complete && img.naturalWidth > 0)).toBe(
+      true,
+    );
+
+    const lista = carrusel.locator('.chatbot-enriquecido__carrusel-lista');
+    const antes = await lista.evaluate((el) => el.scrollLeft);
+    await carrusel.getByRole('button', { name: 'Más productos' }).click();
+    await expect.poll(() => lista.evaluate((el) => el.scrollLeft)).toBeGreaterThan(antes);
+    // Con el teclado: la lista se enfoca y se desliza con las flechas.
+    await lista.focus();
+    await expect(lista).toBeFocused();
+
+    const { violations } = await new AxeBuilder({ page }).include('.chatbot-ventana').analyze();
+    expect(
+      violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`),
+    ).toEqual([]);
+    // La ventana no desborda a lo ancho por el carrusel.
+    expect(await ventana.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  });
+
   test('el asistente queda sobre un aviso de la vista y bajo un modal', async ({ page }) => {
     const { lanzador, ventana } = await abrirAsistente(page);
     // El aviso cruzado de las pujas, con su hoja real, y otro forzado a la
