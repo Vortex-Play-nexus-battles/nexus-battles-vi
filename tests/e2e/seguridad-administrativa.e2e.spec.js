@@ -15,7 +15,8 @@
  *   6. y 7. nadie sanciona ni gestiona un rol igual o superior, ni desde el
  *      panel de cuentas ni llamando directo a moderación;
  *   8. el endpoint de demostración que «baneaba» sin banear ya no existe;
- *   9. tres contraseñas equivocadas bloquean la cuenta y queda auditado;
+ *   9. tres contraseñas equivocadas bloquean la cuenta, queda auditado y la
+ *      alerta de cuentas bloqueadas de la consola la nombra (SA-20);
  *  10. la consola avisa antes de cerrar por inactividad, «Seguir conectado»
  *      renueva y, si nadie responde, el login dice que fue por inactividad.
  *      El tiempo del navegador lo adelanta `page.clock`: el token y el
@@ -391,6 +392,27 @@ test.describe('7.3.9 · seguridad de las cuentas administrativas', () => {
         { timeout: 20_000, message: 'el bloqueo está en la bitácora' },
       )
       .toBe('BLOQUEO_POR_INTENTOS_FALLIDOS');
+
+    // SA-20 (§7.3.4, D-45 señal 1): la alerta de comportamiento sospechoso de
+    // la consola la nombra, bloqueada ahora y sin su correo.
+    const r = await api.get('/api/v1/admin/jugadores/bloqueos?ocultarPruebas=false', como(admin));
+    expect(r.status(), await r.text()).toBe(200);
+    const alerta = await r.json();
+    const bloqueada = alerta.cuentas.find((c) => c.uid === jugador.claims.uid);
+    expect(bloqueada, 'la cuenta recién bloqueada está en la alerta').toMatchObject({
+      apodo: jugador.apodo,
+      rol: 'JUGADOR',
+      vigente: true,
+    });
+    expect(Date.parse(bloqueada.bloqueadaHasta)).toBeGreaterThan(Date.parse(bloqueada.bloqueadaEn));
+    expect(alerta.total).toBeGreaterThanOrEqual(1);
+    expect(JSON.stringify(bloqueada)).not.toContain(jugador.email);
+
+    // Solo quien gestiona cuentas la lee.
+    for (const sesion of [moderadora, jugador]) {
+      const prohibida = await api.get('/api/v1/admin/jugadores/bloqueos', como(sesion));
+      expect(prohibida.status(), sesion.apodo).toBe(403);
+    }
   });
 
   test('10 · la consola avisa antes de cerrar por inactividad; sin respuesta, cierra y el login lo dice', async ({

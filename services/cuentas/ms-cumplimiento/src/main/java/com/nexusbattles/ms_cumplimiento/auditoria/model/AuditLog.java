@@ -57,6 +57,15 @@ public class AuditLog {
     @Column(name = "referencia", updatable = false, length = 120)
     private String referencia;
 
+    /**
+     * SA-18 (1.4.0): el nombre de lo afectado en el momento de la accion (el
+     * de un producto, el texto de un banner), para leer la entrada sin
+     * resolver identificadores; {@link #afectado} sigue siendo el
+     * identificador estable. Nulo en las entradas que no lo traen.
+     */
+    @Column(name = "nombre_afectado", updatable = false, length = 255)
+    private String nombreAfectado;
+
     protected AuditLog() {
         // Requerido por JPA
     }
@@ -72,6 +81,7 @@ public class AuditLog {
         this.ipOrigen = b.ipOrigen;
         this.ocurridoEn = b.ocurridoEn;
         this.referencia = b.referencia;
+        this.nombreAfectado = b.nombreAfectado;
     }
 
     public static Builder builder() {
@@ -89,6 +99,7 @@ public class AuditLog {
     public String getIpOrigen() { return ipOrigen; }
     public Instant getOcurridoEn() { return ocurridoEn; }
     public String getReferencia() { return referencia; }
+    public String getNombreAfectado() { return nombreAfectado; }
 
     public static class Builder {
         private String administradorId;
@@ -100,6 +111,7 @@ public class AuditLog {
         private String ipOrigen;
         private Instant ocurridoEn;
         private String referencia;
+        private String nombreAfectado;
 
         public Builder administradorId(String v) { this.administradorId = v; return this; }
         public Builder tipoAccion(AuditActionType v) { this.tipoAccion = v; return this; }
@@ -110,6 +122,7 @@ public class AuditLog {
         public Builder ipOrigen(String v) { this.ipOrigen = v; return this; }
         public Builder ocurridoEn(Instant v) { this.ocurridoEn = v; return this; }
         public Builder referencia(String v) { this.referencia = v; return this; }
+        public Builder nombreAfectado(String v) { this.nombreAfectado = v; return this; }
 
         public AuditLog build() {
             if (administradorId == null || tipoAccion == null || afectado == null

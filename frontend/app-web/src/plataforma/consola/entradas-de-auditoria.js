@@ -107,14 +107,24 @@ export function quienDe(administrador, titulares) {
   return { texto: valor, identificado: true, uid: null };
 }
 
+/** SA-18: lo que la bitácora importa del catálogo, por el prefijo de lo afectado. */
+const DEL_CATALOGO = Object.freeze({
+  producto: Object.freeze({ clase: 'Producto', sinNombre: 'Producto del catálogo' }),
+  banner: Object.freeze({ clase: 'Banner', sinNombre: 'Banner de inicio' }),
+  recurso: Object.freeze({ clase: 'Recurso gráfico', sinNombre: 'Recurso gráfico' }),
+});
+
 /**
- * Sobre qué recayó la acción, con su clase («Cuenta», «Comentario»…).
+ * Sobre qué recayó la acción, con su clase («Cuenta», «Comentario»…). Las
+ * operaciones del catálogo (SA-18) llegan con el nombre que tenía lo afectado
+ * en ese momento (`nombreAfectado`); sin él, se dice qué era.
  *
  * @param {string|null|undefined} afectado
  * @param {{de: (uid: string) => ({apodo?: string}|null)}|null} titulares
+ * @param {string|null} [nombre] el `nombreAfectado` de la entrada
  * @returns {{texto: string|null, clase: string|null, uid: string|null, referencia: string|null}}
  */
-export function sobreDe(afectado, titulares) {
+export function sobreDe(afectado, titulares, nombre = null) {
   const valor = String(afectado ?? '').trim();
   if (!valor) {
     return { texto: null, clase: null, uid: null, referencia: null };
@@ -142,6 +152,16 @@ export function sobreDe(afectado, titulares) {
     }
     if (prefijo === 'lista-negra') {
       return { texto: `«${dato}»`, clase: 'Lista negra', uid: null, referencia: dato };
+    }
+    const delCatalogo = DEL_CATALOGO[prefijo];
+    if (delCatalogo) {
+      const conNombre = String(nombre ?? '').trim();
+      return {
+        texto: conNombre ? `«${conNombre}»` : delCatalogo.sinNombre,
+        clase: delCatalogo.clase,
+        uid: null,
+        referencia: dato,
+      };
     }
   }
   if (valor === 'registro-de-auditoria') {

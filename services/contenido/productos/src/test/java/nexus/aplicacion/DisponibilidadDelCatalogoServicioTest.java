@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+import nexus.auditoria.RegistroDeOperaciones;
 import nexus.dominio.EstadoProducto;
 import nexus.dominio.Producto;
 import nexus.dominio.RespaldoProducto;
@@ -43,7 +44,7 @@ class DisponibilidadDelCatalogoServicioTest {
                                                 EstadoProducto.ACTIVO));
 
                 DisponibilidadProducto resultado = new DisponibilidadDelCatalogoServicio(
-                                catalogo, productos, respaldos).suspender(activo.id(), "admin-uid");
+                                catalogo, productos, respaldos, mock(RegistroDeOperaciones.class)).suspender(activo.id(), "admin-uid");
 
                 assertEquals(EstadoProducto.SUSPENDIDO, resultado.estado());
                 ArgumentCaptor<RespaldoProducto> captor = ArgumentCaptor.forClass(RespaldoProducto.class);
@@ -69,7 +70,7 @@ class DisponibilidadDelCatalogoServicioTest {
                 when(catalogo.reactivar(activo.id()))
                                 .thenReturn(DisponibilidadProducto.desde(producto(EstadoProducto.ACTIVO, null, 5)));
                 DisponibilidadDelCatalogoServicio servicio = new DisponibilidadDelCatalogoServicio(
-                                catalogo, productos, respaldos);
+                                catalogo, productos, respaldos, mock(RegistroDeOperaciones.class));
 
                 when(productos.findById(activo.id())).thenReturn(Optional.of(activo));
                 servicio.suspender(activo.id(), "admin-uid", "  Error de balance en su daño  ");
@@ -95,7 +96,7 @@ class DisponibilidadDelCatalogoServicioTest {
                 when(catalogo.suspender(suspendido.id()))
                                 .thenReturn(DisponibilidadProducto.desde(suspendido, EstadoProducto.ACTIVO));
 
-                new DisponibilidadDelCatalogoServicio(catalogo, productos, respaldos)
+                new DisponibilidadDelCatalogoServicio(catalogo, productos, respaldos, mock(RegistroDeOperaciones.class))
                                 .suspender(suspendido.id(), "admin-uid");
 
                 verify(respaldos, never()).save(any());

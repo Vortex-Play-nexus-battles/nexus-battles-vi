@@ -342,6 +342,17 @@ jobs:
           python3 tests/contratos/catalogo-oficial.py
           python3 tests/contratos/catalogo-oficial.py --autoprueba
 
+      # §7.3.6 (RF-PRV-002, ADR-010): las estadisticas que analizan la
+      # plataforma salen solo agregadas. Falla si la respuesta de una de ellas
+      # declara un dato que identifica a una persona (uid, correo, apodo,
+      # nombres, IP, el id de un jugador...) o si una de la lista desaparece
+      # sin actualizarla. La autoprueba mete uno a proposito y exige verlo.
+      - name: Las estadisticas no identifican a nadie
+        shell: bash
+        run: |
+          python3 tests/contratos/estadisticas-sin-datos-personales.py
+          python3 tests/contratos/estadisticas-sin-datos-personales.py --autoprueba
+
       # Regla 2: un cambio incompatible abre version nueva. Compara cada
       # contrato tocado contra su propia version en la base de la rama, con
       # `git show`: no consulta ningun broker ni registro externo, asi que no

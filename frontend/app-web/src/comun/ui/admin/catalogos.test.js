@@ -98,6 +98,9 @@ describe('acciones de auditoría', () => {
       'SECURITY_BYPASS_ATTEMPT',
       'ELIMINACION',
       'EXPORTACION',
+      // SA-18 (ms-cumplimiento-auditoria.yaml 1.4.0): lo que importa del catálogo.
+      'REACTIVACION',
+      'REVERSION',
       'OTRO',
     ]) {
       expect(NOMBRE_DE_ACCION[tipo]).toBeTruthy();

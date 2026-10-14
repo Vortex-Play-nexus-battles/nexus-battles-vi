@@ -377,9 +377,14 @@ bajar_imagenes() {
 # volviendo a desplegar; la de uno compartido, cambiando el secret de GitHub y
 # desplegando los dos hosts.
 #
+# 14-oct (SA-18) — ms-cumplimiento pasa a ser cliente: la bitacora central
+# importa de productos las operaciones administrativas del catalogo. Vive en el
+# host de plataforma, como el emisor, asi que su valor lo genera este host y no
+# hace falta secret compartido en GitHub.
+#
 # La lista de clientes vive en una linea propia, a la izquierda, porque el
 # guardian scripts/cd/comprobar-catalogo-servicios.sh la lee con grep.
-CLIENTES_DE_SERVICIO="salas-partidas comentarios notificaciones ms-subastas ms-finanzas moderacion-sanciones torneos admin-parametros ms-ecommerce misiones"
+CLIENTES_DE_SERVICIO="salas-partidas comentarios notificaciones ms-subastas ms-finanzas moderacion-sanciones torneos admin-parametros ms-ecommerce misiones ms-cumplimiento"
 
 #   $1 = archivo persistente del host, $2 = .env al que se anaden las lineas.
 # Deja AUTH_CLIENTES_SERVICIO en el shell. Devuelve 1 si una variable de

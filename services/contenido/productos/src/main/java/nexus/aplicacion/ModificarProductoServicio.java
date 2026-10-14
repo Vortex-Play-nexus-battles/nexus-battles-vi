@@ -8,6 +8,7 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import nexus.api.SolicitudCrearProducto;
 import nexus.api.SolicitudModificarProducto;
+import nexus.auditoria.RegistroDeOperaciones;
 import nexus.dominio.ModificacionProductoInvalidaException;
 import nexus.dominio.Producto;
 import nexus.dominio.ProductoNoEncontradoException;
@@ -24,16 +25,19 @@ public class ModificarProductoServicio {
         private final RespaldoProductoRepository respaldoRepositorio;
         private final ProductoMapper mapper;
         private final Validator validator;
+        private final RegistroDeOperaciones operaciones;
 
         public ModificarProductoServicio(
                         ProductoRepository repositorio,
                         RespaldoProductoRepository respaldoRepositorio,
                         ProductoMapper mapper,
-                        Validator validator) {
+                        Validator validator,
+                        RegistroDeOperaciones operaciones) {
                 this.repositorio = repositorio;
                 this.respaldoRepositorio = respaldoRepositorio;
                 this.mapper = mapper;
                 this.validator = validator;
+                this.operaciones = operaciones;
         }
 
         /**
@@ -105,12 +109,17 @@ public class ModificarProductoServicio {
                 // despues de haber guardado el respaldo —tambien por conflicto—,
                 // se borra ese respaldo de forma compensatoria para no dejar un
                 // historico huerfano que referencia un cambio que nunca se aplico.
+                Producto guardado;
                 try {
-                        return repositorio.save(actualizado);
+                        guardado = repositorio.save(actualizado);
                 } catch (RuntimeException fallo) {
                         respaldoRepositorio.deleteById(respaldo.id());
                         throw fallo;
                 }
+                // SA-18: la modificacion (o la importacion de diseno) ya
+                // aplicada, a la bitacora de operaciones.
+                operaciones.deProducto(respaldo);
+                return guardado;
         }
 
         private static Producto conVersion(Producto producto, int version) {
