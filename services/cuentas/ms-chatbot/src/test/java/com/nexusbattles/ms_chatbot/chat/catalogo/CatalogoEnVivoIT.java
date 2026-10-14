@@ -38,7 +38,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * recibe una credencial.
  */
 @Testcontainers
-@SpringBootTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
+// Plazos de la llamada al catalogo holgados: aqui se prueba el camino, no la
+// latencia, y una maquina cargada no debe convertir el precio en «la base
+// responde» (paso una vez en local, con otra compilacion corriendo al lado).
+@SpringBootTest(properties = {"spring.jpa.hibernate.ddl-auto=validate", "app.http.timeout-conexion-ms=3000",
+    "app.http.timeout-lectura-ms=5000"})
 @AutoConfigureMockMvc
 @DisplayName("Chatbot · catalogo en vivo de punta a punta (1.10.0)")
 class CatalogoEnVivoIT {

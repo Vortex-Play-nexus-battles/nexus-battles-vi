@@ -1,7 +1,7 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
 **Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.10.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.0.0 (canal en tiempo real, 7.4.9)
-**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V13) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
+**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V16) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
 ## Qué hace
@@ -30,8 +30,23 @@ dónde sale cada afirmación (contrato, código, regla o decisión), tema por te
   clave nueva, así que las analíticas de temas frecuentes siguen contando cada tema junto.
 - Añade 118 casos de evaluación (dos por tema, español e inglés).
 
+**V15 (1.11.0).** «¿Cuáles son las reglas del juego?», «¿cómo se juega?» o «what are the game
+rules?» no tenían respuesta (o caían en el tema de la IA o en el de las normas de conducta).
+V15 publica, como V11, una versión nueva con el tema «Reglas básicas del juego»
+(`reglas-del-juego`, enlace al centro de ayuda), que resume lo ya verificado en los temas de
+V11, y sus casos de evaluación; la copia conserva las intenciones adicionales de V12.
+
+**V16 (1.11.0).** La base dice lo que el juego hace hoy. «Cómo apelar una sanción»
+(`apelar-sancion`, V11) se escribió antes de la apelación sin sesión de SA-4 y decía que una
+suspensión o un baneo no se podían apelar; ahora explica «Apelar esta sanción» en la
+pantalla de entrada. Y 18 temas creados en DEV desde la consola, que el repositorio no
+tiene, contradecían el código o el documento (la evidencia, en `contenido/evidencia-v11.md`).
+Cada corrección se aplica solo al tema que sigue diciendo **exactamente** lo auditado: lo que
+un administrador ya editó no se toca. Si hay algo que corregir en producción, se publica como
+V11 (versión nueva, la anterior retirada y revertible); la candidata recibe lo mismo.
+
 `contenido/base-de-conocimiento.json` es la misma base en el formato de importación del
-panel (59 temas y 118 casos): sirve para restaurarla en otro entorno sin tocar la base de
+panel (60 temas y 126 casos): sirve para restaurarla en otro entorno sin tocar la base de
 datos. `BaseDeConocimientoEnProduccionIT` comprueba que cada caso activo lo responde su
 tema, que ningún tema enlaza a una vista de administración y que una pregunta en inglés se
 responde en inglés.
@@ -257,6 +272,12 @@ La migración **V10** (Java, `db.migration`) redactó lo que ya estaba guardado:
 usuario, comentarios, tickets y su contexto, y brechas (las que solo diferían por el secreto se
 fundieron sumando sus contadores; las que solo eran un secreto se borraron).
 
+**1.11.0: el valor entero.** Hasta la 1.10.0 la puntuación en que terminaba una contraseña
+quedaba a la vista: «mi contraseña es Hunter2024!» se guardaba «… ***!», y ese símbolo es parte
+de la contraseña (la política de claves exige uno). Desde la 1.11.0 se tapa el valor entero (se
+pierde, a lo sumo, el punto de la frase) y la migración **V14** vuelve a redactar lo guardado con
+la regla nueva, con la misma implementación de V10.
+
 **Cifrado (7.4.8).** En tránsito: TLS 1.2/1.3 en el borde (`https://nexusbattlesvi.com`);
 del borde al servicio y del servicio a su base el tráfico no sale del host. En reposo: el
 volumen EBS del host de plataforma, donde vive `chatbot-db`, está cifrado con llave de AWS
@@ -353,6 +374,19 @@ propio token; el chatbot no tiene credencial de servicio.
 | Torneos en curso y mi equipo (B11) | torneos `GET /torneos`, `GET /torneos/{id}` | ninguna (dato público) |
 | Misiones en curso (1.3.0) | misiones `GET /api/v1/misiones/en-curso` | token del jugador |
 | Catálogo de productos (1.10.0, también visitantes) | productos `GET /api/v1/productos` | ninguna (dato público) |
+
+**Cómo se reconoce (1.11.0).** El inventario, las subastas, las notificaciones, las
+transacciones y las misiones se reconocen igual (`IntencionDeConsulta`): habla de ese tema,
+pregunta por lo suyo («mi», «mis», «tengo», «my», «I have») y no es una pregunta de reglas.
+Así «¿tengo alguna misión activa?», «¿cuáles son mis últimas transacciones?» o «¿qué subastas
+tengo?» llegan a la consulta en vivo, y «¿puedo cancelar mi puja?», «¿qué pasa si abandono mi
+misión?» o «¿tengo que pagar para subastar?» los responde la base aunque digan «mi».
+
+**Un visitante (1.11.0)** que pide algo de esto, o ir a una sección suya, recibe que hace falta
+una sesión, con enlaces a «Entrar» y «Crear cuenta»: no se consulta nada ni se registra como
+pregunta sin respuesta. **Navegación pública** (`NavegacionPublica`, para todos): «llévame a la
+subasta», «ir al centro de ayuda», «take me to the store»… con el enlace a la vista; la tienda,
+el chat general y «Jugar online» piden sesión, y a un visitante se le dice que entre.
 
 «Busca espada en mi inventario», «¿tengo alguna poción en mi inventario?» o «search my
 inventory for a sword» usan la búsqueda real (criterio de 4 letras o más, como pide el
@@ -498,9 +532,10 @@ en la píldora del kit en modo discreto, y «Tus solicitudes» se actualiza sola
 (`SeguridadDelHistorialIT`: el ataque de la auditoría, límite de frecuencia, mensaje
 bloqueado, restricción de espacios de claves; `BaseDeConocimientoFielAlJuegoIT`: V10 → V11
 con producción, candidata y respuestas guardadas; `BaseDeConocimientoEnProduccionIT`: los
-139 casos de evaluación contra la base publicada; `GestionDeLaBaseDeConocimientoIT` y
+142 casos de evaluación contra la base publicada; `GestionDeLaBaseDeConocimientoIT` y
 `TransicionesDeVersionIT`: V12 y la gestión de la base de 1.6.0; `AprendizajeYAnaliticasIT`:
 V13, preguntas sin respuesta y fórmulas del tablero de 1.7.0;
 `SoporteDesdeLaConversacionYAyudaIT`: la solicitud desde la conversación y el centro de ayuda
 de 1.8.0; `CanalDelChatbotIT` y `RespuestasFrecuentesIT`: el canal en tiempo real y la caché
-de 7.4.9). JaCoCo ≥ 80 %.
+de 7.4.9; `CatalogoEnVivoIT`: el catálogo de 1.10.0; `RedactarLaPuntuacionDeLosSecretosIT` y
+`ReglasDelJuegoIT` y `BaseDeConocimientoAlDiaIT`: V14, V15 y V16 de 1.11.0). JaCoCo ≥ 80 %.

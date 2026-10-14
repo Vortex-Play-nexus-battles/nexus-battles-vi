@@ -16,6 +16,8 @@ import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.ResourceAccessException;
@@ -29,6 +31,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -725,5 +728,58 @@ class MotorConsultasAsistidasTest {
 
         assertThat(resultadoDe("informe de mi actividad")).isEqualTo(ResultadoDeRespuesta.NO_DISPONIBLE);
         assertThat(resultadoDe("informe de mi actividad")).isEqualTo(ResultadoDeRespuesta.CONSULTA_EN_VIVO);
+    }
+
+    // 1.11.0: otras formas de pedir lo mismo llegan a la consulta en vivo.
+    @Test
+    void unaMisionActivaSePreguntaDeOtrasFormas() {
+        when(misionesClient.enCurso(TOKEN)).thenReturn(List.of());
+
+        assertThat(motor.generarRespuesta("¿Tengo alguna misión activa?", TOKEN, UID)).isPresent();
+        assertThat(motor.generarRespuesta("¿Qué misiones tengo en curso?", TOKEN, UID)).isPresent();
+
+        verify(misionesClient, times(2)).enCurso(TOKEN);
+    }
+
+    @Test
+    void lasUltimasTransaccionesSonLosMovimientosDeCreditos() {
+        when(finanzasClient.movimientos(TOKEN, UID, 5)).thenReturn(new PaginaMovimientosDto(List.of(), 0));
+
+        Optional<ResultadoMotor> resultado = motor.generarRespuesta("¿Cuáles son mis últimas transacciones?", TOKEN, UID);
+
+        assertThat(resultado).isPresent();
+        assertThat(resultado.get().resultado()).isEqualTo(ResultadoDeRespuesta.CONSULTA_EN_VIVO);
+    }
+
+    // Y una pregunta de reglas, aunque traiga «mi puja», la responde la base.
+    @Test
+    void unaPreguntaDeReglasSobreLoSuyoNoConsultaNada() {
+        assertThat(motor.generarRespuesta("¿Puedo cancelar mi puja?", TOKEN, UID)).isEmpty();
+        assertThat(motor.generarRespuesta("¿Qué pasa si abandono mi misión?", TOKEN, UID)).isEmpty();
+
+        verifyNoInteractions(subastasClient, misionesClient, inventarioClient, notificacionesClient, finanzasClient);
+    }
+
+    // 1.11.0 (7.4.8): reconocer que un visitante pide algo de su cuenta, sin consultar nada.
+    @ParameterizedTest
+    @ValueSource(strings = {"¿Qué tengo en mi inventario?", "muéstrame mis últimas transacciones",
+        "dame un informe de mi actividad", "busca espada en mi inventario", "llévame a mi inventario",
+        "¿Tengo notificaciones?", "¿Tengo alguna misión activa?", "show me my notifications", "mis pujas"})
+    void reconoceQuePideDatosDeSuCuenta(String mensaje) {
+        assertThat(motor.pideDatosDeSuCuenta(mensaje)).as(mensaje).isTrue();
+        verifyNoInteractions(subastasClient, misionesClient, inventarioClient, notificacionesClient, finanzasClient,
+            torneosClient);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"¿Cómo me registro?", "¿Cómo funciona el combate?", "llévame a la tienda",
+        "¿Hay torneos en curso?", "¿Puedo cancelar mi puja?", "llévame a la subasta", "   "})
+    void loQueNoEsDeSuCuentaNoLoEs(String mensaje) {
+        assertThat(motor.pideDatosDeSuCuenta(mensaje)).as(mensaje).isFalse();
+    }
+
+    @Test
+    void sinMensajeNoPideNada() {
+        assertThat(motor.pideDatosDeSuCuenta(null)).isFalse();
     }
 }
