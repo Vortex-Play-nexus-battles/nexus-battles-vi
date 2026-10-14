@@ -1062,8 +1062,12 @@ describe('SA-3 — inventario de la cuenta', () => {
     expect(filas[1]).toContain('No aplica');
     expect(filas[2]).toContain('En subasta');
     expect(inventario.textContent).not.toMatch(UUID);
-    // Leer el inventario no es modificarlo: no hay botones que no hagan nada.
-    expect(inventario.querySelector('button:not([data-accion="reintentar"])')).toBeNull();
+    // SA-10: el único botón del panel es el que modifica el inventario de verdad.
+    expect(
+      [...inventario.querySelectorAll('button:not([data-accion="reintentar"])')].map(
+        (boton) => boton.dataset.accion,
+      ),
+    ).toEqual(['entregar-productos']);
   });
 
   test('una cuenta sin productos lo dice', async () => {
@@ -1221,5 +1225,44 @@ describe('SA-3 — el historial completo de actividad', () => {
     const administrativas = hechosDeAuditoria(AUDITORIA);
     expect(administrativas.map((h) => h.titulo)).toEqual(['Otra acción', 'Modificación']);
     expect(administrativas[1].actor).toBe('Por ada_admin');
+  });
+});
+
+describe('SA-10 — modificar el inventario de la cuenta (§7.3.4)', () => {
+  const botonDe = (raiz) =>
+    panelDe(raiz, 'inventario-de-la-cuenta').querySelector('[data-accion="entregar-productos"]');
+
+  test('un Administrador sobre un jugador ve «Entregar productos» y abre el panel de la entrega', async () => {
+    const { raiz } = await montar({ sesion: ADMIN });
+
+    const boton = botonDe(raiz);
+    expect(boton.textContent).toBe('Entregar productos');
+    boton.click();
+    const dialogo = document.querySelector('[role="dialog"]');
+    expect(dialogo.textContent).toContain('Entregar productos · Ana');
+    expect(
+      dialogo.querySelector('[data-zona="formulario-de-entrega"] select[name="tipo"]'),
+    ).not.toBeNull();
+    expect(dialogo.querySelector('[data-accion="confirmar-entrega"]').textContent).toBe('Entregar');
+    dialogo.querySelector('[data-accion="cerrar"]').click();
+  });
+
+  test('7.3.1: sobre otro Administrador no se ofrece; un Super Administrador sí puede', async () => {
+    const administradora = identidad(200, { ...FICHA, rol: 'ADMINISTRADOR' });
+    const comoAdmin = await montar({ sesion: ADMIN, buscar: administradora });
+    expect(botonDe(comoAdmin.raiz)).toBeNull();
+
+    const comoSuper = await montar({
+      sesion: SUPER,
+      buscar: identidad(200, { ...FICHA, rol: 'ADMINISTRADOR' }),
+    });
+    expect(botonDe(comoSuper.raiz)).not.toBeNull();
+  });
+
+  test('un Moderador ve el inventario pero no lo modifica', async () => {
+    const { raiz } = await montar({ sesion: { autenticado: true, rol: 'MODERADOR' } });
+
+    expect(panelDe(raiz, 'inventario-de-la-cuenta')).not.toBeNull();
+    expect(botonDe(raiz)).toBeNull();
   });
 });
