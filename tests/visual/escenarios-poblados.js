@@ -5001,6 +5001,30 @@ const RUTAS_DE_LA_FICHA = [
       size: 10,
     }),
   ],
+  // SA-15 (transacciones.yaml 1.1.0): los pagos en moneda real de la cuenta.
+  [
+    '**/api/v1/transacciones/usuarios/*',
+    json({
+      content: [
+        ['Compra en la tienda: Hoja de diamante', 25000, 'APROBADO'],
+        ['Compra en la tienda: Yelmo de acero x2', 19800, 'RECHAZADO'],
+        ['Compra en la tienda: Guerrero de Obsidiana', 42000, 'APROBADO'],
+      ].map(([concepto, monto, resultado], n) => ({
+        id: `7e000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
+        refId: `orden-${n}`,
+        monto,
+        moneda: 'COP',
+        concepto,
+        resultado,
+        comprobanteUrl: null,
+        creado: new Date(Date.UTC(2026, 9, 12 - n * 3, 15, 30, 0)).toISOString(),
+      })),
+      totalElements: 3,
+      totalPages: 1,
+      number: 0,
+      size: 10,
+    }),
+  ],
   ['**/api/v1/sanciones/usuarios/*', json(historialDeSanciones())],
   [
     '**/api/v1/comentarios/moderacion/autores/**',
@@ -5212,7 +5236,8 @@ export const ESCENARIOS_SA3 = [
   },
   {
     id: 'ficha-usuario-creditos',
-    titulo: 'ficha del usuario: saldo y movimientos de créditos (SA-3)',
+    titulo:
+      'ficha del usuario: saldo, movimientos de créditos y pagos en moneda real (SA-3, SA-15)',
     ruta: 'plataforma/moderacion-sanciones/ficha-usuario.html?usuario=15',
     sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
     rutas: RUTAS_DE_LA_FICHA,
@@ -5222,6 +5247,7 @@ export const ESCENARIOS_SA3 = [
     exige: [
       '[data-panel="saldo"] .indicador-admin',
       '[data-panel="movimientos"] .movimiento__importe',
+      '[data-panel="pagos"] tbody tr [data-estado="APROBADO"]',
     ],
   },
   {

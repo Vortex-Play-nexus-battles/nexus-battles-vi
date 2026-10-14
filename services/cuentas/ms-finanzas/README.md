@@ -55,7 +55,10 @@ GET    /pagos/{refId}             Estado de una transacción.
 recibe 403, aunque el `uid` del cuerpo sea el suyo. La única excepción es
 `GET /creditos/{uid}/saldo`, que además admite al propio usuario (y solo el
 suyo). `/transacciones/**` y `/cofres/**` son del usuario autenticado; un
-servicio no tiene historial. Las reglas y sus pruebas negativas de
+servicio no tiene historial. La excepción es `GET /transacciones/usuarios/{uid}`
+(`transacciones.yaml` 1.1.0, SA-15): el historial de pagos en moneda real de
+una cuenta para su ficha administrativa (§7.3.4), solo para Administrador y
+Super Administrador. Las reglas y sus pruebas negativas de
 suplantación están en `seguridad/SecurityConfig` y `SecurityConfigTest`
 (tokens reales firmados y verificados contra un JWKS). Contrato:
 `contracts/openapi/creditos.yaml` 1.1.0.
