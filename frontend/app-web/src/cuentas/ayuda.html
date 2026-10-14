@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Centro de ayuda · The Nexus Battles VI</title>
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/fondos.css" />
+    <link rel="stylesheet" href="./ayuda.css" />
+  </head>
+  <body data-fondo="cuenta">
+    <div data-cabecera-app></div>
+
+    <main class="pagina pila pila--amplia ayuda" data-vista="ayuda">
+      <!-- El centro de ayuda se pinta aquí: encabezado, buscador, índice y temas. -->
+      <div class="pila pila--amplia" data-centro-de-ayuda></div>
+    </main>
+
+    <script type="module">
+      import { exigirAcceso } from '../comun/acceso.js';
+      import { montarCabecera } from '../comun/cabecera-app.js';
+      import { montarCentroDeAyuda } from './ayuda.js';
+
+      // Pública: la ven un visitante y un jugador. La guarda solo lee la sesión.
+      exigirAcceso('ayuda');
+      montarCabecera(document.querySelector('[data-cabecera-app]'), { vista: 'ayuda' });
+      montarCentroDeAyuda(document.querySelector('[data-centro-de-ayuda]')).cargar();
+    </script>
+  </body>
+</html>

@@ -358,7 +358,9 @@ class MotorRespuestasTest {
         assertThat(resultado.categoria()).isEqualTo(Categoria.CUENTA_Y_REGISTRO);
         assertThat(resultado.enriquecido().ofrecerSoporteHumano()).isTrue();
         assertThat(resultado.enriquecido().respuestasRapidas()).containsExactly("Recuperar mi contraseña");
-        assertThat(resultado.enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("registro");
+        // 1.8.0: y el centro de ayuda, abierto en la categoria del tema.
+        assertThat(resultado.enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("registro", "ayuda");
+        assertThat(resultado.enriquecido().enlaces().get(1).ancla()).isEqualTo("categoria-cuenta-y-registro");
         assertThat(motorRespuestas.relacionadosCon("clave-retirada", "x", false)).isEmpty();
         assertThat(motorRespuestas.relacionadosCon(null, "x", true)).isEmpty();
     }

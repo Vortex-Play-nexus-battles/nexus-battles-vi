@@ -128,7 +128,7 @@ describe('vistas con fondo', () => {
     expect(problemas).toEqual([]);
   });
 
-  test('las 26 vistas del jugador tienen escena (CA-02)', () => {
+  test('las 27 vistas del jugador tienen escena (CA-02)', () => {
     // Portal y armazón de jugador de la matriz de acceso. Una vista nueva del
     // jugador sin `data-fondo` se quedaría sobre la atmósfera lisa, fuera del
     // mundo que comparten todas las demás: tiene que elegir escena.
@@ -137,7 +137,8 @@ describe('vistas con fondo', () => {
       .filter(([, entrada]) => declaracion(entrada.ruta).fondo === null)
       .map(([id]) => id);
     expect(sinEscena).toEqual([]);
-    expect(delJugador).toHaveLength(26);
+    // 1.8.0: 27 con el centro de ayuda (`cuentas/ayuda.html`, escena `cuenta`).
+    expect(delJugador).toHaveLength(27);
   });
 
   test('la consola de administración no lleva fondo', () => {

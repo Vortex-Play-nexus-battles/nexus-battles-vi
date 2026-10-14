@@ -372,6 +372,8 @@ function menuDeCuenta({ sesion, base, almacen, navegar, opcionesExtra = [] }) {
     // chat queda aquí, junto a la tienda.
     ['Chat', rutaDeVista('chat'), 'chat'],
     ['Mis sanciones', RUTAS.misSanciones, 'mis-sanciones'],
+    // ms-chatbot.yaml 1.8.0 — lo que el asistente sabe responder, para leerlo.
+    ['Centro de ayuda', rutaDeVista('ayuda'), 'ayuda'],
     ...opcionesExtra,
   ];
   for (const [texto, ruta, vista] of opciones) {

@@ -31,6 +31,10 @@ openapi: 3.1.0
 #               el resultado de cada respuesta del bot se guarda (V13) y las
 #               formulas del tablero quedan corregidas y documentadas; el CSV
 #               ya no puede llevar formulas
+#   7.4.3 (1.8.0) soporte desde la conversacion y centro de ayuda: la
+#               solicitud se arma con la pregunta que el asistente no
+#               resolvio (`POST /chat/tickets/desde-conversacion`) y lo que
+#               sabe responder se lee sin chatear (`GET /chat/ayuda`)
 #   7.4 (1.3.0) lo que faltaba del modulo 7.4: tickets y soporte humano
 #               (RF-CHA-007, RF-ADM-004), sugerencias y autocompletado,
 #               respuestas enriquecidas sin imagenes, vista del jugador y
@@ -123,7 +127,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.7.0
+  version: 1.8.0
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -133,6 +137,36 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.8.0 — 7.4.3: solicitud desde la conversacion y centro de ayuda
+
+    Todo compatible: dos operaciones nuevas, un campo opcional nuevo en
+    `EnlaceInterno` y un valor nuevo de `motivo`. Ninguna operacion ni campo
+    existente cambia de forma. Sin migracion: no hace falta nada nuevo en la
+    base.
+
+    * **`POST /chat/tickets/desde-conversacion`** («escalamiento a agente
+      humano con contexto de la conversacion»). Despues de que el asistente
+      no entendio o de un «no me sirvio», el jugador abre la solicitud con
+      un clic: el servidor toma de SU conversacion (la del `uid` del token,
+      nunca un id que mande el cliente) la ultima pregunta sin resolver, y
+      si no hay ninguna, la ultima pregunta. El tema sale de la respuesta
+      que no sirvio, o de `vista`, o es FAQ_GENERAL. Mismas reglas que
+      `POST /chat/tickets`: solo jugadores (401 SESION_REQUERIDA), limite
+      (429), revision y lista negra (422 y 503), una abierta a la vez (409
+      TICKET_ABIERTO). Sin ninguna pregunta en la conversacion: 409
+      SIN_CONVERSACION. El borde la cuenta en su zona de escritura, como
+      `POST /chat/tickets`.
+    * **`GET /chat/ayuda`** (centro de ayuda, 7.4.3 «enlaces a documentacion
+      relevante»): los temas activos de la version EN PRODUCCION agrupados
+      por categoria, con su respuesta en espanol e ingles y sus pasos.
+      Publica y sin identidad; nada de lo interno de un tema (clave,
+      variantes, prioridad, version). `Cache-Control: public, max-age=300`.
+    * **`EnlaceInterno.ancla`** (opcional): el fragmento dentro de la vista,
+      p. ej. `categoria-cuenta-y-registro` en el centro de ayuda. Al no
+      entender una pregunta o tras un «no me sirvio», la respuesta trae
+      ademas el enlace «Ver el centro de ayuda» (`destino` `ayuda`), con el
+      ancla de la categoria cuando se sabe.
 
     ### 1.7.0 — 7.4.5 y 7.4.7: preguntas sin respuesta y analiticas
 
@@ -441,6 +475,8 @@ tags:
     description: Casos de evaluacion, despliegue evaluado y reversion (HU-CHA-012, RF-CHA-014)
   - name: soporte
     description: Tickets de soporte humano del jugador (1.3.0, 7.4.3, RF-CHA-007)
+  - name: ayuda
+    description: Centro de ayuda publico con lo que el chatbot sabe responder (1.8.0, 7.4.3)
   - name: admin-soporte
     description: Atencion de los tickets de soporte (1.3.0, RF-ADM-004)
 
@@ -972,6 +1008,122 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+
+  /chat/tickets/desde-conversacion:
+    post:
+      tags: [soporte]
+      operationId: abrirTicketDesdeLaConversacionDelChatbot
+      summary: Abre un ticket con la pregunta que el chatbot no resolvio (1.8.0)
+      description: |
+        La «solicitud en un clic» de la ventana despues de un escalamiento o
+        de un «no me sirvio». El servidor arma el ticket con la conversacion
+        de QUIEN LLAMA (el `uid` del token; ningun identificador del cuerpo
+        elige la conversacion):
+
+        * Pregunta: la ultima sin resolver, es decir, la que el chatbot no
+          entendio (escalada) o la que respondio con algo que «no le sirvio»
+          (la pregunta, no el «no me sirvio»). Si no hay ninguna, la ultima
+          pregunta de la conversacion. Ya esta redactada: se guardo asi.
+        * `categoria`: la del tema que respondio esa pregunta; si no hubo
+          tema, la de `vista`; si tampoco, FAQ_GENERAL.
+        * `asunto`: «Sin respuesta del asistente: <pregunta>», recortado a
+          150 caracteres.
+        * `mensaje`: la pregunta y que paso con ella y, si llega,
+          `comentario`; como mucho 2000 caracteres.
+        * El contexto (los ultimos mensajes, redactados), igual que
+          `POST /chat/tickets`.
+
+        Mismas reglas que `POST /chat/tickets`: solo jugadores (401
+        SESION_REQUERIDA), mismo limite de frecuencia (429), el asunto y el
+        mensaje pasan por la revision (422 INYECCION_DETECTADA) y la lista
+        negra (422 CONTENIDO_BLOQUEADO, 503 MODERACION_NO_DISPONIBLE), y una
+        sola solicitud abierta (409 TICKET_ABIERTO).
+      security:
+        - tokenDeUsuario: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AbrirTicketDesdeConversacion'
+            example:
+              vista: SUBASTAS
+      responses:
+        '201':
+          description: Ticket abierto, como lo ve el jugador.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketDeSoporte'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          description: Sin token valido (`motivo` SESION_REQUERIDA).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: |
+            Ya hay un ticket abierto (`motivo` TICKET_ABIERTO), o la
+            conversacion no tiene ninguna pregunta de la cual partir
+            (`motivo` SIN_CONVERSACION).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: |
+            El comentario, o la pregunta tomada de la conversacion, tiene un
+            termino de la lista negra (`motivo` CONTENIDO_BLOQUEADO) o un
+            intento de inyeccion de codigo (`motivo` INYECCION_DETECTADA). No
+            se guarda nada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+        '503':
+          description: La lista negra no responde (`motivo` MODERACION_NO_DISPONIBLE). No se guarda nada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /chat/ayuda:
+    get:
+      tags: [ayuda]
+      operationId: obtenerCentroDeAyudaDelChatbot
+      summary: Lo que el chatbot sabe responder, por categoria (1.8.0)
+      description: |
+        El centro de ayuda: los temas ACTIVOS de la version EN PRODUCCION de
+        la base de conocimiento, agrupados por su categoria (en el orden de
+        `Categoria`, sin las que no tienen temas), y dentro de cada una el de
+        mayor prioridad primero y despues por titulo. Sin los temas de
+        cortesia (saludo, despedida).
+
+        Solo lo que lee un jugador: titulo, respuesta en espanol y en ingles
+        y sus pasos. Nada interno (clave, variantes de pregunta, prioridad,
+        version, fechas).
+
+        Es igual para todos: no lee identidad, no tiene limite propio en el
+        borde (como toda lectura) y se puede guardar en cache cinco minutos.
+        Sin version en produccion, `categorias` viene vacia.
+      security:
+        - {}
+      responses:
+        '200':
+          description: El centro de ayuda.
+          headers:
+            Cache-Control:
+              description: '`public, max-age=300`.'
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CentroDeAyuda'
 
   # ===========================================================================
   # PANEL ADMINISTRATIVO (HU-CHA-012)
@@ -2188,7 +2340,7 @@ components:
         mandar a nadie fuera del sitio. Desde 1.5.0 `texto` lleva la
         etiqueta que la vista tiene en la barra («Ir a Mi inventario»; en
         ingles «Go to Mi inventario») y `destino` es siempre una vista de
-        jugador o publica.
+        jugador o publica. Desde 1.8.0 puede traer `ancla`.
       required: [texto, destino]
       properties:
         texto:
@@ -2198,6 +2350,14 @@ components:
           type: string
           pattern: '^[a-z0-9-]{1,40}$'
           example: inventario
+        ancla:
+          type: [string, 'null']
+          pattern: '^[a-z0-9-]{1,60}$'
+          description: |
+            1.8.0. Fragmento dentro de la vista de `destino` (sin `#`), p. ej.
+            `categoria-cuenta-y-registro` en el centro de ayuda. Sin valor, o
+            ausente, el enlace va al principio de la vista.
+          example: categoria-subasta-y-comercio
 
     TarjetaInformativa:
       type: object
@@ -2275,6 +2435,88 @@ components:
           type: string
           minLength: 1
           maxLength: 2000
+
+    AbrirTicketDesdeConversacion:
+      type: object
+      description: |
+        1.8.0. Todo opcional: el ticket sale de la conversacion de quien
+        llama. Un cuerpo vacio (o ninguno) vale.
+      properties:
+        vista:
+          oneOf:
+            - $ref: '#/components/schemas/VistaDelChat'
+            - type: 'null'
+          description: |
+            Donde esta el jugador. Decide la categoria solo si la pregunta no
+            tuvo tema que la respondiera.
+        comentario:
+          type: [string, 'null']
+          maxLength: 2000
+          description: |
+            Lo que el jugador quiera agregar. Pasa por la misma revision y
+            lista negra que el resto del ticket; vacio o solo espacios es sin
+            comentario.
+
+    CentroDeAyuda:
+      type: object
+      description: 1.8.0. Lo que el chatbot sabe responder, agrupado por categoria.
+      required: [categorias]
+      properties:
+        categorias:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoriaDeAyuda'
+
+    CategoriaDeAyuda:
+      type: object
+      description: 1.8.0.
+      required: [categoria, ancla, temas]
+      properties:
+        categoria:
+          $ref: '#/components/schemas/Categoria'
+        ancla:
+          type: string
+          pattern: '^[a-z0-9-]{1,60}$'
+          description: |
+            Fragmento de esta categoria en la pagina del centro de ayuda
+            (`categoria-` y el valor en minusculas con guiones). Es el mismo
+            que trae `EnlaceInterno.ancla`.
+          example: categoria-cuenta-y-registro
+        temas:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/TemaDeAyuda'
+
+    TemaDeAyuda:
+      type: object
+      description: 1.8.0. Un tema publicado, como lo lee un jugador.
+      required: [titulo, respuestaEs, respuestaEn, pasosEs, pasosEn]
+      properties:
+        titulo:
+          type: string
+          maxLength: 150
+        respuestaEs:
+          type: string
+        respuestaEn:
+          type: [string, 'null']
+          description: null si el tema no tiene respuesta en ingles.
+        pasosEs:
+          type: array
+          maxItems: 20
+          description: |
+            Los pasos «1) … 2) …» de la respuesta en espanol, si el tema es
+            paso a paso (como en `RespuestaEnriquecida.pasos`); vacia si no.
+          items:
+            type: string
+            maxLength: 500
+        pasosEn:
+          type: array
+          maxItems: 20
+          description: Los de la respuesta en ingles; vacia si no hay o no es paso a paso.
+          items:
+            type: string
+            maxLength: 500
 
     TicketDeSoporte:
       type: object
@@ -2418,7 +2660,8 @@ components:
           enum: [LIMITE_DE_FRECUENCIA, CONTENIDO_BLOQUEADO, MODERACION_NO_DISPONIBLE,
                  SESION_REQUERIDA, TICKET_ABIERTO, TRANSICION_NO_PERMITIDA,
                  OTRO_TICKET_ABIERTO, INYECCION_DETECTADA,
-                 TEMA_DUPLICADO, IMPORTACION_DEMASIADO_GRANDE, CAMBIO_CONCURRENTE]
+                 TEMA_DUPLICADO, IMPORTACION_DEMASIADO_GRANDE, CAMBIO_CONCURRENTE,
+                 SIN_CONVERSACION]
           description: |
             1.2.0. Solo en los errores nuevos de /chat/**. 1.3.0 agrega los de
             los tickets: SESION_REQUERIDA, TICKET_ABIERTO y
@@ -2427,6 +2670,8 @@ components:
             nombraba aunque las respuestas ya los traian.) 1.6.0 agrega los del
             panel de la base de conocimiento: TEMA_DUPLICADO (409),
             IMPORTACION_DEMASIADO_GRANDE (413) y CAMBIO_CONCURRENTE (409).
+            1.8.0: SIN_CONVERSACION (409), una solicitud desde una
+            conversacion sin preguntas.
 
     SesionAnonima:
       type: object
