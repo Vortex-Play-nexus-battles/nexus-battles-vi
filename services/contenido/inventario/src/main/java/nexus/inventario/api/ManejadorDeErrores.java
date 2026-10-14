@@ -1,6 +1,7 @@
 package nexus.inventario.api;
 
 import nexus.inventario.aplicacion.TransferenciaSinBloqueoException;
+import nexus.inventario.aplicacion.TransferenciaCombateInvalidaException;
 import nexus.inventario.aplicacion.CatalogoNoDisponibleException;
 import nexus.inventario.aplicacion.ClaveDeEntregaReutilizadaException;
 import nexus.inventario.aplicacion.ParteNoCoincideException;
@@ -62,6 +63,11 @@ public class ManejadorDeErrores {
     @ExceptionHandler(TransferenciaSinBloqueoException.class)
     public ProblemDetail transferenciaSinBloqueo(TransferenciaSinBloqueoException error) {
         return problema(HttpStatus.CONFLICT, "Transferencia sin bloqueo", error.getMessage());
+    }
+
+    @ExceptionHandler(TransferenciaCombateInvalidaException.class)
+    public ProblemDetail transferenciaCombateInvalida(TransferenciaCombateInvalidaException error) {
+        return problema(HttpStatus.CONFLICT, "Transferencia de combate invalida", error.getMessage());
     }
 
     @ExceptionHandler(ElementoNoEncontradoException.class)

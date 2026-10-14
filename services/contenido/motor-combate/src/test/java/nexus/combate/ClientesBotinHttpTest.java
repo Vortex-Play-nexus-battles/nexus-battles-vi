@@ -91,11 +91,11 @@ class ClientesBotinHttpTest {
     }
 
     private ClienteCatalogoBotinHttp clienteCatalogo() {
-        return new ClienteCatalogoBotinHttp(baseUri(), httpClient());
+        return new ClienteCatalogoBotinHttp(baseUri(), httpClient(), () -> "token-servicio");
     }
 
     private ClienteInventarioBotinHttp clienteInventario() {
-        return new ClienteInventarioBotinHttp(baseUri(), httpClient());
+        return new ClienteInventarioBotinHttp(baseUri(), httpClient(), () -> "token-servicio");
     }
 
     private URI baseUri() {
@@ -107,6 +107,7 @@ class ClientesBotinHttpTest {
     }
 
     private void responder(HttpExchange intercambio) throws IOException {
+        assertEquals("Bearer token-servicio", intercambio.getRequestHeaders().getFirst("Authorization"));
         String ruta = intercambio.getRequestURI().getPath();
         String metodo = intercambio.getRequestMethod();
         if (ruta.equals("/api/v1/productos/producto-armadura")) {
