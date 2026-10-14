@@ -3,6 +3,7 @@ package com.nexusbattles.ms_chatbot.config;
 import com.nexusbattles.comun.seguridad.CadenaDeSeguridad;
 import com.nexusbattles.comun.seguridad.ConversorRolesJwt;
 import com.nexusbattles.ms_chatbot.chat.conocimiento.LimiteDelArchivoDeImportacion;
+import com.nexusbattles.ms_chatbot.chat.tiemporeal.DestinosDelCanal;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -110,6 +111,12 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Regla 3 de plataforma: actuator abierto para la sonda de salud.
                 .requestMatchers("/actuator/**").permitAll()
+                // 7.4.9 (contracts/websocket/chatbot.yaml 1.0.0): el handshake del
+                // canal en tiempo real. El navegador no puede mandar cabeceras en
+                // un handshake de WebSocket: la identidad va en el CONNECT de
+                // STOMP y la decide PoliticaDelCanal con las reglas de /chat/**.
+                // El origen lo filtran CORS (abajo) y el propio endpoint.
+                .requestMatchers(DestinosDelCanal.ENDPOINT).permitAll()
                 .requestMatchers("/chatbot/admin/**").hasAnyRole(ROL_ADMINISTRADOR, ROL_SUPER_ADMINISTRADOR)
                 .anyRequest().authenticated()
             );

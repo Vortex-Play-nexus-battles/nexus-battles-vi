@@ -28,7 +28,24 @@ info:
     declara «configurables desde admin-parametros». Un parametro sin valor
     (`valor: null`) es una decision que el PO no ha tomado: el consumidor
     aplica su comportamiento por omision y lo dice.
-  version: 1.0.0
+
+    1.1.0 (SA-11, §7.3.7 «cambios en politicas de uso que afecten al
+    usuario», RF-NOT-005) — la administracion publica aqui un cambio en una
+    politica de uso (los terminos y condiciones del servicio o la politica
+    de privacidad, las dos que nombran las causales de §7.3.2): que politica,
+    un titulo, lo que cambia en palabras del jugador, desde cuando rige y el
+    motivo. Publicar es de ADMINISTRADOR o SUPER_ADMINISTRADOR, como cambiar
+    un parametro, y cada publicacion llega a la bitacora central de
+    ms-cumplimiento (§7.3.5) con la misma cola y los mismos reintentos que
+    los cambios de parametros (`CREACION` de `politica:<POLITICA>`, con la IP
+    de quien publico y la referencia `admin-parametros:politica-<id>`, que
+    hace idempotente el reintento). Leer es publico, como el catalogo: es un
+    anuncio para todos los jugadores, y por eso la respuesta no lleva quien
+    publico, ni el motivo ni la IP. Notificaciones lee los cambios
+    posteriores a su punto de lectura (`/parametros/politicas/cambios/posteriores`)
+    y los lleva a la bandeja de cada jugador en su siguiente ingreso.
+    Compatible: solo anade operaciones y esquemas.
+  version: 1.1.0
 servers:
   - url: http://localhost:8088/api/v1
     description: Entorno local de desarrollo
@@ -127,6 +144,74 @@ paths:
           content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
         '404': { $ref: '#/components/responses/NoEncontrado' }
 
+  /parametros/politicas/cambios:
+    get:
+      summary: Los cambios publicados en las politicas de uso, del mas reciente al mas antiguo (los 50 ultimos)
+      operationId: historialDeCambiosDePolitica
+      security: []
+      responses:
+        '200':
+          description: Los cambios publicados, del mas reciente al mas antiguo.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CambioDePolitica' }
+    post:
+      summary: Publicar un cambio en una politica de uso, con motivo (SA-11, §7.3.7)
+      operationId: publicarCambioDePolitica
+      description: >
+        Lo publica quien administra (ADMINISTRADOR o SUPER_ADMINISTRADOR) y
+        queda en la bitacora central (§7.3.5). Los jugadores lo reciben en su
+        bandeja de notificaciones en su siguiente ingreso. Una vigencia en el
+        pasado (mas de 5 minutos) se rechaza: los jugadores se enteran desde
+        hoy; sin vigencia rige desde ya.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublicacionDePolitica' }
+      responses:
+        '201':
+          description: Publicado; llega a la bandeja de cada jugador en su siguiente ingreso
+          content: { application/json: { schema: { $ref: '#/components/schemas/CambioDePolitica' } } }
+        '400':
+          description: Politica que no existe, textos fuera de su largo, sin motivo o vigencia en el pasado (SOLICITUD_INVALIDA)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '401': { description: Sin token }
+        '403':
+          description: El rol no publica cambios en las politicas (PERMISO_INSUFICIENTE)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+
+  /parametros/politicas/cambios/posteriores:
+    get:
+      summary: Lo publicado despues de un punto de lectura, en el orden en que se publico
+      operationId: cambiosDePoliticaPosteriores
+      description: >
+        La lectura de notificaciones: devuelve los cambios con `publicadoEn`
+        estrictamente posterior a `desde`, del mas antiguo al mas reciente,
+        hasta `limite`. `hasta` es el `publicadoEn` del ultimo que viene (o
+        `desde` si no viene ninguno) y se envia como `desde` la vez siguiente;
+        `completo` falso dice que hay mas despues de `hasta`.
+      security: []
+      parameters:
+        - name: desde
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: limite
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+          description: Fuera de 1..100 se ajusta al extremo
+      responses:
+        '200':
+          description: El lote de cambios posteriores a `desde`.
+          content: { application/json: { schema: { $ref: '#/components/schemas/LoteDeCambiosDePolitica' } } }
+        '400':
+          description: Falta `desde` o no es una fecha ISO-8601
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+
 components:
   securitySchemes:
     tokenDeUsuario:
@@ -197,6 +282,46 @@ components:
         cambiadoPor: { type: string, format: uuid }
         cambiadoEn: { type: string, format: date-time }
         vigenteDesde: { type: string, format: date-time }
+
+    Politica:
+      type: string
+      enum: [TERMINOS_Y_CONDICIONES, POLITICA_DE_PRIVACIDAD]
+      description: Las politicas de uso que nombran las causales de sancion (§7.3.2)
+
+    PublicacionDePolitica:
+      type: object
+      required: [politica, titulo, descripcion, motivo]
+      properties:
+        politica: { $ref: '#/components/schemas/Politica' }
+        titulo: { type: string, minLength: 5, maxLength: 120 }
+        descripcion: { type: string, minLength: 20, maxLength: 2000, description: Lo que cambia, en palabras del jugador }
+        vigenteDesde:
+          type: [string, 'null']
+          format: date-time
+          description: Desde cuando rige; sin ella, desde ya. No puede estar en el pasado (holgura de 5 minutos)
+        motivo: { type: string, minLength: 3, maxLength: 500, description: Va a la bitacora central, no al jugador }
+
+    CambioDePolitica:
+      type: object
+      required: [id, politica, nombreDeLaPolitica, titulo, descripcion, vigenteDesde, publicadoEn]
+      properties:
+        id: { type: string, format: uuid }
+        politica: { $ref: '#/components/schemas/Politica' }
+        nombreDeLaPolitica: { type: string, description: Como se lee (por ejemplo «Política de privacidad») }
+        titulo: { type: string }
+        descripcion: { type: string }
+        vigenteDesde: { type: string, format: date-time }
+        publicadoEn: { type: string, format: date-time }
+
+    LoteDeCambiosDePolitica:
+      type: object
+      required: [cambios, hasta, completo]
+      properties:
+        cambios:
+          type: array
+          items: { $ref: '#/components/schemas/CambioDePolitica' }
+        hasta: { type: string, format: date-time, description: El punto de lectura siguiente }
+        completo: { type: boolean, description: Falso si hay mas despues de `hasta` }
 
     ProblemDetail:
       type: object

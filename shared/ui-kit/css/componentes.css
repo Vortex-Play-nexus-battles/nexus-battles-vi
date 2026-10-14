@@ -12282,6 +12282,13 @@ body:has(.chatbot-flotante) main:not(.combate) {
   border-radius: 0;
 }
 
+/* SA-8 — el título del panel no crece: `.dialogo__titulo` lleva `flex: 1`
+   para repartir la fila de un encabezado, y en un panel de alto completo eso
+   lo estiraba hasta empujar el contenido a media pantalla. */
+.dialogo--lateral > .dialogo__titulo {
+  flex: 0 0 auto;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .dialogo--lateral {
     animation: entrar-panel-lateral var(--duracion-normal) var(--curva-salida) both;
@@ -12455,4 +12462,38 @@ body:has(.chatbot-flotante) main:not(.combate) {
   border-color: color-mix(in srgb, var(--primaria) 40%, transparent);
   background: color-mix(in srgb, var(--primaria) 9%, var(--superficie));
   box-shadow: inset 3px 0 0 var(--primaria);
+}
+
+/* SA-8 (punto 22) — los parámetros de plataforma: una tabla por área con las
+   mismas columnas, para que de un área a otra el valor, lo que admite y el
+   último cambio caigan en el mismo sitio. En el teléfono cada fila se apila
+   como ficha (la tabla de la consola ya lo hace por debajo de 641 px). */
+.parametros__tablas {
+  margin-block-start: var(--e-4);
+}
+
+@media (min-width: 900px) {
+  .parametros__tablas .tabla-admin__tabla {
+    table-layout: fixed;
+  }
+
+  .parametros__tablas .tabla-admin__tabla th:nth-child(1) {
+    width: 30%;
+  }
+
+  .parametros__tablas .tabla-admin__tabla th:nth-child(2) {
+    width: 15%;
+  }
+
+  .parametros__tablas .tabla-admin__tabla th:nth-child(3) {
+    width: 15%;
+  }
+
+  .parametros__tablas .tabla-admin__tabla th:nth-child(4) {
+    width: 22%;
+  }
+
+  .parametros__tablas .tabla-admin__tabla th:nth-child(5) {
+    width: 18%;
+  }
 }

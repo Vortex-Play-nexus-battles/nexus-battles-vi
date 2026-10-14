@@ -345,6 +345,11 @@ services:
       # srv-salas-partidas y srv-comentarios, para que se muevan juntas. Si no
       # responde, la entrega de pendientes sigue sin esos avisos.
       PRODUCTOS_BASE_URL: ${PRODUCTOS_BASE_URL:-http://34.193.90.11:8103}
+      # SA-11 (§7.3.7): los cambios en las politicas de uso llegan a la bandeja.
+      # Se leen de admin-parametros (mismo host, lectura publica, sin
+      # credencial) con la misma variable y valor por omision que el resto de
+      # servicios. Si no responde, la entrega de pendientes sigue sin esos avisos.
+      PARAMETROS_URL: ${PARAMETROS_URL:-http://srv-admin-parametros:8088/api/v1}
 
   srv-moderacion-sanciones:
     <<: *servicio-plataforma

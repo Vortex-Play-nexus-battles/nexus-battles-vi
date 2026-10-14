@@ -13,7 +13,11 @@
  */
 
 /**
- * @typedef {{nombre: string, ayuda: string, grupo: string}} FichaDeParametro
+ * `admiteVacio`: el parámetro se puede dejar sin valor, y su ayuda dice qué
+ * pasa entonces (no se avisa, no hay límite, solo pesos…). El resto necesita
+ * un valor: la consola no ofrece vaciarlo.
+ *
+ * @typedef {{nombre: string, ayuda: string, grupo: string, admiteVacio?: boolean}} FichaDeParametro
  */
 
 /** Grupos, en el orden en que se leen. */
@@ -50,12 +54,14 @@ export const CATALOGO_DE_PARAMETROS = Object.freeze({
     ayuda:
       'A partir de cuántas sanciones en un mismo día se avisa de una frecuencia inusual. Sin valor, no se avisa.',
     grupo: 'Sanciones y moderación',
+    admiteVacio: true,
   },
   'metricas.umbral-reportes-por-dia': {
     nombre: 'Alerta de reportes por día',
     ayuda:
       'A partir de cuántos reportes de comentarios en un mismo día se avisa de una frecuencia inusual. Sin valor, se muestran los conteos y no se avisa.',
     grupo: 'Sanciones y moderación',
+    admiteVacio: true,
   },
   'salas.participantes-maximo': {
     nombre: 'Jugadores por batalla',
@@ -66,6 +72,7 @@ export const CATALOGO_DE_PARAMETROS = Object.freeze({
     nombre: 'Tiempo por turno',
     ayuda: 'Segundos que tiene cada participante para jugar su turno. Sin valor, no hay límite.',
     grupo: 'Partidas',
+    admiteVacio: true,
   },
   'salas.apuestas.si-gana-la-maquina': {
     nombre: 'Apuestas si gana la máquina',
@@ -136,6 +143,7 @@ export const CATALOGO_DE_PARAMETROS = Object.freeze({
     nombre: 'Mensajes por minuto',
     ayuda: 'Cuántos mensajes puede enviar un jugador por minuto. Sin valor, no hay límite.',
     grupo: 'Chat',
+    admiteVacio: true,
   },
   'jugador.creditos-iniciales': {
     nombre: 'Créditos de bienvenida',
@@ -151,11 +159,13 @@ export const CATALOGO_DE_PARAMETROS = Object.freeze({
     nombre: 'Tasa de cambio a dólares',
     ayuda: 'Pesos colombianos por cada dólar, para mostrar y cobrar en USD. Sin valor, solo pesos.',
     grupo: 'Tienda',
+    admiteVacio: true,
   },
   'tienda.tasa-cop-eur': {
     nombre: 'Tasa de cambio a euros',
     ayuda: 'Pesos colombianos por cada euro, para mostrar y cobrar en EUR. Sin valor, solo pesos.',
     grupo: 'Tienda',
+    admiteVacio: true,
   },
   'plataforma.latencia-objetivo-ms': {
     nombre: 'Latencia objetivo',
@@ -212,11 +222,57 @@ const UNIDADES = Object.freeze({
   'COP/EUR': 'COP por EUR',
 });
 
+/** La unidad en singular, para «1 día» y no «1 días». */
+const SINGULARES = Object.freeze({
+  horas: 'hora',
+  días: 'día',
+  créditos: 'crédito',
+  mensajes: 'mensaje',
+  'mensajes por minuto': 'mensaje por minuto',
+  'sanciones por día': 'sanción por día',
+  'reportes por día': 'reporte por día',
+  segundos: 'segundo',
+  subastas: 'subasta',
+  pujas: 'puja',
+  equipos: 'equipo',
+  jugadores: 'jugador',
+});
+
 /** Las opciones de los parámetros de texto, como se leen. */
 const OPCIONES_LEGIBLES = Object.freeze({
   LIBERAR: 'Se devuelven',
   CONSUMIR: 'Se pierden',
+  true: 'Sí',
+  false: 'No',
 });
+
+/**
+ * Una opción de un parámetro de texto o booleano, como se lee.
+ *
+ * @param {string} opcion
+ * @returns {string}
+ */
+export function opcionLegible(opcion) {
+  return OPCIONES_LEGIBLES[String(opcion)] ?? String(opcion);
+}
+
+/**
+ * Una cantidad con la unidad del servicio, en palabras: «30 días», «1 día»,
+ * «20 reportes por día».
+ *
+ * @param {string|number} cantidad
+ * @param {string|null|undefined} unidad la del servicio («dias», «reportes/dia»…)
+ * @returns {string}
+ */
+export function conUnidad(cantidad, unidad) {
+  const texto = String(cantidad);
+  if (!unidad) {
+    return texto;
+  }
+  const legible = UNIDADES[unidad] ?? unidad;
+  const enSingular = Number(texto) === 1 ? (SINGULARES[legible] ?? legible) : legible;
+  return `${texto} ${enSingular}`;
+}
 
 /**
  * El valor vigente con su unidad, para leer: «30 días», «Sin definir».
@@ -229,7 +285,8 @@ export function valorLegible(parametro) {
   if (valor === null || valor === undefined || String(valor).trim() === '') {
     return 'Sin definir';
   }
-  const unidad = parametro?.unidad ? (UNIDADES[parametro.unidad] ?? parametro.unidad) : '';
-  const texto = OPCIONES_LEGIBLES[String(valor)] ?? String(valor);
-  return unidad ? `${texto} ${unidad}` : texto;
+  if (String(valor) in OPCIONES_LEGIBLES) {
+    return opcionLegible(valor);
+  }
+  return conUnidad(valor, parametro?.unidad);
 }
