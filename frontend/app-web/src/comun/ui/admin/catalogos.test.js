@@ -57,8 +57,12 @@ describe('parámetros', () => {
     }
   });
 
-  test('cubre los veintisiete parámetros que siembra el servicio', () => {
-    expect(Object.keys(CATALOGO_DE_PARAMETROS)).toHaveLength(27);
+  test('cubre los veintiocho parámetros que siembra el servicio', () => {
+    // SA-4: V6 de admin-parametros añade el umbral de reportes por día.
+    expect(Object.keys(CATALOGO_DE_PARAMETROS)).toHaveLength(28);
+    expect(CATALOGO_DE_PARAMETROS['metricas.umbral-reportes-por-dia'].nombre).toBe(
+      'Alerta de reportes por día',
+    );
   });
 
   test('una clave desconocida conserva la descripción del servicio', () => {
@@ -76,6 +80,7 @@ describe('parámetros', () => {
     expect(valorLegible({ valor: null, unidad: 'dias' })).toBe('Sin definir');
     expect(valorLegible({ valor: 'LIBERAR', unidad: null })).toBe('Se devuelven');
     expect(valorLegible({ valor: '3', unidad: 'otra' })).toBe('3 otra');
+    expect(valorLegible({ valor: '20', unidad: 'reportes/dia' })).toBe('20 reportes por día');
   });
 });
 

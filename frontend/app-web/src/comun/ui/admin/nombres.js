@@ -53,3 +53,26 @@ export const NOMBRE_DE_CATEGORIA_DE_TERMINO = Object.freeze({
 export function nombreDeCategoriaDeTermino(categoria) {
   return NOMBRE_DE_CATEGORIA_DE_TERMINO[String(categoria ?? '')] ?? humanizar(categoria);
 }
+
+/**
+ * La categoría de un reporte de comentario (comentarios.yaml,
+ * `CategoriaDeReporte`), en el orden y con el texto de §7.3.3 «Categorías de
+ * reporte». La usan el formulario de reporte, la cola de moderación y la
+ * frecuencia de reportes del tablero.
+ */
+export const NOMBRE_DE_CATEGORIA_DE_REPORTE = Object.freeze({
+  SPAM: 'Spam o publicidad no solicitada',
+  CONTENIDO_OFENSIVO: 'Contenido ofensivo o abusivo',
+  ACOSO: 'Acoso o intimidación',
+  INFORMACION_FALSA: 'Información falsa o engañosa',
+  CONTENIDO_INAPROPIADO: 'Contenido inapropiado o NSFW',
+  VIOLACION_DE_DERECHOS: 'Violación de derechos de autor',
+});
+
+/**
+ * @param {string|null|undefined} categoria
+ * @returns {string}
+ */
+export function nombreDeCategoriaDeReporte(categoria) {
+  return NOMBRE_DE_CATEGORIA_DE_REPORTE[String(categoria ?? '')] ?? humanizar(categoria);
+}

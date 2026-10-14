@@ -25,6 +25,7 @@
  * comparando textos (`shared/ui-kit/MAPEO-ERRORES.md`).
  */
 
+import { NOMBRE_DE_CATEGORIA_DE_REPORTE } from '../../comun/ui/admin/nombres.js';
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 import { ErrorDeApi, baseDeApi, rutaDeComentarios, urlDeImagen } from './cliente-comentarios.js';
 
@@ -35,14 +36,11 @@ export { ErrorDeApi };
  * «Categorías de reporte» (SA-4, informe de revisión: «Violación de
  * derechos» a secas no decía de qué derechos).
  */
-export const CATEGORIAS = Object.freeze([
-  { valor: 'SPAM', etiqueta: 'Spam o publicidad no solicitada' },
-  { valor: 'CONTENIDO_OFENSIVO', etiqueta: 'Contenido ofensivo o abusivo' },
-  { valor: 'ACOSO', etiqueta: 'Acoso o intimidación' },
-  { valor: 'INFORMACION_FALSA', etiqueta: 'Información falsa o engañosa' },
-  { valor: 'CONTENIDO_INAPROPIADO', etiqueta: 'Contenido inapropiado o NSFW' },
-  { valor: 'VIOLACION_DE_DERECHOS', etiqueta: 'Violación de derechos de autor' },
-]);
+export const CATEGORIAS = Object.freeze(
+  Object.entries(NOMBRE_DE_CATEGORIA_DE_REPORTE).map(([valor, etiqueta]) =>
+    Object.freeze({ valor, etiqueta }),
+  ),
+);
 
 /** Los estados desde los que se edita y se marca: todos menos ELIMINADO (1.5.0). */
 const NO_TERMINALES = Object.freeze(['PUBLICADO', 'EN_REVISION', 'OCULTO']);

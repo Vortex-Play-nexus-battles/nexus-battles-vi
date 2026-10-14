@@ -1123,53 +1123,70 @@ describe('alertas de moderación (UXC-9, §7.3.4)', () => {
     return caja;
   };
 
-  test('el panel pinta las alertas del servicio de métricas', async () => {
+  test('el panel pinta las alertas del servicio de métricas, serie por serie', async () => {
     const { raiz, consultarApi } = await montar({
       consultarApi: apiSimulada({
         '/moderacion': conDatos({
           sanciones: {},
           alertasConfiguradas: true,
           umbralSancionesPorDia: 10,
-          alertas: ['2026-09-20: 14 sanciones (umbral 10)'],
+          umbralReportesPorDia: null,
+          avisos: [{ tipo: 'SANCIONES', fecha: '2026-09-20', cantidad: 14, umbral: 10 }],
+          alertas: ['Alta frecuencia de sanciones el 2026-09-20: 14 (umbral: 10 o más por día)'],
           pendientes: [],
+          noDisponibles: [],
+          reportes: { total: 2, porDia: [{ fecha: '2026-09-20', reportes: 2 }] },
         }),
       }),
     });
 
     expect(consultarApi.mock.calls.map((c) => c[0])).toContain('/moderacion');
     const panelDeAlertas = raiz.querySelector('[data-panel="alertas-moderacion"]');
-    expect(panelDeAlertas.querySelector('[data-zona="alertas"]').textContent).toContain(
-      '2026-09-20: 14 sanciones (umbral 10)',
+    const sanciones = panelDeAlertas.querySelector(
+      '[data-zona="alertas"] [data-serie="SANCIONES"]',
     );
+    expect(sanciones.querySelector('[data-zona="avisos"]').textContent).toMatch(/14 sanciones/);
     // Cuántas, de un vistazo y no solo con color.
-    const resumen = panelDeAlertas.querySelector('.estado-admin');
+    const resumen = sanciones.querySelector('.estado-admin');
     expect(resumen.textContent).toBe('1 alerta');
     expect(resumen.dataset.tono).toBe('error');
+    // La de reportes, sin umbral del PO, dice que no se evalúa (no «sin alertas»).
+    const reportes = panelDeAlertas.querySelector('[data-serie="REPORTES"]');
+    expect(reportes.querySelector('.estado-admin').textContent).toBe('Desactivada');
   });
 
-  test('sin umbral configurado lo dice, en vez de un «sin alertas» que no se evaluó', () => {
+  test('sin ningún umbral lo dice en las dos series, en vez de un «sin alertas» que no se evaluó', () => {
     const caja = contenedor(
-      pintarAlertasDeModeracion({ alertasConfiguradas: false, alertas: [], pendientes: [] }),
+      pintarAlertasDeModeracion({
+        alertasConfiguradas: false,
+        avisos: [],
+        alertas: [],
+        pendientes: [],
+      }),
     );
-    expect(caja.querySelector('.estado-admin').textContent).toBe('Desactivadas');
+    const estados = [...caja.querySelectorAll('.estado-admin')].map((e) => e.textContent);
+    expect(estados).toEqual(['Desactivada', 'Desactivada']);
+    expect(caja.querySelectorAll('[data-zona="sin-umbral"]')).toHaveLength(2);
     expect(caja.querySelector('[data-zona="sin-umbral"]').textContent).toMatch(
-      /alertas están desactivadas/,
+      /no se evalúa ninguna alerta/,
     );
     expect(caja.querySelector('[data-zona="sin-alertas"]')).toBeNull();
   });
 
-  test('con umbral y sin días por encima, «sin alertas» con el umbral; las notas internas no se pintan', () => {
+  test('con umbral y sin días que lleguen, «sin alertas» con el umbral; las notas internas no se pintan', () => {
     const caja = contenedor(
       pintarAlertasDeModeracion({
         alertasConfiguradas: true,
         umbralSancionesPorDia: 10,
+        avisos: [],
         alertas: [],
-        pendientes: ['registro de usuarios sin contrato de lectura'],
+        pendientes: ['registro de usuarios: ms-identidad no responde: contrato'],
       }),
     );
-    expect(caja.querySelector('.estado-admin').textContent).toBe('Sin alertas');
-    expect(caja.querySelector('.estado-admin').dataset.tono).toBe('exito');
-    expect(caja.querySelector('[data-zona="sin-alertas"]').textContent).toBe(
+    const sanciones = caja.querySelector('[data-serie="SANCIONES"]');
+    expect(sanciones.querySelector('.estado-admin').textContent).toBe('Sin alertas');
+    expect(sanciones.querySelector('.estado-admin').dataset.tono).toBe('exito');
+    expect(sanciones.querySelector('[data-zona="sin-alertas"]').textContent).toBe(
       'Ningún día llegó a 10 sanciones.',
     );
     expect(caja.textContent).not.toContain('contrato');

@@ -11845,6 +11845,50 @@ body:has(.chatbot-flotante) main:not(.combate) {
   flex: 0 1 auto;
 }
 
+/* --- Alertas de moderación (alertas-de-moderacion.js, SA-4 §7.3.8) ------- */
+/* Una caja por serie (sanciones y reportes por día), una junto a otra cuando
+   caben y una debajo de otra en un teléfono. Cada caja dice su estado arriba,
+   a la derecha del título, sin depender solo del color. */
+.alertas-moderacion {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--e-3);
+}
+
+.alertas-moderacion__serie {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  min-width: 0;
+  padding: var(--e-3);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.alertas-moderacion__cabeza {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2);
+}
+
+.alertas-moderacion__cabeza .panel-admin__grupo {
+  margin: 0;
+}
+
+.alertas-moderacion__serie .panel-admin__explicacion {
+  margin: 0;
+}
+
+/* Los gráficos de un tablero, de dos en dos cuando caben. */
+.rejilla-graficos-admin {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: var(--e-4);
+}
+
 /* --- Estado (estado.js) -------------------------------------------------- */
 
 .estado-admin {

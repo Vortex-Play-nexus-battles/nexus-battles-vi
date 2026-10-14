@@ -877,6 +877,11 @@ services:
       SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
       # HU-MET-001: cuentas por estado y altas por dia, de ms-identidad.
       IDENTIDAD_URL: http://srv-ms-identidad:8089
+      # SA-4 (§7.3.8): frecuencia de reportes de comentarios y umbrales del
+      # catalogo (el de sanciones, 3 por la V6 de admin-parametros; el de
+      # reportes, sin cifra del PO).
+      COMENTARIOS_URL: http://srv-comentarios:8081
+      PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
       # HU-MET-001 (#527): la observabilidad es de administracion.
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
       # RFINAL-08 — pantalla «Sistema»: en el banco todos comparten esta red,

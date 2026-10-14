@@ -30,6 +30,7 @@ import { panel, pintarDesenlace } from './panel.js';
 import { h } from '../../comun/ui/dom.js';
 import { barraDeFiltros } from '../../comun/ui/admin/barra-de-filtros.js';
 import { graficoDeBarras } from '../../comun/ui/admin/grafico.js';
+import { diaCompleto, diaCorto } from '../../comun/ui/admin/fechas.js';
 import { humanizar } from '../../comun/ui/admin/estado.js';
 import { rejillaDeIndicadores, tarjetaDeIndicador } from '../../comun/ui/admin/indicador.js';
 
@@ -281,11 +282,11 @@ export function pintarIndicadores(datos) {
 export function graficoDeRegistros(registros) {
   const porDia = Array.isArray(registros?.porDia) ? registros.porDia : [];
   return graficoDeBarras({
-    titulo: `Registros por día · del ${fechaCompleta(registros?.desde)} al ${fechaCompleta(
+    titulo: `Registros por día · del ${diaCompleto(registros?.desde)} al ${diaCompleto(
       registros?.hasta,
     )}`,
     datos: porDia.map((dia) => ({
-      etiqueta: fechaCorta(dia.fecha),
+      etiqueta: diaCorto(dia.fecha),
       valor: cifra(dia.cuentas),
     })),
     unidad: 'cuentas nuevas',
@@ -372,35 +373,6 @@ export function guardarArchivo(nombre, contenido, tipo) {
 /** Un número que llegó, o null (el indicador pinta un guion), nunca un cero inventado. */
 function cifra(valor) {
   return typeof valor === 'number' && Number.isFinite(valor) ? valor : null;
-}
-
-/** `2026-10-05` → «5 oct»: la etiqueta de una barra. */
-function fechaCorta(dia) {
-  if (!dia) {
-    return 'sin fecha';
-  }
-  const fecha = new Date(`${dia}T00:00:00Z`);
-  if (Number.isNaN(fecha.getTime())) {
-    return String(dia);
-  }
-  return fecha.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-}
-
-/** `2026-10-05` → «5 oct 2026». La fecha es un día, sin hora ni zona. */
-function fechaCompleta(dia) {
-  if (!dia) {
-    return 'sin fecha';
-  }
-  const fecha = new Date(`${dia}T00:00:00Z`);
-  if (Number.isNaN(fecha.getTime())) {
-    return String(dia);
-  }
-  return fecha.toLocaleDateString('es-CO', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
 }
 
 /**

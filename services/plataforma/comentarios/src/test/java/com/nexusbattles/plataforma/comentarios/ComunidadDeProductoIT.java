@@ -664,6 +664,51 @@ class ComunidadDeProductoIT {
         }
 
         /**
+         * SA-4 (§7.3.8, contrato 1.15.0) contra PostgreSQL real: la consulta con
+         * constructor de {@code ReporteRepository.contablesEntre} y el corte del
+         * periodo [desde, hasta). Otros tests de la clase tambien reportan, asi
+         * que se comparan diferencias sobre un periodo que empieza ahora.
+         */
+        @Test
+        @DisplayName("1.15.0: la frecuencia cuenta los reportes del periodo por dia y categoria, sin identificadores")
+        void frecuenciaDeReportes() throws Exception {
+            java.time.Instant desde = java.time.Instant.now().minusSeconds(1);
+            String[] uno = comentarioPublicado();
+            String[] otro = comentarioPublicado();
+            UUID quien = UUID.randomUUID();
+            assertEquals(201, reportar(uno[0], uno[1], jugador(quien)).statusCode());
+            assertEquals(201, reportar(otro[0], otro[1], jugador(quien)).statusCode());
+            assertEquals(201, pedir("POST", "/api/v1/products/" + uno[0] + "/comments/" + uno[1] + "/reportes",
+                    jugador(UUID.randomUUID()), "{\"categoria\":\"ACOSO\"}").statusCode());
+            java.time.Instant hasta = java.time.Instant.now().plusSeconds(1);
+
+            HttpResponse<String> r = pedir("GET", "/api/v1/comentarios/moderacion/reportes/frecuencia?desde="
+                    + desde + "&hasta=" + hasta, moderadora(), null);
+            assertEquals(200, r.statusCode(), r.body());
+            int total = leer(r, "$.total");
+            int spam = leer(r, "$.porCategoria.SPAM");
+            int acoso = leer(r, "$.porCategoria.ACOSO");
+            assertTrue(total >= 3, r.body());
+            assertTrue(spam >= 2, r.body());
+            assertTrue(acoso >= 1, r.body());
+            assertTrue((Integer) leer(r, "$.comentariosReportados") >= 2, r.body());
+            assertTrue((Integer) leer(r, "$.reportantes") >= 2, r.body());
+            List<Integer> porDia = leer(r, "$.porDia[*].reportes");
+            assertEquals(total, porDia.stream().mapToInt(Integer::intValue).sum(), "los dias suman el total");
+            assertFalse(r.body().contains(uno[1]), "no sale el id del comentario");
+            assertFalse(r.body().contains(quien.toString()), "no sale quien reporto");
+
+            // El periodo es [desde, hasta): una hora que empieza en «hasta» no ve ninguno de estos.
+            HttpResponse<String> despues = pedir("GET", "/api/v1/comentarios/moderacion/reportes/frecuencia?desde="
+                    + hasta + "&hasta=" + hasta.plusSeconds(3600), moderadora(), null);
+            assertEquals(200, despues.statusCode(), despues.body());
+            assertEquals(0, (Integer) leer(despues, "$.total"), despues.body());
+
+            assertEquals(403, pedir("GET", "/api/v1/comentarios/moderacion/reportes/frecuencia",
+                    jugador(UUID.randomUUID()), null).statusCode(), "un jugador no lee la frecuencia");
+        }
+
+        /**
          * Sin esto, el 409 podria venir del pre-chequeo de cortesia (una peticion
          * termina antes de que la otra compruebe) y el test pasaria sin haber
          * tocado el indice. La barrera retiene a las dos dentro del

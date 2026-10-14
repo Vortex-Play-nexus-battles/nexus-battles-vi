@@ -46,7 +46,6 @@ import { encabezadoDePagina } from '../../comun/ui/pagina.js';
 import { NOMBRE_DE_ROL } from '../../comun/shell.js';
 import { RUTAS, resolver } from '../../comun/sesion.js';
 import { urlDeVista } from '../../comun/acceso.js';
-import { distintivo } from '../../comun/ui/distintivo.js';
 import { nombreDeModalidad } from '../../comun/ui/juego/partida.js';
 import { construirPaginacion } from '../../comun/paginacion.js';
 import { creditos, numero } from '../../comun/ui/formato.js';
@@ -58,15 +57,19 @@ import {
   ESTADOS_DE_SALA,
   ESTADOS_DE_SERVICIO,
   ESTADOS_DE_TORNEO,
-  distintivoDeEstado,
   estadoSegun,
   humanizar,
 } from '../../comun/ui/admin/estado.js';
 import { rejillaDeIndicadores, tarjetaDeIndicador } from '../../comun/ui/admin/indicador.js';
 import { nombreDeAccion } from '../../comun/ui/admin/nombres.js';
+import { pintarAlertasDeModeracion } from '../../comun/ui/admin/alertas-de-moderacion.js';
 import { fichaDeParametro, valorLegible } from '../../comun/ui/admin/parametros.js';
 import { SITUACION_DEL_SERVICIO, nombreDelServicio } from '../../comun/ui/admin/servicios.js';
 import { tablaDeDatos } from '../../comun/ui/admin/tabla-de-datos.js';
+
+// SA-4: las alertas viven en el kit (las usa también el tablero de moderación);
+// se reexportan para quien ya las importaba de aquí.
+export { pintarAlertasDeModeracion };
 
 /**
  * Cuentas por página del directorio: las dieciséis de los listados del
@@ -867,11 +870,15 @@ function seccionModeracion(consultarApi) {
     pintar: (datos) => indicador({ etiqueta: 'por revisar', valor: totalDe(datos) }),
   });
 
-  // §7.3.4 «alertas»: las de alta frecuencia de sanciones que evalúa el
-  // servicio de métricas contra su umbral.
+  // §7.3.4 «alertas» y §7.3.8 «alertas de actividad sospechosa o alta
+  // frecuencia de reportes»: los días con alta frecuencia de sanciones o de
+  // reportes que evalúa el servicio de métricas contra los umbrales de
+  // Parámetros (SA-4, metricas-plataforma 1.11.0).
   const alertas = panelDeRecurso({
     id: 'alertas-moderacion',
     titulo: 'Alertas de moderación',
+    descripcion: 'Días con alta frecuencia de sanciones o de reportes en los últimos 30 días.',
+    acciones: [enlaceA('tablero-tecnico', 'Ver el tablero de moderación')].filter(Boolean),
     recurso: '/moderacion',
     consultarApi,
     pintar: (datos) => pintarAlertasDeModeracion(datos),
@@ -1053,53 +1060,6 @@ const NOMBRE_DE_APELACION = Object.freeze({
   ACEPTADA: 'Apelaciones aceptadas',
   RECHAZADA: 'Apelaciones rechazadas',
 });
-
-/**
- * Las alertas de moderación tal como las publica el servicio de métricas.
- *
- * @param {{alertasConfiguradas?: boolean, umbralSancionesPorDia?: number|null,
- *          alertas?: string[]}} datos
- * @returns {HTMLElement[]}
- */
-export function pintarAlertasDeModeracion(datos) {
-  const lista = (Array.isArray(datos?.alertas) ? datos.alertas : []).filter(
-    (alerta) => typeof alerta === 'string' && alerta.trim(),
-  );
-  if (!datos?.alertasConfiguradas) {
-    return [
-      distintivoDeEstado({ texto: 'Desactivadas', tono: 'neutro' }),
-      h('p', {
-        clase: 'panel-admin__explicacion',
-        datos: { zona: 'sin-umbral' },
-        texto:
-          'Las alertas están desactivadas: falta fijar el umbral de sanciones por día en Parámetros.',
-      }),
-    ];
-  }
-  if (lista.length === 0) {
-    // D-25: el umbral es «a partir de», así que se dice «llegó a».
-    const texto = Number.isInteger(datos?.umbralSancionesPorDia)
-      ? `Ningún día llegó a ${datos.umbralSancionesPorDia} sanciones.`
-      : 'Ningún día llegó al umbral.';
-    return [
-      distintivoDeEstado({ texto: 'Sin alertas', tono: 'exito' }),
-      h('p', { clase: 'panel-admin__explicacion', datos: { zona: 'sin-alertas' }, texto }),
-    ];
-  }
-  return [
-    distintivoDeEstado({
-      texto: `${numero(lista.length)} ${lista.length === 1 ? 'alerta' : 'alertas'}`,
-      tono: 'error',
-    }),
-    h('ul', {
-      clase: 'pila pila--ajustada',
-      datos: { zona: 'alertas' },
-      hijos: lista.map((alerta) =>
-        h('li', { hijos: [distintivo('Alerta', 'reportado'), ` ${alerta}`] }),
-      ),
-    }),
-  ];
-}
 
 /* -------------------------------------------------------------------------
    8. Sistema
