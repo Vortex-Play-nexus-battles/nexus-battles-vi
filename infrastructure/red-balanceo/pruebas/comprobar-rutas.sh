@@ -389,7 +389,35 @@ for par in \
     verificar:cuentas/verificar-cuenta.html \
     restablecer:cuentas/restablecer-confirmar.html \
     recuperar:cuentas/restablecer-solicitar.html \
-    misiones:contenido/misiones/misiones.html; do
+    misiones:contenido/misiones/misiones.html \
+    tienda:cuentas/tienda.html \
+    cofres:cuentas/mis-cofres.html \
+    cuenta/movimientos:cuentas/historial-transacciones.html \
+    cuenta/sanciones:plataforma/moderacion-sanciones/mis-sanciones.html \
+    notificaciones:plataforma/notificaciones/notificaciones.html \
+    chat:plataforma/salas-partidas/chat.html \
+    comentar:plataforma/comentarios/publicar-comentario.html \
+    jugar/nueva-sala:plataforma/salas-partidas/crear-sala.html \
+    jugar/sala:plataforma/salas-partidas/sala-batalla.html \
+    jugar/heroe:plataforma/salas-partidas/validacion-heroe.html \
+    subastas/publicar:cuentas/publicar-subasta.html \
+    subastas/pujar:cuentas/pujas.html \
+    consola:plataforma/consola/consola.html \
+    consola/control:plataforma/consola/control-integral.html \
+    consola/usuarios:cuentas/gestion-usuarios.html \
+    consola/usuarios/ficha:plataforma/moderacion-sanciones/ficha-usuario.html \
+    consola/usuarios/nueva-cuenta:cuentas/crear-cuenta-admin.html \
+    consola/productos:contenido/productos/panel-catalogo.html \
+    consola/productos/nuevo:contenido/productos/productos.html \
+    consola/productos/banners:contenido/productos/banners.html \
+    consola/comentarios:plataforma/comentarios/moderar-comentarios.html \
+    consola/sanciones:plataforma/moderacion-sanciones/sanciones-admin.html \
+    consola/lista-negra:plataforma/moderacion-sanciones/lista-negra-admin.html \
+    consola/parametros:plataforma/admin-parametros/parametros-admin.html \
+    consola/metricas:plataforma/metricas-plataforma/panel-metricas.html \
+    consola/tecnico:plataforma/metricas-plataforma/tablero-tecnico.html \
+    consola/asistente:cuentas/panel-chatbot.html \
+    consola/auditoria:cuentas/auditoria.html; do
     limpia="/${par%%:*}"
     fichero="${par#*:}"
     carpeta="/frontend/app-web/src/${fichero%/*}/"
@@ -406,9 +434,15 @@ redirige /jugar/                                      "/jugar"
 redirige "/frontend/app-web/src/cuentas/verificar-cuenta.html?motivo=registro" \
                                                       "/verificar?motivo=registro"
 redirige /restablecer/                                "/restablecer"
-# Una vista SIN direccion limpia se sigue sirviendo donde estaba, con la marca.
-sirve /frontend/app-web/src/plataforma/salas-partidas/crear-sala.html \
-    "marca de rutas limpias" '<meta name="nexus-rutas" content="limpias">'
+# SA-7 (punto critico externo del informe de revision) — ya no queda vista sin
+# direccion limpia. Las de la sala y la consola llevan su consulta con ellas:
+# el enlace de una partida o de una ficha no se pierde al redirigir.
+redirige "/frontend/app-web/src/plataforma/salas-partidas/sala-batalla.html?sala=s1&partida=p1" \
+                                                      "/jugar/sala?sala=s1&partida=p1"
+redirige "/frontend/app-web/src/plataforma/moderacion-sanciones/ficha-usuario.html?usuario=7" \
+                                                      "/consola/usuarios/ficha?usuario=7"
+redirige /consola/usuarios/                           "/consola/usuarios"
+redirige /jugar/nueva-sala/                           "/jugar/nueva-sala"
 # 6-oct — pedir el codigo de recuperacion tiene la suya, /recuperar; la del
 # canje sigue siendo /restablecer y ninguna de las dos se lleva a la otra.
 redirige /recuperar/                                  "/recuperar"
@@ -422,8 +456,8 @@ cabecera /login                   Cache-Control           '^no-store$'
 cabecera /login                   X-Content-Type-Options  '^nosniff$'
 cabecera /login                   X-Frame-Options         '^DENY$'
 cabecera /login                   Referrer-Policy         'strict-origin-when-cross-origin'
-cabecera /frontend/app-web/src/plataforma/salas-partidas/crear-sala.html \
-                                  Content-Security-Policy "nonce-[0-9a-f]{32}"
+cabecera /jugar/nueva-sala         Content-Security-Policy "nonce-[0-9a-f]{32}"
+cabecera /consola/usuarios        Cache-Control           '^no-store$'
 cabecera /frontend/app-web/src/cuentas/login.js \
                                   Cache-Control           '^no-cache$'
 cabecera /shared/ui-kit/css/tokens.css \

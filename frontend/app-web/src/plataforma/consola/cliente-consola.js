@@ -317,6 +317,11 @@ export function totalDe(datos) {
     if (typeof datos.totalElements === 'number') {
       return datos.totalElements;
     }
+    // SA-7 — la página propia de salas y subastas (`totalElementos`): sin
+    // esto se contaban solo las filas de la primera página.
+    if (typeof datos.totalElementos === 'number') {
+      return datos.totalElementos;
+    }
     for (const clave of CLAVES_DE_FILAS) {
       if (Array.isArray(datos[clave])) {
         return datos[clave].length;
