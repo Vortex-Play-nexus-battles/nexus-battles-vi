@@ -38,6 +38,34 @@ public class AuditoriaClient {
             .toBodilessEntity();
     }
 
+    /**
+     * Como {@link #registrar(String, String, String, String, String, String, String)} con la
+     * {@code referencia} del evento (ms-cumplimiento-auditoria 1.3.0): repetir el
+     * mismo hecho con la misma referencia no duplica la entrada. La usa la entrega
+     * administrativa al inventario (SA-10), que se repite con la misma clave
+     * cuando la bitacora no respondio la primera vez.
+     */
+    @Retry(name = "auditoria", fallbackMethod = "registrarConReferenciaYFallback")
+    @CircuitBreaker(name = "auditoria")
+    public void registrar(String tipoAccion, String administradorId, String afectado,
+                          String valorAnterior, String valorNuevo, String motivo,
+                          String ipOrigen, String referencia) {
+        RegistrarAuditoriaRequest solicitud = new RegistrarAuditoriaRequest(
+            tipoAccion, administradorId, afectado, valorAnterior, valorNuevo, motivo, ipOrigen, referencia
+        );
+        restClient.post()
+            .uri(urlAuditoria)
+            .body(solicitud)
+            .retrieve()
+            .toBodilessEntity();
+    }
+
+    private void registrarConReferenciaYFallback(String tipoAccion, String administradorId, String afectado,
+                                                 String valorAnterior, String valorNuevo, String motivo,
+                                                 String ipOrigen, String referencia, Throwable ex) {
+        registrarConFallback(tipoAccion, administradorId, afectado, valorAnterior, valorNuevo, motivo, ipOrigen, ex);
+    }
+
     private void registrarConFallback(String tipoAccion, String administradorId, String afectado,
                                       String valorAnterior, String valorNuevo, String motivo,
                                       String ipOrigen, Throwable ex) {
