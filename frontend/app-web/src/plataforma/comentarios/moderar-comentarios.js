@@ -35,10 +35,18 @@
  * siga (por ejemplo, editar y despues aprobar). MARCAR y DESMARCAR son una
  * nota interna: el autor no recibe aviso, y la pantalla lo dice.
  *
+ * <h2>Por que se retuvo (HU-COM-007 CA-01)</h2>
+ *
+ * Lo que el filtro automatico retuvo trae su deteccion (comentarios.yaml
+ * 1.10.0): la tarjeta y el detalle dicen que reglas de la lista negra
+ * coincidieron, por su id, con la categoria y el motivo; o que la lista negra
+ * no respondio y se retuvo por precaucion. Lo que llego por reportes no la trae.
+ *
  * Nada se pinta con innerHTML: el texto de un comentario reportado es
  * exactamente el contenido del que hay que desconfiar.
  */
 
+import { nombreDeCategoriaDeTermino } from '../../comun/ui/admin/nombres.js';
 import { destinoVisible, urlDeVista } from '../../comun/acceso.js';
 import { h, vaciar } from '../../comun/ui/dom.js';
 import { pintarAviso, limpiarAviso } from '../../comun/ui/aviso.js';
@@ -181,6 +189,94 @@ export function enlazadorDeFicha(rol) {
   };
 }
 
+/** «Regla 7», «Reglas 7, 9»; o que la lista negra no dijo cual. */
+function textoDeReglas(reglas) {
+  if (reglas.length === 0) {
+    return 'La lista negra no indicó qué término coincidió';
+  }
+  // SA-4 — el número de la regla es un identificador interno: a quien modera
+  // le sirve cuántos términos coincidieron y de qué categoría, no su id.
+  return reglas.length === 1
+    ? 'Coincidió con un término de la lista negra'
+    : `Coincidió con ${reglas.length} términos de la lista negra`;
+}
+
+/**
+ * HU-COM-007 CA-01 (comentarios.yaml 1.10.0) — por que el filtro automatico
+ * retuvo el comentario: cuantos terminos de la lista negra coincidieron (el
+ * termino nunca llega y su id no le dice nada a quien modera), con la
+ * categoria y el motivo generico. Si la
+ * lista negra no respondio, se dice eso y nada mas: el motivo tecnico no le
+ * sirve al moderador.
+ *
+ * @param {object} deteccion `DeteccionAutomatica` del contrato
+ * @returns {HTMLElement[]}
+ */
+function lineasDeDeteccion(deteccion) {
+  if (deteccion.servicioNoDisponible === true) {
+    return [
+      h('p', {
+        clase: 't-meta',
+        datos: { campo: 'deteccion-sin-servicio' },
+        texto: 'La lista negra no respondió; retenido por precaución',
+      }),
+    ];
+  }
+  const reglas = Array.isArray(deteccion.reglas) ? deteccion.reglas : [];
+  return [
+    h('p', {
+      clase: 't-meta fila fila--envuelta',
+      hijos: [
+        h('span', { datos: { campo: 'deteccion-reglas' }, texto: textoDeReglas(reglas) }),
+        deteccion.categoria
+          ? h('span', {
+              clase: 'distintivo',
+              datos: { campo: 'deteccion-categoria' },
+              texto: nombreDeCategoriaDeTermino(deteccion.categoria),
+            })
+          : null,
+      ],
+    }),
+    deteccion.motivo
+      ? h('p', { clase: 't-meta', datos: { campo: 'deteccion-motivo' }, texto: deteccion.motivo })
+      : null,
+  ].filter(Boolean);
+}
+
+/**
+ * SA-4 — la dirección para sancionar al autor de un comentario desde su
+ * detalle: la consola de sanciones con la cuenta ya elegida y el comentario
+ * ligado a la sanción. `null` si este rol no puede abrir la consola.
+ *
+ * @param {string|null} rol
+ * @returns {((autorId: string, comentarioId: string) => string)|null}
+ */
+export function enlazadorDeSancion(rol) {
+  if (!destinoVisible('sanciones-admin', { autenticado: true, rol })) {
+    return null;
+  }
+  return (autorId, comentarioId) => {
+    const destino = new URL(urlDeVista('sanciones-admin'));
+    destino.searchParams.set('usuario', autorId);
+    if (comentarioId) {
+      destino.searchParams.set('comentario', comentarioId);
+    }
+    return destino.href;
+  };
+}
+
+/** El nombre de una categoría de reporte (§7.3.3); una desconocida, humanizada. */
+function nombreDeCategoria(categoria) {
+  const conocida = CATEGORIAS.find((c) => c.valor === categoria);
+  if (conocida) {
+    return conocida.etiqueta;
+  }
+  const texto = String(categoria ?? '')
+    .replaceAll('_', ' ')
+    .toLowerCase();
+  return texto ? texto.charAt(0).toUpperCase() + texto.slice(1) : 'Sin categoría';
+}
+
 /**
  * Una entrada de la cola, como tarjeta pulsable.
  *
@@ -243,6 +339,17 @@ export function tarjetaDeEntrada(
       h('span', { clase: 'distintivo', texto: `${nombre.replaceAll('_', ' ')}: ${cuantos}` }),
     );
   const reportes = entrada.reportes ?? 0;
+  // HU-COM-007 CA-01: solo lo que retuvo el filtro trae deteccion.
+  const deteccion = entrada.deteccion
+    ? h('div', {
+        clase: 'pila pila--compacta',
+        datos: { zona: 'deteccion' },
+        hijos: [
+          h('p', { clase: 'tarjeta__meta', texto: 'Detección automática' }),
+          ...lineasDeDeteccion(entrada.deteccion),
+        ],
+      })
+    : null;
 
   const articulo = h('article', {
     clase: 'tarjeta pila pila--compacta',
@@ -281,6 +388,7 @@ export function tarjetaDeEntrada(
       ],
     }),
     h('p', { clase: 't-cuerpo', datos: { campo: 'texto' }, texto: comentario.texto ?? '' }),
+    ...(deteccion ? [deteccion] : []),
     h('div', { clase: 'fila fila--envuelta', hijos: categorias }),
     h('div', {
       clase: 'fila',
@@ -533,8 +641,8 @@ function pistaDelMotivo(accion) {
 }
 
 /**
- * El detalle: el comentario, sus imagenes, sus reportes, su historial y la
- * decision.
+ * El detalle: el comentario, sus imagenes, por que lo retuvo el filtro si fue
+ * el (HU-COM-007), sus reportes, su historial y la decision.
  *
  * @param {object} detalle `DetalleDeModeracionResponse` del contrato
  * @param {(decision: {accion: string, motivo: string, textoNuevo?: string}) => void} alDecidir
@@ -554,6 +662,7 @@ export function panelDeDetalle(
     crearUrl = (blob) => globalThis.URL?.createObjectURL?.(blob) ?? '',
     prioridadElevada = false,
     cargarHistorialDelAutor = null,
+    hrefDeSancion = null,
   } = {},
 ) {
   const comentario = detalle.comentario ?? {};
@@ -570,9 +679,38 @@ export function panelDeDetalle(
     }),
     h('p', { clase: 't-cuerpo', datos: { campo: 'texto' }, texto: comentario.texto ?? '' }),
   );
+  // SA-4 — de la decisión sobre el comentario a la sanción de su autor, sin
+  // copiar su identificador: la consola abre con la cuenta y el comentario.
+  if (hrefDeSancion) {
+    panel.append(
+      h('p', {
+        clase: 'fila fila--envuelta',
+        hijos: [
+          h('a', {
+            clase: 'boton boton--contorno boton--pequeno',
+            texto: 'Sancionar al autor',
+            atributos: { href: hrefDeSancion },
+            datos: { accion: 'sancionar-autor' },
+          }),
+        ],
+      }),
+    );
+  }
   const imagenes = imagenesDelComentario(comentario, { cargarImagen, crearUrl });
   if (imagenes) {
     panel.append(h('h3', { texto: 'Imágenes' }), imagenes);
+  }
+
+  // ------------------------------------------- deteccion automatica (HU-COM-007)
+  if (detalle.deteccion) {
+    panel.append(
+      h('h3', { texto: 'Detección automática' }),
+      h('div', {
+        clase: 'pila pila--compacta',
+        datos: { zona: 'deteccion' },
+        hijos: lineasDeDeteccion(detalle.deteccion),
+      }),
+    );
   }
 
   // --------------------------------------------------------------- reportes
@@ -585,7 +723,8 @@ export function panelDeDetalle(
       hijos: reportes.map((r) =>
         h('li', {
           clase: 't-meta',
-          texto: `${String(r.categoria ?? '').replaceAll('_', ' ')} · ${fechaHora(r.fecha)}${
+          // SA-4 — la categoría con su nombre de §7.3.3, no la constante.
+          texto: `${nombreDeCategoria(r.categoria)} · ${fechaHora(r.fecha)}${
             r.descripcion ? ` · ${r.descripcion}` : ''
           }`,
         }),
@@ -1125,6 +1264,7 @@ export function montarModeracion(
   { api = null, productoId = null, crearUrl, rol = null } = {},
 ) {
   const hrefDeFicha = enlazadorDeFicha(rol);
+  const sancionDe = enlazadorDeSancion(rol);
   const cliente = {
     consultarCola,
     consultarDetalle,
@@ -1509,6 +1649,10 @@ export function montarModeracion(
           cargarHistorialDelAutor: (autorId, paginacion) =>
             cliente.historialDelAutor(autorId, paginacion),
           prioridadElevada: prioridadPorComentario.get(comentarioId) === true,
+          hrefDeSancion:
+            sancionDe && detalle.comentario?.autorId
+              ? sancionDe(detalle.comentario.autorId, comentarioId)
+              : null,
           ...(crearUrl ? { crearUrl } : {}),
         }),
       );
@@ -1582,5 +1726,7 @@ export function montarModeracion(
   filtroCategoria?.addEventListener('change', alCambiarFiltro);
   filtroPrioridad?.addEventListener('change', alCambiarFiltro);
   recargar();
-  return { recargar };
+  // SA-4 — `abrir` lo usa el historial de moderación: «Abrir» lleva el
+  // comentario al panel de revisión de esta misma pantalla.
+  return { recargar, abrir };
 }

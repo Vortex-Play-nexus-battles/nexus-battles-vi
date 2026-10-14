@@ -1,6 +1,5 @@
 package com.nexusbattles.plataforma.metricasplataforma.moderacion;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpHeaders;
@@ -19,8 +18,9 @@ import java.time.OffsetDateTime;
 /**
  * {@code GET /api/v1/moderacion?desde&hasta} — HU-MET-001. Sin periodo: los ultimos 30 dias.
  *
- * <p>Las sanciones son obligatorias (sin ellas, 503). Las cuentas de ms-identidad son accesorias: si no se pueden
- * leer, el tablero sale igual y el motivo queda en {@code pendientes} (CA-03).
+ * <p>Las sanciones son obligatorias (sin ellas, 503). Las cuentas de ms-identidad y la frecuencia de reportes de
+ * comentarios son accesorias: si una no se puede leer, el tablero sale igual y lo dice (CA-03, RF-MET-001). A las dos
+ * se les reenvia el token de quien mira el tablero: son rutas de personas, no de servicios.
  */
 @RestController
 @RequestMapping("/api/v1/moderacion")
@@ -28,15 +28,16 @@ public class ModeracionController {
 
     private final FuenteDeModeracion fuente;
     private final FuenteDeUsuarios usuarios;
-    private final Integer umbralSancionesPorDia;
+    private final FuenteDeReportes reportes;
+    private final UmbralesDeModeracion umbrales;
     private final Clock reloj;
 
-    public ModeracionController(FuenteDeModeracion fuente, FuenteDeUsuarios usuarios,
-                                @Value("${metricas.moderacion.umbral-sanciones-por-dia:#{null}}") Integer umbralSancionesPorDia,
-                                Clock reloj) {
+    public ModeracionController(FuenteDeModeracion fuente, FuenteDeUsuarios usuarios, FuenteDeReportes reportes,
+                                UmbralesDeModeracion umbrales, Clock reloj) {
         this.fuente = fuente;
         this.usuarios = usuarios;
-        this.umbralSancionesPorDia = umbralSancionesPorDia;
+        this.reportes = reportes;
+        this.umbrales = umbrales;
         this.reloj = reloj;
     }
 
@@ -51,12 +52,26 @@ public class ModeracionController {
             throw new IllegalArgumentException("el fin del periodo debe ser posterior a su inicio");
         }
         FuenteDeModeracion.Agregados sanciones = fuente.consultar(inicio, fin);
+        return TableroDeModeracion.de(sanciones, umbrales.vigentes(), cuentas(inicio, fin, autorizacion),
+                frecuencia(inicio, fin, autorizacion));
+    }
+
+    private TableroDeModeracion.Lectura<FuenteDeUsuarios.Indicadores> cuentas(OffsetDateTime inicio,
+                                                                            OffsetDateTime fin, String autorizacion) {
         try {
-            FuenteDeUsuarios.Indicadores cuentas = usuarios.consultar(
-                    inicio.toLocalDate().toString(), fin.toLocalDate().toString(), autorizacion);
-            return TableroDeModeracion.de(sanciones, umbralSancionesPorDia, cuentas, null);
+            return TableroDeModeracion.Lectura.de(usuarios.consultar(
+                    inicio.toLocalDate().toString(), fin.toLocalDate().toString(), autorizacion));
         } catch (FuenteDeUsuarios.NoDisponible sinUsuarios) {
-            return TableroDeModeracion.de(sanciones, umbralSancionesPorDia, null, sinUsuarios.getMessage());
+            return TableroDeModeracion.Lectura.fallida(sinUsuarios.causa(), sinUsuarios.getMessage());
+        }
+    }
+
+    private TableroDeModeracion.Lectura<FuenteDeReportes.Frecuencia> frecuencia(OffsetDateTime inicio,
+                                                                              OffsetDateTime fin, String autorizacion) {
+        try {
+            return TableroDeModeracion.Lectura.de(reportes.consultar(inicio, fin, autorizacion));
+        } catch (FuenteDeReportes.NoDisponible sinReportes) {
+            return TableroDeModeracion.Lectura.fallida(sinReportes.causa(), sinReportes.getMessage());
         }
     }
 

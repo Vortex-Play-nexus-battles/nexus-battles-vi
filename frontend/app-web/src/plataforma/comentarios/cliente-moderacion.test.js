@@ -338,14 +338,22 @@ describe('la tabla de acciones', () => {
     expect(ACCIONES_INTERNAS).toEqual(['MARCAR', 'DESMARCAR']);
   });
 
-  test('las categorias son las seis del contrato, sin inventos', () => {
+  test('las categorias son las seis del contrato, en el orden y con el texto de §7.3.3', () => {
     expect(CATEGORIAS.map((c) => c.valor)).toEqual([
+      'SPAM',
       'CONTENIDO_OFENSIVO',
       'ACOSO',
-      'SPAM',
       'INFORMACION_FALSA',
       'CONTENIDO_INAPROPIADO',
       'VIOLACION_DE_DERECHOS',
+    ]);
+    expect(CATEGORIAS.map((c) => c.etiqueta)).toEqual([
+      'Spam o publicidad no solicitada',
+      'Contenido ofensivo o abusivo',
+      'Acoso o intimidación',
+      'Información falsa o engañosa',
+      'Contenido inapropiado o NSFW',
+      'Violación de derechos de autor',
     ]);
   });
 });

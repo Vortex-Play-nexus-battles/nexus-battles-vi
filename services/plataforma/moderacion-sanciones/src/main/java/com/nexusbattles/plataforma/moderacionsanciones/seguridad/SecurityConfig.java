@@ -106,6 +106,11 @@ public class SecurityConfig {
                 // ms-identidad con su credencial de servicio; el controlador
                 // comprueba ademas que el azp sea ms-identidad.
                 .requestMatchers("/api/v1/internal/**").hasRole(JerarquiaDeRoles.SERVICIO)
+                // Lista de personas con varias sanciones (HU-USR-008, D-45):
+                // identificadores, asi que solo quien modera; el jugador entra
+                // por la regla general de abajo solo a lo suyo.
+                .requestMatchers(HttpMethod.GET, "/api/v1/sanciones/reincidentes")
+                .hasRole(JerarquiaDeRoles.MODERADOR)
                 .requestMatchers("/api/v1/sanciones/**", "/api/v1/apelaciones/**")
                 .hasAnyRole(JerarquiaDeRoles.JUGADOR, JerarquiaDeRoles.MODERADOR)
                 .anyRequest().authenticated());

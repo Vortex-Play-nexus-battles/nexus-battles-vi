@@ -81,6 +81,16 @@ public class SancionesAdminController {
         return servicio.historialDe(actorDe(actor), usuarioId).stream().map(SancionResponse::desde).toList();
     }
 
+    /**
+     * 1.3.0 (HU-USR-008, D-45): usuarios con {@code minimo} sanciones no
+     * revertidas o mas. Sin {@code minimo}, el que fijo el PO: 3.
+     */
+    @GetMapping("/reincidentes")
+    public SancionesService.Reincidentes reincidentes(@AuthenticationPrincipal Jwt actor,
+                                                      @RequestParam(defaultValue = "3") int minimo) {
+        return servicio.reincidentes(actorDe(actor), minimo);
+    }
+
     @GetMapping("/{sancionId}")
     public SancionResponse obtener(@AuthenticationPrincipal Jwt actor, @PathVariable UUID sancionId) {
         return SancionResponse.desde(servicio.obtener(actorDe(actor), sancionId));

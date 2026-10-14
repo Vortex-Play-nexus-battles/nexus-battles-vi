@@ -48,7 +48,9 @@ class ParametrosServiceIT {
         ParametrosService.Vigente dias = servicio.obtener("torneos.dias-entre-torneos");
         assertThat(dias.parametro().inalterable()).isTrue();
         assertThat(dias.valor()).isEqualTo("91");
-        assertThat(servicio.obtener("metricas.umbral-sanciones-por-dia").valor()).as("sin decision del PO").isNull();
+        // D-25: la cifra de sanciones ya es del PO (V6); la de reportes sigue sin decision.
+        assertThat(servicio.obtener("metricas.umbral-sanciones-por-dia").valor()).as("decision del PO").isEqualTo("3");
+        assertThat(servicio.obtener("metricas.umbral-reportes-por-dia").valor()).as("sin decision del PO").isNull();
         assertThat(servicio.obtener("salas.apuestas.si-gana-la-maquina").parametro().opcionesComoLista())
                 .containsExactly("LIBERAR", "CONSUMIR");
         assertThatThrownBy(() -> servicio.obtener("no.existe"))

@@ -1883,32 +1883,37 @@ export const ESCENARIOS = [
   },
   {
     id: 'lista-negra-con-terminos',
-    titulo: 'lista negra con términos vetados',
+    titulo: 'lista negra: cifras, alta y la tabla de términos con sus acciones',
     ruta: 'plataforma/moderacion-sanciones/lista-negra-admin.html',
     sesion: () => sesionDe('qa_moderador', 'MODERADOR'),
     rutas: [
       [
         '**/api/v1/lista-negra/terminos*',
-        json({
-          contenido: [
+        (ruta) => {
+          const consulta = new URL(ruta.request().url()).searchParams;
+          const todos = [
             terminoVetado(1, 'spiderman', 'MARCA', 'SUBCADENA'),
             terminoVetado(2, 'hitler', 'DIRIGENTE', 'SUBCADENA'),
             terminoVetado(3, 'messi', 'CELEBRIDAD', 'PALABRA'),
             terminoVetado(4, 'mussolini', 'POLITICO', 'SUBCADENA'),
             terminoVetado(5, 'culo', 'OFENSIVO', 'PALABRA', { activo: false }),
             terminoVetado(6, 'nexus_oficial', 'OTRO', 'SUBCADENA'),
-          ],
-          pagina: 0,
-          tamano: 16,
-          total: 6,
-        }),
+          ];
+          const activo = consulta.get('activo');
+          const contenido =
+            activo === null ? todos : todos.filter((t) => String(t.activo) === activo);
+          return json({ contenido, pagina: 0, tamano: 16, total: contenido.length });
+        },
       ],
     ],
-    exige: ['.lista-terminos__fila, li'],
+    exige: [
+      '[data-panel="terminos"] tbody tr',
+      '[data-zona="cifras-de-la-lista"] .indicador-admin',
+    ],
   },
   {
     id: 'moderacion-con-cola',
-    titulo: 'cola de moderación con tres comentarios reportados',
+    titulo: 'cola de moderación con tres comentarios reportados y el historial de decisiones',
     ruta: 'plataforma/comentarios/moderar-comentarios.html',
     sesion: () => sesionDe('qa_moderador', 'MODERADOR'),
     rutas: [
@@ -1919,6 +1924,50 @@ export const ESCENARIOS = [
           total: 3,
           pagina: 0,
           tamano: 16,
+        }),
+      ],
+      // SA-4 (§7.3.3): el histórico de moderación, con dos decisiones.
+      [
+        '**/api/v1/comentarios/moderacion/historial*',
+        json({
+          contenido: [
+            {
+              id: 'asiento-lab-1',
+              fecha: new Date(Date.now() - 3_600_000).toISOString(),
+              accion: 'OCULTAR',
+              moderadorId: 'mod-lab',
+              apodoModerador: 'qa_moderador',
+              motivo: 'Lenguaje ofensivo hacia otro jugador.',
+              estadoAnterior: 'EN_REVISION',
+              estadoNuevo: 'OCULTO',
+              textoEditado: false,
+              comentarioId: 'com-lab-1',
+              productoId: 'prod-lab',
+              autorId: 'aut-lab',
+              apodoAutor: 'qa_autor',
+              extracto: 'Este comentario tenía un insulto.',
+            },
+            {
+              id: 'asiento-lab-2',
+              fecha: new Date(Date.now() - 7_200_000).toISOString(),
+              accion: 'EDITAR',
+              moderadorId: 'mod-lab',
+              apodoModerador: 'qa_moderador',
+              motivo: 'Se quitó un dato personal.',
+              estadoAnterior: 'PUBLICADO',
+              estadoNuevo: 'PUBLICADO',
+              textoEditado: true,
+              comentarioId: 'com-lab-2',
+              productoId: 'prod-lab',
+              autorId: 'aut-lab-2',
+              apodoAutor: 'qa_autora',
+              extracto: 'Muy buena espada, la recomiendo.',
+            },
+          ],
+          pagina: 0,
+          tamano: 16,
+          total: 2,
+          totalPaginas: 1,
         }),
       ],
     ],
@@ -4491,6 +4540,30 @@ function registrosDeTreintaDias() {
   return dias;
 }
 
+/** Frecuencia de reportes de comentarios (comentarios 1.15.0), reenviada por /moderacion (1.11.0). */
+const FRECUENCIA_DE_REPORTES = {
+  desde: '2026-09-13T15:00:00Z',
+  hasta: '2026-10-13T15:00:00Z',
+  total: 31,
+  porDia: [
+    { fecha: '2026-09-20', reportes: 3 },
+    { fecha: '2026-09-27', reportes: 6 },
+    { fecha: '2026-10-02', reportes: 4 },
+    { fecha: '2026-10-07', reportes: 12 },
+    { fecha: '2026-10-11', reportes: 6 },
+  ],
+  porCategoria: {
+    SPAM: 11,
+    CONTENIDO_OFENSIVO: 8,
+    ACOSO: 6,
+    INFORMACION_FALSA: 3,
+    CONTENIDO_INAPROPIADO: 2,
+    VIOLACION_DE_DERECHOS: 1,
+  },
+  comentariosReportados: 19,
+  reportantes: 14,
+};
+
 export const ESCENARIOS_SA2 = [
   {
     id: 'control-integral-poblado',
@@ -4612,8 +4685,12 @@ export const ESCENARIOS_SA2 = [
           sanciones: {},
           alertasConfiguradas: true,
           umbralSancionesPorDia: 3,
-          alertas: [],
+          umbralReportesPorDia: null,
+          avisos: [{ tipo: 'SANCIONES', fecha: '2026-10-07', cantidad: 4, umbral: 3 }],
+          alertas: ['Alta frecuencia de sanciones el 2026-10-07: 4 (umbral: 3 o más por día)'],
           pendientes: [],
+          noDisponibles: [],
+          reportes: FRECUENCIA_DE_REPORTES,
         }),
       ],
       [
@@ -5082,3 +5159,116 @@ export const ESCENARIOS_SA3 = [
 ];
 
 ESCENARIOS.push(...ESCENARIOS_SA3);
+
+/* =========================================================================
+   SA-4 (§7.3.8) — el tablero de moderación: cifras, alertas por serie
+   (sanciones con el umbral del PO, reportes sin cifra), las tres series por
+   día y los reportes por categoría (metricas-plataforma 1.11.0).
+   ========================================================================= */
+
+export const ESCENARIOS_SA4_TABLERO = [
+  {
+    id: 'tablero-moderacion-con-alertas',
+    titulo: 'tablero de moderación: alertas por serie, reportes por día y por categoría',
+    ruta: 'plataforma/metricas-plataforma/tablero-tecnico.html',
+    sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+    rutas: [
+      [
+        '**/api/v1/tecnicas',
+        json({
+          generadoEn: '2026-10-13T15:00:00Z',
+          desdeCache: false,
+          servicios: [
+            {
+              servicio: 'comentarios',
+              cpu: 0.12,
+              memoriaMb: 182.4,
+              peticiones: 5240,
+              promedioMs: 38.2,
+              maximoMs: 410,
+              errores5xx: 0,
+              tasaDeError: 0,
+              brecha: null,
+            },
+            {
+              servicio: 'moderacion-sanciones',
+              cpu: 0.08,
+              memoriaMb: 171.9,
+              peticiones: 1830,
+              promedioMs: 44.7,
+              maximoMs: 380,
+              errores5xx: 0,
+              tasaDeError: 0,
+              brecha: null,
+            },
+          ],
+          alertas: [],
+          brechas: [],
+          umbrales: { cpu: 0.75, latenciaMs: 500, disponibilidadPorcentaje: 99.95 },
+        }),
+      ],
+      [
+        '**/api/v1/moderacion*',
+        json({
+          sanciones: {
+            desde: '2026-09-13T15:00:00Z',
+            hasta: '2026-10-13T15:00:00Z',
+            total: 17,
+            porTipo: { ADVERTENCIA: 10, SUSPENSION: 6, BANEO: 1 },
+            porDia: [
+              { fecha: '2026-09-18', emitidas: 2 },
+              { fecha: '2026-09-25', emitidas: 3 },
+              { fecha: '2026-10-01', emitidas: 1 },
+              { fecha: '2026-10-07', emitidas: 4 },
+              { fecha: '2026-10-10', emitidas: 2 },
+              { fecha: '2026-10-12', emitidas: 5 },
+            ],
+            apelaciones: { PENDIENTE: 2, MANTENIDA: 1, REDUCIDA: 0, REVERTIDA: 1 },
+            moderadoresActivos: 3,
+            revertidas: 1,
+          },
+          alertasConfiguradas: true,
+          umbralSancionesPorDia: 3,
+          umbralReportesPorDia: null,
+          avisos: [
+            { tipo: 'SANCIONES', fecha: '2026-09-25', cantidad: 3, umbral: 3 },
+            { tipo: 'SANCIONES', fecha: '2026-10-07', cantidad: 4, umbral: 3 },
+            { tipo: 'SANCIONES', fecha: '2026-10-12', cantidad: 5, umbral: 3 },
+          ],
+          alertas: [],
+          pendientes: [],
+          noDisponibles: [],
+          reportes: FRECUENCIA_DE_REPORTES,
+          registroDeUsuarios: {
+            total: 1894,
+            porEstado: {
+              ACTIVO: 1700,
+              PENDIENTE_VERIFICACION: 150,
+              INACTIVO: 4,
+              SUSPENDIDO: 30,
+              BANEADO: 10,
+            },
+            registros: {
+              desde: '2026-09-14',
+              hasta: '2026-10-13',
+              total: 54,
+              porDia: registrosDeTreintaDias(),
+            },
+            ocultarPruebas: true,
+            calculadoEn: '2026-10-13T15:00:00Z',
+          },
+        }),
+      ],
+    ],
+    exige: [
+      '[data-zona="indicadores-moderacion"] .indicador-admin',
+      '[data-serie="SANCIONES"] [data-zona="avisos"] li',
+      '[data-serie="REPORTES"] [data-zona="sin-umbral"]',
+      '[data-zona="reportes-por-dia"] .grafico-admin__columna',
+      '[data-zona="reportes-por-categoria"] tbody tr',
+      '[data-zona="altas-por-dia"] .grafico-admin__columna',
+    ],
+  },
+];
+
+ESCENARIOS.push(...ESCENARIOS_SA4_TABLERO);

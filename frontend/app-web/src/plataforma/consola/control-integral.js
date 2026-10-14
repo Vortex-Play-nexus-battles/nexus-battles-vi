@@ -46,7 +46,6 @@ import { encabezadoDePagina } from '../../comun/ui/pagina.js';
 import { NOMBRE_DE_ROL } from '../../comun/shell.js';
 import { RUTAS, resolver } from '../../comun/sesion.js';
 import { urlDeVista } from '../../comun/acceso.js';
-import { distintivo } from '../../comun/ui/distintivo.js';
 import { nombreDeModalidad } from '../../comun/ui/juego/partida.js';
 import { construirPaginacion } from '../../comun/paginacion.js';
 import { creditos, numero } from '../../comun/ui/formato.js';
@@ -58,15 +57,19 @@ import {
   ESTADOS_DE_SALA,
   ESTADOS_DE_SERVICIO,
   ESTADOS_DE_TORNEO,
-  distintivoDeEstado,
   estadoSegun,
   humanizar,
 } from '../../comun/ui/admin/estado.js';
 import { rejillaDeIndicadores, tarjetaDeIndicador } from '../../comun/ui/admin/indicador.js';
 import { nombreDeAccion } from '../../comun/ui/admin/nombres.js';
+import { pintarAlertasDeModeracion } from '../../comun/ui/admin/alertas-de-moderacion.js';
 import { fichaDeParametro, valorLegible } from '../../comun/ui/admin/parametros.js';
 import { SITUACION_DEL_SERVICIO, nombreDelServicio } from '../../comun/ui/admin/servicios.js';
 import { tablaDeDatos } from '../../comun/ui/admin/tabla-de-datos.js';
+
+// SA-4: las alertas viven en el kit (las usa también el tablero de moderación);
+// se reexportan para quien ya las importaba de aquí.
+export { pintarAlertasDeModeracion };
 
 /**
  * Cuentas por página del directorio: las dieciséis de los listados del
@@ -867,18 +870,140 @@ function seccionModeracion(consultarApi) {
     pintar: (datos) => indicador({ etiqueta: 'por revisar', valor: totalDe(datos) }),
   });
 
-  // §7.3.4 «alertas»: las de alta frecuencia de sanciones que evalúa el
-  // servicio de métricas contra su umbral.
+  // §7.3.4 «alertas» y §7.3.8 «alertas de actividad sospechosa o alta
+  // frecuencia de reportes»: los días con alta frecuencia de sanciones o de
+  // reportes que evalúa el servicio de métricas contra los umbrales de
+  // Parámetros (SA-4, metricas-plataforma 1.11.0).
   const alertas = panelDeRecurso({
     id: 'alertas-moderacion',
     titulo: 'Alertas de moderación',
+    descripcion: 'Días con alta frecuencia de sanciones o de reportes en los últimos 30 días.',
+    acciones: [enlaceA('tablero-tecnico', 'Ver el tablero de moderación')].filter(Boolean),
     recurso: '/moderacion',
     consultarApi,
     pintar: (datos) => pintarAlertasDeModeracion(datos),
   });
 
-  // Las dos cifras juntas arriba; la bitácora y el recuento, cada uno en su fila.
-  return [alertas, comentarios, auditoria, sanciones];
+  // HU-USR-008 (D-45) — «comportamiento sospechoso», una de las dos señales que
+  // fijó el PO: quien acumula varias sanciones sin revertir (#909, integrado en
+  // SA-4). Sin `minimo` el servicio usa el del PO (3); el panel lo lee de la
+  // respuesta, no lo repite.
+  const reincidentes = panelDeReincidentes(consultarApi);
+
+  // Las dos cifras juntas arriba; la lista, la bitácora y el recuento, cada
+  // uno en su fila.
+  return [alertas, comentarios, reincidentes, auditoria, sanciones];
+}
+
+/**
+ * El panel de quienes acumulan sanciones sin revertir, con el apodo de cada
+ * cuenta (ms-identidad-admin 1.9.0, `GET /admin/titulares`): un identificador
+ * en pantalla no le dice nada a quien opera.
+ *
+ * @param {typeof consultar} consultarApi
+ */
+function panelDeReincidentes(consultarApi) {
+  const partes = panel({
+    id: 'reincidentes',
+    titulo: 'Usuarios con varias sanciones',
+    descripcion:
+      'Cuentas que acumulan sanciones sin revertir: una de las alertas de comportamiento ' +
+      'sospechoso.',
+    ancho: 'completo',
+  });
+  const cargar = async () => {
+    const desenlace = await consultarApi('/sanciones/reincidentes');
+    const apodos = new Map();
+    const uids = (Array.isArray(desenlace.datos?.usuarios) ? desenlace.datos.usuarios : [])
+      .map((u) => u?.usuarioId)
+      .filter(Boolean);
+    if (desenlace.resultado === RESULTADO.DATOS && uids.length > 0) {
+      const nombres = await consultarApi(`/admin/titulares?uids=${uids.join(',')}`);
+      if (nombres.resultado === RESULTADO.DATOS && Array.isArray(nombres.datos)) {
+        nombres.datos.forEach((t) => apodos.set(String(t.uid).toLowerCase(), t.apodo));
+      }
+    }
+    pintarDesenlace(partes, desenlace, (datos) => pintarReincidentes(datos, apodos), {
+      alReintentar: cargar,
+    });
+    return desenlace;
+  };
+  return { ...partes, cargar, id: 'reincidentes' };
+}
+
+/**
+ * La lista de reincidentes tal como la publica moderacion-sanciones
+ * (`GET /sanciones/reincidentes`, 1.5.0). Un cuerpo que no tenga esa forma se
+ * trata como «sin datos»: no se inventa a nadie.
+ *
+ * @param {{minimo?: number, total?: number,
+ *          usuarios?: {usuarioId?: string, sanciones?: number, ultimaEn?: string}[]}} datos
+ * @param {Map<string, string>} [apodos] uid → apodo
+ * @returns {HTMLElement[]}
+ */
+export function pintarReincidentes(datos, apodos = new Map()) {
+  const usuarios = (Array.isArray(datos?.usuarios) ? datos.usuarios : []).filter(
+    (u) => u?.usuarioId,
+  );
+  const minimo = Number.isInteger(datos?.minimo) ? datos.minimo : null;
+  const criterio = minimo === null ? 'varias' : `${minimo} o más`;
+  if (usuarios.length === 0) {
+    return [
+      h('p', {
+        clase: 't-meta',
+        datos: { zona: 'sin-reincidentes' },
+        texto: `Nadie tiene ${criterio} sanciones sin revertir.`,
+      }),
+    ];
+  }
+
+  const total =
+    Number.isInteger(datos?.total) && datos.total >= usuarios.length
+      ? datos.total
+      : usuarios.length;
+  const cortada =
+    total > usuarios.length ? ` Se muestran los ${usuarios.length} con más sanciones.` : '';
+  const filas = usuarios.map((u) => ({
+    ...u,
+    apodo: apodos.get(String(u.usuarioId).toLowerCase()) ?? null,
+  }));
+  return [
+    h('p', {
+      clase: 't-meta',
+      datos: { zona: 'resumen-reincidentes' },
+      texto: `${total} ${total === 1 ? 'usuario' : 'usuarios'} con ${criterio} sanciones sin revertir.${cortada}`,
+    }),
+    tablaDeDatos({
+      titulo: 'Usuarios con varias sanciones sin revertir',
+      claveDeFila: (u) => u.usuarioId,
+      columnas: [
+        {
+          clave: 'apodo',
+          titulo: 'Cuenta',
+          principal: true,
+          valor: (u) =>
+            u.apodo ?? h('span', { clase: 'tabla-admin__sin-dato', texto: 'Sin apodo' }),
+        },
+        { clave: 'sanciones', titulo: 'Sanciones sin revertir', tipo: 'numero' },
+        {
+          clave: 'ultimaEn',
+          titulo: 'Última sanción',
+          tipo: 'fecha',
+          valor: (u) => formatearFecha(u.ultimaEn),
+        },
+        {
+          clave: 'acciones',
+          titulo: 'Acciones',
+          tipo: 'accion',
+          valor: (u) => [
+            enlaceAFicha({ uid: u.usuarioId, apodo: u.apodo ?? undefined }),
+            enlaceASanciones({ uid: u.usuarioId, apodo: u.apodo ?? undefined }),
+          ],
+        },
+      ],
+      filas,
+    }),
+  ];
 }
 
 /** El tipo de sanción en plural, para el rótulo de su cifra. */
@@ -935,53 +1060,6 @@ const NOMBRE_DE_APELACION = Object.freeze({
   ACEPTADA: 'Apelaciones aceptadas',
   RECHAZADA: 'Apelaciones rechazadas',
 });
-
-/**
- * Las alertas de moderación tal como las publica el servicio de métricas.
- *
- * @param {{alertasConfiguradas?: boolean, umbralSancionesPorDia?: number|null,
- *          alertas?: string[]}} datos
- * @returns {HTMLElement[]}
- */
-export function pintarAlertasDeModeracion(datos) {
-  const lista = (Array.isArray(datos?.alertas) ? datos.alertas : []).filter(
-    (alerta) => typeof alerta === 'string' && alerta.trim(),
-  );
-  if (!datos?.alertasConfiguradas) {
-    return [
-      distintivoDeEstado({ texto: 'Desactivadas', tono: 'neutro' }),
-      h('p', {
-        clase: 'panel-admin__explicacion',
-        datos: { zona: 'sin-umbral' },
-        texto:
-          'Las alertas están desactivadas: falta fijar el umbral de sanciones por día en Parámetros.',
-      }),
-    ];
-  }
-  if (lista.length === 0) {
-    // D-25: el umbral es «a partir de», así que se dice «llegó a».
-    const texto = Number.isInteger(datos?.umbralSancionesPorDia)
-      ? `Ningún día llegó a ${datos.umbralSancionesPorDia} sanciones.`
-      : 'Ningún día llegó al umbral.';
-    return [
-      distintivoDeEstado({ texto: 'Sin alertas', tono: 'exito' }),
-      h('p', { clase: 'panel-admin__explicacion', datos: { zona: 'sin-alertas' }, texto }),
-    ];
-  }
-  return [
-    distintivoDeEstado({
-      texto: `${numero(lista.length)} ${lista.length === 1 ? 'alerta' : 'alertas'}`,
-      tono: 'error',
-    }),
-    h('ul', {
-      clase: 'pila pila--ajustada',
-      datos: { zona: 'alertas' },
-      hijos: lista.map((alerta) =>
-        h('li', { hijos: [distintivo('Alerta', 'reportado'), ` ${alerta}`] }),
-      ),
-    }),
-  ];
-}
 
 /* -------------------------------------------------------------------------
    8. Sistema

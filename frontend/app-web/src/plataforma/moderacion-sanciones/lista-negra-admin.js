@@ -3,6 +3,11 @@
  * (HU-ADM-002; 7.1.1 y 7.3.2 del documento del curso: «lista negra
  * actualizable»).
  *
+ * SA-4 (informe de revisión, punto 21): la página pasa al kit de la consola
+ * —cifras arriba, alta en su panel, los términos en una tabla con las
+ * acciones a un lado, la edición completa (término, categoría y modo) en un
+ * panel lateral— y deja de explicar el algoritmo en la cabecera.
+ *
  * Habla con `contracts/openapi/moderacion-lista-negra.yaml` 2.0.x por el
  * borde. Desde la 2.0.0 el listado no es una lista de cadenas sino una página
  * de términos con su categoría del 7.1.1, su modo de coincidencia, si está
@@ -15,18 +20,21 @@
  * el estado HTTP, nunca comparando textos (`shared/ui-kit/MAPEO-ERRORES.md`).
  */
 
+import { NOMBRE_DE_CATEGORIA_DE_TERMINO } from '../../comun/ui/admin/nombres.js';
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 import { construirPaginacion } from '../../comun/paginacion.js';
 import { limpiarAviso, pintarAviso, tonoPorEstado } from '../../comun/ui/aviso.js';
-import { confirmar as confirmarConDialogo, pedirTexto } from '../../comun/ui/dialogo.js';
-import { h, nodo, vaciar } from '../../comun/ui/dom.js';
-import { distintivo } from '../../comun/ui/distintivo.js';
-import {
-  estadoDeCarga,
-  estadoDeError,
-  estadoVacio,
-  pintarEstado,
-} from '../../comun/ui/estado-vista.js';
+import { barraDeFiltros } from '../../comun/ui/admin/barra-de-filtros.js';
+import { distintivoDeEstado } from '../../comun/ui/admin/estado.js';
+import { rejillaDeIndicadores, tarjetaDeIndicador } from '../../comun/ui/admin/indicador.js';
+import { abrirPanelLateral } from '../../comun/ui/admin/panel-lateral.js';
+import { tablaDeDatos } from '../../comun/ui/admin/tabla-de-datos.js';
+import { confirmar as confirmarConDialogo } from '../../comun/ui/dialogo.js';
+import { h, vaciar } from '../../comun/ui/dom.js';
+import { estadoDeCarga, estadoDeError, pintarEstado } from '../../comun/ui/estado-vista.js';
+import { fecha as fechaCorta } from '../../comun/ui/formato.js';
+import { encabezadoDePagina } from '../../comun/ui/pagina.js';
+import { panel } from '../consola/panel.js';
 
 export const BASE_URL = '/api/v1/lista-negra/terminos';
 
@@ -34,14 +42,7 @@ export const BASE_URL = '/api/v1/lista-negra/terminos';
 export const TAMANO_DE_PAGINA = 16;
 
 /** Categorías del contrato, con el texto que ve el moderador (7.1.1). */
-export const CATEGORIAS = Object.freeze({
-  OFENSIVO: 'Ofensivo',
-  MARCA: 'Marca registrada',
-  CELEBRIDAD: 'Celebridad',
-  POLITICO: 'Político',
-  DIRIGENTE: 'Dirigente',
-  OTRO: 'Otro',
-});
+export const CATEGORIAS = NOMBRE_DE_CATEGORIA_DE_TERMINO;
 
 /** Modos de coincidencia del contrato. */
 export const MODOS = Object.freeze({
@@ -127,30 +128,32 @@ export function altaDesde(datos) {
   return cuerpo;
 }
 
-/** Fecha corta legible, o vacío si no hay. */
-function fecha(valor) {
-  if (!valor) {
-    return '';
+/** Quien dio de alta el término, como se lee: la carga inicial no es una persona. */
+export function autorDe(termino) {
+  if (!termino?.creadoPor) {
+    return 'Sin autor';
   }
-  const instante = new Date(valor);
-  return Number.isNaN(instante.getTime()) ? '' : instante.toLocaleDateString('es-CO');
+  return termino.creadoPor === 'semilla' ? 'Carga inicial' : termino.creadoPor;
 }
 
 /**
- * La línea de metadatos de un término: forma normalizada, autor y fecha.
+ * La celda «Alta»: quién y cuándo.
  *
- * @param {{normalizado?: string, creadoPor?: string|null, creadoEn?: string}} termino
+ * @param {{creadoPor?: string|null, creadoEn?: string|null}} termino
  * @returns {string}
  */
-export function descripcionDe(termino) {
-  const partes = [`Se compara como «${termino.normalizado ?? ''}»`];
-  partes.push(termino.creadoPor ? `alta de ${termino.creadoPor}` : 'autor desconocido');
-  const cuando = fecha(termino.creadoEn);
-  if (cuando) {
-    partes.push(cuando);
-  }
-  return partes.join(' · ');
+export function altaDe(termino) {
+  const cuando = termino?.creadoEn ? fechaCorta(termino.creadoEn) : null;
+  return cuando && cuando !== '—' ? `${autorDe(termino)} · ${cuando}` : autorDe(termino);
 }
+
+/** Opciones de los desplegables, como pares `[valor, texto]`. */
+const OPCIONES_DE_CATEGORIA = Object.freeze(Object.entries(CATEGORIAS));
+const OPCIONES_DE_MODO = Object.freeze(Object.entries(MODOS));
+const OPCIONES_DE_ESTADO = Object.freeze([
+  ['true', 'Activos'],
+  ['false', 'Apagados'],
+]);
 
 /* ---- API ---- */
 
@@ -193,31 +196,113 @@ export const api = {
 
 /* ---- DOM ---- */
 
-/**
- * Fila de un término con sus acciones.
- *
- * @param {object} termino `TerminoResponse` del contrato
- * @param {{editar?: Function, alternar?: Function, eliminar?: Function}} [acciones]
- * @returns {HTMLLIElement}
- */
-export function filaDeTermino(termino, { editar, alternar, eliminar } = {}) {
-  const fila = h('li', {
-    clase: 'lista-terminos__fila',
-    datos: { termino: termino.termino, activo: String(Boolean(termino.activo)) },
+let secuencia = 0;
+
+/** Un desplegable del kit con su etiqueta. */
+function desplegable({ id, nombre, etiqueta, opciones, vacio = null, valor = '', pista = null }) {
+  const control = h('select', {
+    clase: 'desplegable__control',
+    atributos: { id, name: nombre },
+    hijos: [
+      ...(vacio !== null ? [h('option', { texto: vacio, atributos: { value: '' } })] : []),
+      ...opciones.map(([v, texto]) => h('option', { texto, atributos: { value: v } })),
+    ],
   });
+  control.value = valor;
+  const pistaId = pista ? `${id}-pista` : null;
+  if (pistaId) {
+    control.setAttribute('aria-describedby', pistaId);
+  }
+  return h('div', {
+    clase: 'desplegable',
+    hijos: [
+      h('label', { clase: 'campo__etiqueta', texto: etiqueta, atributos: { for: id } }),
+      control,
+      ...(pista
+        ? [h('p', { clase: 'campo__pista', texto: pista, atributos: { id: pistaId } })]
+        : []),
+    ],
+  });
+}
 
-  const datos = h('div', { clase: 'pila pila--ajustada' });
-  datos.append(h('span', { clase: 'lista-terminos__termino', texto: termino.termino }));
-  const etiquetas = h('div', { clase: 'fila fila--acciones' });
-  etiquetas.append(
-    distintivo(etiquetaDeCategoria(termino.categoria)),
-    distintivo(etiquetaDeModo(termino.modo)),
-    distintivo(termino.activo ? 'Activo' : 'Inactivo', termino.activo ? 'activo' : 'no-disponible'),
-  );
-  datos.append(etiquetas, nodo('p', 't-meta', descripcionDe(termino)));
-  fila.append(datos);
+/** El campo del término. */
+function campoDeTermino({ id, valor = '' }) {
+  const entrada = h('input', {
+    clase: 'campo__control',
+    atributos: {
+      id,
+      name: 'termino',
+      type: 'text',
+      maxlength: 120,
+      required: true,
+      autocomplete: 'off',
+      placeholder: 'Por ejemplo, spiderman',
+    },
+  });
+  entrada.value = valor;
+  return h('div', {
+    clase: 'campo',
+    hijos: [
+      h('label', { clase: 'campo__etiqueta', texto: 'Término', atributos: { for: id } }),
+      entrada,
+    ],
+  });
+}
 
-  const botones = h('div', { clase: 'lista-terminos__acciones' });
+const PISTA_DEL_MODO =
+  'Automático: dentro de otras palabras desde 5 letras; si es más corto, solo como palabra entera.';
+
+/**
+ * El formulario de alta: término, categoría y cómo se busca.
+ *
+ * @returns {HTMLFormElement}
+ */
+export function formularioDeAlta() {
+  secuencia += 1;
+  const id = `alta-${secuencia}`;
+  return h('form', {
+    clase: 'formulario-termino',
+    atributos: { novalidate: true, 'aria-label': 'Añadir un término a la lista negra' },
+    datos: { zona: 'alta' },
+    hijos: [
+      campoDeTermino({ id: `${id}-termino` }),
+      desplegable({
+        id: `${id}-categoria`,
+        nombre: 'categoria',
+        etiqueta: 'Categoría',
+        opciones: OPCIONES_DE_CATEGORIA,
+        vacio: 'Elige la categoría',
+      }),
+      desplegable({
+        id: `${id}-modo`,
+        nombre: 'modo',
+        etiqueta: 'Cómo se busca',
+        opciones: OPCIONES_DE_MODO,
+        vacio: 'Automático',
+        pista: PISTA_DEL_MODO,
+      }),
+      h('div', {
+        clase: 'formulario-termino__accion',
+        hijos: [
+          h('button', {
+            clase: 'boton boton--primario',
+            texto: 'Agregar término',
+            atributos: { type: 'submit' },
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+/**
+ * Los botones de una fila: editar, apagar o activar, y quitar.
+ *
+ * @param {object} termino `TerminoResponse`
+ * @param {{editar?: Function, alternar?: Function, eliminar?: Function}} acciones
+ * @returns {HTMLElement}
+ */
+export function accionesDeTermino(termino, { editar, alternar, eliminar } = {}) {
   const boton = (texto, clase, accion, etiqueta, alPulsar) => {
     const elemento = h('button', {
       clase: `boton ${clase} boton--pequeno`,
@@ -228,70 +313,209 @@ export function filaDeTermino(termino, { editar, alternar, eliminar } = {}) {
     elemento.addEventListener('click', () => alPulsar?.(termino));
     return elemento;
   };
-  botones.append(
-    boton('Editar', 'boton--secundario', 'editar', `Editar el término ${termino.termino}`, editar),
-    boton(
-      termino.activo ? 'Desactivar' : 'Activar',
-      'boton--secundario',
-      'alternar',
-      `${termino.activo ? 'Desactivar' : 'Activar'} el término ${termino.termino}`,
-      alternar,
-    ),
-    boton(
-      'Eliminar',
-      'boton--peligro',
-      'eliminar',
-      `Eliminar el término ${termino.termino}`,
-      eliminar,
-    ),
-  );
-  fila.append(botones);
-  return fila;
+  return h('div', {
+    clase: 'tabla-admin__acciones',
+    hijos: [
+      boton(
+        'Editar',
+        'boton--secundario',
+        'editar',
+        `Editar el término ${termino.termino}`,
+        editar,
+      ),
+      boton(
+        termino.activo ? 'Apagar' : 'Activar',
+        'boton--secundario',
+        'alternar',
+        `${termino.activo ? 'Apagar' : 'Activar'} el término ${termino.termino}`,
+        alternar,
+      ),
+      boton(
+        'Quitar',
+        'boton--peligro',
+        'eliminar',
+        `Quitar el término ${termino.termino}`,
+        eliminar,
+      ),
+    ],
+  });
 }
 
 /**
- * Monta la vista sobre un documento con las zonas `[data-zona=...]` de
- * `lista-negra-admin.html`.
+ * La tabla de términos: cada uno con su categoría, su modo, su estado, su
+ * alta y sus acciones a la derecha.
  *
- * UXC-7 — confirmar y preguntar son los diálogos del kit (con su etiqueta, se
- * leen con lector de pantalla y devuelven el foco), no `window.confirm()` ni
- * `window.prompt()`. Se pueden inyectar; lo que devuelvan se espera con
- * `await`, así que sirven tanto una función síncrona como una promesa.
+ * @param {object[]} terminos
+ * @param {{editar?: Function, alternar?: Function, eliminar?: Function, resumen?: string|null}} acciones
+ * @returns {HTMLElement}
+ */
+export function tablaDeTerminos(terminos, { resumen = null, ...acciones } = {}) {
+  return tablaDeDatos({
+    titulo: 'Términos vetados',
+    resumen,
+    claveDeFila: (t) => String(t.id ?? t.termino),
+    columnas: [
+      { clave: 'termino', titulo: 'Término', principal: true },
+      {
+        clave: 'categoria',
+        titulo: 'Categoría',
+        valor: (t) => etiquetaDeCategoria(t.categoria),
+      },
+      { clave: 'modo', titulo: 'Cómo se busca', valor: (t) => etiquetaDeModo(t.modo) },
+      {
+        clave: 'activo',
+        titulo: 'Estado',
+        valor: (t) =>
+          distintivoDeEstado(
+            t.activo ? { texto: 'Activo', tono: 'exito' } : { texto: 'Apagado', tono: 'neutro' },
+          ),
+      },
+      { clave: 'alta', titulo: 'Alta', valor: (t) => altaDe(t) },
+      {
+        clave: 'acciones',
+        titulo: 'Acciones',
+        tipo: 'accion',
+        valor: (t) => accionesDeTermino(t, acciones),
+      },
+    ],
+    filas: terminos,
+  });
+}
+
+/**
+ * El formulario de edición del panel lateral: el término, su categoría y
+ * cómo se busca, con los valores de ahora.
+ *
+ * @param {object} termino
+ * @returns {{elemento: HTMLFormElement, leer: () => {termino: string, categoria: string, modo: string}}}
+ */
+export function formularioDeEdicion(termino) {
+  secuencia += 1;
+  const id = `edicion-${secuencia}`;
+  const elemento = h('form', {
+    clase: 'pila pila--compacta',
+    atributos: { novalidate: true, 'aria-label': `Editar el término ${termino.termino}` },
+    datos: { zona: 'edicion' },
+    hijos: [
+      campoDeTermino({ id: `${id}-termino`, valor: termino.termino }),
+      desplegable({
+        id: `${id}-categoria`,
+        nombre: 'categoria',
+        etiqueta: 'Categoría',
+        opciones: OPCIONES_DE_CATEGORIA,
+        valor: termino.categoria ?? 'OTRO',
+      }),
+      desplegable({
+        id: `${id}-modo`,
+        nombre: 'modo',
+        etiqueta: 'Cómo se busca',
+        opciones: OPCIONES_DE_MODO,
+        valor: termino.modo ?? 'SUBCADENA',
+      }),
+      h('p', {
+        clase: 'campo__error',
+        atributos: { role: 'alert' },
+        datos: { zona: 'error-edicion' },
+      }),
+    ],
+  });
+  elemento.querySelector('[data-zona="error-edicion"]').hidden = true;
+  const leer = () => {
+    const datos = new FormData(elemento);
+    return {
+      termino: String(datos.get('termino') ?? '').trim(),
+      categoria: String(datos.get('categoria') ?? ''),
+      modo: String(datos.get('modo') ?? ''),
+    };
+  };
+  return { elemento, leer };
+}
+
+/**
+ * Monta la vista sobre las zonas `[data-zona=encabezado|aviso|indicadores|consola]`
+ * de `lista-negra-admin.html`.
+ *
+ * Confirmar es el diálogo del kit (con su etiqueta, se lee con lector de
+ * pantalla y devuelve el foco), no `window.confirm()`; se puede inyectar, y lo
+ * que devuelva se espera con `await`.
  *
  * @param {ParentNode} raiz
  * @param {{fetchImpl?: Function,
- *          confirmar?: (texto: string) => boolean|Promise<boolean>,
- *          preguntar?: (texto: string, valor: string) => string|null|Promise<string|null>}} [opciones]
- * @returns {{cargar: (pagina?: number) => Promise<void>}}
+ *          confirmar?: (termino: object) => boolean|Promise<boolean>,
+ *          abrirEdicion?: typeof abrirPanelLateral}} [opciones]
+ * @returns {{cargar: (pagina?: number) => Promise<void>, cargarCifras: () => Promise<void>}}
  */
 export function montarListaNegra(
   raiz,
   {
     fetchImpl,
-    confirmar = (texto) =>
+    confirmar = (termino) =>
       confirmarConDialogo({
-        titulo: texto,
-        mensaje: 'Dejará de filtrarse desde este momento. Puedes volver a añadirlo cuando quieras.',
+        titulo: `¿Quitar «${termino.termino}» de la lista negra?`,
+        mensaje:
+          'Deja de filtrarse desde este momento. Si solo quieres dejar de aplicarlo un tiempo, apágalo.',
         textoConfirmar: 'Quitar término',
+        peligro: true,
       }),
-    preguntar = (texto, valor) =>
-      pedirTexto({
-        titulo: texto,
-        etiqueta: 'Término',
-        valor,
-        pista: 'La lista negra filtra apodos, comentarios, chat y mensajes privados.',
-        textoConfirmar: 'Guardar término',
-      }),
+    abrirEdicion = abrirPanelLateral,
   } = {},
 ) {
+  const zonaEncabezado = raiz.querySelector('[data-zona="encabezado"]');
   const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
-  const zonaLista = raiz.querySelector('[data-zona="terminos"]');
-  const zonaPaginacion = raiz.querySelector('[data-zona="paginacion"]');
-  const formAlta = raiz.querySelector('[data-zona="alta"]');
-  const formFiltros = raiz.querySelector('[data-zona="filtros"]');
+  const zonaIndicadores = raiz.querySelector('[data-zona="indicadores"]');
+  const zonaConsola = raiz.querySelector('[data-zona="consola"]');
+
+  zonaEncabezado?.replaceChildren(
+    encabezadoDePagina({
+      titulo: 'Lista negra',
+      descripcion: 'Vocabulario vetado en apodos, nombres, comentarios y chat.',
+    }),
+  );
+
+  const alta = panel({ id: 'alta-de-termino', titulo: 'Añadir un término', ancho: 'completo' });
+  const formAlta = formularioDeAlta();
+  // Un formulario no «carga»: el sello queda como el de un panel con datos.
+  alta.sello.dataset.estado = 'datos';
+  vaciar(alta.zona).append(formAlta);
+
+  const listado = panel({ id: 'terminos', titulo: 'Términos vetados', ancho: 'completo' });
+  const zonaTabla = h('div', { clase: 'pila pila--compacta', datos: { zona: 'terminos' } });
+  const zonaPaginacion = h('div', { datos: { zona: 'paginacion' } });
 
   let filtros = {};
   let paginaActual = 0;
+
+  const barra = barraDeFiltros({
+    etiqueta: 'Buscar y filtrar términos',
+    busqueda: { nombre: 'buscar', etiqueta: 'Término', placeholder: 'Busca un término' },
+    filtros: [
+      {
+        nombre: 'categoria',
+        etiqueta: 'Categoría',
+        opciones: OPCIONES_DE_CATEGORIA,
+        todos: 'Todas las categorías',
+      },
+      { nombre: 'activo', etiqueta: 'Estado', opciones: OPCIONES_DE_ESTADO, todos: 'Todos' },
+    ],
+    alAplicar: (valores) => {
+      filtros = {};
+      for (const clave of ['categoria', 'activo', 'buscar']) {
+        const valor = String(valores[clave] ?? '').trim();
+        if (valor) {
+          filtros[clave] = valor;
+        }
+      }
+      cargar(0);
+    },
+  });
+  listado.sello.dataset.estado = 'datos';
+  vaciar(listado.zona).append(barra.elemento, zonaTabla, zonaPaginacion);
+
+  if (zonaConsola) {
+    vaciar(zonaConsola).append(
+      h('div', { clase: 'consola-integral__rejilla', hijos: [alta.elemento, listado.elemento] }),
+    );
+  }
 
   function contarError(error, accion) {
     const deServicio = error instanceof ErrorDeListaNegra;
@@ -306,15 +530,49 @@ export function montarListaNegra(
     pintarAviso(zonaAviso, { tono: 'exito', titulo, detalle });
   }
 
+  /** Las tres cifras de arriba; la que no responda se dice «sin dato», nunca 0. */
+  async function cargarCifras() {
+    if (!zonaIndicadores) {
+      return;
+    }
+    const total = async (consulta) => {
+      try {
+        const respuesta = await api.listar(consulta, 0, fetchImpl);
+        return Number.isFinite(respuesta?.total) ? respuesta.total : null;
+      } catch {
+        return null;
+      }
+    };
+    const [todos, activos, apagados] = await Promise.all([
+      total({}),
+      total({ activo: 'true' }),
+      total({ activo: 'false' }),
+    ]);
+    zonaIndicadores.replaceChildren(
+      rejillaDeIndicadores(
+        [
+          tarjetaDeIndicador({ etiqueta: 'Términos en la lista', valor: todos }),
+          tarjetaDeIndicador({
+            etiqueta: 'Activos',
+            valor: activos,
+            tono: activos ? 'exito' : null,
+          }),
+          tarjetaDeIndicador({ etiqueta: 'Apagados', valor: apagados }),
+        ],
+        { zona: 'cifras-de-la-lista' },
+      ),
+    );
+  }
+
   async function cargar(pagina = 0) {
-    pintarEstado(zonaLista, estadoDeCarga({ filas: 3, etiqueta: 'Cargando términos…' }));
+    pintarEstado(zonaTabla, estadoDeCarga({ filas: 3, etiqueta: 'Cargando términos…' }));
     vaciar(zonaPaginacion);
     let respuesta;
     try {
       respuesta = await api.listar(filtros, pagina, fetchImpl);
     } catch (error) {
       pintarEstado(
-        zonaLista,
+        zonaTabla,
         estadoDeError({
           titulo: 'No pudimos cargar la lista negra',
           detalle:
@@ -328,50 +586,94 @@ export function montarListaNegra(
     }
     paginaActual = respuesta.pagina ?? pagina;
     const terminos = respuesta.contenido ?? [];
-    if (terminos.length === 0) {
-      const filtrada = Object.keys(filtros).length > 0;
-      pintarEstado(
-        zonaLista,
-        estadoVacio({
-          titulo: filtrada ? 'Ningún término cumple el filtro' : 'La lista negra está vacía',
-          detalle: filtrada
-            ? 'Cambia o quita el filtro para ver el resto de la lista.'
-            : 'Mientras esté vacía, el registro solo aplica sus validaciones de formato. Añade un término arriba.',
-        }),
-      );
-      return;
-    }
-    const lista = h('ul', {
-      clase: 'lista-terminos',
-      atributos: { 'aria-label': 'Términos vetados' },
-    });
-    for (const termino of terminos) {
-      lista.append(filaDeTermino(termino, { editar, alternar, eliminar }));
-    }
-    vaciar(zonaLista).append(lista);
-    zonaLista.hidden = false;
-    const totalPaginas = Math.ceil((respuesta.total ?? terminos.length) / TAMANO_DE_PAGINA);
-    const control = construirPaginacion(
-      { paginaActual: Math.min(paginaActual, Math.max(totalPaginas - 1, 0)), totalPaginas },
-      (siguiente) => cargar(siguiente),
+    const total = respuesta.total ?? terminos.length;
+    const filtrada = Object.keys(filtros).length > 0;
+    vaciar(zonaTabla).append(
+      terminos.length === 0
+        ? tablaDeDatos({
+            titulo: 'Términos vetados',
+            columnas: [{ clave: 'termino', titulo: 'Término', principal: true }],
+            filas: [],
+            vacio: filtrada
+              ? {
+                  titulo: 'Ningún término cumple el filtro',
+                  detalle: 'Cambia o quita el filtro para ver el resto de la lista.',
+                }
+              : {
+                  titulo: 'La lista negra está vacía',
+                  detalle: 'Añade el primer término en el panel de arriba.',
+                },
+          })
+        : tablaDeTerminos(terminos, {
+            resumen: `${terminos.length} de ${total}`,
+            editar,
+            alternar,
+            eliminar,
+          }),
     );
-    control.setAttribute('aria-label', 'Paginación de la lista negra');
-    zonaPaginacion.append(control);
+    const totalPaginas = Math.ceil(total / TAMANO_DE_PAGINA);
+    if (totalPaginas > 1) {
+      const control = construirPaginacion(
+        { paginaActual: Math.min(paginaActual, totalPaginas - 1), totalPaginas },
+        (siguiente) => cargar(siguiente),
+      );
+      control.setAttribute('aria-label', 'Paginación de la lista negra');
+      zonaPaginacion.append(control);
+    }
   }
 
-  async function editar(termino) {
+  function recargarTodo(pagina = paginaActual) {
+    return Promise.all([cargar(pagina), cargarCifras()]);
+  }
+
+  function editar(termino) {
     limpiarAviso(zonaAviso);
-    const nuevo = await preguntar(`Editar «${termino.termino}»`, termino.termino);
-    if (!nuevo || !nuevo.trim() || nuevo.trim() === termino.termino) {
-      return;
-    }
-    try {
-      const editado = await api.editar(termino.termino, { termino: nuevo.trim() }, fetchImpl);
-      await cargar(paginaActual);
-      contarExito('Término actualizado', `Ahora es «${editado?.termino ?? nuevo.trim()}».`);
-    } catch (error) {
-      contarError(error, 'editar el término');
-    }
+    const formulario = formularioDeEdicion(termino);
+    const error = formulario.elemento.querySelector('[data-zona="error-edicion"]');
+    const guardar = h('button', {
+      clase: 'boton boton--primario',
+      texto: 'Guardar cambios',
+      atributos: { type: 'button' },
+      datos: { accion: 'guardar-termino' },
+    });
+    const { cerrar } = abrirEdicion({
+      titulo: `Editar «${termino.termino}»`,
+      subtitulo: etiquetaDeCategoria(termino.categoria),
+      contenido: formulario.elemento,
+      acciones: [guardar],
+    });
+    const enviar = async () => {
+      error.hidden = true;
+      const cuerpo = formulario.leer();
+      if (!cuerpo.termino) {
+        error.textContent = 'Escribe el término.';
+        error.hidden = false;
+        return;
+      }
+      guardar.disabled = true;
+      try {
+        const editado = await api.editar(termino.termino, cuerpo, fetchImpl);
+        cerrar?.();
+        await recargarTodo();
+        contarExito(
+          'Término actualizado',
+          `«${editado?.termino ?? cuerpo.termino}» · ${etiquetaDeCategoria(editado?.categoria ?? cuerpo.categoria)} · ${etiquetaDeModo(editado?.modo ?? cuerpo.modo).toLowerCase()}.`,
+        );
+      } catch (problema) {
+        error.textContent =
+          problema instanceof ErrorDeListaNegra && problema.detalle
+            ? problema.detalle
+            : 'No pudimos contactar con el servicio de moderación. Vuelve a intentarlo.';
+        error.hidden = false;
+      } finally {
+        guardar.disabled = false;
+      }
+    };
+    guardar.addEventListener('click', enviar);
+    formulario.elemento.addEventListener('submit', (evento) => {
+      evento.preventDefault();
+      enviar();
+    });
   }
 
   async function alternar(termino) {
@@ -382,9 +684,9 @@ export function montarListaNegra(
         { termino: termino.termino, activo: !termino.activo },
         fetchImpl,
       );
-      await cargar(paginaActual);
+      await recargarTodo();
       contarExito(
-        termino.activo ? 'Término desactivado' : 'Término activado',
+        termino.activo ? 'Término apagado' : 'Término activado',
         termino.activo
           ? `«${termino.termino}» deja de aplicarse, sin borrarse.`
           : `«${termino.termino}» vuelve a aplicarse.`,
@@ -396,27 +698,33 @@ export function montarListaNegra(
 
   async function eliminar(termino) {
     limpiarAviso(zonaAviso);
-    if (!(await confirmar(`¿Quitar «${termino.termino}» de la lista negra?`))) {
+    if (!(await confirmar(termino))) {
       return;
     }
     try {
       await api.eliminar(termino.termino, fetchImpl);
-      await cargar(paginaActual);
-      contarExito('Término eliminado', `«${termino.termino}» ya no está en la lista negra.`);
+      await recargarTodo();
+      contarExito('Término quitado', `«${termino.termino}» ya no está en la lista negra.`);
     } catch (error) {
-      contarError(error, 'eliminar el término');
+      contarError(error, 'quitar el término');
     }
   }
 
-  formAlta?.addEventListener('submit', async (evento) => {
+  formAlta.addEventListener('submit', async (evento) => {
     evento.preventDefault();
     limpiarAviso(zonaAviso);
     const cuerpo = altaDesde(new FormData(formAlta));
     if (!cuerpo.termino) {
       pintarAviso(zonaAviso, {
         tono: 'advertencia',
-        titulo: 'Escribe el término que quieres prohibir',
+        titulo: 'Escribe el término que quieres vetar',
       });
+      formAlta.querySelector('[name="termino"]')?.focus();
+      return;
+    }
+    if (!cuerpo.categoria) {
+      pintarAviso(zonaAviso, { tono: 'advertencia', titulo: 'Elige la categoría del término' });
+      formAlta.querySelector('[name="categoria"]')?.focus();
       return;
     }
     const botonAlta = formAlta.querySelector('[type="submit"]');
@@ -424,29 +732,16 @@ export function montarListaNegra(
     try {
       const creado = await api.agregar(cuerpo, fetchImpl);
       formAlta.querySelector('[name="termino"]').value = '';
-      await cargar(0);
+      await recargarTodo(0);
       contarExito(
         'Término agregado',
-        `«${creado?.termino ?? cuerpo.termino}» (${etiquetaDeCategoria(creado?.categoria)}) ya se aplica.`,
+        `«${creado?.termino ?? cuerpo.termino}» (${etiquetaDeCategoria(creado?.categoria ?? cuerpo.categoria)}) ya se aplica.`,
       );
     } catch (error) {
       contarError(error, 'agregar el término');
     } finally {
       botonAlta.disabled = false;
     }
-  });
-
-  formFiltros?.addEventListener('submit', (evento) => {
-    evento.preventDefault();
-    const datos = new FormData(formFiltros);
-    filtros = {};
-    for (const clave of ['categoria', 'activo', 'buscar']) {
-      const valor = String(datos.get(clave) ?? '').trim();
-      if (valor) {
-        filtros[clave] = valor;
-      }
-    }
-    cargar(0);
   });
 
   /*
@@ -461,5 +756,6 @@ export function montarListaNegra(
   });
 
   cargar(0);
-  return { cargar };
+  cargarCifras();
+  return { cargar, cargarCifras };
 }

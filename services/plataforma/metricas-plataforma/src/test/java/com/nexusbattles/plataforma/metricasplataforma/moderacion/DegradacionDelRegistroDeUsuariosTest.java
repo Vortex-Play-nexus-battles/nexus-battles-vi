@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.metricasplataforma.moderacion;
 
+import com.nexusbattles.plataforma.resiliencia.parametros.LectorDeParametros;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -54,9 +55,11 @@ class DegradacionDelRegistroDeUsuariosTest {
     private final RestClient.Builder constructor = RestClient.builder();
     private final MockRestServiceServer identidad = MockRestServiceServer.bindTo(constructor).build();
     private final FuenteDeModeracion sanciones = mock(FuenteDeModeracion.class);
-    /** Umbral D-25 = 3 «a partir de», como lo deja el despliegue. */
+    private final FuenteDeReportes reportes = mock(FuenteDeReportes.class);
+    /** Umbral D-25 = 3 «a partir de» (aqui de respaldo, sin catalogo); el de reportes, sin cifra del PO. */
     private final ModeracionController controlador = new ModeracionController(sanciones,
-            new ClienteDeUsuarios(constructor.build(), "http://identidad:8089"), 3, Clock.fixed(AHORA, ZoneOffset.UTC));
+            new ClienteDeUsuarios(constructor.build(), "http://identidad:8089"), reportes,
+            new UmbralesDeModeracion(LectorDeParametros.soloRespaldo(), 3, null), Clock.fixed(AHORA, ZoneOffset.UTC));
 
     @BeforeEach
     void sancionesArriba() {
@@ -67,6 +70,10 @@ class DegradacionDelRegistroDeUsuariosTest {
                 List.of(new FuenteDeModeracion.PorDia("2026-09-20", 2), new FuenteDeModeracion.PorDia("2026-09-21", 3),
                         new FuenteDeModeracion.PorDia("2026-09-22", 4)),
                 Map.of(), 1, 0));
+        Map<String, Long> categorias = new java.util.LinkedHashMap<>();
+        FuenteDeReportes.CATEGORIAS_DEL_CONTRATO.forEach(c -> categorias.put(c, 0L));
+        when(reportes.consultar(any(), any(), any())).thenReturn(new FuenteDeReportes.Frecuencia(hasta.minusDays(30),
+                hasta, 0L, List.of(), categorias, 0L, 0L));
     }
 
     @Test
@@ -81,7 +88,8 @@ class DegradacionDelRegistroDeUsuariosTest {
         assertThat(tablero.registroDeUsuarios()).isNotNull();
         assertThat(tablero.registroDeUsuarios().porEstado()).containsEntry("ACTIVO", 8L);
         assertThat(tablero.registroDeUsuarios().registros().porDia()).hasSize(2);
-        assertThat(tablero.pendientes()).singleElement().asString().startsWith("frecuencia de reportes");
+        assertThat(tablero.pendientes()).isEmpty();
+        assertThat(tablero.noDisponibles()).isEmpty();
         assertThat(tablero.alertas()).hasSize(2);
         identidad.verify();
     }
@@ -98,10 +106,14 @@ class DegradacionDelRegistroDeUsuariosTest {
         assertThat(tablero.alertasConfiguradas()).isTrue();
         assertThat(tablero.alertas()).hasSize(2);
         assertThat(tablero.registroDeUsuarios()).isNull();
-        assertThat(tablero.pendientes()).hasSize(2);
+        assertThat(tablero.pendientes()).hasSize(1);
         assertThat(tablero.pendientes().get(0))
                 .startsWith("registro de nuevos usuarios: ms-identidad")
                 .contains(motivo);
+        assertThat(tablero.noDisponibles()).singleElement()
+                .extracting(TableroDeModeracion.IndicadorNoDisponible::indicador)
+                .isEqualTo(TableroDeModeracion.Indicador.REGISTRO_DE_USUARIOS);
+        assertThat(tablero.reportes()).as("la frecuencia de reportes no cae con identidad").isNotNull();
     }
 
     static Stream<Arguments> identidadQueNoDaLasCuentas() {
