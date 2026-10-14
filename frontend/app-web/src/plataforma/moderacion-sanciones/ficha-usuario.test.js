@@ -21,6 +21,7 @@ import {
   hechosDeComentarios,
   hechosDeLaCuenta,
   hechosDeMovimientos,
+  hechosDePagos,
   hechosDePartidas,
   hechosDeReportes,
   montarFichaDeUsuario,
@@ -178,6 +179,36 @@ const MOVIMIENTOS = {
       estado: 'ACTIVA',
       signo: 'APARTA',
       creado: '2026-10-04T19:59:00Z',
+    },
+  ],
+  totalElements: 2,
+  totalPages: 1,
+  number: 0,
+  size: 10,
+};
+
+/** Página de `ResumenTransaccion` de transacciones.yaml 1.1.0 (SA-15). */
+const PAGOS = {
+  content: [
+    {
+      id: 'eeeeeeee-0000-0000-0000-000000000002',
+      refId: 'orden-2',
+      monto: 9900.5,
+      moneda: 'COP',
+      concepto: 'Compra en la tienda: Yelmo de acero',
+      resultado: 'RECHAZADO',
+      comprobanteUrl: null,
+      creado: '2026-10-03T16:40:00Z',
+    },
+    {
+      id: 'eeeeeeee-0000-0000-0000-000000000001',
+      refId: 'orden-1',
+      monto: 25000,
+      moneda: 'COP',
+      concepto: 'Compra en la tienda: Hoja de diamante',
+      resultado: 'APROBADO',
+      comprobanteUrl: null,
+      creado: '2026-10-02T15:00:00Z',
     },
   ],
   totalElements: 2,
@@ -398,6 +429,7 @@ function secciones(sobrescribir = {}) {
       ['/partidas/jugadores/', PARTIDAS],
       [`/creditos/${UID}/saldo`, SALDO],
       [`/creditos/${UID}/movimientos`, MOVIMIENTOS],
+      [`/transacciones/usuarios/${UID}`, PAGOS],
       [
         `/comentarios/moderacion/usuarios/${UID}/reportes?direccion=REALIZADOS`,
         REPORTES_REALIZADOS,
@@ -688,6 +720,7 @@ describe('las secciones de los otros servicios', () => {
       'partidas',
       'saldo',
       'movimientos',
+      'pagos',
       'reportes-realizados',
       'reportes-recibidos',
       'inventario-de-la-cuenta',
@@ -703,9 +736,9 @@ describe('las secciones de los otros servicios', () => {
     expect(raiz.body.textContent).not.toMatch(
       /Sin fuente publicada|SIN FUENTE|Fuente:|GET \/api|HU-|NO IMPLEMENTADO|HTTP \d/,
     );
-    // La matriz de permisos y nueve secciones por uid; la auditoría no, que
+    // La matriz de permisos y diez secciones por uid; la auditoría no, que
     // no es del Administrador.
-    expect(consultarApi).toHaveBeenCalledTimes(10);
+    expect(consultarApi).toHaveBeenCalledTimes(11);
   });
 });
 
@@ -794,7 +827,7 @@ describe('SA-3 — las pestañas de la ficha (§7.3.4)', () => {
     expect(pestanas.map((p) => p.textContent)).toEqual([
       'Resumen',
       'Juego',
-      'Créditos',
+      'Créditos y pagos',
       'Sanciones',
       'Comunidad',
       'Inventario',
@@ -984,6 +1017,72 @@ describe('SA-3 — créditos: saldo y movimientos', () => {
     });
 
     expect(panelDe(raiz, 'movimientos').textContent).toContain('Su saldo no se ha movido todavía.');
+  });
+});
+
+describe('SA-15 — pagos en moneda real (§7.3.4 «Historial de transacciones»)', () => {
+  test('se piden a ms-finanzas por el uid y se leen con el resultado en palabras', async () => {
+    const { raiz, consultarApi } = await montar();
+
+    expect(consultarApi.mock.calls.map((c) => c[0])).toContain(
+      `/transacciones/usuarios/${UID}?page=0&size=10`,
+    );
+    const pagos = panelDe(raiz, 'pagos');
+    expect(pagos.closest('[data-seccion="creditos"]')).not.toBeNull();
+    const filas = [...pagos.querySelectorAll('tbody tr')];
+    expect(filas).toHaveLength(2);
+    expect(filas[0].textContent).toContain('Compra en la tienda: Yelmo de acero');
+    expect(filas[0].textContent).toContain('9.900,50 COP');
+    expect(filas[0].querySelector('[data-estado="RECHAZADO"]').textContent).toBe('Rechazado');
+    expect(filas[1].textContent).toContain('25.000 COP');
+    expect(filas[1].querySelector('[data-estado="APROBADO"]').textContent).toBe('Aprobado');
+    // Ni la constante del contrato ni la referencia de la orden.
+    expect(pagos.textContent).not.toMatch(/APROBADO|RECHAZADO|orden-1|orden-2/);
+    expect(pagos.querySelector('caption').textContent).toContain('2');
+  });
+
+  test('una cuenta que nunca pagó con dinero lo dice', async () => {
+    const { raiz } = await montar({
+      consultarApi: secciones({
+        [`/transacciones/usuarios/${UID}`]: {
+          ...conDatos({ content: [], totalElements: 0 }),
+          resultado: RESULTADO.VACIO,
+        },
+      }),
+    });
+
+    expect(panelDe(raiz, 'pagos').textContent).toContain('No ha pagado nada con dinero.');
+  });
+
+  test('si ms-finanzas no contesta, la sección lo dice y el resto de la ficha sigue', async () => {
+    const { raiz } = await montar({
+      consultarApi: secciones({
+        [`/transacciones/usuarios/${UID}`]: (recurso) =>
+          conFallo(RESULTADO.SERVICIO_DEGRADADO, 503, recurso),
+      }),
+    });
+
+    const pagos = panelDe(raiz, 'pagos');
+    expect(pagos.querySelector('.panel-admin__estado').textContent).toBe('Sin conexión');
+    expect(pagos.querySelector('[data-accion="reintentar"]')).not.toBeNull();
+    expect(panelDe(raiz, 'movimientos').querySelectorAll('tbody tr')).toHaveLength(2);
+    expect(panelDe(raiz, 'linea-de-tiempo').textContent).toContain('Faltan los hechos de: pagos');
+  });
+
+  test('cada pago es un hecho de la línea, con lo que se pagó, cuánto y qué pasó', () => {
+    const hechos = hechosDePagos(PAGOS);
+    expect(hechos.map((h) => h.titulo)).toEqual([
+      'Un pago con dinero fue rechazado',
+      'Pagó con dinero',
+    ]);
+    expect(hechos[1]).toEqual({
+      cuando: '2026-10-02T15:00:00Z',
+      titulo: 'Pagó con dinero',
+      detalle: 'Compra en la tienda: Hoja de diamante · 25.000 COP',
+      tono: 'exito',
+    });
+    expect(hechosDePagos({ content: [{ monto: 1, moneda: 'COP' }] })).toEqual([]);
+    expect(hechosDePagos(null)).toEqual([]);
   });
 });
 
@@ -1179,7 +1278,8 @@ describe('SA-3 — el historial completo de actividad', () => {
     filtro.value = 'creditos';
     filtro.dispatchEvent(new Event('change'));
     const deCreditos = [...linea.querySelectorAll('.linea-tiempo__hecho')];
-    expect(deCreditos).toHaveLength(2);
+    // Dos movimientos de créditos y dos pagos con dinero (SA-15).
+    expect(deCreditos).toHaveLength(4);
     expect(deCreditos.every((hecho) => hecho.dataset.categoria === 'creditos')).toBe(true);
 
     filtro.value = '';

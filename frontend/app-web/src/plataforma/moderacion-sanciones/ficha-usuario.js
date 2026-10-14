@@ -14,7 +14,8 @@
  * |            | Rol y permisos                | `GET /rbac/matrix` (rbac 2.0.0)                            |
  * | Juego      | Estadísticas de juego         | `GET /partidas/jugadores/{uid}/estadisticas` (salas-partidas 1.11.0) |
  * |            | Últimas partidas              | `GET /partidas/jugadores/{uid}`                            |
- * | Créditos   | Saldo y movimientos           | `GET /creditos/{uid}/saldo` y `/movimientos` (creditos 1.5.0) |
+ * | Créditos y pagos | Saldo y movimientos     | `GET /creditos/{uid}/saldo` y `/movimientos` (creditos 1.5.0) |
+ * |            | Pagos en moneda real          | `GET /transacciones/usuarios/{uid}` (transacciones 1.1.0, SA-15) |
  * | Sanciones  | Sanciones y advertencias      | `GET /sanciones/usuarios/{uid}` (moderacion-sanciones-admin) |
  * | Comunidad  | Comentarios publicados        | `GET /comentarios/moderacion/autores/{uid}/comentarios`    |
  * |            | Reportes realizados/recibidos | `GET /comentarios/moderacion/usuarios/{uid}/reportes` (comentarios 1.12.0) |
@@ -52,7 +53,7 @@ import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-err
 import { leerSesion } from '../../comun/sesion.js';
 import { NOMBRE_DE_ROL } from '../../comun/shell.js';
 import { aviso } from '../../comun/ui/aviso.js';
-import { distintivoDeEstado } from '../../comun/ui/admin/estado.js';
+import { distintivoDeEstado, ESTADOS_DE_PAGO, estadoSegun } from '../../comun/ui/admin/estado.js';
 import { rejillaDeIndicadores, tarjetaDeIndicador } from '../../comun/ui/admin/indicador.js';
 import { nombreDeAccion } from '../../comun/ui/admin/nombres.js';
 import { permisosDelRol } from '../../comun/ui/admin/permisos.js';
@@ -64,7 +65,7 @@ import {
   estadoVacio,
   pintarEstado,
 } from '../../comun/ui/estado-vista.js';
-import { fechaHora, nombreDelTipo } from '../../comun/ui/formato.js';
+import { dinero, fechaHora, nombreDelTipo } from '../../comun/ui/formato.js';
 import { icono } from '../../comun/ui/icono.js';
 import {
   distintivoDeResultado,
@@ -128,7 +129,7 @@ export const DESENLACE_DE_FICHA = Object.freeze({
 export const PESTANAS_DE_LA_FICHA = Object.freeze([
   { id: 'resumen', etiqueta: 'Resumen' },
   { id: 'juego', etiqueta: 'Juego' },
-  { id: 'creditos', etiqueta: 'Créditos' },
+  { id: 'creditos', etiqueta: 'Créditos y pagos' },
   { id: 'sanciones', etiqueta: 'Sanciones' },
   { id: 'comunidad', etiqueta: 'Comunidad' },
   { id: 'inventario', etiqueta: 'Inventario' },
@@ -139,7 +140,7 @@ export const PESTANAS_DE_LA_FICHA = Object.freeze([
 export const CATEGORIAS_DE_LA_LINEA = Object.freeze([
   { valor: 'cuenta', etiqueta: 'Cuenta' },
   { valor: 'juego', etiqueta: 'Partidas' },
-  { valor: 'creditos', etiqueta: 'Créditos' },
+  { valor: 'creditos', etiqueta: 'Créditos y pagos' },
   { valor: 'sanciones', etiqueta: 'Sanciones' },
   { valor: 'comunidad', etiqueta: 'Comentarios y reportes' },
   { valor: 'administracion', etiqueta: 'Acciones administrativas' },
@@ -310,6 +311,36 @@ export function hechosDeMovimientos(pagina) {
       detalle: importeConUnidad(movimiento),
       tono: 'neutro',
     }));
+}
+
+/** Cómo se cuenta en la línea de tiempo lo que pasó con un pago. */
+const HECHO_DE_PAGO = Object.freeze({
+  APROBADO: { titulo: 'Pagó con dinero', tono: 'exito' },
+  RECHAZADO: { titulo: 'Un pago con dinero fue rechazado', tono: 'advertencia' },
+  INDETERMINADO: { titulo: 'Un pago con dinero quedó sin confirmar', tono: 'advertencia' },
+});
+
+/**
+ * Un hecho por cobro en moneda real (SA-15): qué se pagó, cuánto y qué pasó.
+ *
+ * @param {{content?: object[]}|null} pagina página de `ResumenTransaccion` (transacciones 1.1.0)
+ * @returns {import('../../comun/ui/linea-de-tiempo.js').HechoDeLaLinea[]}
+ */
+export function hechosDePagos(pagina) {
+  return filasDe(pagina)
+    .filter((pago) => pago?.creado)
+    .map((pago) => {
+      const forma = HECHO_DE_PAGO[pago.resultado] ?? {
+        titulo: 'Un pago con dinero',
+        tono: 'neutro',
+      };
+      return {
+        cuando: pago.creado,
+        titulo: forma.titulo,
+        detalle: [pago.concepto, dinero(pago.monto, pago.moneda)].filter(Boolean).join(' · '),
+        tono: forma.tono,
+      };
+    });
 }
 
 /**
@@ -604,7 +635,7 @@ async function pintarSecciones(zona, ficha, { consultarApi, ahora, veAuditoria }
   const paneles = {
     resumen: [panelDeLaCuenta(ficha), permisos.elemento, panelDeAcciones(ficha)],
     juego: [elementoDe('estadisticas'), elementoDe('partidas')],
-    creditos: [elementoDe('saldo'), elementoDe('movimientos')],
+    creditos: [elementoDe('saldo'), elementoDe('movimientos'), elementoDe('pagos')],
     sanciones: [elementoDe('sanciones')],
     comunidad: [
       elementoDe('comentarios'),
@@ -708,6 +739,22 @@ function fuentesDeLaFicha(ficha, { veAuditoria }) {
         servicio: 'créditos',
         recurso: (uid) => `/creditos/${uid}/movimientos?page=0&size=${RECIENTES_POR_SECCION}`,
         pintar: pintarMovimientos,
+        vacio: { content: [], totalElements: 0 },
+      },
+    },
+    {
+      // SA-15 (§7.3.4 «Historial de transacciones»): lo pagado con dinero,
+      // que vive en otro libro que los créditos (ms-finanzas, transacciones 1.1.0).
+      id: 'pagos',
+      enLaLinea: { nombre: 'pagos', categoria: 'creditos', hechos: hechosDePagos },
+      panel: {
+        id: 'pagos',
+        titulo: 'Pagos en moneda real',
+        descripcion: 'Cada cobro con dinero, aprobado o no, con lo que se compró.',
+        ancho: 'completo',
+        servicio: 'pagos',
+        recurso: (uid) => `/transacciones/usuarios/${uid}?page=0&size=${RECIENTES_POR_SECCION}`,
+        pintar: pintarPagos,
         vacio: { content: [], totalElements: 0 },
       },
     },
@@ -1277,6 +1324,40 @@ function pintarMovimientos(pagina) {
       lista.length,
       cifra(pagina?.totalElements),
       ['movimiento', 'movimientos'],
+      'del más reciente al más antiguo',
+    ),
+  });
+}
+
+/**
+ * SA-15 — los cobros en moneda real: cuándo, qué, cuánto y qué pasó, con el
+ * resultado en palabras. La referencia de la pasarela no llega: el servicio
+ * no la publica.
+ *
+ * @param {object|null} pagina página de `ResumenTransaccion` (transacciones 1.1.0)
+ */
+function pintarPagos(pagina) {
+  const lista = filasDe(pagina);
+  if (lista.length === 0) {
+    return h('p', { clase: 't-meta', texto: 'No ha pagado nada con dinero.' });
+  }
+  return tabla({
+    columnas: [
+      { titulo: 'Fecha', tipo: 'fecha' },
+      'Concepto',
+      { titulo: 'Importe', tipo: 'numero' },
+      'Resultado',
+    ],
+    filas: lista.map((pago) => [
+      pago.creado ? fechaHora(pago.creado) : null,
+      pago.concepto ?? null,
+      dinero(pago.monto, pago.moneda),
+      estadoSegun(pago.resultado, ESTADOS_DE_PAGO),
+    ]),
+    resumen: resumenDeRecientes(
+      lista.length,
+      cifra(pagina?.totalElements),
+      ['pago', 'pagos'],
       'del más reciente al más antiguo',
     ),
   });
