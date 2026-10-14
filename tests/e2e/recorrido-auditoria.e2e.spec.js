@@ -30,8 +30,8 @@
  *   - cambiar el #hash no cambiaba de pestaña → cambia;
  *   - misiones 504 y subastas 502 → cargan.
  *
- * Lo que no se recorre aquí, y por qué: el asistente (ms-chatbot no está en
- * este banco; en DEV lo cubre la prueba del profesor), la descarga de datos y
+ * Lo que no se recorre aquí, y por qué: el asistente (tiene sus propios
+ * recorridos en este banco, chatbot-*.e2e.spec.js), la descarga de datos y
  * el cierre de cuenta (el portal de privacidad es del Grupo 4, HU-PRV-004/005/006,
  * y todavía no existe: aquí se comprueba que la vista lo diga en vez de fallar),
  * y el pago en USD/EUR (D-32: la tasa la fija el PO en Parámetros).

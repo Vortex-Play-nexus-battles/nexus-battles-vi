@@ -107,6 +107,20 @@ services:
       timeout: 3s
       retries: 20
 
+  # 7.4 — la base propia del asistente (regla 7): ms-chatbot crea su esquema
+  # `chatbot` con Flyway al arrancar (V1..V13), igual que en DEV.
+  e2e-chatbot-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: chatbot_db
+      POSTGRES_USER: chatbot_user
+      POSTGRES_PASSWORD: chatbot
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatbot_user -d chatbot_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
   # Una sola Mongo para los tres servicios de contenido, con una base por
   # servicio: es como esta en docker-compose.contenido.yml.
   e2e-contenido-mongo:
@@ -591,6 +605,60 @@ services:
       timeout: 5s
       retries: 40
 
+  # 7.4 — el asistente (ms-chatbot), con sus consultas en vivo contra los
+  # servicios de verdad de este banco. Hasta la revision final del 7.4 no
+  # estaba aqui: el asistente solo se probaba con la API simulada
+  # (ventana-chatbot.aceptacion.spec.js) o a mano en DEV. Ahora sus cuatro
+  # recorridos (visitante, jugador, soporte y administracion) corren de punta
+  # a punta por el borde: chatbot-*.e2e.spec.js.
+  #
+  # No usa credencial de servicio (ADR-005): lo de un jugador lo pide con el
+  # token del propio jugador; el catalogo y los torneos son publicos. Las URL
+  # son las mismas variables que fija docker-compose.ms-chatbot.yml en DEV,
+  # apuntando a los contenedores de esta red.
+  srv-ms-chatbot:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/cuentas/ms-chatbot/build.nosync/libs/*.jar
+        PUERTO: "8094"
+    environment:
+      DB_HOST: e2e-chatbot-db
+      DB_PORT: "5432"
+      DB_NAME: chatbot_db
+      DB_USER: chatbot_user
+      DB_PASSWORD: chatbot
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # El navegador de las pruebas entra por el borde publicado en el 8099:
+      # sin este origen, Spring trata el POST como de otro sitio (403) y el
+      # handshake del canal STOMP se rechaza.
+      CORS_ORIGENES: http://localhost:8099
+      INVENTARIO_BASE_URL: http://srv-inventario:8080
+      SUBASTAS_BASE_URL: http://srv-ms-subastas:8092/api/v1
+      NOTIFICACIONES_BASE_URL: http://srv-notificaciones:8085/api/v1
+      FINANZAS_BASE_URL: http://srv-ms-finanzas:8093/api/v1
+      TORNEOS_BASE_URL: http://srv-torneos:8083/api/v1
+      MISIONES_BASE_URL: http://srv-misiones:8080
+      PRODUCTOS_BASE_URL: http://srv-productos:8080
+      # La lista negra de verdad (fail-closed por omision, D-14).
+      LISTA_NEGRA_VERIFICAR_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
+      # Plazos de las consultas salientes mas holgados que en DEV (1 s / 1,5 s),
+      # como los del sondeo de metricas: el banco corre unas veinte JVM en un
+      # runner compartido y lo que se prueba aqui es el recorrido, no la
+      # latencia (esa se mide contra DEV, 7.4.11).
+      CHATBOT_HTTP_TIMEOUT_CONEXION_MS: "3000"
+      CHATBOT_HTTP_TIMEOUT_LECTURA_MS: "5000"
+    depends_on:
+      e2e-chatbot-db: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+      srv-moderacion-sanciones: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8094/api/v1/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
   # R16 — la tienda (Grupo 4): vitrina y carrito sobre el catalogo maestro.
   # Hasta R16 no estaba en este banco y la tienda solo se veia en AWS, donde
   # ademas no cabe (desplegableDev: false). Aqui corre entera: el jugador se
@@ -883,15 +951,15 @@ services:
       # tambien los que en DEV viven en el host de contenido (alli los fija
       # docker-compose.deploy.yml por la IP de ese host). Los de plataforma ya
       # salen bien con los valores de application.yml (srv-<nombre>).
-      # ms-chatbot no esta en el banco: se dice NO_DESPLEGADO en vez de salir
-      # CAIDO por un nombre que aqui no existe. ms-cumplimiento si (SA-1).
+      # ms-chatbot y ms-cumplimiento (SA-1) tambien estan en el banco desde la
+      # revision final del 7.4: ninguno sale NO_DESPLEGADO.
       SISTEMA_SALUD_HEROES: http://srv-heroes:8080/actuator/health
       SISTEMA_SALUD_INVENTARIO: http://srv-inventario:8080/actuator/health
       SISTEMA_SALUD_PRODUCTOS: http://srv-productos:8080/actuator/health
       SISTEMA_SALUD_MOTOR_COMBATE: http://srv-motor-combate:8080/actuator/health
       SISTEMA_SALUD_MISIONES: http://srv-misiones:8080/actuator/health
       SISTEMA_SALUD_MS_SUBASTAS: http://srv-ms-subastas:8092/api/v1/actuator/health
-      SISTEMA_SALUD_MS_CHATBOT: NO_DESPLEGADO
+      SISTEMA_SALUD_MS_CHATBOT: http://srv-ms-chatbot:8094/api/v1/actuator/health
       SISTEMA_SALUD_MS_CUMPLIMIENTO: http://srv-ms-cumplimiento:8091/actuator/health
       # Plazos del sondeo del panel tan holgados como los que tenia el
       # recolector del tablero antes de RFINAL-08 (2 s / 3 s): el banco corre
@@ -1077,6 +1145,9 @@ services:
       srv-correo: { condition: service_healthy }
       # 7.3.5: /api/v1/admin/auditoria (seguridad-administrativa.e2e.spec.js).
       srv-ms-cumplimiento: { condition: service_healthy }
+      # 7.4: /api/v1/chat, /api/v1/chatbot y /api/v1/ws-chatbot
+      # (chatbot-*.e2e.spec.js).
+      srv-ms-chatbot: { condition: service_healthy }
     healthcheck:
       # 127.0.0.1 y no `localhost` a proposito. El entrypoint de la imagen
       # intenta anadir un `listen [::]:80` y no puede, porque la
