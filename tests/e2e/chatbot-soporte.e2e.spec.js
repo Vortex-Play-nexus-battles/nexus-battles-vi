@@ -5,11 +5,12 @@
  *
  * El recorrido de la revisión final del 7.4: una jugadora pregunta algo que
  * el asistente no entiende (y en la pregunta va su contraseña) → la respuesta
- * le ofrece alternativas y «Hablar con soporte» → abre la solicitud con esa
- * conversación en un clic → la contraseña no llega a ninguna parte (ni a la
- * conversación, ni a la solicitud, ni a su contexto) → la solicitud persiste
- * → el administrador la ve en el panel del asistente, la lee y la responde →
- * la jugadora ve la respuesta en su ventana.
+ * le ofrece alternativas y, desde ms-chatbot.yaml 1.12.0 (RF-CHA-007), le dice
+ * que ya abrió la solicitud con esa conversación, con «Ver solicitud» → la
+ * contraseña no llega a ninguna parte (ni a la conversación, ni a la
+ * solicitud, ni a su contexto) → la solicitud persiste → el administrador la
+ * ve en el panel del asistente, la lee y la responde → la jugadora ve la
+ * respuesta en su ventana.
  */
 
 import { test, expect, request as apiRequest } from '@playwright/test';
@@ -65,7 +66,7 @@ test.describe('Asistente · soporte humano (§7.4.3, §7.4.6)', () => {
     await api?.dispose();
   });
 
-  test('sin resolver: alternativas, la solicitud en un clic y ningún secreto guardado', async ({
+  test('sin resolver: alternativas, la solicitud abierta sola y ningún secreto guardado', async ({
     page,
   }) => {
     test.setTimeout(120_000);
@@ -85,26 +86,27 @@ test.describe('Asistente · soporte humano (§7.4.3, §7.4.6)', () => {
     await expect(recargado.preguntas.last()).toContainText(PREGUNTA_REDACTADA);
     await expect(recargado.ventana).not.toContainText(SECRETO);
 
-    // «Hablar con soporte» y la solicitud con esta conversación.
-    await recargado.respuestas.last().locator('[data-accion="ofrecer-soporte"]').click();
+    // 1.12.0: la solicitud ya está abierta; la respuesta lo dice y lleva a ella.
+    const ultima = recargado.respuestas.last();
+    await expect(ultima).toContainText('Abrí una solicitud de soporte con esta conversación');
+    const aviso = ultima.locator('.chatbot-enriquecido__solicitud');
+    await expect(aviso).toContainText('Sin respuesta del asistente');
+    await expect(aviso).not.toContainText(SECRETO);
+    await expect(ultima.locator('[data-accion="ofrecer-soporte"]')).toHaveCount(0);
+    const id = await aviso.getAttribute('data-solicitud-id');
+    expect(id).toMatch(/^[0-9a-f-]{36}$/);
+    ticket = { ticketId: id };
+
+    await aviso.locator('[data-accion="ver-solicitud"]').click();
     const panel = page.locator('.chatbot-soporte');
     await expect(panel).toBeVisible();
-    const crear = panel.locator('[data-accion="crear-solicitud-desde-conversacion"]');
-    await expect(crear).toBeVisible();
-    const creada = page.waitForResponse(
-      (r) =>
-        r.url().includes('/api/v1/chat/tickets/desde-conversacion') &&
-        r.request().method() === 'POST',
+    // Ya abierta: no se ofrece crear otra con la conversación.
+    await expect(panel.locator('[data-accion="crear-solicitud-desde-conversacion"]')).toHaveCount(
+      0,
     );
-    await crear.click();
-    const respuestaDeCreacion = await creada;
-    expect(respuestaDeCreacion.status(), await respuestaDeCreacion.text()).toBe(201);
-    ticket = await respuestaDeCreacion.json();
-    await expect(panel).toContainText('Listo: abrimos tu solicitud con esta conversación.');
-    const fila = panel
-      .locator('.chatbot-soporte__ticket')
-      .filter({ hasText: 'Sin respuesta del asistente' });
-    await expect(fila.first()).toContainText('Abierta');
+    const fila = panel.locator(`.chatbot-soporte__ticket[data-ticket-id="${id}"]`);
+    await expect(fila).toContainText('Sin respuesta del asistente');
+    await expect(fila).toContainText('Abierta');
 
     // Persistida, y redactada en todas sus partes.
     const mias = await api.get('/api/v1/chat/tickets', { headers: conToken(jugadora.token) });

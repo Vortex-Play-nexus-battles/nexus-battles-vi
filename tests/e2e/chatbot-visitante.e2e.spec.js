@@ -13,6 +13,10 @@
  * Y por la API, lo que un visitante NO puede hacer (7.4.8): leer el historial
  * de otra sesión, ni hacerse pasar por un jugador con una cabecera o con la
  * vista desde la que pregunta (el contexto de la vista no autoriza nada).
+ *
+ * ms-chatbot.yaml 1.12.0 (RF-CHA-007, actor Visitante): lo que no entiende
+ * también le abre al visitante una solicitud de soporte, que ve en «Tus
+ * solicitudes» con su sesión y que nadie más ve.
  */
 
 import { test, expect, request as apiRequest } from '@playwright/test';
@@ -24,6 +28,7 @@ import { conLaPaginaQuieta } from './ayudantes/movimiento.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const CLAVE = 'Contrasena-E2E-2026';
+const ADMIN = process.env.E2E_ADMIN ?? 'admin_e2e';
 const NORMAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 const GRAVES = new Set(['serious', 'critical']);
 
@@ -109,6 +114,59 @@ test.describe('Asistente · visitante (§7.4)', () => {
     await expect(transacciones).toContainText(SIN_SESION);
     // No es una pregunta sin respuesta: no ofrece soporte humano.
     await expect(transacciones.locator('[data-accion="ofrecer-soporte"]')).toHaveCount(0);
+  });
+
+  test('sin respuesta: su solicitud se abre sola, la ve en «Tus solicitudes» y nadie más', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const sufijo = Date.now().toString(36);
+    await page.goto(`${BORDE}/login`);
+    await abrirAsistente(page);
+
+    const respuesta = await preguntar(page, `la nebulosa Quetzal ${sufijo} no aparece en mi mapa`);
+    await expect(respuesta).toContainText('No estoy seguro de haber entendido');
+    await expect(respuesta).toContainText('mientras sigas en esta sesión de visitante');
+    const aviso = respuesta.locator('.chatbot-enriquecido__solicitud');
+    const id = await aviso.getAttribute('data-solicitud-id');
+    expect(id).toMatch(/^[0-9a-f-]{36}$/);
+
+    await aviso.locator('[data-accion="ver-solicitud"]').click();
+    const panel = page.locator('.chatbot-soporte');
+    await expect(panel).toContainText('Estás como visitante');
+    await expect(panel.locator(`.chatbot-soporte__ticket[data-ticket-id="${id}"]`)).toContainText(
+      'Abierta',
+    );
+    await expect(panel.locator('form')).toHaveCount(1);
+    await expect(panel.getByRole('link', { name: 'Iniciar sesión' })).toBeVisible();
+
+    const api = await apiRequest.newContext({ baseURL: BORDE });
+    try {
+      const suya = await page.evaluate(() => sessionStorage.getItem('nexus.chatbot.sesionAnonima'));
+      expect(suya).toMatch(/^visitante-/);
+      const conSesion = (sesion) => ({ headers: { 'X-Id-Sesion-Anonima': sesion } });
+      // Su sesión la ve; otra, no; sin sesión, 401.
+      const mias = await api.get('/api/v1/chat/tickets', conSesion(suya));
+      expect(mias.status()).toBe(200);
+      expect((await mias.json()).map((t) => t.ticketId)).toContain(id);
+      const ajenas = await api.get('/api/v1/chat/tickets', conSesion(sesionDeVisitante()));
+      expect(ajenas.status()).toBe(200);
+      expect(await ajenas.json()).toEqual([]);
+      expect((await api.get('/api/v1/chat/tickets')).status()).toBe(401);
+
+      // El administrador sabe que es de un visitante, sin cuenta.
+      const admin = await sesionDelBanco(api, ADMIN, { clave: CLAVE, base: BORDE });
+      const detalle = await api.get(`/api/v1/chatbot/admin/tickets/${id}`, {
+        headers: { Authorization: `Bearer ${admin.token}` },
+      });
+      expect(detalle.status(), await detalle.text()).toBe(200);
+      const solicitud = await detalle.json();
+      expect(solicitud.deVisitante).toBe(true);
+      expect(solicitud.uid).toMatch(/^anonimo:/);
+      expect(solicitud.uid).not.toContain(suya);
+    } finally {
+      await api.dispose();
+    }
   });
 
   test('por la API: ni el historial de otra sesión, ni hacerse pasar por un jugador', async () => {

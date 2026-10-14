@@ -48,6 +48,11 @@ openapi: 3.1.0
 #               preguntar, la navegacion a secciones publicas es para todos,
 #               las reglas del juego tienen su tema (V15) y la base dice lo
 #               que el juego hace hoy (V16)
+#   7.4.2, 7.4.3 y 7.4.8 (1.12.0) segunda auditoria del 7.4: la solicitud
+#               de soporte se abre sola cuando el asistente no resuelve
+#               (RF-CHA-007), tambien para un visitante; la redaccion tapa
+#               las claves anunciadas con «es» (V17) y la base entiende mas
+#               formas de preguntar y errores de escritura (V18)
 #   7.4 (1.3.0) lo que faltaba del modulo 7.4: tickets y soporte humano
 #               (RF-CHA-007, RF-ADM-004), sugerencias y autocompletado,
 #               respuestas enriquecidas sin imagenes, vista del jugador y
@@ -142,7 +147,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.11.0
+  version: 1.12.0
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -152,6 +157,56 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.12.0 — 7.4.2, 7.4.3 y 7.4.8: segunda auditoria
+
+    Compatible: se anaden un campo a dos respuestas (`enriquecido.solicitud`,
+    `TicketDeSoporteAdmin.deVisitante`) y el visitante puede usar tres
+    operaciones que antes le respondian 401. Cambia lo que se responde y lo
+    que se guarda.
+
+    * **La solicitud de soporte se abre sola (7.4.3, RF-CHA-007 «generar
+      automaticamente un ticket de soporte»).** Cuando el asistente no
+      entiende una pregunta (`resultado` ESCALADO) o le dicen «no me sirvio»
+      (NO_SIRVIO), abre una solicitud con la pregunta y la conversacion, ya
+      redactadas, igual que `POST /chat/tickets/desde-conversacion`. Si la
+      persona ya tiene una abierta, la pregunta y su respuesta se suman a su
+      contexto (los 20 mensajes mas recientes): nunca hay mas de una abierta
+      por persona. La respuesta lo dice al final y trae
+      `enriquecido.solicitud`. Si no se puede abrir (la lista negra no
+      responde, un error de la base), la respuesta lo dice y ofrece el
+      formulario y el centro de ayuda: la respuesta nunca falla por eso. El
+      texto del escalamiento ya no dice que alguien escribira: dice que la
+      pregunta quedo registrada.
+    * **Tambien para el visitante (RF-CHA-007, actores Visitante y
+      Jugador).** `POST /chat/tickets`, `POST /chat/tickets/desde-conversacion`
+      y `GET /chat/tickets` aceptan la sesion de visitante
+      (`X-Id-Sesion-Anonima`) con las reglas de `POST /chat/mensajes`: con un
+      token valido se ignora, y una sesion declarada que aun no escribio se
+      registra al abrir (nunca se emite una). Sus solicitudes son de la clave
+      de su conversacion (`anonimo:<sesion>`, ningun uid puede ocuparla) y
+      las ve mientras dure esa sesion. Al listar, una sesion con forma que no
+      esta registrada o ya vencio recibe una lista vacia. Sin token ni
+      sesion, 401 SESION_REQUERIDA como antes.
+    * **`TicketDeSoporteAdmin.deVisitante`**: la abrio un visitante; su
+      `uid` es entonces la clave de su conversacion, no una cuenta.
+    * **Avisos en vivo** (`contracts/websocket/chatbot.yaml` 1.1.0): el
+      visitante tambien recibe en `/user/queue/soporte/tickets` los cambios
+      de las suyas.
+    * **Redaccion (7.4.8).** Con «es»/«is» o sin separador, una palabra
+      ambigua (clave, token, secret, pin) tambien anuncia un secreto si el
+      valor lo parece: «mi clave es Hunter2024!», «mi token es abc123XYZ»,
+      «my secret is P4ssw0rd!» y «mi clave Hunter2024 no sirve» se guardan
+      tapados; «la clave es atacar primero» o «el token es valido», igual.
+      V17 vuelve a redactar lo guardado con la regla nueva.
+    * **La base entiende mas formas de preguntar (7.4.2, 7.4.4).** Un error
+      de una letra en una palabra de 6 o mas letras dentro de una frase
+      («como funsionan las subatsas», «terminos de servisio») ya no deja sin
+      respuesta, sin confundir una
+      palabra que la base ya conoce con otra (salvo su plural). V18 publica
+      una version nueva con dos temas («Terminos del servicio», que no
+      inventa un documento que no existe, y «Como funciona la subasta»),
+      mas formas de preguntar y sus casos de evaluacion.
 
     ### 1.11.0 — 7.4.4 y 7.4.8: lo que se vio en DEV
 
@@ -683,6 +738,13 @@ paths:
         4. Si la pregunta no se entiende, se escala: la respuesta ofrece
            soporte humano y temas relacionados, y la pregunta se registra
            como brecha de conocimiento (HU-CHA-011).
+        5. Desde 1.12.0 (RF-CHA-007), con un escalamiento o un «no me
+           sirvio», el asistente abre la solicitud de soporte de quien
+           pregunta (jugador o visitante) con la conversacion, o suma la
+           pregunta a la que ya tiene abierta, y lo dice al final de la
+           respuesta, con `enriquecido.solicitud`. Si no se puede abrir, lo
+           dice y ofrece el formulario y el centro de ayuda; la respuesta no
+           falla por eso.
 
         Desde 1.5.0 la respuesta va en el idioma de la pregunta, o en el de
         las preferencias del chat si no son AUTOMATICO.
@@ -1046,12 +1108,15 @@ paths:
     post:
       tags: [soporte]
       operationId: abrirTicketDeSoporteDelChatbot
-      summary: Abre un ticket de soporte humano (1.3.0)
+      summary: Abre un ticket de soporte humano (1.3.0; visitantes desde 1.12.0)
       description: |
-        Solo para jugadores con sesion: el ticket queda a nombre del `uid`
-        del token. A un visitante se le responde 401 (`motivo`
-        SESION_REQUERIDA) y la ventana le explica que necesita una cuenta y
-        le ofrece iniciar sesion o crear una.
+        Un jugador con sesion: el ticket queda a nombre del `uid` del token.
+        Desde 1.12.0 (RF-CHA-007, actor Visitante) tambien un visitante con
+        su sesion (`X-Id-Sesion-Anonima`, las mismas reglas que `POST
+        /chat/mensajes`; una declarada que aun no escribio se registra aqui,
+        nunca se emite una): el ticket es de la clave de su conversacion y lo
+        ve mientras dure la sesion. Sin token valido ni sesion con forma, 401
+        (`motivo` SESION_REQUERIDA).
 
         El servidor guarda con el ticket el contexto de la conversacion
         actual (los ultimos mensajes, ya redactados: sin contrasenas,
@@ -1063,7 +1128,10 @@ paths:
         limite de frecuencia (429) y la misma lista negra (422 y 503) que
         `POST /chat/mensajes`.
       security:
+        - {}
         - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
       requestBody:
         required: true
         content:
@@ -1084,7 +1152,7 @@ paths:
         '400':
           $ref: '#/components/responses/PeticionInvalida'
         '401':
-          description: Sin token valido (`motivo` SESION_REQUERIDA).
+          description: Sin token valido ni sesion de visitante con forma (`motivo` SESION_REQUERIDA).
           content:
             application/problem+json:
               schema:
@@ -1115,12 +1183,20 @@ paths:
     get:
       tags: [soporte]
       operationId: listarMisTicketsDelChatbot
-      summary: Tickets del propio jugador, el mas reciente primero (1.3.0)
+      summary: Tickets propios, el mas reciente primero (1.3.0; visitantes desde 1.12.0)
+      description: |
+        Los del `uid` del token o, desde 1.12.0, los de la sesion de
+        visitante (`X-Id-Sesion-Anonima`, ignorada con un token valido). Una
+        sesion con forma que aun no esta registrada o ya vencio no tiene
+        ninguno: lista vacia. Sin token valido ni sesion con forma, 401.
       security:
+        - {}
         - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
       responses:
         '200':
-          description: Tickets del `uid` del token, con su estado y la respuesta de soporte si ya la hay.
+          description: Tickets propios, con su estado y la respuesta de soporte si ya la hay.
           content:
             application/json:
               schema:
@@ -1128,7 +1204,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/TicketDeSoporte'
         '401':
-          description: Sin token valido (`motivo` SESION_REQUERIDA).
+          description: Sin token valido ni sesion de visitante con forma (`motivo` SESION_REQUERIDA).
           content:
             application/problem+json:
               schema:
@@ -1141,9 +1217,12 @@ paths:
       summary: Abre un ticket con la pregunta que el chatbot no resolvio (1.8.0)
       description: |
         La «solicitud en un clic» de la ventana despues de un escalamiento o
-        de un «no me sirvio». El servidor arma el ticket con la conversacion
-        de QUIEN LLAMA (el `uid` del token; ningun identificador del cuerpo
-        elige la conversacion):
+        de un «no me sirvio». Desde 1.12.0 el asistente ya la abre solo al no
+        resolver (ver `POST /chat/mensajes`); este boton queda para cuando
+        eso fallo o para una pregunta respondida que no sirvio de otra forma.
+        El servidor arma el ticket con la conversacion de QUIEN LLAMA (el
+        `uid` del token o, desde 1.12.0, la sesion de visitante; ningun
+        identificador del cuerpo elige la conversacion):
 
         * Pregunta: la ultima sin resolver, es decir, la que el chatbot no
           entendio (escalada) o la que respondio con algo que «no le sirvio»
@@ -1158,13 +1237,16 @@ paths:
         * El contexto (los ultimos mensajes, redactados), igual que
           `POST /chat/tickets`.
 
-        Mismas reglas que `POST /chat/tickets`: solo jugadores (401
-        SESION_REQUERIDA), mismo limite de frecuencia (429), el asunto y el
+        Mismas reglas que `POST /chat/tickets`: jugador o visitante (401
+        SESION_REQUERIDA sin ninguno), mismo limite de frecuencia (429), el asunto y el
         mensaje pasan por la revision (422 INYECCION_DETECTADA) y la lista
         negra (422 CONTENIDO_BLOQUEADO, 503 MODERACION_NO_DISPONIBLE), y una
         sola solicitud abierta (409 TICKET_ABIERTO).
       security:
+        - {}
         - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
       requestBody:
         required: false
         content:
@@ -1183,7 +1265,7 @@ paths:
         '400':
           $ref: '#/components/responses/PeticionInvalida'
         '401':
-          description: Sin token valido (`motivo` SESION_REQUERIDA).
+          description: Sin token valido ni sesion de visitante con forma (`motivo` SESION_REQUERIDA).
           content:
             application/problem+json:
               schema:
@@ -2455,6 +2537,37 @@ components:
         ofrecerSoporteHumano:
           type: boolean
           description: true cuando conviene ofrecer abrir un ticket (escalamiento).
+        solicitud:
+          description: |
+            1.12.0 (RF-CHA-007). La solicitud de soporte que el asistente
+            abrio, o a la que sumo la pregunta, porque no pudo responder.
+            null (o ausente) en cualquier otra respuesta y en las guardadas
+            antes de 1.12.0. Cuando viene, la ventana enseña «Ver solicitud»
+            en lugar de «Hablar con soporte».
+          oneOf:
+            - $ref: '#/components/schemas/SolicitudAbierta'
+            - type: 'null'
+
+    SolicitudAbierta:
+      type: object
+      description: |
+        1.12.0. Lo minimo para enseñar la solicitud en la respuesta; el
+        detalle y su estado al dia estan en `GET /chat/tickets`.
+      required: [id, asunto, estado, nueva]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: El `ticketId` de la solicitud.
+        asunto:
+          type: string
+          maxLength: 150
+          description: Ya redactado.
+        estado:
+          $ref: '#/components/schemas/EstadoDeTicket'
+        nueva:
+          type: boolean
+          description: true si se abrio con esta pregunta; false si se sumo a la que ya estaba abierta.
 
     EnlaceInterno:
       type: object
@@ -2679,7 +2792,13 @@ components:
           properties:
             uid:
               type: string
-              description: Jugador que lo abrio (claim `uid` de su token). Sin email, nombre ni telefono.
+              description: |
+                Jugador que lo abrio (claim `uid` de su token). Sin email,
+                nombre ni telefono. Desde 1.12.0, si la abrio un visitante,
+                la clave de su conversacion (`anonimo:<sesion>`).
+            deVisitante:
+              type: boolean
+              description: 1.12.0. true si la abrio un visitante (sin cuenta); `uid` no es entonces una cuenta.
             asignadoA:
               type: [string, 'null']
               description: '`uid` del administrador que lo atiende.'

@@ -1,6 +1,8 @@
 package com.nexusbattles.ms_chatbot.chat.tiemporeal;
 
 import com.nexusbattles.ms_chatbot.chat.api.TicketResponse;
+import com.nexusbattles.ms_chatbot.chat.identidad.SesionAnonima;
+import com.nexusbattles.ms_chatbot.chat.identidad.SesionAnonimaRepository;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.soporte.EstadoTicket;
 import com.nexusbattles.ms_chatbot.chat.soporte.TicketActualizado;
@@ -21,10 +23,12 @@ import org.springframework.security.access.AccessDeniedException;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -53,7 +57,7 @@ class PiezasDelCanalTest {
             "No carga", "Se queda cargando", List.of(), Instant.parse("2026-10-14T10:00:00Z"));
         ticket.atender(EstadoTicket.RESUELTO, "Ya quedo", "admin-1", false, Instant.parse("2026-10-14T11:00:00Z"));
 
-        new AvisosDeSoporte(mensajeria).alActualizarTicket(new TicketActualizado(ticket));
+        new AvisosDeSoporte(mensajeria, mock(SesionAnonimaRepository.class)).alActualizarTicket(new TicketActualizado(ticket));
 
         verify(mensajeria).convertAndSendToUser("11111111-2222-4333-8444-555555555555", "/queue/soporte/tickets",
             TicketResponse.desde(ticket));
@@ -68,8 +72,42 @@ class PiezasDelCanalTest {
         TicketSoporte ticket = TicketSoporte.abrir("uid-1", Categoria.SOPORTE_TECNICO, "A", "B", List.of(),
             Instant.parse("2026-10-14T10:00:00Z"));
 
-        assertThatCode(() -> new AvisosDeSoporte(mensajeria).alActualizarTicket(new TicketActualizado(ticket)))
+        assertThatCode(() -> new AvisosDeSoporte(mensajeria, mock(SesionAnonimaRepository.class)).alActualizarTicket(new TicketActualizado(ticket)))
             .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("1.12.0: la solicitud de un visitante va al nombre de sus conexiones, la huella de su sesion")
+    void elAvisoDeUnVisitanteVaALaHuellaDeSuSesion() {
+        SimpMessagingTemplate mensajeria = mock(SimpMessagingTemplate.class);
+        SesionAnonimaRepository sesiones = mock(SesionAnonimaRepository.class);
+        SesionAnonima sesion = new SesionAnonima("a".repeat(64), Instant.parse("2026-10-14T09:00:00Z"),
+            Duration.ofHours(2));
+        when(sesiones.findById(sesion.getId())).thenReturn(Optional.of(sesion));
+        TicketSoporte ticket = TicketSoporte.abrir(sesion.claveDeConversacion(), Categoria.SOPORTE_TECNICO,
+            "No carga", "Se queda cargando", List.of(), Instant.parse("2026-10-14T10:00:00Z"));
+
+        new AvisosDeSoporte(mensajeria, sesiones).alActualizarTicket(new TicketActualizado(ticket));
+
+        verify(mensajeria).convertAndSendToUser("anonimo:" + "a".repeat(64), "/queue/soporte/tickets",
+            TicketResponse.desde(ticket));
+    }
+
+    @Test
+    @DisplayName("1.12.0: sin la sesion del visitante (vencida y apartada) o con una clave sin forma, no se avisa a nadie")
+    void sinSesionDelVisitanteNoSeAvisaANadie() {
+        SimpMessagingTemplate mensajeria = mock(SimpMessagingTemplate.class);
+        SesionAnonimaRepository sesiones = mock(SesionAnonimaRepository.class);
+        when(sesiones.findById(any())).thenReturn(Optional.empty());
+        AvisosDeSoporte avisos = new AvisosDeSoporte(mensajeria, sesiones);
+
+        avisos.alActualizarTicket(new TicketActualizado(TicketSoporte.abrir("anonimo:" + UUID.randomUUID(),
+            Categoria.SOPORTE_TECNICO, "A", "B", List.of(), Instant.parse("2026-10-14T10:00:00Z"))));
+        avisos.alActualizarTicket(new TicketActualizado(TicketSoporte.abrir("anonimo:no-es-una-sesion",
+            Categoria.SOPORTE_TECNICO, "A", "B", List.of(), Instant.parse("2026-10-14T10:00:00Z"))));
+
+        verifyNoInteractions(mensajeria);
+        assertThat(avisos.nombreEnElCanal(null)).isEmpty();
     }
 
     // ----------------------------------------------------- ErroresDelProtocolo

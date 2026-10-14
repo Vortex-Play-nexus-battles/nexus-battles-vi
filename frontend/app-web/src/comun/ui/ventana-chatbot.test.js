@@ -1046,17 +1046,22 @@ describe('soporte', () => {
   });
 
   // #506 — un visitante que pide una persona no se queda en un callejón sin
-  // salida: se le dice que hace falta una cuenta y se le dan las dos salidas.
-  test('a un visitante el panel le explica que necesita una cuenta y cómo conseguirla', async () => {
+  // salida. Desde ms-chatbot.yaml 1.12.0 (RF-CHA-007) abre la solicitud como
+  // cualquiera; la nota le dice hasta cuándo verá la respuesta y le ofrece,
+  // como salida secundaria, entrar o crear una cuenta.
+  test('a un visitante el panel le deja pedir ayuda y le ofrece una cuenta', async () => {
     const vista = await montar({
       login: () => 'http://localhost/cuentas/login.html?volver=%2Fcuentas%2Fsubastas.html',
       registro: 'http://localhost/cuentas/registro.html',
     });
 
     vista.el.querySelector('[data-accion="hablar-con-soporte"]').click();
+    await esperar();
 
     const panel = vista.el.querySelector('[data-chatbot-soporte]');
-    expect(panel.textContent).toContain('necesitas una cuenta');
+    expect(panel.textContent).toContain('Estás como visitante');
+    expect(panel.querySelector('form')).not.toBeNull();
+    expect(vista.cliente.misTickets).toHaveBeenCalled();
     expect(panel.querySelector('[data-accion="iniciar-sesion"]').getAttribute('href')).toBe(
       'http://localhost/cuentas/login.html?volver=%2Fcuentas%2Fsubastas.html',
     );
@@ -1065,8 +1070,8 @@ describe('soporte', () => {
     );
     // El chat general también pide sesión: era otra puerta al mismo login.
     expect(panel.querySelector('[data-accion="chat-general"]')).toBeNull();
-    expect(vista.cliente.misTickets).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(panel.querySelector('[data-accion="iniciar-sesion"]'));
+    // Lo principal es pedir ayuda: el foco va al formulario, no a la cuenta.
+    expect(document.activeElement).toBe(panel.querySelector('select'));
   });
 
   test('por omisión, «Iniciar sesión» lleva al login con la vuelta a esta página', async () => {

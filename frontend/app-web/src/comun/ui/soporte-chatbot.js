@@ -1,15 +1,18 @@
 /**
  * «Hablar con soporte» dentro de la ventana del asistente.
  *
- * Cuando el asistente no resuelve algo, el jugador con sesión abre una
- * solicitud de soporte (un ticket en el servidor) y ve aquí las suyas, con su
- * estado y la respuesta de soporte cuando llega.
+ * Cuando el asistente no resuelve algo, se abre una solicitud de soporte (un
+ * ticket en el servidor) y aquí se ven las propias, con su estado y la
+ * respuesta de soporte cuando llega. Desde ms-chatbot.yaml 1.12.0
+ * (RF-CHA-007) el asistente la abre solo al no resolver una pregunta; este
+ * panel sirve para verla, para abrir una con la conversación si eso falló, o
+ * para escribirla con otras palabras.
  *
- * Un visitante no abre solicitudes (el servidor le responde 401). #506 — en
- * vez de un callejón sin salida se le explica que hablar con una persona del
- * equipo pide una cuenta, y se le ofrece iniciar sesión (volviendo después a
- * la página donde estaba) o crear una. Ya no se le ofrece el chat general:
- * también pide sesión, así que era otra puerta al mismo login.
+ * 1.12.0 — el visitante también (RF-CHA-007 nombra al Visitante): sus
+ * solicitudes son de su sesión de visitante, así que una nota le dice que
+ * verá la respuesta aquí mientras siga en ella y le ofrece iniciar sesión
+ * (volviendo después a la página donde estaba) o crear una cuenta. Antes
+ * (#506) solo se le ofrecía la cuenta, porque el servidor le respondía 401.
  *
  * El texto que se pinta sale del servidor, así que entra con `textContent`
  * (`h()`), nunca como HTML. Los errores se deciden por el `motivo` del
@@ -52,8 +55,9 @@ export const TEXTOS_SOPORTE = Object.freeze({
   titulo: 'Hablar con soporte',
   intro: 'Cuéntanos qué pasa y una persona del equipo te responderá aquí.',
   volver: 'Volver al chat',
+  // 1.12.0 — el visitante también abre solicitudes, ligadas a su sesión.
   visitante:
-    'Para hablar con una persona del equipo necesitas una cuenta: inicia sesión o crea una.',
+    'Estás como visitante: verás la respuesta aquí, en «Tus solicitudes», mientras sigas en esta sesión del navegador. Con una cuenta, tus solicitudes quedan guardadas.',
   iniciarSesion: 'Iniciar sesión',
   crearCuenta: 'Crear cuenta',
   categoria: 'Tema',
@@ -198,7 +202,9 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
 
   // --------------------------------------------------------- visitante
 
-  function pintarVisitante() {
+  // 1.12.0 — hasta cuándo verá la respuesta y, si quiere, una cuenta. Las
+  // salidas son secundarias: lo principal del panel es pedir ayuda.
+  function notaDeVisitante() {
     const acciones = h('div', { clase: 'chatbot-soporte__acciones' });
     const destinoLogin = typeof login === 'function' ? login() : login;
     const destinoRegistro = typeof registro === 'function' ? registro() : registro;
@@ -206,6 +212,8 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
       acciones.append(
         boton({
           texto: TEXTOS_SOPORTE.iniciarSesion,
+          variante: 'secundario',
+          tamano: 'pequeno',
           href: destinoLogin,
           nombre: 'iniciar-sesion',
         }),
@@ -216,18 +224,23 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
         boton({
           texto: TEXTOS_SOPORTE.crearCuenta,
           variante: 'secundario',
+          tamano: 'pequeno',
           href: destinoRegistro,
           nombre: 'crear-cuenta',
         }),
       );
     }
-    contenido.append(
-      h('p', { clase: 'chatbot-soporte__texto', texto: TEXTOS_SOPORTE.visitante }),
-      acciones,
-    );
+    return h('div', {
+      clase: 'chatbot-soporte__visitante',
+      datos: { zona: 'visitante' },
+      hijos: [
+        h('p', { clase: 'chatbot-soporte__texto', texto: TEXTOS_SOPORTE.visitante }),
+        acciones.childElementCount > 0 ? acciones : null,
+      ],
+    });
   }
 
-  // ------------------------------------------------------------ jugador
+  // ---------------------------------------------------- jugador y visitante
 
   const categoria = campo({
     nombre: 'categoria',
@@ -323,9 +336,10 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
     conCarga(crear, false);
   }
 
-  function pintarJugador() {
+  function pintarSolicitudes({ visitante }) {
     contenido.append(
       h('p', { clase: 'chatbot-soporte__texto', texto: TEXTOS_SOPORTE.intro }),
+      ...(visitante ? [notaDeVisitante()] : []),
       zonaDesdeConversacion,
       formulario,
       h('h4', { clase: 'chatbot-soporte__subtitulo', texto: TEXTOS_SOPORTE.tuyas }),
@@ -463,26 +477,24 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
     vistaDeApertura = vista;
     limpiarAviso(zonaAviso);
     vaciar(contenido);
-    if (sesion()?.autenticado) {
-      pintarJugador();
-    } else {
-      pintarVisitante();
-    }
+    pintarSolicitudes({ visitante: !sesion()?.autenticado });
     panel.hidden = false;
   }
 
-  // El primero en el orden de la página: «Crear solicitud con esta
-  // conversación» si está, luego el formulario o el botón del visitante.
+  // Lo principal del panel: «Crear solicitud con esta conversación» si está
+  // y, si no, el formulario. La nota del visitante va antes, pero sus
+  // enlaces son una salida secundaria y no se llevan el foco.
   function enfocar() {
     const destino =
-      panel.querySelector('[data-accion="crear-solicitud-desde-conversacion"], select, a.boton') ??
+      panel.querySelector('[data-accion="crear-solicitud-desde-conversacion"]') ??
+      panel.querySelector('select') ??
       botonVolver;
     destino.focus();
   }
 
   // ---------------------------------------------------- 7.4.9, en vivo
 
-  /** Si «Tus solicitudes» está a la vista (panel abierto, con sesión). */
+  /** Si «Tus solicitudes» está a la vista (panel abierto). */
   function listaALaVista() {
     return !panel.hidden && contenido.contains(lista);
   }

@@ -16,6 +16,11 @@
  * mandarlo, y si lo manda, la vista lo negaría igual; así no se ofrece una
  * puerta cerrada.
  *
+ * ms-chatbot.yaml 1.12.0 (RF-CHA-007) — cuando no pudo responder, el
+ * asistente abre solo la solicitud de soporte (o suma la pregunta a la que ya
+ * estaba abierta) y la manda en `solicitud`. Se pinta como un aviso con
+ * «Ver solicitud», en lugar de «Hablar con soporte»: ya no hay nada que pedir.
+ *
  * @module comun/ui/enriquecido-chatbot
  */
 
@@ -28,6 +33,10 @@ export const TEXTOS_ENRIQUECIDO = Object.freeze({
   pasos: 'Pasos',
   soporte: 'Hablar con soporte',
   otrasPreguntas: 'También puedes preguntar',
+  // ms-chatbot.yaml 1.12.0 — la solicitud que se abrió sola.
+  solicitudAbierta: 'Abrí una solicitud de soporte',
+  solicitudSumada: 'Sumé tu pregunta a tu solicitud abierta',
+  verSolicitud: 'Ver solicitud',
 });
 
 /**
@@ -95,11 +104,14 @@ export function introAntesDePasos(contenido) {
  *
  * @param {{pasos?: string[], enlaces?: Array<{texto: string, destino: string}>,
  *          tarjetas?: Array<{titulo: string, texto: string, enlace?: {texto: string, destino: string}|null}>,
- *          respuestasRapidas?: string[], ofrecerSoporteHumano?: boolean}|null} enriquecido
+ *          respuestasRapidas?: string[], ofrecerSoporteHumano?: boolean,
+ *          solicitud?: {id: string, asunto?: string, estado?: string, nueva?: boolean}|null}|null} enriquecido
  * @param {{alPreguntar: (pregunta: string) => void, alPedirSoporte: () => void,
+ *          alVerSolicitud?: (solicitud: object) => void,
  *          url?: (destino: string) => string|null,
  *          visible?: (destino: string) => boolean}} acciones `visible`: si la
- *          sesión actual puede ver ese destino (inyectable en pruebas)
+ *          sesión actual puede ver ese destino (inyectable en pruebas);
+ *          `alVerSolicitud`: abrir «Tus solicitudes» (por omisión, `alPedirSoporte`)
  * @returns {HTMLElement|null} null si no hay nada que pintar
  */
 export function pintarEnriquecido(
@@ -107,6 +119,7 @@ export function pintarEnriquecido(
   {
     alPreguntar,
     alPedirSoporte,
+    alVerSolicitud = alPedirSoporte,
     url = urlDeVista,
     visible = (destino) => destinoVisible(destino, leerSesion()),
   },
@@ -155,7 +168,11 @@ export function pintarEnriquecido(
     boton.addEventListener('click', () => alPreguntar(pregunta));
     return boton;
   });
-  if (enriquecido.ofrecerSoporteHumano) {
+  const solicitud = enriquecido.solicitud?.id ? enriquecido.solicitud : null;
+  if (solicitud) {
+    caja.append(avisoDeSolicitud(solicitud, alVerSolicitud));
+  }
+  if (enriquecido.ofrecerSoporteHumano && !solicitud) {
     const soporte = h('button', {
       clase: 'chatbot-rapidas__opcion chatbot-enriquecido__soporte',
       texto: TEXTOS_ENRIQUECIDO.soporte,
@@ -176,6 +193,35 @@ export function pintarEnriquecido(
   }
 
   return caja.childElementCount > 0 ? caja : null;
+}
+
+// ms-chatbot.yaml 1.12.0 — «Abrí una solicitud…» o «Sumé tu pregunta…», su
+// asunto (texto del servidor, con textContent) y «Ver solicitud».
+function avisoDeSolicitud(solicitud, alVerSolicitud) {
+  const ver = h('button', {
+    clase: 'chatbot-rapidas__opcion chatbot-enriquecido__soporte',
+    texto: TEXTOS_ENRIQUECIDO.verSolicitud,
+    atributos: { type: 'button' },
+    datos: { accion: 'ver-solicitud' },
+  });
+  ver.addEventListener('click', () => alVerSolicitud(solicitud));
+  return h('div', {
+    clase: 'chatbot-enriquecido__solicitud',
+    datos: { solicitudId: solicitud.id },
+    hijos: [
+      h('p', {
+        clase: 'chatbot-enriquecido__solicitud-titulo',
+        texto:
+          solicitud.nueva === false
+            ? TEXTOS_ENRIQUECIDO.solicitudSumada
+            : TEXTOS_ENRIQUECIDO.solicitudAbierta,
+      }),
+      solicitud.asunto
+        ? h('p', { clase: 'chatbot-enriquecido__solicitud-asunto', texto: solicitud.asunto })
+        : null,
+      ver,
+    ],
+  });
 }
 
 function enlaceInterno(enlace, url, visible) {

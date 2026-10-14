@@ -17,7 +17,7 @@ asyncapi: 3.0.0
 
 info:
   title: Nexus Battles VI — Chatbot en tiempo real (ms-chatbot)
-  version: 1.0.0
+  version: 1.1.0
   description: |
     WebSocket nativo + STOMP 1.2 (sin SockJS) de ms-chatbot en
     `/api/v1/ws-chatbot` (el servicio tiene `context-path` `/api/v1`). El
@@ -100,6 +100,9 @@ info:
 
     Changelog:
 
+    - 1.1.0 (ms-chatbot.yaml 1.12.0, RF-CHA-007): el visitante tambien
+      tiene solicitudes de soporte y recibe sus cambios en
+      `/user/queue/soporte/tickets`. Ningun destino ni forma cambia.
     - 1.0.0 (7.4.9, ms-chatbot.yaml 1.9.0): primer canal del chatbot.
   license:
     name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
@@ -181,8 +184,13 @@ channels:
       su dueno lo recibe en TODAS sus conexiones: lo que ve de la solicitud,
       con la misma forma que un elemento de `GET /chat/tickets`
       (`TicketDeSoporte`, sin `uid`, asignacion ni contexto). Solo al dueno:
-      el destino es de usuario y se resuelve por su `uid`. Un visitante se
-      puede suscribir, pero no tiene solicitudes y nunca recibe nada.
+      el destino es de usuario y se resuelve por su `uid`.
+
+      Desde 1.1.0 (ms-chatbot.yaml 1.12.0) tambien un visitante: su solicitud
+      es de la clave de su conversacion y el servidor la traduce, con la
+      sesion registrada, al nombre de sus conexiones (`anonimo:` + la huella
+      de la sesion); nunca con un dato del cliente. Si la sesion ya no
+      existe (vencio y se aparto), no se avisa a nadie.
     messages:
       ticketActualizado:
         $ref: '#/components/messages/TicketActualizado'

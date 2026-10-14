@@ -17,12 +17,15 @@
  * - calificar cada respuesta del bot (útil / no útil, con comentario opcional);
  * - respuestas enriquecidas: pasos, enlaces a secciones del sitio, tarjetas,
  *   botones de respuesta rápida y «Hablar con soporte» (`enriquecido-chatbot.js`);
- *   cada mensaje manda la sección donde está el jugador (`vista`);
+ *   cada mensaje manda la sección donde está el jugador (`vista`). Desde
+ *   ms-chatbot.yaml 1.12.0, si no pudo responder, la solicitud de soporte ya
+ *   viene abierta y su aviso lleva a «Tus solicitudes» («Ver solicitud»);
  * - preguntas rápidas, temas frecuentes y autocompletado mientras se escribe
  *   (`sugerencias-chatbot.js`), sacados de lo que el asistente sabe responder;
  * - «Soporte»: abrir una solicitud de soporte humano y ver las propias
- *   (`soporte-chatbot.js`); el visitante recibe cómo conseguirlo: entrar
- *   (volviendo a esta página) o crear una cuenta;
+ *   (`soporte-chatbot.js`). Desde 1.12.0 también el visitante: las ve
+ *   mientras dure su sesión, y se le ofrece entrar (volviendo a esta página)
+ *   o crear una cuenta;
  * - «Preferencias» (7.4.5): el idioma de las respuestas y el nivel de detalle,
  *   guardados en el servidor (`preferencias-chatbot.js`);
  * - UXC-9 (§7.4, RNF-DIS-002): minimizarla a su barra de título sin perder la
@@ -43,8 +46,9 @@
  * - el lector de pantalla oye quién habla («Tú:», «Asistente:») y la
  *   conversación es una región `role="log"`;
  * - las acciones de la cabecera se parten en dos filas si no caben;
- * - un visitante que pide soporte humano recibe cómo conseguirlo (entrar con
- *   vuelta a esta página, o crear una cuenta), no un callejón sin salida.
+ * - un visitante que pide soporte humano no se queda en un callejón sin
+ *   salida: desde 1.12.0 la abre como cualquiera, y además puede entrar (con
+ *   vuelta a esta página) o crear una cuenta.
  *
  * 7.4.9 — con un `canal` (`../canal-chatbot.js`, lo pasa `asistente.js`), las
  * preguntas van por el canal en tiempo real mientras está abierto y por HTTP
@@ -529,6 +533,8 @@ export function crearVentanaChatbot({
     const parteEnriquecida = pintarEnriquecido(enriquecido, {
       alPreguntar: enviarSugerencia,
       alPedirSoporte: () => mostrarSoporte(true),
+      // 1.12.0 — la solicitud ya está abierta: «Soporte» la enseña en «Tus solicitudes».
+      alVerSolicitud: () => mostrarSoporte(true),
       // #506 — un enlace a una vista que esta sesión no puede ver no se pinta.
       visible: (destino) => destinoVisible(destino, sesion() ?? null),
     });

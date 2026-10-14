@@ -1,7 +1,7 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
-**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.10.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.0.0 (canal en tiempo real, 7.4.9)
-**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V16) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
+**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.12.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.1.0 (canal en tiempo real, 7.4.9)
+**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V18) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
 ## Qué hace
@@ -45,8 +45,21 @@ Cada corrección se aplica solo al tema que sigue diciendo **exactamente** lo au
 un administrador ya editó no se toca. Si hay algo que corregir en producción, se publica como
 V11 (versión nueva, la anterior retirada y revertible); la candidata recibe lo mismo.
 
+**V18 (1.12.0, segunda auditoría del 7.4).** La base entiende más formas de preguntar.
+Publica, como V15, una versión nueva con dos temas que faltaban, «Términos del servicio»
+(`terminos-del-servicio`: no hay un documento de términos aparte, así que dice lo que sí está
+escrito —las causales de sanción, «Mi Cuenta» › «Privacidad», que los créditos no se cambian por
+dinero— sin inventar uno) y «Cómo funciona la subasta» (`como-funciona-la-subasta`, cinco
+pasos con lo ya verificado en V11); suma variantes que faltaban (otras formas de preguntar por
+los modos de juego, «won't load» en inglés) y 13 casos de evaluación con erratas. Un tema solo
+se crea si su clave no existe y una variante solo se suma si falta, así que lo que un
+administrador ya editó se conserva. El motor, por su parte, tolera una errata de una letra en
+las palabras de 6 o más letras de una frase («cómo funsionan las subatsas», «términos de
+servisio»), salvo que lo escrito sea
+otra palabra que la base ya conoce, con la excepción de su plural.
+
 `contenido/base-de-conocimiento.json` es la misma base en el formato de importación del
-panel (60 temas y 126 casos): sirve para restaurarla en otro entorno sin tocar la base de
+panel (62 temas y 139 casos): sirve para restaurarla en otro entorno sin tocar la base de
 datos. `BaseDeConocimientoEnProduccionIT` comprueba que cada caso activo lo responde su
 tema, que ningún tema enlaza a una vista de administración y que una pregunta en inglés se
 responde en inglés.
@@ -183,10 +196,11 @@ recibe 403.
 §7.4.3 «escalamiento a agente humano con contexto de la conversación» y «enlaces a
 documentación relevante». Sin migración: no hace falta nada nuevo en la base (sigue V13).
 
-**`POST /chat/tickets/desde-conversacion`** — la solicitud en un clic. Solo jugadores (un
-visitante recibe 401 `SESION_REQUERIDA`). La conversación es la de la identidad verificada
-(`claveDeConversacion`, que sale del `uid` del token); el cuerpo (`vista`, `comentario` ≤ 2000,
-los dos opcionales) no elige de quién es.
+**`POST /chat/tickets/desde-conversacion`** — la solicitud en un clic. Desde 1.12.0, para el
+jugador y para el visitante (ver «Solicitud automática y visitantes»). La conversación es la de
+la identidad verificada (`claveDeConversacion`, que sale del `uid` del token o de la sesión
+registrada del visitante); el cuerpo (`vista`, `comentario` ≤ 2000, los dos opcionales) no
+elige de quién es.
 
 - **Pregunta** (`PreguntaParaSoporte`): la última que el asistente no resolvió, buscando desde
   el final. Si no la entendió (`ESCALADO`), la pregunta de justo antes; si «no le sirvió»
@@ -232,9 +246,49 @@ barata, igual para todos y se puede guardar en caché.
 
 `SoporteDesdeLaConversacionYAyudaIT`: con PostgreSQL real, dos jugadores con su propia
 pregunta (redactada: la tarjeta no llega a la base), el 409 de la segunda, la que se ve en «Tus
-solicitudes», el «no me sirvió» con su categoría, el 401 del visitante y el 409
-`SIN_CONVERSACION`; y el centro de ayuda solo con lo activo en producción, sin campos internos y
-con su `Cache-Control`.
+solicitudes», el «no me sirvió» con su categoría, la del visitante, el 401 sin identidad y el
+409 `SIN_CONVERSACION`; y el centro de ayuda solo con lo activo en producción, sin campos
+internos y con su `Cache-Control`.
+
+## Solicitud automática y visitantes (1.12.0)
+
+RF-CHA-007 pide «generar automáticamente un ticket de soporte» si el chatbot no puede
+resolver la consulta, con el Visitante y el Jugador como actores. Hasta 1.11.0 la solicitud
+pedía un clic y el visitante recibía 401: la segunda auditoría del 7.4 lo encontró y no había
+decisión que lo cubriera. Sin migración: la tabla de V6 ya guarda cualquier clave de 64.
+
+- **Se abre sola** (`TicketSoporteService.alNoResolver`, desde `ChatService`) cuando el
+  asistente no entiende una pregunta (`ESCALADO`) o le dicen «no me sirvió» (`NO_SIRVIO`),
+  después de guardar el intercambio: lleva esa pregunta y la conversación, redactadas, con el
+  asunto, el mensaje y la categoría de la solicitud en un clic. Las mismas reglas (revisión,
+  lista negra, una abierta por persona) salvo el límite de frecuencia: el mensaje que la
+  provocó ya lo pasó.
+- **Una abierta por persona.** Si ya hay una (`ABIERTO` o `EN_PROCESO`), la pregunta y su
+  respuesta se suman a su contexto (`TicketSoporte.sumarAlContexto`, los 20 más recientes) en
+  una transacción. Dos a la vez: el índice único de V6 deja abrir una y la otra se suma.
+- **La respuesta lo dice** al final («Abrí una solicitud de soporte…» o «Sumé esta pregunta…»)
+  y trae `enriquecido.solicitud` (`id`, `asunto`, `estado`, `nueva`); se guarda así, de modo
+  que el historial la enseña igual (`RegistroDeConversaciones.completarRespuesta`). La ventana
+  pinta «Ver solicitud» en lugar de «Hablar con soporte».
+- **Si no se puede abrir** (la lista negra no responde, un error de la base), la respuesta lo
+  dice y ofrece el formulario y el centro de ayuda; nunca falla por eso. Es el «canal
+  alternativo» de las excepciones de RF-CHA-007.
+- **El visitante** abre, ve y recibe en vivo las suyas con su sesión (`X-Id-Sesion-Anonima`,
+  las reglas de `POST /chat/mensajes`; `ResolutorDeIdentidad.resolverODeclarar` registra la
+  declarada al abrir, nunca emite una). Son de la clave de su conversación (`anonimo:<sesión>`,
+  ningún uid puede ocuparla, V5) y las ve mientras dure la sesión (24 h sin actividad). Al
+  listar, una sesión con forma que no está registrada o venció recibe `[]`; sin token ni
+  sesión, 401 como antes. En el panel, `deVisitante` y «Un visitante sin cuenta» en lugar de
+  un uid. No se le pide correo ni teléfono (D-CHA-11).
+- El texto del escalamiento ya no promete que alguien escribirá: «Esta pregunta quedó
+  registrada para mejorar mis respuestas».
+
+`SolicitudesAutomaticasIT` (PostgreSQL real): la primera pregunta sin resolver abre la de un
+jugador (redactada, con la categoría de la vista), la segunda se suma, una resuelta no la toca,
+el historial la guarda, el botón de un clic da 409 y, resuelta por un administrador, la
+siguiente abre otra; el «no me sirvió» con la pregunta del tema; la del visitante, que solo
+ve su sesión y que el administrador reconoce; y la que abre con el formulario antes de
+escribir. `CanalDelChatbotIT` añade el aviso en vivo al visitante (y a ningún otro).
 
 ## Diálogo (1.5.0)
 
@@ -277,6 +331,15 @@ quedaba a la vista: «mi contraseña es Hunter2024!» se guardaba «… ***!», 
 de la contraseña (la política de claves exige uno). Desde la 1.11.0 se tapa el valor entero (se
 pierde, a lo sumo, el punto de la frase) y la migración **V14** vuelve a redactar lo guardado con
 la regla nueva, con la misma implementación de V10.
+
+**1.12.0: las claves anunciadas con «es».** La segunda auditoría encontró que «mi clave es
+Hunter2024! gracias» se guardaba entera: clave, token, secret y pin son palabras ambiguas («la
+clave es atacar primero») y antes solo anunciaban un secreto con dos puntos o «=». Ahora, con
+«es»/«is» o sin separador, también lo anuncian si el valor lo parece (letras y dígitos, o un
+símbolo): «mi clave es Hunter2024!», «mi token es abc123XYZ», «my secret is P4ssw0rd!» y «mi
+clave Hunter2024 no sirve» se tapan; «la clave es atacar primero» o «el token es válido» quedan
+igual. La migración **V17** vuelve a redactar lo guardado, otra vez con la implementación de
+V10.
 
 **Cifrado (7.4.8).** En tránsito: TLS 1.2/1.3 en el borde (`https://nexusbattlesvi.com`);
 del borde al servicio y del servicio a su base el tráfico no sale del host. En reposo: el
@@ -417,7 +480,7 @@ todos) durante 5 minutos y, si el catálogo no responde, sigue usando la última
 minutos (D-CHA-10). `PRODUCTOS_BASE_URL` es la raíz del servicio de productos, la misma que
 usa ms-identidad (host de contenido, 8103).
 
-## Tiempo real (7.4.9, `contracts/websocket/chatbot.yaml` 1.0.0)
+## Tiempo real (7.4.9, `contracts/websocket/chatbot.yaml` 1.1.0)
 
 «WebSocket para comunicación en tiempo real». STOMP sobre WebSocket nativo (sin SockJS), como
 ms-subastas, en `/api/v1/ws-chatbot` (`chat.tiemporeal`). No sustituye a la API: es la misma
@@ -452,7 +515,10 @@ handshake, revisión de la entrada, lista negra, motores, caché, guardado). Nad
   STOMP) cierra la conexión; una pregunta de 4000 cabe de sobra y la ventana manda por HTTP lo
   que, codificado en JSON, pasaría de 16 000.
 - **Soporte en vivo**: `TicketSoporteAdminService.atender` publica `TicketActualizado` y, tras el
-  commit, `AvisosDeSoporte` lo manda al `uid` del dueño (todas sus conexiones, nadie más).
+  commit, `AvisosDeSoporte` lo manda al `uid` del dueño (todas sus conexiones, nadie más). Desde
+  1.1.0 también al visitante: la solicitud es de `anonimo:<sesión>` y `AvisosDeSoporte` la
+  traduce, con la sesión registrada, al nombre de sus conexiones (`anonimo:<huella>`); si la
+  sesión ya no existe, no avisa a nadie.
 - **Una sola instancia.** El broker es el simple de Spring, en memoria: conexiones,
   suscripciones y avisos son de la instancia. Escalar horizontalmente exigiría un broker externo
   (relay STOMP), que no está desplegado; el contrato no promete más. Efecto sabido: el
@@ -532,10 +598,12 @@ en la píldora del kit en modo discreto, y «Tus solicitudes» se actualiza sola
 (`SeguridadDelHistorialIT`: el ataque de la auditoría, límite de frecuencia, mensaje
 bloqueado, restricción de espacios de claves; `BaseDeConocimientoFielAlJuegoIT`: V10 → V11
 con producción, candidata y respuestas guardadas; `BaseDeConocimientoEnProduccionIT`: los
-142 casos de evaluación contra la base publicada; `GestionDeLaBaseDeConocimientoIT` y
+155 casos de evaluación contra la base publicada; `GestionDeLaBaseDeConocimientoIT` y
 `TransicionesDeVersionIT`: V12 y la gestión de la base de 1.6.0; `AprendizajeYAnaliticasIT`:
 V13, preguntas sin respuesta y fórmulas del tablero de 1.7.0;
 `SoporteDesdeLaConversacionYAyudaIT`: la solicitud desde la conversación y el centro de ayuda
 de 1.8.0; `CanalDelChatbotIT` y `RespuestasFrecuentesIT`: el canal en tiempo real y la caché
 de 7.4.9; `CatalogoEnVivoIT`: el catálogo de 1.10.0; `RedactarLaPuntuacionDeLosSecretosIT` y
-`ReglasDelJuegoIT` y `BaseDeConocimientoAlDiaIT`: V14, V15 y V16 de 1.11.0). JaCoCo ≥ 80 %.
+`ReglasDelJuegoIT` y `BaseDeConocimientoAlDiaIT`: V14, V15 y V16 de 1.11.0;
+`RedactarLasClavesAnunciadasIT` y `SolicitudesAutomaticasIT`: V17 y la solicitud automática de
+1.12.0). JaCoCo ≥ 80 %.
