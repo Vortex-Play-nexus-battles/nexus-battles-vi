@@ -198,10 +198,11 @@ class AuditLogEventosTest {
 
             String csv = new String(AuditLogService.generarCsv(List.of(entrada)), StandardCharsets.UTF_8);
 
+            // 1.4.0 (SA-18): nombre_afectado va al final; vacío si la entrada no lo trae.
             assertThat(csv).startsWith("﻿id,fecha_hora,ocurrido_en,administrador,tipo_accion,afectado,"
-                + "valor_anterior,valor_nuevo,motivo,ip_origen\r\n");
+                + "valor_anterior,valor_nuevo,motivo,ip_origen,nombre_afectado\r\n");
             assertThat(csv).contains("\"superadmin_qa\",\"ACTUALIZACION\",\"parametro:metricas.umbral-sanciones-por-dia\","
-                + "\"3\",\"4\",\"Ajuste \"\"temporal\"\", acordado con el PO\",\"203.0.113.9\"\r\n");
+                + "\"3\",\"4\",\"Ajuste \"\"temporal\"\", acordado con el PO\",\"203.0.113.9\",\r\n");
         }
 
         @Test

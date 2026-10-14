@@ -23,6 +23,9 @@ export const NOMBRE_DE_ACCION = Object.freeze({
   RECHAZO: 'Rechazo',
   SECURITY_BYPASS_ATTEMPT: 'Intento de acceso no autorizado',
   EXPORTACION: 'Exportación',
+  // SA-18: las operaciones del catálogo que importa la bitácora.
+  REACTIVACION: 'Reactivación',
+  REVERSION: 'Reversión',
   OTRO: 'Otra acción',
 });
 

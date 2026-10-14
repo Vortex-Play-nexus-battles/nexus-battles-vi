@@ -72,6 +72,12 @@ public class SeguridadConfig {
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 .requestMatchers(HttpMethod.GET, "/api/v1/banners")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                // SA-18 (contrato 1.12.0): el historial de un banner
+                                // es de la administracion del catalogo, como el de un
+                                // producto. Sin la IP de quien actuo (eso es de la
+                                // bitacora central, solo del Super Administrador).
+                                .requestMatchers(HttpMethod.GET, "/api/v1/banners/{id}/historial")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 .requestMatchers(HttpMethod.GET, "/api/v1/banners/vigentes")
                                 .permitAll()
                                 .requestMatchers(HttpMethod.GET, "/api/v1/productos/estadisticas")
@@ -116,6 +122,17 @@ public class SeguridadConfig {
                                 // es la que manda, y esta ruta no puede quedar
                                 // nunca a merced de un patron publico.
                                 .requestMatchers(HttpMethod.GET, "/api/v1/productos/alertas/cambios")
+                                .hasRole("SERVICIO")
+                                // SA-18 (contrato 1.12.0, §7.3.5): las operaciones
+                                // administrativas del catalogo las importa la
+                                // bitacora central (ms-cumplimiento) con su
+                                // credencial. Ningun usuario, tampoco un Super
+                                // Administrador: el las lee en la bitacora, donde son
+                                // inmutables. De los servicios, solo los de
+                                // productos.auditoria.lectores (lo mira el
+                                // controlador por el claim azp). Antes de la regla
+                                // publica de GET /{id}, como la de arriba.
+                                .requestMatchers(HttpMethod.GET, "/api/v1/productos/auditoria/operaciones")
                                 .hasRole("SERVICIO")
                                 // Lectura publica del catalogo: el detalle por id y, desde
                                 // R16 (contrato 1.2.0), el listado paginado de la coleccion

@@ -77,6 +77,8 @@ export const OPCIONES_DE_ACCION = Object.freeze(
     'ELIMINACION',
     'APROBACION',
     'RECHAZO',
+    'REACTIVACION',
+    'REVERSION',
     'SECURITY_BYPASS_ATTEMPT',
     'EXPORTACION',
     'OTRO',
@@ -92,6 +94,8 @@ const TONO_DE_ACCION = Object.freeze({
   SECURITY_BYPASS_ATTEMPT: 'error',
   CREACION: 'exito',
   APROBACION: 'exito',
+  REACTIVACION: 'exito',
+  REVERSION: 'info',
   RECHAZO: 'info',
   CAMBIO_ROL: 'info',
   EXPORTACION: 'info',
@@ -313,7 +317,10 @@ export function columnasDeAuditoria({ titulares, alVer }) {
     {
       clave: 'afectado',
       titulo: 'Sobre',
-      valor: (e) => celdaDeSobre(sobreDe(e.afectado, titulares), { enlaceDeCuenta: urlDeFicha }),
+      valor: (e) =>
+        celdaDeSobre(sobreDe(e.afectado, titulares, e.nombreAfectado), {
+          enlaceDeCuenta: urlDeFicha,
+        }),
     },
     { clave: 'cambio', titulo: 'Cambio', valor: (e) => celdaRecortada(cambioDe(e)) },
     {
@@ -352,7 +359,7 @@ export function columnasDeAuditoria({ titulares, alVer }) {
  */
 export function paresDelDetalle(entrada, titulares) {
   const quien = quienDe(entrada.administrador, titulares);
-  const sobre = sobreDe(entrada.afectado, titulares);
+  const sobre = sobreDe(entrada.afectado, titulares, entrada.nombreAfectado);
   const momento = momentoDe(entrada);
   const pares = [['Ocurrió', fechaHoraExacta(momento)]];
   if (entrada.ocurridoEn && entrada.fechaHora && entrada.ocurridoEn !== entrada.fechaHora) {
@@ -505,7 +512,7 @@ export function montarAuditoria(
   function verEntrada(entrada) {
     abrirDetalle({
       titulo: nombreDeAccion(entrada.tipoAccion),
-      subtitulo: sobreDe(entrada.afectado, titulares).texto ?? null,
+      subtitulo: sobreDe(entrada.afectado, titulares, entrada.nombreAfectado).texto ?? null,
       contenido: listaDeDatos(paresDelDetalle(entrada, titulares)),
     });
   }

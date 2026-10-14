@@ -102,6 +102,15 @@ public class Usuario {
     @Column
     private LocalDateTime bloqueadoHasta;
 
+    /**
+     * SA-20 (D-45, señal 1): cuando empezo el ultimo bloqueo por intentos
+     * fallidos. A diferencia de {@code bloqueadoHasta}, no se borra al volver a
+     * entrar: es lo que deja ver las cuentas bloqueadas en un periodo. Nulo =
+     * nunca se ha bloqueado desde que existe el campo (V9).
+     */
+    @Column(name = "ultimo_bloqueo_en")
+    private LocalDateTime ultimoBloqueoEn;
+
     @Column
     private LocalDateTime suspendidoHasta;
 

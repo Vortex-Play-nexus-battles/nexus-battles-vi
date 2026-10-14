@@ -198,13 +198,21 @@ class MigracionesIT {
         jdbc.update("DELETE FROM usuarios WHERE id = ?", id);
     }
 
+    /** SA-20 — V9: la columna de la marca del ultimo bloqueo y su indice. */
+    private static void comprobarMarcaDelUltimoBloqueo(JdbcTemplate jdbc) {
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM information_schema.columns WHERE table_name = 'usuarios'"
+                + " AND column_name = 'ultimo_bloqueo_en'", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM pg_indexes WHERE tablename = 'usuarios'"
+                + " AND indexname = 'idx_usuarios_ultimo_bloqueo_en'", Integer.class)).isEqualTo(1);
+    }
+
     private static int tablasDelSegundoFactor(JdbcTemplate jdbc) {
         return jdbc.queryForObject("SELECT count(*) FROM information_schema.tables WHERE table_name IN"
                 + " ('segundo_factor','codigos_recuperacion','desafios_acceso')", Integer.class);
     }
 
     @Test
-    @DisplayName("base vacia: V1 a V8 se aplican y las entidades validan contra ellas")
+    @DisplayName("base vacia: V1 a V9 se aplican y las entidades validan contra ellas")
     void baseVacia() throws Exception {
         String url = crearBase("nueva");
         try (ConfigurableApplicationContext contexto = arrancarComoDespliegue(url)) {
@@ -219,9 +227,12 @@ class MigracionesIT {
                             org.assertj.core.groups.Tuple.tuple("5", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("6", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("7", "SQL"),
-                            org.assertj.core.groups.Tuple.tuple("8", "SQL"));
+                            org.assertj.core.groups.Tuple.tuple("8", "SQL"),
+                            org.assertj.core.groups.Tuple.tuple("9", "SQL"));
             assertThat(indicesDePrefijo(jdbc)).isEqualTo(1);
             assertThat(tablasDelSegundoFactor(jdbc)).isEqualTo(3);
+            // V9 (SA-20): la marca del ultimo bloqueo por intentos y su indice.
+            comprobarMarcaDelUltimoBloqueo(jdbc);
             // V8 (SA-4): el desafio admite el proposito APELAR y sigue sin admitir otros.
             comprobarPropositosDelDesafio(jdbc);
             // V7 (SA-3): las dos columnas del resumen del historial de sanciones.
@@ -242,7 +253,7 @@ class MigracionesIT {
     }
 
     @Test
-    @DisplayName("base heredada con datos: se marca como V1 sin tocarla, se aplican V2 a V8 y el jugador sigue ahi")
+    @DisplayName("base heredada con datos: se marca como V1 sin tocarla, se aplican V2 a V9 y el jugador sigue ahi")
     void baseHeredada() throws Exception {
         String url = crearBase("heredada");
         UUID veterana = baseHeredadaConUnJugador(url);
@@ -259,7 +270,8 @@ class MigracionesIT {
                             org.assertj.core.groups.Tuple.tuple("5", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("6", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("7", "SQL"),
-                            org.assertj.core.groups.Tuple.tuple("8", "SQL"));
+                            org.assertj.core.groups.Tuple.tuple("8", "SQL"),
+                            org.assertj.core.groups.Tuple.tuple("9", "SQL"));
             assertThat(tablasDelSegundoFactor(jdbc)).isEqualTo(3);
             // V6 sobre la cuenta heredada: el cierre se programa con su uid.
             comprobarCierresDeCuenta(jdbc, veterana);
@@ -267,6 +279,10 @@ class MigracionesIT {
             comprobarHistorialDeSanciones(jdbc, veterana);
             // V8 sobre la tabla que creo V5 en la base heredada.
             comprobarPropositosDelDesafio(jdbc);
+            // V9 sobre la tabla que creo Hibernate: la cuenta heredada no tiene bloqueo.
+            comprobarMarcaDelUltimoBloqueo(jdbc);
+            assertThat(jdbc.queryForObject("SELECT ultimo_bloqueo_en FROM usuarios WHERE public_id = ?",
+                    Timestamp.class, veterana)).isNull();
             // V4 sobre la tabla que creo Hibernate: el indice de la busqueda existe.
             assertThat(indicesDePrefijo(jdbc)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT apodo FROM usuarios WHERE public_id = ?", String.class, veterana))
@@ -324,10 +340,10 @@ class MigracionesIT {
             assertThat(jdbc.queryForObject(
                     "SELECT count(*) FROM pg_constraint WHERE conname = 'uk_usuarios_public_id'", Integer.class))
                     .isEqualTo(1);
-            // V1 (linea base) y V2 a V8: V5 es el segundo factor, V6 el cierre de
-            // cuenta, V7 el resumen del historial de sanciones y V8 el codigo de
-            // apelacion sin sesion.
-            assertThat(historial(jdbc)).hasSize(8);
+            // V1 (linea base) y V2 a V9: V5 es el segundo factor, V6 el cierre de
+            // cuenta, V7 el resumen del historial de sanciones, V8 el codigo de
+            // apelacion sin sesion y V9 la marca del ultimo bloqueo.
+            assertThat(historial(jdbc)).hasSize(9);
         }
     }
 }
