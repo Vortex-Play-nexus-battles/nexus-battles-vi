@@ -22,9 +22,10 @@
  * | Actividad  | Línea de tiempo               | los hechos con fecha de todo lo anterior                   |
  * |            | Acciones administrativas      | `GET /admin/auditoria?afectado=…` (ms-cumplimiento-auditoria 1.2.0), solo Super Administrador |
  *
- * El inventario se ve aquí; darle o quitarle productos a una cuenta llega
- * con la entrega administrativa auditada (SA-5). La ficha no pinta un botón
- * que todavía no hace nada.
+ * El inventario se ve aquí y, para un Administrador o Super Administrador
+ * sobre una cuenta de rol inferior (7.3.1), se modifica con «Entregar
+ * productos» (SA-10, §7.3.4): la entrega administrativa auditada de
+ * ms-identidad-admin.yaml 1.10.0 (`entrega-administrativa.js`).
  *
  * ## Las reglas de la historia
  *
@@ -45,6 +46,7 @@
 import { consultar, filasDe, RESULTADO } from '../consola/cliente-consola.js';
 import { panel, pintarDesenlace, tabla } from '../consola/panel.js';
 import { CATEGORIAS } from '../comentarios/cliente-moderacion.js';
+import { abrirEntregaAdministrativa, puedeEntregarA } from './entrega-administrativa.js';
 import { ESTADO_LEGIBLE } from '../comentarios/moderar-comentarios.js';
 import { puedeVer, urlDeVista, VEREDICTO } from '../../comun/acceso.js';
 import { rutaDeApi } from '../../comun/base-api.js';
@@ -440,7 +442,12 @@ export function montarFichaDeUsuario(
     }
     pintarEncabezado(zonaEncabezado, desenlace.ficha);
     pintarAuditoria(zonaAviso, desenlace.ficha);
-    await pintarSecciones(zonaFicha, desenlace.ficha, { consultarApi, ahora, veAuditoria });
+    await pintarSecciones(zonaFicha, desenlace.ficha, {
+      consultarApi,
+      ahora,
+      veAuditoria,
+      rolDeQuienMira: sesion?.rol ?? null,
+    });
     return desenlace;
   };
   return cargar();
@@ -580,13 +587,22 @@ function pintarFallo(zona, desenlace, reintentar) {
  *
  * @param {HTMLElement} zona
  * @param {object} ficha
- * @param {{consultarApi: typeof consultar, ahora: () => number, veAuditoria: boolean}} opciones
+ * @param {{consultarApi: typeof consultar, ahora: () => number, veAuditoria: boolean,
+ *          rolDeQuienMira?: string|null}} opciones
  */
-async function pintarSecciones(zona, ficha, { consultarApi, ahora, veAuditoria }) {
+async function pintarSecciones(
+  zona,
+  ficha,
+  { consultarApi, ahora, veAuditoria, rolDeQuienMira = null },
+) {
   const linea = panelDeLaLinea();
   /** @type {Map<string, {datos: *, falta: string|null}>} */
   const cargados = new Map();
   const fuentes = fuentesDeLaFicha(ficha, { veAuditoria });
+  const inventario = fuentes.find((fuente) => fuente.id === 'inventario-de-la-cuenta');
+  if (inventario && ficha.uid && puedeEntregarA(rolDeQuienMira, ficha.rol)) {
+    inventario.panel.acciones = [botonDeEntrega(ficha, () => inventario.controlador)];
+  }
   const repintarLinea = () => linea.pintar(armarLinea(ficha, fuentes, cargados, ahora()));
   for (const fuente of fuentes) {
     fuente.controlador = panelPorUid({
@@ -1048,14 +1064,20 @@ function panelPorUid({
   servicio,
   recurso,
   ancho = null,
+  acciones = [],
   pintar,
   vacio,
   alCargar,
   ficha,
   consultarApi,
 }) {
-  const partes = panel({ id, titulo, descripcion, ancho });
-  const controlador = { elemento: partes.elemento, alReintentar: null, cargar: null };
+  const partes = panel({ id, titulo, descripcion, ancho, acciones });
+  const controlador = {
+    elemento: partes.elemento,
+    zona: partes.zona,
+    alReintentar: null,
+    cargar: null,
+  };
 
   controlador.cargar = async () => {
     if (!ficha.uid) {
@@ -1421,6 +1443,47 @@ function situacionDelElemento(elemento) {
   return elemento?.disponible === false
     ? { texto: 'No disponible', tono: 'neutro' }
     : { texto: 'Disponible', tono: 'exito' };
+}
+
+/**
+ * «Entregar productos» (SA-10, §7.3.4): abre el panel de la entrega y, hecha,
+ * vuelve a pedir el inventario y dice qué se entregó.
+ *
+ * @param {object} ficha
+ * @param {() => {cargar: () => Promise<void>, zona: HTMLElement}|undefined} controladorDelPanel
+ */
+function botonDeEntrega(ficha, controladorDelPanel) {
+  const boton = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: 'Entregar productos',
+    atributos: { type: 'button' },
+    datos: { accion: 'entregar-productos' },
+  });
+  boton.addEventListener('click', () => {
+    abrirEntregaAdministrativa({
+      ficha,
+      alEntregar: async (entrega) => {
+        const controlador = controladorDelPanel();
+        if (!controlador) {
+          return;
+        }
+        await controlador.cargar();
+        const unidades = Number(entrega?.cantidad) || 0;
+        controlador.zona.prepend(
+          aviso({
+            tono: 'exito',
+            titulo: entrega?.nueva === false ? 'Esa entrega ya estaba hecha' : 'Entrega hecha',
+            detalle:
+              entrega?.nueva === false
+                ? 'No se repitió: sus productos siguen como estaban.'
+                : `${unidades} × ${entrega?.nombre ?? 'producto'} ya ${unidades === 1 ? 'está' : 'están'} en su inventario. Queda en la auditoría.`,
+          }),
+        );
+        boton.focus();
+      },
+    });
+  });
+  return boton;
 }
 
 /** @param {object|null} pagina `PaginaInventario` (inventario 1.8.0) */
