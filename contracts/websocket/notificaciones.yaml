@@ -19,7 +19,7 @@ asyncapi: 3.0.0
 
 info:
   title: Nexus Battles VI - Notificaciones en tiempo real
-  version: 1.2.0
+  version: 1.2.1
   description: |
     Canal WebSocket + STOMP del modulo `notificaciones`.
 
@@ -73,6 +73,12 @@ info:
     `bandejaDelUsuario` como `avisoNuevo` de tipo `CAMBIO_CATALOGO`, igual que
     cualquier otro aviso. Si el catalogo no responde, el alta sigue igual.
     Ningun canal ni mensaje cambia de forma.
+
+    Sobre los cambios en las politicas de uso (1.2.1, SA-11, §7.3.7). En el
+    mismo momento llegan, como `avisoNuevo` de tipo `CAMBIO_POLITICA`, los
+    cambios en las politicas de uso que el jugador no habia visto (contrato
+    HTTP 1.5.0). Si admin-parametros no responde, el alta sigue igual. Solo
+    documentacion: ningun canal ni mensaje cambia de forma.
   license:
     name: Uso academico - Proyecto Integrador II, UPB Bucaramanga
 
@@ -128,6 +134,8 @@ channels:
       Desde la 1.2.0 (HU-NOT-001), antes de responder se incorporan a la
       bandeja los cambios del catalogo que el jugador no habia visto (avisos
       `CAMBIO_CATALOGO`); si el catalogo no responde, el alta sigue igual.
+      Desde la 1.2.1 (SA-11), tambien los cambios en las politicas de uso
+      (avisos `CAMBIO_POLITICA`), con la misma degradacion.
     messages:
       registrarSesion:
         $ref: '#/components/messages/RegistrarSesion'

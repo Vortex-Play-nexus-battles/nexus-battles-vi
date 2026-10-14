@@ -51,7 +51,21 @@ info:
     sin esos avisos (degradacion controlada) y se intenta en una sesion
     siguiente. Compatible: ninguna operacion ni esquema cambia de forma; solo
     aparece un `tipo` nuevo de aviso.
-  version: 1.4.0
+
+    1.5.0 (SA-11, §7.3.7 «cambios en politicas de uso que afecten al
+    usuario», RF-NOT-005) — por el mismo camino, antes de entregar lo
+    pendiente, el servicio incorpora los cambios en las politicas de uso
+    publicados por la administracion, leidos de admin-parametros
+    (`GET /api/v1/parametros/politicas/cambios/posteriores`,
+    admin-parametros.yaml 1.1.0, lectura publica). Cada cambio es un aviso de
+    tipo `CAMBIO_POLITICA` con id `politica:{idDelCambio}` (idempotente): el
+    titulo dice que politica cambio, el cuerpo que cambio y desde cuando
+    rige, y `creadaEn` es la publicacion. La primera vez se leen los
+    publicados en una ventana configurable (30 dias), para que quien vuelve
+    despues de un cambio se entere; despues, lo posterior a su punto de
+    lectura. Si admin-parametros no responde, la entrega sigue igual sin esos
+    avisos. Compatible: solo aparece otro `tipo` de aviso.
+  version: 1.5.0
 servers:
   - url: http://localhost:8085/api/v1
     description: Entorno local de desarrollo
@@ -163,6 +177,12 @@ paths:
         Consulta productos como mucho una vez por intervalo minimo y jugador
         (configurable). Si productos no responde, la respuesta es la misma de
         siempre, sin esos avisos, y se reintenta en una sesion siguiente.
+
+        Desde la 1.5.0 (SA-11, §7.3.7) incorpora tambien los cambios en las
+        politicas de uso publicados por la administracion, como avisos
+        `CAMBIO_POLITICA` con id `politica:{idDelCambio}`, con la misma
+        degradacion: si admin-parametros no responde, la respuesta es la de
+        siempre.
       parameters:
         - name: usuarioId
           in: path
@@ -279,6 +299,8 @@ components:
           description: >
             Origen del aviso. Desde la 1.4.0 incluye `CAMBIO_CATALOGO`: un
             cambio del catalogo (HU-NOT-001), con id `catalogo:{idDeAlerta}`.
+            Desde la 1.5.0, `CAMBIO_POLITICA`: un cambio en una politica de
+            uso (SA-11, §7.3.7), con id `politica:{idDelCambio}`.
         titulo:
           type: string
         cuerpo:

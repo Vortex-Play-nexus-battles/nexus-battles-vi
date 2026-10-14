@@ -26,7 +26,8 @@ public class ParametrosController {
         this.servicio = servicio;
     }
 
-    static Actor actorDe(Jwt token) {
+    /** Quien actua, sacado del token; tambien lo usan las politicas de uso (SA-11). */
+    public static Actor actorDe(Jwt token) {
         String rol = token.getClaimAsString("rol");
         UUID id;
         try {
@@ -68,7 +69,7 @@ public class ParametrosController {
      * despues el primer valor de {@code X-Forwarded-For} y, sin borde, la
      * remota. Solo caracteres de una IP y como mucho 45.
      */
-    static String ipDe(jakarta.servlet.http.HttpServletRequest peticion) {
+    public static String ipDe(jakarta.servlet.http.HttpServletRequest peticion) {
         String real = peticion.getHeader("X-Real-IP");
         if (real != null && pareceUnaIp(real.strip())) {
             return real.strip();
