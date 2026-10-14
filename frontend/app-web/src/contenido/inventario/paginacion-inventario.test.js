@@ -210,6 +210,18 @@ describe('Paginacion integrada en la vista de inventario', () => {
     expect(nombres.slice(0, 2)).toEqual(['Heroe 32', 'Espada 33']);
   });
 
+  test('RF-INV-002: una página que no existe lleva a la última válida', async () => {
+    const { consultar, pedidas } = servidor({ objetos: 20 });
+    await montarInventario(raiz, 'jugador-A', 5, { ...SIN_ESCRITURA, consultar });
+
+    // 20 objetos son dos páginas: la 6 no existe y se enseña la 2, sin pasar
+    // por el «Todavía no tienes objetos».
+    expect(panelObjetos(raiz).querySelectorAll('.vitrina__producto')).toHaveLength(4);
+    expect(control(raiz).querySelector('[aria-current="page"]').textContent).toBe('2');
+    expect(panelObjetos(raiz).textContent).not.toMatch(/Todavía no tienes objetos/);
+    expect(pedidas.filter((p) => p.categoria === 'OBJETOS').map((p) => p.numero)).toEqual([5, 1]);
+  });
+
   test('la casilla activa sigue a la pagina que se esta mostrando', async () => {
     const { consultar } = servidor({ objetos: 80 });
     await montarInventario(raiz, 'jugador-A', 0, { ...SIN_ESCRITURA, consultar });

@@ -1271,6 +1271,23 @@ export async function montarInventario(
     }
   }
 
+  /**
+   * RF-INV-002, excepción: «solicitud de una página inexistente, que debe
+   * redirigir a la última página válida». Con el servidor paginando (1.7.0),
+   * `?pagina=99` o la página de la que se acaba de retirar lo último llegaban
+   * vacías y la vitrina decía «Todavía no tienes objetos». Se pide la última
+   * que existe antes de pintar nada.
+   */
+  async function conUltimaPaginaValida(consulta, jugador, pagina) {
+    const respuesta = await consulta(jugador, pagina);
+    const total = Number.isInteger(respuesta?.totalPaginas) ? respuesta.totalPaginas : 0;
+    const vacia = Array.isArray(respuesta?.elementos) && respuesta.elementos.length === 0;
+    if (vacia && total > 0 && pagina >= total) {
+      return consulta(jugador, total - 1);
+    }
+    return respuesta;
+  }
+
   /** La pagina que el jugador esta viendo ahora mismo. */
   function paginaEnCurso() {
     return paginaMostrada?.numero ?? numeroPagina;
@@ -1291,10 +1308,11 @@ export async function montarInventario(
     // Revisión final (13-oct) — sin busqueda, la vitrina de «Objetos» pide al
     // servidor su página de dieciséis (`categoria=OBJETOS`, inventario 1.7.0).
     const consultaSinBusqueda = (_jugador, pagina) => paginaDeCategoria(CATEGORIAS.OBJETOS, pagina);
+    const consulta = busquedaActiva
+      ? (jugador, pagina) => buscar(jugador, criterioBusqueda, pagina)
+      : consultaSinBusqueda;
     const consultada = await montarVitrina(vista.contenido, identidad, numero, {
-      consultar: busquedaActiva
-        ? (jugador, pagina) => buscar(jugador, criterioBusqueda, pagina)
-        : consultaSinBusqueda,
+      consultar: (jugador, pagina) => conUltimaPaginaValida(consulta, jugador, pagina),
       alEditar: abrirEdicion,
       alEquipar: abrirEquipamiento,
       alEliminar: eliminarDelInventario,
