@@ -106,7 +106,13 @@ services:
       # (ADR-005): reenvia el token del propio jugador. Inventario vive en el
       # host de contenido, igual que en docker-compose.deploy.yml.
       INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://34.193.90.11:8102}
-      SUBASTAS_BASE_URL: ${SUBASTAS_BASE_URL:-http://srv-ms-subastas:8092/api/v1}
+      # ms-subastas tambien vive en el host de contenido desde el 28-sep
+      # (servicios.json, claseHost contenido; el borde lo alcanza en
+      # 34.193.90.11:8092). Con srv-ms-subastas, un nombre que en el host de
+      # plataforma no existe, «¿como van mis subastas?» y «¿que hay en la
+      # subasta?» respondian «no pude consultar» en DEV (lo vio el canario del
+      # asistente el 14-oct).
+      SUBASTAS_BASE_URL: ${SUBASTAS_BASE_URL:-http://34.193.90.11:8092/api/v1}
       NOTIFICACIONES_BASE_URL: ${NOTIFICACIONES_BASE_URL:-http://srv-notificaciones:8085/api/v1}
       # B11 (ms-chatbot.yaml 1.2.0): movimientos de creditos del propio jugador
       # (con su token), torneos como dato publico y la lista negra para filtrar
