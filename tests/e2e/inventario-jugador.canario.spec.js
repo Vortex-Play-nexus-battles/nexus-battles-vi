@@ -36,6 +36,7 @@ import { test, expect, request as apiRequest } from '@playwright/test';
 
 import { sesionDe } from './ayudantes/cuentas.js';
 import { conLaPaginaQuieta } from './ayudantes/movimiento.js';
+import { servicioNoDesplegadoDe } from './ayudantes/no-desplegados.js';
 
 const AWS = process.env.E2E_AWS ?? 'http://35.168.124.119';
 const CLAVE = 'Contrasena-Canario-2026';
@@ -44,6 +45,16 @@ const MARCA = Date.now().toString(36);
 const NORMAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 const GRAVES = new Set(['serious', 'critical']);
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+/** §7.1.1 — la barra del jugador: el inventario y las secciones a las que lleva. */
+const BARRA_DEL_JUGADOR = [
+  { id: 'jugar', etiqueta: 'Jugar online', ruta: /\/jugar(?:[?#]|$)/ },
+  { id: 'misiones', etiqueta: 'Misiones', ruta: /\/misiones(?:[?#]|$)/ },
+  { id: 'torneo', etiqueta: 'Torneo', ruta: /\/torneos(?:[?#]|$)/ },
+  { id: 'inventario', etiqueta: 'Mi inventario', ruta: /\/inventario(?:[?#]|$)/ },
+  { id: 'subasta', etiqueta: 'Subasta', ruta: /\/subastas(?:[?#]|$)/ },
+  { id: 'cuenta', etiqueta: 'Mi Cuenta', ruta: /\/cuenta(?:[?#]|$)/ },
+];
 
 /** Un PNG real de 3×2 (el mismo que usan las pruebas del servicio de comentarios). */
 const PNG = Buffer.from(
@@ -218,6 +229,44 @@ test.describe('Mi inventario en AWS DEV (revisión final §7.1)', () => {
     const despues = await pagina(api, jugadora.token, 'HEROES');
     expect(despues.totalElementos).toBe(heroes.totalElementos);
     expect(despues.elementos[0].nombrePropio).toBe(heroe.nombrePropio);
+  });
+
+  test('§7.1.1: desde el inventario la barra lleva a cada sección del jugador', async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(180_000);
+    // Solo se comprueba el acceso: lo que cada sección hace es de su módulo.
+    const fallos = [];
+    page.on('response', (respuesta) => {
+      const ruta = new URL(respuesta.url()).pathname;
+      if (
+        ruta.startsWith('/api/') &&
+        respuesta.status() >= 500 &&
+        servicioNoDesplegadoDe(ruta) === null
+      ) {
+        fallos.push(`${respuesta.status()} ${ruta}`);
+      }
+    });
+    await entrar(page, jugadora);
+    await irAlInventario(page);
+    const visitadas = [];
+    for (const seccion of BARRA_DEL_JUGADOR) {
+      const enlace = page.locator(`header[data-cabecera-app] a[data-seccion="${seccion.id}"]`);
+      if (!(await enlace.isVisible())) {
+        await page.locator('[data-zona="alternar-nav"]').click();
+      }
+      await expect(enlace).toContainText(seccion.etiqueta);
+      await enlace.click();
+      await expect(page).toHaveURL(seccion.ruta, { timeout: 30_000 });
+      await expect(
+        page.locator(`header[data-cabecera-app] a[data-seccion="${seccion.id}"]`),
+      ).toHaveAttribute('aria-current', 'page');
+      await conLaPaginaQuieta(page);
+      visitadas.push(seccion.etiqueta);
+    }
+    await capturar(page, testInfo, 'inv-07-barra-mi-cuenta');
+    console.log(`INVENTARIO-INFO|barra|${visitadas.join(' → ')}`);
+    expect(fallos, 'ninguna petición respondió 5xx').toEqual([]);
   });
 
   test('interfaz: del login al equipo, con búsqueda, detalle, opinión y persistencia', async ({
