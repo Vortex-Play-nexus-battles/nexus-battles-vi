@@ -369,9 +369,15 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
         return producto;
     }
 
-    /** Lo que retiene al heroe, con el detalle que inventario da: la subasta. */
+    /**
+     * Lo que retiene al heroe, con el detalle que inventario da: la subasta o,
+     * desde inventario 1.6.0, la ejecucion de una mision (HU-MIS-009 C3).
+     */
     private static String motivoDeBloqueo(ElementoInventario heroe) {
-        return heroe.subastaId() == null ? null : "una subasta en curso";
+        if (heroe.subastaId() != null) {
+            return "una subasta en curso";
+        }
+        return heroe.ejecucionMisionId() == null ? null : EstadoDelHeroe.EN_MISION;
     }
 
     /**
@@ -407,11 +413,12 @@ class ClienteInventarioHeroes implements HeroeDelJugador {
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     record ElementoInventario(String id, String tipo, String nombrePropio,
-                              String productoId, boolean disponible, String subastaId, Integer nivel) {
+                              String productoId, boolean disponible, String subastaId, Integer nivel,
+                              String ejecucionMisionId) {
 
         ElementoInventario(String id, String tipo, String nombrePropio, String productoId, boolean disponible,
                            String subastaId) {
-            this(id, tipo, nombrePropio, productoId, disponible, subastaId, null);
+            this(id, tipo, nombrePropio, productoId, disponible, subastaId, null, null);
         }
     }
 
