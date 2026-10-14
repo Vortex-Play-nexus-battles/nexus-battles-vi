@@ -105,9 +105,16 @@ comprobar GET  /api/v1/auth/segundo-factor \
                                            "identidad GET /api/v1/auth/segundo-factor"
 comprobar POST /api/v1/auth/login/segundo-factor \
                                            "identidad POST /api/v1/auth/login/segundo-factor"
+# SA-4 — la apelacion sin sesion de una cuenta suspendida o baneada, tambien
+# de ms-identidad por /auth.
+comprobar POST /api/v1/auth/apelacion/consulta \
+                                           "identidad POST /api/v1/auth/apelacion/consulta"
+comprobar POST /api/v1/auth/apelacion      "identidad POST /api/v1/auth/apelacion"
 comprobar GET  /api/v1/perfiles/yo         "identidad GET /api/v1/perfiles/yo"
 comprobar GET  /api/v1/rbac/roles          "identidad GET /api/v1/rbac/roles"
 comprobar GET  /api/v1/admin/usuarios      "identidad GET /api/v1/admin/usuarios"
+# SA-4 (ms-identidad-admin 1.9.0): titulares para la consola de moderacion.
+comprobar GET  /api/v1/admin/titulares     "identidad GET /api/v1/admin/titulares"
 # Auditoria de DEV del 30-sep: la foto de perfil la sirve ms-identidad fuera
 # de /api (devuelve `/avatares-subidos/<archivo>`) y por el borde solo se lee.
 comprobar GET  /avatares-subidos/a.png     "identidad GET /avatares-subidos/a.png"
@@ -603,6 +610,7 @@ libre() {
 libre     GET  /api/v1/products/p-1/comments                  40
 libre     GET  "/api/v1/vitrina?page=0"                       40
 libre     POST /api/v1/salas                                  30
+libre     GET  /api/v1/chat/historial                         30
 # acceso: la primera rafaga llena el cupo; las demas rutas de la clase
 # comparten cupo (misma direccion, misma zona) y tienen que dar 429 igual.
 limitada  POST /api/v1/auth/login                             30 20 2
@@ -613,6 +621,9 @@ limitada  POST /api/v1/auth/restablecer/solicitar             25  0 2
 # login no lleva `$`): probar codigos de 6 cifras desde internet tiene el
 # mismo cupo que probar contrasenas, ademas del bloqueo de la cuenta.
 limitada  POST /api/v1/auth/login/segundo-factor              25  0 2
+# SA-4 — la apelacion sin sesion se abre con el codigo del login: mismo cupo.
+limitada  POST /api/v1/auth/apelacion/consulta                25  0 2
+limitada  POST /api/v1/auth/apelacion                         25  0 2
 # escritura: zona propia, asi que el login agotado no la toca.
 limitada  POST /api/v1/products/p-1/comments                  80 60 1
 limitada  POST /api/v1/products/p-1/rating                    25  0 1
@@ -622,6 +633,11 @@ limitada  POST /api/v1/subastas/s-1/pujas                     25  0 1
 limitada  POST /api/v1/mensajes-directos/conversaciones/u-1/mensajes 25 0 1
 # La compra (B5) se cuenta sobre la ruta ya reescrita, /ecommerce/api/v1/...
 limitada  POST /api/v1/checkout                               25  0 1
+# El chatbot (ms-chatbot.yaml 1.4.0): mensajes, sesiones, tickets y calificaciones.
+limitada  POST /api/v1/chat/mensajes                          25  0 1
+limitada  POST /api/v1/chat/sesiones                          25  0 1
+limitada  POST /api/v1/chat/tickets                           25  0 1
+limitada  POST /api/v1/chat/mensajes/m-1/calificacion         25  0 1
 
 # Desde el anfitrion (origen privado, como el banco E2E) el login no se
 # limita: 40 seguidas, las 40 llegan a identidad.

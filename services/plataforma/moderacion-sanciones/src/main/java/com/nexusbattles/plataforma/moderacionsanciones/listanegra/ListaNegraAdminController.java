@@ -59,17 +59,23 @@ public class ListaNegraAdminController {
         return TerminoResponse.desde(service.editar(termino, request.datos(), IdentidadDelToken.apodoDe(quien)));
     }
 
+    /** 2.2.0: {@code ?motivo=} opcional, que va a la bitacora central (§7.3.5). */
     @DeleteMapping("/{termino}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void eliminarTermino(@AuthenticationPrincipal Jwt quien, @PathVariable String termino) {
-        service.eliminar(termino, IdentidadDelToken.apodoDe(quien));
+    public void eliminarTermino(@AuthenticationPrincipal Jwt quien, @PathVariable String termino,
+                                @RequestParam(required = false) String motivo) {
+        service.eliminar(termino, IdentidadDelToken.apodoDe(quien), motivo);
     }
 
-    /** {@code TerminoRequest}: solo {@code termino} es obligatorio. */
+    /**
+     * {@code TerminoRequest}: solo {@code termino} es obligatorio. {@code motivo}
+     * (2.2.0) es opcional y no se guarda con el termino: va a la bitacora
+     * central.
+     */
     public record TerminoRequest(String termino, CategoriaDeTermino categoria, ModoDeCoincidencia modo,
-                                 Boolean activo) {
+                                 Boolean activo, String motivo) {
         ListaNegraAdminService.DatosDeTermino datos() {
-            return new ListaNegraAdminService.DatosDeTermino(termino, categoria, modo, activo);
+            return new ListaNegraAdminService.DatosDeTermino(termino, categoria, modo, activo, motivo);
         }
     }
 

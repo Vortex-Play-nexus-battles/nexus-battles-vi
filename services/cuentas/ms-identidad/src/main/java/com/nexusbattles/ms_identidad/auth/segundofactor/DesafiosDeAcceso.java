@@ -5,12 +5,15 @@ import com.nexusbattles.ms_identidad.auth.segundofactor.DesafioDeAcceso.Proposit
 import com.nexusbattles.ms_identidad.auth.segundofactor.SegundoFactorRechazadoException.Motivo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
@@ -84,6 +87,39 @@ public class DesafiosDeAcceso {
             return Optional.of(emitir(usuario, Proposito.ENROLAR));
         }
         return Optional.empty();
+    }
+
+    /**
+     * SA-4 — lo que dura el codigo de apelacion: leer la sancion y escribir el
+     * argumento lleva mas que teclear un codigo de seis cifras.
+     */
+    static final Duration VIGENCIA_DEL_CODIGO_DE_APELACION = Duration.ofMinutes(30);
+
+    /**
+     * SA-4 (§7.3.2) — el codigo con el que una cuenta suspendida o baneada,
+     * que ya dio su contrasena, ve la sancion que le impide entrar y la apela.
+     * Mismo tratamiento que el desafio del segundo paso: 256 bits al azar,
+     * solo su SHA-256 en la base, ligado a la version del token.
+     *
+     * <p>En una transaccion PROPIA: quien lo pide es el login, que a
+     * continuacion lanza el 403 de la cuenta y deshace la suya. Sin
+     * {@code REQUIRES_NEW} el codigo se devolveria al navegador sin estar
+     * guardado.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Optional<DesafioEmitido> paraApelar(Usuario usuario) {
+        if (usuario == null || usuario.getId() == null) {
+            return Optional.empty();
+        }
+        byte[] bytes = new byte[BYTES_DEL_DESAFIO];
+        azar.nextBytes(bytes);
+        String valor = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        LocalDateTime ahora = LocalDateTime.now(reloj);
+        desafios.borrarGastadosDe(usuario.getId(), Proposito.APELAR, ahora);
+        desafios.save(new DesafioDeAcceso(usuario.getId(), resumen(valor), Proposito.APELAR,
+                usuario.getVersionToken(), ahora, ahora.plus(VIGENCIA_DEL_CODIGO_DE_APELACION)));
+        return Optional.of(new DesafioEmitido(valor, reloj.instant().plus(VIGENCIA_DEL_CODIGO_DE_APELACION),
+                Proposito.APELAR));
     }
 
     private DesafioEmitido emitir(Usuario usuario, Proposito proposito) {

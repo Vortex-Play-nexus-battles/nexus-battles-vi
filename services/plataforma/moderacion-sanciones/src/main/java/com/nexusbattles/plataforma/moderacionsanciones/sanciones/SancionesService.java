@@ -1,5 +1,7 @@
 package com.nexusbattles.plataforma.moderacionsanciones.sanciones;
 
+import com.nexusbattles.plataforma.moderacionsanciones.auditoria.BitacoraDeAuditoria;
+import com.nexusbattles.plataforma.moderacionsanciones.auditoria.TipoDeAccion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -61,11 +63,18 @@ public class SancionesService {
     private final LimitesDeSancion limites;
     private final RolesDeCuentas roles;
     private final PlazoDeDecision plazoDeDecision;
+    private final BitacoraDeAuditoria bitacora;
 
+    /**
+     * SA-5 (§7.3.5): con la bitacora central. Emitir, levantar y resolver una
+     * apelacion dejan su asiento en la misma transaccion; la bitacora decide si
+     * la accion es de una persona desde la consola o de otro servicio que ya la
+     * registra ({@code OrigenDeLaAccion}).
+     */
     @org.springframework.beans.factory.annotation.Autowired
     public SancionesService(SancionRepository sanciones, ApelacionRepository apelaciones,
                             SalidasDeSancion salidas, Clock reloj, LimitesDeSancion limites,
-                            RolesDeCuentas roles, PlazoDeDecision plazoDeDecision) {
+                            RolesDeCuentas roles, PlazoDeDecision plazoDeDecision, BitacoraDeAuditoria bitacora) {
         this.sanciones = Objects.requireNonNull(sanciones);
         this.apelaciones = Objects.requireNonNull(apelaciones);
         this.salidas = Objects.requireNonNull(salidas);
@@ -73,6 +82,14 @@ public class SancionesService {
         this.limites = Objects.requireNonNull(limites);
         this.roles = Objects.requireNonNull(roles);
         this.plazoDeDecision = Objects.requireNonNull(plazoDeDecision);
+        this.bitacora = Objects.requireNonNull(bitacora);
+    }
+
+    /** Sin bitacora central (pruebas). */
+    public SancionesService(SancionRepository sanciones, ApelacionRepository apelaciones,
+                            SalidasDeSancion salidas, Clock reloj, LimitesDeSancion limites,
+                            RolesDeCuentas roles, PlazoDeDecision plazoDeDecision) {
+        this(sanciones, apelaciones, salidas, reloj, limites, roles, plazoDeDecision, BitacoraDeAuditoria.NINGUNA);
     }
 
     /** Sin festivos configurados: el plazo de decision cuenta de lunes a viernes. */
@@ -168,6 +185,8 @@ public class SancionesService {
                 sancion.id(), sancion.tipo(), sancion.causal(), sancion.usuarioId(), actor.id(), actor.rol(),
                 vigenteHasta);
         salidas.emision(sancion, tituloDe(sancion), cuerpoDe(sancion), ahora);
+        bitacora.registrar(sancion.tipo() == Sancion.Tipo.SUSPENSION ? TipoDeAccion.SUSPENSION : TipoDeAccion.SANCION,
+                sancion.usuarioId().toString(), null, descripcionDe(sancion), sancion.motivo());
         return sancion;
     }
 
@@ -217,12 +236,15 @@ public class SancionesService {
                     "el baneo es definitivo: solo lo revierte una apelacion favorable del panel");
         }
         exigirJerarquia(actor, sancion.usuarioId(), "levantar la sancion de");
+        String comoEstaba = descripcionDe(sancion);
         sancion.revertir(actor.id(), motivoLimpio, ahora);
         sanciones.save(sancion);
         BITACORA.info("Sancion levantada: id={} tipo={} usuario={} por={} ({})", sancion.id(), sancion.tipo(),
                 sancion.usuarioId(), actor.id(), actor.rol());
         salidas.levantamiento(sancion, TextosDeSancion.tituloDelLevantamiento(sancion),
                 TextosDeSancion.cuerpoDelLevantamiento(sancion, motivoLimpio), ahora);
+        bitacora.registrar(TipoDeAccion.ACTUALIZACION, sancion.usuarioId().toString(), comoEstaba,
+                "Suspensión levantada antes de su fin", motivoLimpio);
         return sancion;
     }
 
@@ -331,6 +353,70 @@ public class SancionesService {
         return apelacion;
     }
 
+    /** Por que la sancion que impide entrar no se puede apelar ahora (SA-4, apelacion sin sesion). */
+    public enum MotivoNoApelable { SIN_SANCION, FUERA_DE_PLAZO, APELACION_ABIERTA }
+
+    /**
+     * Lo que ve en la pantalla de inicio de sesion una cuenta suspendida o
+     * baneada (SA-4): la sancion que le impide entrar, hasta cuando puede
+     * apelarla y, si ya apelo, como va la ultima apelacion.
+     *
+     * @param sancion          la que restringe hoy; nula si ya no hay ninguna
+     * @param apelableHasta    emision + plazo de apelacion vigente (§7.3.2, 30 dias)
+     * @param motivoNoApelable nulo si se puede apelar ahora
+     * @param apelacion        la ultima apelacion de esa sancion, abierta o resuelta
+     */
+    public record EstadoDeApelacion(Sancion sancion, OffsetDateTime apelableHasta,
+                                    MotivoNoApelable motivoNoApelable, Apelacion apelacion) {
+
+        public boolean puedeApelar() {
+            return sancion != null && motivoNoApelable == null;
+        }
+    }
+
+    /**
+     * El estado de la apelacion de la sancion que hoy impide entrar a la
+     * cuenta. Las mismas reglas que {@link #apelar}: dentro del plazo y sin
+     * otra apelacion abierta sobre la misma sancion.
+     */
+    @Transactional(readOnly = true)
+    public EstadoDeApelacion estadoDeApelacionDe(UUID usuarioId) {
+        java.util.Optional<Sancion> activa = activaDe(Objects.requireNonNull(usuarioId));
+        if (activa.isEmpty()) {
+            return new EstadoDeApelacion(null, null, MotivoNoApelable.SIN_SANCION, null);
+        }
+        Sancion sancion = activa.get();
+        OffsetDateTime apelableHasta = sancion.emitidaEn().plus(limites.plazoDeApelacion());
+        Apelacion ultima = apelaciones.findFirstBySancionIdOrderByCreadaEnDesc(sancion.id()).orElse(null);
+        MotivoNoApelable motivo = null;
+        if (ultima != null && ultima.estado() == Apelacion.Estado.PENDIENTE) {
+            motivo = MotivoNoApelable.APELACION_ABIERTA;
+        } else if (ahora().isAfter(apelableHasta)) {
+            motivo = MotivoNoApelable.FUERA_DE_PLAZO;
+        }
+        return new EstadoDeApelacion(sancion, apelableHasta, motivo, ultima);
+    }
+
+    /**
+     * La apelacion de quien no puede iniciar sesion (SA-4, §7.3.2: «Los
+     * usuarios sancionados deben tener derecho a apelar»). La presenta
+     * ms-identidad en su nombre despues de comprobar su contrasena, y aqui se
+     * aplican las mismas reglas que a cualquier apelacion ({@link #apelar}),
+     * solo sobre la sancion que le impide entrar: por esta via no se apela
+     * nada mas.
+     */
+    @Transactional
+    public Apelacion apelarSinSesion(UUID usuarioId, UUID sancionId, String argumento) {
+        Sancion activa = activaDe(Objects.requireNonNull(usuarioId)).orElseThrow(() ->
+                new SancionRechazada(SancionRechazada.Motivo.APELACION_NO_PROCEDE,
+                        "la cuenta ya no tiene una sancion que le impida entrar"));
+        if (!activa.id().equals(sancionId)) {
+            throw new SancionRechazada(SancionRechazada.Motivo.APELACION_NO_PROCEDE,
+                    "sin sesion solo se apela la sancion que impide entrar");
+        }
+        return apelar(new Actor(usuarioId, "JUGADOR"), sancionId, argumento);
+    }
+
     /** Que apelaciones ve el panel (SA-4): las pendientes, las resueltas o todas. */
     public enum EstadoDeLaLista { PENDIENTES, RESUELTAS, TODAS }
 
@@ -381,6 +467,7 @@ public class SancionesService {
         Sancion sancion = sanciones.findById(apelacion.sancionId()).orElseThrow();
         exigirJerarquia(actor, sancion.usuarioId(), "resolver la apelacion de");
         OffsetDateTime ahora = ahora();
+        String comoEstaba = descripcionDe(sancion);
         try {
             switch (decision) {
                 case REVERTIDA -> sancion.revertir(actor.id(), motivo, ahora);
@@ -406,6 +493,15 @@ public class SancionesService {
                 TextosDeSancion.cuerpoDeLaResolucion(sancion, decision, motivo,
                         decision == Apelacion.Estado.REDUCIDA ? nuevaVigencia : null),
                 ahora);
+        bitacora.registrar(decision == Apelacion.Estado.MANTENIDA ? TipoDeAccion.RECHAZO : TipoDeAccion.APROBACION,
+                sancion.usuarioId().toString(), "Apelación pendiente · " + comoEstaba,
+                switch (decision) {
+                    case REVERTIDA -> "Apelación estimada: sanción revertida";
+                    case REDUCIDA -> "Apelación estimada en parte: suspensión reducida hasta "
+                            + TextosDeSancion.fecha(nuevaVigencia);
+                    default -> "Apelación desestimada: la sanción se mantiene";
+                },
+                motivo.strip());
         return apelacion;
     }
 
@@ -474,6 +570,27 @@ public class SancionesService {
     }
 
     /**
+     * Una sancion dicha para la bitacora central: «Suspensión hasta el 20 de
+     * octubre de 2026, 6:00 p. m. · Causal: Spam o publicidad no autorizada ·
+     * Política: Normas de convivencia», en la hora de Colombia.
+     */
+    static String descripcionDe(Sancion sancion) {
+        StringBuilder texto = new StringBuilder(switch (sancion.tipo()) {
+            case ADVERTENCIA -> "Advertencia";
+            case SUSPENSION -> sancion.vigenteHasta() == null
+                    ? "Suspensión" : "Suspensión hasta el " + TextosDeSancion.fecha(sancion.vigenteHasta());
+            case BANEO -> "Inhabilitación definitiva";
+        });
+        if (sancion.causal() != null) {
+            texto.append(" · Causal: ").append(sancion.causal().etiqueta());
+        }
+        if (sancion.politica() != null) {
+            texto.append(" · Política: ").append(sancion.politica());
+        }
+        return texto.toString();
+    }
+
+    /**
      * Metricas de moderacion de un periodo (HU-MET-001): solo agregados.
      * Un periodo vacio no es error: devuelve ceros (la ausencia de actividad
      * tambien es evidencia).
@@ -487,6 +604,40 @@ public class SancionesService {
         return MetricasDeModeracion.de(desde, hasta,
                 sanciones.findByEmitidaEnBetweenOrderByEmitidaEnAsc(desde, hasta),
                 apelaciones.findByCreadaEnBetween(desde, hasta));
+    }
+
+    /**
+     * Usuarios con {@code minimo} sanciones no revertidas o mas: una de las dos
+     * senales de «comportamiento sospechoso» que definio el PO para HU-USR-008
+     * (D-45). Solo quien modera: es una lista con identificadores de personas.
+     * La lista se corta en {@link #MAXIMO_DE_REINCIDENTES}; {@code total} dice
+     * cuantos hay en realidad.
+     */
+    @Transactional(readOnly = true)
+    public Reincidentes reincidentes(Actor actor, int minimo) {
+        if (!actor.puedeModerar()) {
+            throw new SancionRechazada(SancionRechazada.Motivo.PERMISO_INSUFICIENTE,
+                    "la lista de reincidentes es de quien modera");
+        }
+        if (minimo < 1) {
+            throw new SancionRechazada(SancionRechazada.Motivo.SOLICITUD_INVALIDA,
+                    "el minimo de sanciones tiene que ser 1 o mas");
+        }
+        List<UsuarioReincidente> usuarios = sanciones
+                .reincidentes(minimo, org.springframework.data.domain.PageRequest.of(0, MAXIMO_DE_REINCIDENTES))
+                .stream()
+                .map(r -> new UsuarioReincidente(r.getUsuarioId(), r.getSanciones(), r.getUltimaEn()))
+                .toList();
+        return new Reincidentes(minimo, sanciones.contarReincidentes(minimo), usuarios);
+    }
+
+    /** Cuantos usuarios devuelve como mucho la lista de reincidentes. */
+    static final int MAXIMO_DE_REINCIDENTES = 100;
+
+    public record Reincidentes(int minimo, long total, List<UsuarioReincidente> usuarios) {
+    }
+
+    public record UsuarioReincidente(UUID usuarioId, long sanciones, OffsetDateTime ultimaEn) {
     }
 
     private OffsetDateTime ahora() {

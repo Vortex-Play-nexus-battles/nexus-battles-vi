@@ -132,6 +132,92 @@ export async function modificarProducto(
   return cuerpo;
 }
 
+/** HU-PRD-007 — historial de cambios de solo lectura. */
+export async function consultarHistorialProducto(
+  id,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const respuesta = await fetchImpl(`${RUTA_PRODUCTOS}/${encodeURIComponent(id)}/historial`, {
+    method: 'GET',
+  });
+  const cuerpo = await cuerpoDe(respuesta);
+  if (!respuesta.ok) {
+    throw errorDe(cuerpo, respuesta.status, 'No se pudo consultar el historial del producto.');
+  }
+  return cuerpo;
+}
+
+/** HU-PRD-007 — crea una reversión auditada a partir de un respaldo. */
+export async function revertirProducto(
+  id,
+  respaldoId,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const respuesta = await fetchImpl(`${RUTA_PRODUCTOS}/${encodeURIComponent(id)}/reversiones`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ respaldoId }),
+  });
+  const cuerpo = await cuerpoDe(respuesta);
+  if (!respuesta.ok) {
+    throw errorDe(cuerpo, respuesta.status, 'No se pudo revertir el producto.');
+  }
+  return cuerpo;
+}
+
+/** HU-PRD-011 — versiones del diseño con fecha y autor. */
+export async function consultarVersionesDiseno(
+  id,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const respuesta = await fetchImpl(
+    `${RUTA_PRODUCTOS}/${encodeURIComponent(id)}/diseno/versiones`,
+    { method: 'GET' },
+  );
+  const cuerpo = await cuerpoDe(respuesta);
+  if (!respuesta.ok) {
+    throw errorDe(cuerpo, respuesta.status, 'No se pudieron consultar las versiones del diseño.');
+  }
+  return cuerpo;
+}
+
+/** HU-PRD-011 — exporta el diseño actual en el formato portable del servicio. */
+export async function exportarPlantillaDiseno(
+  id,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const respuesta = await fetchImpl(
+    `${RUTA_PRODUCTOS}/${encodeURIComponent(id)}/diseno/plantilla`,
+    { method: 'GET' },
+  );
+  const cuerpo = await cuerpoDe(respuesta);
+  if (!respuesta.ok) {
+    throw errorDe(cuerpo, respuesta.status, 'No se pudo exportar la plantilla de diseño.');
+  }
+  return cuerpo;
+}
+
+/** HU-PRD-011 — aplica una plantilla validada sin cambiar los demás datos. */
+export async function importarPlantillaDiseno(
+  id,
+  plantilla,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const respuesta = await fetchImpl(
+    `${RUTA_PRODUCTOS}/${encodeURIComponent(id)}/diseno/importaciones`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(plantilla),
+    },
+  );
+  const cuerpo = await cuerpoDe(respuesta);
+  if (!respuesta.ok) {
+    throw errorDe(cuerpo, respuesta.status, 'No se pudo importar la plantilla de diseño.');
+  }
+  return cuerpo;
+}
+
 /**
  * Suspende o reactiva un producto (`suspenderProducto` / `reactivarProducto`).
  *

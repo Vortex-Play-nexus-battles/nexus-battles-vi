@@ -40,6 +40,23 @@ public class AuditLog {
     @Column(name = "ip_origen", nullable = false, updatable = false, length = 45)
     private String ipOrigen;
 
+    /**
+     * SA-5 (1.3.0): cuando ocurrio la accion, segun el servicio que la
+     * registra. {@link #fechaHora} sigue siendo cuando quedo registrada aqui,
+     * y la fija este servicio: una entrega que llega tarde (porque este
+     * servicio estuvo caido) no pierde la hora exacta de la accion. Nulo en
+     * las entradas que el origen registra en el momento.
+     */
+    @Column(name = "ocurrido_en", updatable = false)
+    private Instant ocurridoEn;
+
+    /**
+     * SA-5 (1.3.0): la clave del evento en el servicio de origen. Unica:
+     * una entrega repetida devuelve la entrada que ya existe.
+     */
+    @Column(name = "referencia", updatable = false, length = 120)
+    private String referencia;
+
     protected AuditLog() {
         // Requerido por JPA
     }
@@ -53,6 +70,8 @@ public class AuditLog {
         this.valorNuevo = b.valorNuevo;
         this.motivo = b.motivo;
         this.ipOrigen = b.ipOrigen;
+        this.ocurridoEn = b.ocurridoEn;
+        this.referencia = b.referencia;
     }
 
     public static Builder builder() {
@@ -68,6 +87,8 @@ public class AuditLog {
     public String getValorNuevo() { return valorNuevo; }
     public String getMotivo() { return motivo; }
     public String getIpOrigen() { return ipOrigen; }
+    public Instant getOcurridoEn() { return ocurridoEn; }
+    public String getReferencia() { return referencia; }
 
     public static class Builder {
         private String administradorId;
@@ -77,6 +98,8 @@ public class AuditLog {
         private String valorNuevo;
         private String motivo;
         private String ipOrigen;
+        private Instant ocurridoEn;
+        private String referencia;
 
         public Builder administradorId(String v) { this.administradorId = v; return this; }
         public Builder tipoAccion(AuditActionType v) { this.tipoAccion = v; return this; }
@@ -85,6 +108,8 @@ public class AuditLog {
         public Builder valorNuevo(String v) { this.valorNuevo = v; return this; }
         public Builder motivo(String v) { this.motivo = v; return this; }
         public Builder ipOrigen(String v) { this.ipOrigen = v; return this; }
+        public Builder ocurridoEn(Instant v) { this.ocurridoEn = v; return this; }
+        public Builder referencia(String v) { this.referencia = v; return this; }
 
         public AuditLog build() {
             if (administradorId == null || tipoAccion == null || afectado == null

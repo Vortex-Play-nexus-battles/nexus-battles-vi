@@ -199,9 +199,10 @@ public class AdminGestionUsuarioService {
                 : suspendidoHasta.atZone(reloj.getZone()).toOffsetDateTime();
         proyecciones.aplicar(usuario, EstadoCuenta.SUSPENDIDO, fin, sancion.id());
 
+        // SA-5 (§7.3.5): el motivo de quien actua, no una etiqueta fija; y la causal con lo impuesto.
         auditarSinFrenar("SUSPENSION", administradorId, usuario, estadoAnterior,
-                "SUSPENDIDO hasta " + fin + " (sancion " + sancion.id() + ")",
-                "Suspensión de cuenta (moderacion-sanciones)", ipOrigen);
+                "SUSPENDIDO hasta " + fin + " (sancion " + sancion.id() + ")" + conCausal(causal),
+                motivoOPorOmision(motivo, MOTIVO_SUSPENSION), ipOrigen);
     }
 
     /** Baneo definitivo (7.3.2, sancion 3): {@code POST /sanciones} tipo BANEO con {@code confirmacion: true}. */
@@ -234,8 +235,8 @@ public class AdminGestionUsuarioService {
         proyecciones.aplicar(usuario, EstadoCuenta.BANEADO, null, sancion.id());
 
         auditarSinFrenar("SANCION", administradorId, usuario, estadoAnterior,
-                EstadoCuenta.BANEADO + " (sancion " + sancion.id() + ")",
-                "Baneo definitivo de cuenta (moderacion-sanciones)", ipOrigen);
+                EstadoCuenta.BANEADO + " (sancion " + sancion.id() + ")" + conCausal(causal),
+                motivoOPorOmision(motivo, MOTIVO_BANEO), ipOrigen);
     }
 
     /**
@@ -287,8 +288,7 @@ public class AdminGestionUsuarioService {
         proyecciones.levantar(usuario);
 
         auditarSinFrenar("ACTUALIZACION", administradorId, usuario, estadoAnterior,
-                EstadoCuenta.normalizado(usuario.getEstado()),
-                "Reactivación de cuenta (moderacion-sanciones)", ipOrigen);
+                EstadoCuenta.normalizado(usuario.getEstado()), MOTIVO_REACTIVACION, ipOrigen);
     }
 
     @Transactional
@@ -416,6 +416,11 @@ public class AdminGestionUsuarioService {
     /** Un texto opcional sin espacios sobrantes; en blanco cuenta como ausente. */
     private static String vacioANulo(String texto) {
         return texto == null || texto.isBlank() ? null : texto.strip();
+    }
+
+    /** « · causal ACOSO» si la hay; nada si no (SA-5). */
+    private static String conCausal(String causal) {
+        return causal == null || causal.isBlank() ? "" : " · causal " + causal.strip();
     }
 
     private void auditarSinFrenar(String tipo, String administradorId, Usuario usuario, String anterior,

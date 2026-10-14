@@ -71,7 +71,8 @@ class MotorRespuestasTest {
         ResultadoMotor resultado = motorRespuestas.generarRespuesta("olvide mi contrasena");
 
         assertThat(resultado.enriquecido().pasos()).containsExactly("Ve al inicio.", "Responde las preguntas.");
-        assertThat(resultado.enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("login");
+        assertThat(resultado.enriquecido().enlaces()).extracting(e -> e.destino())
+            .containsExactly("restablecer-solicitar");
         assertThat(resultado.enriquecido().respuestasRapidas()).containsExactly("Cómo crear una cuenta");
     }
 
@@ -257,6 +258,100 @@ class MotorRespuestasTest {
     void generarRespuesta_conPreferenciasNulas_respondeComoSinPreferencias() {
         assertThat(motorRespuestas.generarRespuesta("how do i sign up for an account", null, null).texto())
             .isEqualTo(motorRespuestas.generarRespuesta("how do i sign up for an account").texto());
+    }
+
+    // 1.5.0 (7.4.2): el escalamiento tambien va en el idioma de la pregunta,
+    // salvo que la preferencia diga otro.
+    @Test
+    void generarRespuesta_escaladaEnIngles_respondeEnInglesSalvoPreferenciaEs() {
+        ResultadoMotor ingles = motorRespuestas.generarRespuesta("what is the meaning of life");
+        ResultadoMotor espanol = motorRespuestas.generarRespuesta("what is the meaning of life", null,
+            new PreferenciasDeRespuesta(IdiomaPreferido.ES, NivelDeDetalle.NORMAL));
+
+        assertThat(ingles.requiereEscalamiento()).isTrue();
+        assertThat(ingles.ingles()).isTrue();
+        assertThat(ingles.texto()).isEqualTo(MotorRespuestas.ESCALAMIENTO_EN);
+        assertThat(espanol.texto()).isEqualTo(MotorRespuestas.ESCALAMIENTO_ES);
+        assertThat(espanol.ingles()).isFalse();
+    }
+
+    // 1.5.0: el resultado dice en que idioma quedo, para que lo que se anada
+    // despues (preguntas relacionadas, avisos) vaya en el mismo.
+    @Test
+    void generarRespuesta_marcaElIdiomaEnQueQuedo() {
+        assertThat(motorRespuestas.generarRespuesta("how do i sign up for an account").ingles()).isTrue();
+        assertThat(motorRespuestas.generarRespuesta("como me registro").ingles()).isFalse();
+    }
+
+    // 1.5.0 (seguimiento): el tema anterior otra vez, con lo que se pide.
+    @Test
+    void responderTema_respondeElTemaConLasPreferenciasPedidas() {
+        PreferenciasDeRespuesta detallado = new PreferenciasDeRespuesta(IdiomaPreferido.AUTOMATICO,
+            NivelDeDetalle.DETALLADO);
+        PreferenciasDeRespuesta ingles = new PreferenciasDeRespuesta(IdiomaPreferido.EN, NivelDeDetalle.NORMAL);
+
+        assertThat(motorRespuestas.responderTema("clave-registro", ingles, false).orElseThrow().texto())
+            .contains("To create your account");
+        ResultadoMotor conDetalle = motorRespuestas.responderTema("clave-registro", detallado, false).orElseThrow();
+        assertThat(conDetalle.temaClave()).isEqualTo("clave-registro");
+        assertThat(conDetalle.texto()).contains("Para crear tu cuenta");
+        assertThat(motorRespuestas.responderTema("clave-subasta", null, true).orElseThrow().texto())
+            .contains("Choose the item");
+    }
+
+    @Test
+    void responderTema_conUnTemaQueYaNoEstaEnProduccion_noResponde() {
+        PreferenciasDeRespuesta normal = PreferenciasDeRespuesta.POR_DEFECTO;
+
+        assertThat(motorRespuestas.responderTema("clave-retirada", normal, false)).isEmpty();
+        assertThat(motorRespuestas.responderTema(null, normal, false)).isEmpty();
+    }
+
+    // 1.5.0 («no me sirvio»): se ofrece soporte y otras preguntas del tema; cuenta
+    // como escalamiento en las analiticas, sin tema que lo respondiera.
+    @Test
+    void relacionadosCon_ofreceSoporteYOtrasPreguntasDelTema() {
+        TemaConocimiento recuperar = new TemaConocimiento(null, "clave-recuperar", Categoria.CUENTA_Y_REGISTRO,
+            TipoRespuesta.PASO_A_PASO, "Recuperar mi contraseña", "olvide mi contrasena", null,
+            "Para recuperarla: 1) Ve al inicio. 2) Responde las preguntas.", null, 0, true);
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(temaRegistro(0), recuperar));
+
+        ResultadoMotor resultado = motorRespuestas.relacionadosCon("clave-registro", "Siento que no sirviera.", false)
+            .orElseThrow();
+
+        assertThat(resultado.texto()).isEqualTo("Siento que no sirviera.");
+        assertThat(resultado.requiereEscalamiento()).isTrue();
+        assertThat(resultado.temaClave()).isNull();
+        assertThat(resultado.temasSugeridos()).isEmpty();
+        assertThat(resultado.categoria()).isEqualTo(Categoria.CUENTA_Y_REGISTRO);
+        assertThat(resultado.enriquecido().ofrecerSoporteHumano()).isTrue();
+        assertThat(resultado.enriquecido().respuestasRapidas()).containsExactly("Recuperar mi contraseña");
+        assertThat(resultado.enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("registro");
+        assertThat(motorRespuestas.relacionadosCon("clave-retirada", "x", false)).isEmpty();
+        assertThat(motorRespuestas.relacionadosCon(null, "x", true)).isEmpty();
+    }
+
+    // 1.5.0: a igual puntaje y prioridad decide la clave, no el orden de las filas.
+    @Test
+    void responderCon_aIgualPuntajeYPrioridadDecideLaClave() {
+        TemaConocimiento b = new TemaConocimiento(null, "b-tienda", Categoria.PRODUCTO, TipoRespuesta.DIRECTA,
+            "Tienda B", "comprar", null, "B.", null, 0, true);
+        TemaConocimiento a = new TemaConocimiento(null, "a-tienda", Categoria.PRODUCTO, TipoRespuesta.DIRECTA,
+            "Tienda A", "comprar", null, "A.", null, 0, true);
+
+        assertThat(motorRespuestas.responderCon("quiero comprar", List.of(b, a)).temaClave()).isEqualTo("a-tienda");
+        assertThat(motorRespuestas.responderCon("quiero comprar", List.of(a, b)).temaClave()).isEqualTo("a-tienda");
+    }
+
+    // 1.5.0 (7.4.2 «errores ortograficos»): dos letras vecinas cambiadas son un
+    // solo error.
+    @Test
+    void generarRespuesta_conLetrasCambiadas_igualReconoceElTema() {
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("como subatsar un producto");
+
+        assertThat(resultado.requiereEscalamiento()).isFalse();
+        assertThat(resultado.temaClave()).isEqualTo("clave-subasta");
     }
 
     private static TemaConocimiento temaTorneoSoloEnEspanol() {

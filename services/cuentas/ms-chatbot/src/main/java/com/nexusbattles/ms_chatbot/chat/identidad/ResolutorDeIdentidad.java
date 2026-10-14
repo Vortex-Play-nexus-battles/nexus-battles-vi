@@ -1,6 +1,5 @@
 package com.nexusbattles.ms_chatbot.chat.identidad;
 
-import com.nexusbattles.comun.seguridad.IdentidadDelToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
@@ -64,18 +63,26 @@ public class ResolutorDeIdentidad {
         return new Resultado(IdentidadDelChat.visitante(emitida.sesion()), emitida.identificador());
     }
 
-    // Un token que no identifica a un usuario (sin uid ni sujeto UUID, p. ej.
-    // una credencial de servicio) se trata como si no viniera: el chat es de
-    // personas, y degradar a visitante es lo mismo que ya se hace con un token
-    // vencido (HU-CHA-008).
+    // La identidad de un usuario es SOLO el claim `uid` (ADR-002): el `sub` es
+    // su apodo y nunca se interpreta como uid (1.4.0; antes se aceptaba un
+    // `sub` con forma de UUID cuando faltaba el uid, via IdentidadDelToken).
+    // Un token sin uid valido (p. ej. una credencial de servicio) se trata
+    // como si no viniera: el chat es de personas, y degradar a visitante es
+    // lo mismo que ya se hace con un token vencido (HU-CHA-008).
+    static final String CLAIM_UID = "uid";
+
     private static Optional<IdentidadDelChat> usuarioDelToken(Authentication autenticacion) {
         if (!(autenticacion instanceof JwtAuthenticationToken jwt)) {
             return Optional.empty();
         }
+        Object claim = jwt.getToken().getClaims().get(CLAIM_UID);
+        if (!(claim instanceof String uidDelToken) || uidDelToken.isBlank()) {
+            return Optional.empty();
+        }
         try {
-            UUID uid = IdentidadDelToken.idDe(jwt.getToken());
+            UUID uid = UUID.fromString(uidDelToken.strip());
             return Optional.of(IdentidadDelChat.usuario(uid, jwt.getToken().getTokenValue()));
-        } catch (IllegalArgumentException | NullPointerException sinUsuario) {
+        } catch (IllegalArgumentException uidSinForma) {
             return Optional.empty();
         }
     }

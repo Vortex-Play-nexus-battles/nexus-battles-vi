@@ -1,6 +1,8 @@
 package com.nexusbattles.plataforma.moderacionsanciones.listanegra;
 
 import jakarta.persistence.criteria.Predicate;
+import com.nexusbattles.plataforma.moderacionsanciones.auditoria.BitacoraDeAuditoria;
+import com.nexusbattles.plataforma.moderacionsanciones.auditoria.TipoDeAccion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -55,20 +57,45 @@ public class ListaNegraAdminService {
 
     public static final int TAMANO_MAXIMO_DE_PAGINA = 200;
 
+    /** El motivo cabe en la columna de la bitacora central (ms-cumplimiento: 500). */
+    public static final int LONGITUD_MAXIMA_MOTIVO = 500;
+
     private final TerminoProhibidoRepository repositorio;
     private final CatalogoDeTerminosActivos catalogo;
     private final Clock reloj;
+    private final BitacoraDeAuditoria bitacora;
 
+    /**
+     * SA-5 (§7.3.5): cada alta, edicion y baja deja su asiento en la bitacora
+     * central, con quien, desde donde, como estaba, como quedo y por que.
+     */
+    @org.springframework.beans.factory.annotation.Autowired
     public ListaNegraAdminService(TerminoProhibidoRepository repositorio, CatalogoDeTerminosActivos catalogo,
-                                  Clock reloj) {
+                                  Clock reloj, BitacoraDeAuditoria bitacora) {
         this.repositorio = Objects.requireNonNull(repositorio);
         this.catalogo = Objects.requireNonNull(catalogo);
         this.reloj = Objects.requireNonNull(reloj);
+        this.bitacora = Objects.requireNonNull(bitacora);
     }
 
-    /** Lo que llega en el cuerpo de un alta o una edicion. */
+    /** Sin bitacora central (pruebas). */
+    public ListaNegraAdminService(TerminoProhibidoRepository repositorio, CatalogoDeTerminosActivos catalogo,
+                                  Clock reloj) {
+        this(repositorio, catalogo, reloj, BitacoraDeAuditoria.NINGUNA);
+    }
+
+    /**
+     * Lo que llega en el cuerpo de un alta o una edicion. {@code motivo}
+     * (2.2.0) es opcional: va a la bitacora central.
+     */
     public record DatosDeTermino(String termino, CategoriaDeTermino categoria, ModoDeCoincidencia modo,
-                                 Boolean activo) {
+                                 Boolean activo, String motivo) {
+
+        /** Sin motivo (la forma anterior a 2.2.0). */
+        public DatosDeTermino(String termino, CategoriaDeTermino categoria, ModoDeCoincidencia modo,
+                              Boolean activo) {
+            this(termino, categoria, modo, activo, null);
+        }
     }
 
     /** Filtros y pagina de {@code GET /terminos}. */
@@ -96,15 +123,21 @@ public class ListaNegraAdminService {
                 datos.categoria() == null ? CategoriaDeTermino.OTRO : datos.categoria(),
                 datos.modo() == null ? ModoDeCoincidencia.porOmision(normalizado) : datos.modo(),
                 datos.activo() == null || datos.activo(), recortar(autor), ahora());
+        String motivo = motivoValido(datos.motivo());
         TerminoProhibido guardado = guardar(nuevo, termino, normalizado);
         catalogo.invalidar();
         BITACORA.info("Lista negra: alta del termino {} ({}, {}) por {}", guardado.id(), guardado.categoria(),
                 guardado.modo(), guardado.creadoPor());
+        bitacora.registrar(TipoDeAccion.CREACION, afectadoDe(guardado), null, descripcionDe(guardado),
+                motivo == null ? "Alta en la lista negra" : motivo);
         return guardado;
     }
 
     public TerminoProhibido editar(String terminoActual, DatosDeTermino datos, String autor) {
         TerminoProhibido existente = buscar(terminoActual);
+        String comoEstaba = descripcionDe(existente);
+        String afectadoAntes = afectadoDe(existente);
+        String motivo = motivoValido(datos.motivo());
         String termino = terminoValido(datos.termino());
         String normalizado = normalizadoValido(termino);
         boolean cambiaLaForma = !normalizado.equals(existente.normalizado());
@@ -120,15 +153,64 @@ public class ListaNegraAdminService {
         catalogo.invalidar();
         BITACORA.info("Lista negra: edicion del termino {} ({}, {}, activo={}) por {}", guardado.id(),
                 guardado.categoria(), guardado.modo(), guardado.activo(), recortar(autor));
+        bitacora.registrar(TipoDeAccion.ACTUALIZACION, afectadoAntes, comoEstaba, descripcionDe(guardado),
+                motivo == null ? "Edición en la lista negra" : motivo);
         return guardado;
     }
 
     public void eliminar(String termino, String autor) {
+        eliminar(termino, autor, null);
+    }
+
+    /** Baja con su motivo (2.2.0), que va a la bitacora central. */
+    public void eliminar(String termino, String autor, String motivo) {
+        String motivoLimpio = motivoValido(motivo);
         TerminoProhibido existente = buscar(termino);
         repositorio.delete(existente);
         catalogo.invalidar();
         BITACORA.info("Lista negra: baja del termino {} ({}) por {}", existente.id(), existente.categoria(),
                 recortar(autor));
+        bitacora.registrar(TipoDeAccion.ELIMINACION, afectadoDe(existente), descripcionDe(existente), null,
+                motivoLimpio == null ? "Baja de la lista negra" : motivoLimpio);
+    }
+
+    /** {@code lista-negra:<termino>}: el termino tal como se escribio, no su forma normalizada. */
+    static String afectadoDe(TerminoProhibido termino) {
+        return "lista-negra:" + termino.termino();
+    }
+
+    /** «spiderman» · Personaje o celebridad · dentro de otras palabras · activo. */
+    static String descripcionDe(TerminoProhibido termino) {
+        return "«" + termino.termino() + "» · " + nombreDe(termino.categoria()) + " · "
+                + (termino.modo() == ModoDeCoincidencia.PALABRA ? "palabra completa" : "dentro de otras palabras")
+                + " · " + (termino.activo() ? "activo" : "apagado");
+    }
+
+    /** El nombre de cada categoria, el mismo que enseña la consola. */
+    static String nombreDe(CategoriaDeTermino categoria) {
+        if (categoria == null) {
+            return "Otro";
+        }
+        return switch (categoria) {
+            case OFENSIVO -> "Ofensivo";
+            case MARCA -> "Marca registrada";
+            case CELEBRIDAD -> "Celebridad";
+            case POLITICO -> "Político";
+            case DIRIGENTE -> "Dirigente";
+            case OTRO -> "Otro";
+        };
+    }
+
+    private static String motivoValido(String motivo) {
+        if (motivo == null || motivo.isBlank()) {
+            return null;
+        }
+        String limpio = motivo.strip();
+        if (limpio.length() > LONGITUD_MAXIMA_MOTIVO) {
+            throw new IllegalArgumentException(
+                    "El motivo no puede superar los " + LONGITUD_MAXIMA_MOTIVO + " caracteres");
+        }
+        return limpio;
     }
 
     private TerminoProhibido buscar(String termino) {

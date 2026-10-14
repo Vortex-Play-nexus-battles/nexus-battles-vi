@@ -13,6 +13,9 @@ public enum AuditActionType {
     CREACION,
     ACTUALIZACION,
     ELIMINACION_LOGICA,
+    // 1.3.0 (SA-5): lo que se borra de verdad, como un termino de la lista
+    // negra. ELIMINACION_LOGICA queda para lo que se marca y se conserva.
+    ELIMINACION,
     SUSPENSION,
     SANCION,
     CAMBIO_ROL,

@@ -21,6 +21,9 @@ public interface ApelacionRepository extends JpaRepository<Apelacion, UUID> {
     /** SA-4: todas, de la mas nueva a la mas antigua. */
     List<Apelacion> findAllByOrderByCreadaEnDesc();
 
+    /** SA-4 (apelacion sin sesion): la ultima apelacion de una sancion, abierta o resuelta. */
+    Optional<Apelacion> findFirstBySancionIdOrderByCreadaEnDesc(UUID sancionId);
+
     /** Las abiertas en un periodo, para las metricas de moderacion (HU-MET-001). */
     List<Apelacion> findByCreadaEnBetween(OffsetDateTime desde, OffsetDateTime hasta);
 }
