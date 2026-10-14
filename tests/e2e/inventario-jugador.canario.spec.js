@@ -385,10 +385,11 @@ test.describe('Mi inventario en AWS DEV (revisión final §7.1)', () => {
     await expect(dialogo.locator('.ficha__imagen')).toBeVisible();
     await expect(dialogo.locator('[data-zona="en-tu-inventario"]')).toBeVisible();
     // Promedio y control de calificación (sin enviar: ver la cabecera).
-    await expect(dialogo.getByText(/calificaci/i).first()).toBeVisible({ timeout: 30_000 });
-    await expect(
-      dialogo.locator('[data-accion="calificar"], .calificar-producto').first(),
-    ).toBeVisible();
+    // El promedio en cinco estrellas («N valoraciones» o «sin valoraciones»).
+    await expect(dialogo.locator('.resumen-calificacion').first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(dialogo.locator('.calificar-producto').first()).toBeVisible();
 
     // Opinión con imagen: apodo y fecha; después se retira (la propia).
     const texto = `Opinión de prueba del canario ${MARCA}`;
