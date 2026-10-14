@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Servicio de productos
-  version: 1.10.0
+  version: 1.11.0
   description: >
     Creación de productos del catálogo de THE NEXUS BATTLES VI
     (HU-PRD-001), reserva de tiraje (HU-PRD-002), modificación con
@@ -116,6 +116,13 @@ info:
     retira la imagen actual de un producto (409). Además, §7.2.5: `motivo`
     opcional al suspender, reactivar y revertir, que queda en la entrada del
     historial (`CambioProducto.motivo`). Todo es aditivo.
+
+    1.11.0 (SA-13, §7.2.1 «estado de disponibilidad (activo/único/
+    suspendido)»): el alta admite `estado` opcional, ACTIVO o UNICO; sin el,
+    el producto nace ACTIVO como hasta ahora. SUSPENDIDO no es un estado
+    inicial (400): suspender tiene su propia operación. Un producto UNICO se
+    vende igual que uno ACTIVO; la tienda y el inventario lo identifican.
+    Campo opcional nuevo en una petición: versión menor.
 servers:
   - url: /
     description: Servicio publicado en el mismo origen configurado por la plataforma.
@@ -448,8 +455,9 @@ paths:
       operationId: crearProducto
       description: >
         Operación permitida únicamente a los roles ADMINISTRADOR y
-        SUPER_ADMINISTRADOR. El identificador, el estado inicial ACTIVO,
-        la versión y las fechas son generados por el sistema.
+        SUPER_ADMINISTRADOR. El identificador, la versión y las fechas los
+        genera el sistema. El estado inicial es ACTIVO salvo que el alta pida
+        UNICO (1.11.0); SUSPENDIDO no es un estado inicial (400).
       security:
         - BearerAuth: []
       requestBody:
@@ -1466,6 +1474,14 @@ components:
             y no es subastable.
         promocion:
           $ref: "#/components/schemas/Promocion"
+        estado:
+          type: string
+          enum: [ACTIVO, UNICO]
+          default: ACTIVO
+          description: >
+            (1.11.0, §7.2.1) La disponibilidad con la que nace: ACTIVO o
+            UNICO. Sin el campo, ACTIVO. SUSPENDIDO no es un estado inicial
+            (400).
       allOf:
         - if:
              type: object
