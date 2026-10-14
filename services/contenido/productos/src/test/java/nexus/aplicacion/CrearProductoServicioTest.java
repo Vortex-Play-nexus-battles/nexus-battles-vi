@@ -90,4 +90,30 @@ class CrearProductoServicioTest {
                 verify(respaldos).save(any(RespaldoProducto.class));
                 assertEquals(nexus.dominio.OrigenProducto.ADMINISTRACION, producto.origen());
         }
+
+        @Test
+        @DisplayName("SA-13: el alta puede nacer UNICO (§7.2.1); sin estado, ACTIVO; suspendido no es un estado inicial")
+        void estadoInicial() {
+                ProductoRepository repositorio = mock(ProductoRepository.class);
+                when(repositorio.insert(any(Producto.class)))
+                        .thenAnswer(invocacion -> invocacion.getArgument(0, Producto.class));
+                CrearProductoServicio servicio = new CrearProductoServicio(
+                        repositorio, Mappers.getMapper(ProductoMapper.class), mock(RespaldoProductoRepository.class));
+
+                Producto unico = servicio.crear(arma(EstadoProducto.UNICO), "admin");
+                Producto activo = servicio.crear(arma(null), "admin");
+
+                assertEquals(EstadoProducto.UNICO, unico.estado());
+                assertEquals(EstadoProducto.ACTIVO, activo.estado());
+                assertTrue(arma(EstadoProducto.UNICO).isEstadoInicialValido());
+                assertTrue(arma(null).isEstadoInicialValido());
+                assertFalse(arma(EstadoProducto.SUSPENDIDO).isEstadoInicialValido());
+        }
+
+        private static SolicitudCrearProducto arma(EstadoProducto estado) {
+                return new SolicitudCrearProducto("Corona del Nexo", "productos/corona.webp",
+                        "Edicion unica para probar el estado inicial", TipoProducto.ARMA, 1, 900, null, false,
+                        null, null, null, null, null, null, null, null, null, null, null, 30,
+                        new BigDecimal("5"), null, estado);
+        }
 }

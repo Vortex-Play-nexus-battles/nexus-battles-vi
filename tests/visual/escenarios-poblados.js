@@ -1032,6 +1032,8 @@ const PRODUCTOS_DE_TIENDA = [
     habilidades: null,
     precioFinal: 45000,
     precioOriginal: 45000,
+    // SA-13 (§7.2.2): de pago en moneda real, identificado en la tarjeta.
+    premium: true,
   }),
   producto({
     id: 'aaaaaaa1-0000-4000-8000-000000000005',
@@ -1041,6 +1043,8 @@ const PRODUCTOS_DE_TIENDA = [
     habilidades: 'Ataque +6',
     precioFinal: 32000,
     precioOriginal: 32000,
+    // SA-13 (§7.2.1): una pieza única del catálogo.
+    unico: true,
   }),
 ];
 
@@ -2960,6 +2964,8 @@ export const ESCENARIOS = [
       '.cart-item [data-cantidad-item]',
       '#btn-pagar:not([disabled])',
       '#moneda-tienda option[value="USD"][disabled]',
+      '.product-card .producto-premium',
+      '.product-card .producto-unico',
     ],
   },
   {
