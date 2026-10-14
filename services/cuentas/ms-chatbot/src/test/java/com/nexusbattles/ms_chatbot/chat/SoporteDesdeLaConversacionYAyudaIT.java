@@ -192,8 +192,8 @@ class SoporteDesdeLaConversacionYAyudaIT {
             .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
 
         List<String> titulos = JsonPath.read(json, "$.categorias[*].temas[*].titulo");
-        // 59 publicados, sin saludo ni despedida, sin el desactivado.
-        assertThat(titulos).hasSize(56)
+        // 60 publicados (V11 y V15), sin saludo ni despedida, sin el desactivado.
+        assertThat(titulos).hasSize(57)
             .doesNotContain("Tema solo de la candidata", "Saludo", "Despedida");
         assertThat(jdbc.queryForObject("""
             SELECT titulo FROM chatbot.temas_conocimiento WHERE clave = 'cancelar-subasta'

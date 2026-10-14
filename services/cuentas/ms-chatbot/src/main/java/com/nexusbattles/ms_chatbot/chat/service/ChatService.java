@@ -2,7 +2,9 @@ package com.nexusbattles.ms_chatbot.chat.service;
 
 import com.nexusbattles.ms_chatbot.chat.catalogo.ConsultaDeCatalogo;
 import com.nexusbattles.ms_chatbot.chat.consultas.MotorConsultasAsistidas;
+import com.nexusbattles.ms_chatbot.chat.consultas.NavegacionPublica;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.Enriquecedor;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.RespuestaEnriquecida;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
 import com.nexusbattles.ms_chatbot.chat.entrada.RevisionDeEntrada;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
@@ -13,6 +15,7 @@ import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionDeContenido;
 import com.nexusbattles.ms_chatbot.chat.motor.MotorRespuestas;
 import com.nexusbattles.ms_chatbot.chat.motor.ResultadoMotor;
+import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TipoRespuesta;
 import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
 import com.nexusbattles.ms_chatbot.chat.preferencias.NivelDeDetalle;
@@ -82,6 +85,15 @@ public class ChatService {
     // 1.5.0 — un seguimiento («mas detalle», «en ingles») cuando la respuesta
     // anterior no salio de un tema de la base (una consulta en vivo, un
     // escalamiento) o ese tema ya no esta en produccion.
+    // 1.11.0 (7.4.4, 7.4.8): lo que se le dice a un visitante que pide datos
+    // de su cuenta. No se consulta nada y no es una pregunta sin respuesta.
+    static final String SIN_SESION = "Para eso necesito que inicies sesión: con tu sesión iniciada puedo consultar "
+        + "en tiempo real tu inventario, tus misiones en curso, tus subastas y pujas, tus notificaciones y tus "
+        + "movimientos de créditos. Sin sesión no puedo ver ningún dato personal.";
+    static final String SIN_SESION_EN = "For that I need you to sign in: with your session I can check, in real "
+        + "time, your inventory, your missions in progress, your auctions and bids, your notifications and your "
+        + "credit movements. Without a session I can't see any personal data.";
+
     static final String SIN_TEMA_ANTERIOR = "Para eso necesito la pregunta completa: escríbemela otra vez y te "
         + "respondo como me pides.";
     static final String SIN_TEMA_ANTERIOR_EN = "For that I need the whole question: please write it again and "
@@ -92,6 +104,7 @@ public class ChatService {
     private final MotorRespuestas motorRespuestas;
     private final MotorConsultasAsistidas motorConsultasAsistidas;
     private final ConsultaDeCatalogo consultaDeCatalogo;
+    private final NavegacionPublica navegacionPublica;
     private final BrechaConocimientoService brechaConocimientoService;
     private final LimitadorDeFrecuencia limitador;
     private final ModeracionDeContenido moderacion;
@@ -104,7 +117,7 @@ public class ChatService {
                        BrechaConocimientoService brechaConocimientoService, LimitadorDeFrecuencia limitador,
                        ModeracionDeContenido moderacion, RegistroDeConversaciones registro,
                        PreferenciasService preferenciasService, RevisionDeEntrada revision,
-                       ConsultaDeCatalogo consultaDeCatalogo) {
+                       ConsultaDeCatalogo consultaDeCatalogo, NavegacionPublica navegacionPublica) {
         this.conversacionRepository = conversacionRepository;
         this.mensajeRepository = mensajeRepository;
         this.motorRespuestas = motorRespuestas;
@@ -116,6 +129,7 @@ public class ChatService {
         this.preferenciasService = preferenciasService;
         this.revision = revision;
         this.consultaDeCatalogo = consultaDeCatalogo;
+        this.navegacionPublica = navegacionPublica;
     }
 
     public Mensaje enviarMensaje(IdentidadDelChat identidad, String contenido, String adjuntoUrl) {
@@ -194,12 +208,23 @@ public class ChatService {
         if (seguimiento.isPresent()) {
             return new Generada(seguimiento.get(), true);
         }
-        if (identidad.autenticado() && identidad.tokenCrudo() != null) {
+        boolean conSesion = identidad.autenticado() && identidad.tokenCrudo() != null;
+        if (conSesion) {
             Optional<ResultadoMotor> enVivo = motorConsultasAsistidas.generarRespuesta(contenido,
                 identidad.tokenCrudo(), identidad.uid(), preferencias.idioma());
             if (enVivo.isPresent()) {
                 return new Generada(enVivo.get(), false);
             }
+        } else if (motorConsultasAsistidas.pideDatosDeSuCuenta(contenido)) {
+            // 1.11.0: un visitante que pide algo de su cuenta. Hasta aqui caia
+            // en la base, que no tiene ese tema, y acababa en «no te entendi»
+            // y como pregunta sin respuesta.
+            return new Generada(sinSesion(contenido, preferencias), false);
+        }
+        // 1.11.0: «llevame a la tienda», «ir al centro de ayuda»... para todos.
+        Optional<ResultadoMotor> navegacion = navegacionPublica.responder(contenido, conSesion, preferencias.idioma());
+        if (navegacion.isPresent()) {
+            return new Generada(navegacion.get(), false);
         }
         // 1.10.0: el catalogo de hoy (dato publico), para visitantes y jugadores.
         Optional<ResultadoMotor> catalogo = consultaDeCatalogo.responder(contenido, preferencias.idioma());
@@ -207,6 +232,21 @@ public class ChatService {
             return new Generada(catalogo.get(), false);
         }
         return new Generada(responderConLaBase(contenido, vista, preferencias), false);
+    }
+
+    // 1.11.0: hace falta una sesion; con el enlace para entrar y el de crear
+    // cuenta. Resuelve (TEMA): es la respuesta correcta para un visitante.
+    private static ResultadoMotor sinSesion(String contenido, PreferenciasDeRespuesta preferencias) {
+        boolean ingles = switch (preferencias.idioma()) {
+            case ES -> false;
+            case EN -> true;
+            case AUTOMATICO -> IdiomaDelTexto.esIngles(NormalizadorTexto.normalizar(contenido));
+        };
+        RespuestaEnriquecida enlaces = new RespuestaEnriquecida(List.of(),
+            List.of(Enriquecedor.enlaceA("login", ingles), Enriquecedor.enlaceA("registro", ingles)),
+            List.of(), List.of(), false);
+        return new ResultadoMotor(ingles ? SIN_SESION_EN : SIN_SESION, Categoria.FAQ_GENERAL, TipoRespuesta.DIRECTA,
+            false, List.of(), null, enlaces, ingles, ResultadoDeRespuesta.TEMA);
     }
 
     // La ultima respuesta del bot en esta conversacion, otra vez, con lo que

@@ -41,6 +41,13 @@ openapi: 3.1.0
 #   7.4.1, 7.4.2 y 7.4.5 (1.10.0) catalogo en vivo: los productos que se
 #               venden hoy, sus precios y su ficha salen del catalogo publico
 #               (productos.yaml), no de un texto copiado en la base
+#   7.4.4 y 7.4.8 (1.11.0) lo que se vio en DEV: la redaccion tapa tambien
+#               la puntuacion en que termina un secreto (V14), un visitante
+#               que pide datos de su cuenta recibe que hace falta una sesion,
+#               las consultas en vivo se reconocen con mas formas de
+#               preguntar, la navegacion a secciones publicas es para todos,
+#               las reglas del juego tienen su tema (V15) y la base dice lo
+#               que el juego hace hoy (V16)
 #   7.4 (1.3.0) lo que faltaba del modulo 7.4: tickets y soporte humano
 #               (RF-CHA-007, RF-ADM-004), sugerencias y autocompletado,
 #               respuestas enriquecidas sin imagenes, vista del jugador y
@@ -135,7 +142,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.10.0
+  version: 1.11.0
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -145,6 +152,46 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.11.0 — 7.4.4 y 7.4.8: lo que se vio en DEV
+
+    Todo compatible: ninguna operacion ni forma cambia; cambia lo que se
+    guarda y lo que se responde.
+
+    * **Redaccion (7.4.8).** El valor anunciado de un secreto se tapa
+      entero, tambien la puntuacion en que termina: «mi contrasena es
+      Hunter2024!» se guarda «mi contrasena es ***», no «***!» (ese simbolo
+      es parte de la contrasena; la politica de claves exige uno). La
+      migracion V14 vuelve a redactar lo guardado con la regla nueva.
+    * **Un visitante que pide datos de su cuenta** («¿que tengo en mi
+      inventario?», «mis ultimas transacciones», «llevame a mi inventario»)
+      recibe que hace falta una sesion, con enlaces a `login` y `registro`
+      (`resultado` TEMA). No se consulta nada, no se busca un tema y no se
+      registra como pregunta sin respuesta. Antes acababa en «no te
+      entendi» y en las brechas.
+    * **Consultas en vivo con mas formas de preguntar (7.4.3, 7.4.4).**
+      Subastas, notificaciones, transacciones y misiones se reconocen como
+      el inventario: tema + «mi/mis/tengo/my» y no una pregunta de reglas
+      («¿tengo alguna mision activa?», «¿cuales son mis ultimas
+      transacciones?», «¿que subastas tengo?»). Y una pregunta de reglas
+      sobre lo propio («¿puedo cancelar mi puja?», «¿que pasa si abandono mi
+      mision?», «¿tengo que pagar para subastar?») ya no se toma por una
+      consulta: la responde la base.
+    * **Reglas del juego (7.4.2).** «¿Cuales son las reglas del juego?»,
+      «¿como se juega?» y «what are the game rules?» no tenian respuesta:
+      V15 publica una version nueva de la base con el tema «Reglas basicas
+      del juego» (`reglas-del-juego`), que resume lo ya verificado en V11, y
+      sus casos de evaluacion.
+    * **La base dice lo que el juego hace hoy (7.4.2, 7.4.5).** V16 corrige
+      «Como apelar una sancion» (`apelar-sancion`): desde SA-4 una suspension
+      o un baneo se apelan sin sesion, en la pantalla de entrada. Corrige
+      tambien temas creados en DEV que contradecian el juego, solo si siguen
+      diciendo exactamente lo auditado. Ninguna operacion ni forma cambia.
+    * **Navegacion a secciones publicas, para todos (7.4.4).** «Llevame a la
+      subasta», «ir al centro de ayuda», «take me to the store»: enlace a la
+      vista (`resultado` NAVEGACION). La tienda, el chat general y «Jugar
+      online» piden sesion: a un visitante se le dice que entre, con enlaces
+      a `login` y `registro`. «Ir al inicio» lleva a `portada` o a `home`.
 
     ### 1.10.0 — 7.4.1, 7.4.2 y 7.4.5: el catalogo de hoy
 
@@ -623,6 +670,12 @@ paths:
            o un informe de actividad, se responde con datos en vivo
            (HU-CHA-008). Desde 1.3.0 tambien sus misiones en curso
            (`misiones.yaml`); desde 1.5.0, buscar en su inventario.
+           Desde 1.11.0, un visitante que pide algo de eso recibe que hace
+           falta una sesion (enlaces a `login` y `registro`), sin consultar
+           nada.
+        1b. Desde 1.11.0, para todos: ir a una seccion publica («llevame a
+           la subasta», «ir al centro de ayuda»); las que piden sesion, a un
+           visitante se le dice que entre.
         2. Desde 1.10.0, para todos: si pregunta por los productos que se
            venden, por el precio o por la ficha de un producto del catalogo,
            se responde con el catalogo publico de hoy (`productos.yaml`).
