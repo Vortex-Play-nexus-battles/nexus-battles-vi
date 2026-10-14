@@ -392,7 +392,10 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
       ),
     ).toHaveCount(0);
     await enlace.click();
-    await expect(page).toHaveURL(new RegExp(`${CREAR_SALA}\\?torneo=${torneo.id}&encuentro=5`));
+    // SA-7: la vista se sirve por su dirección limpia (/jugar/nueva-sala).
+    await expect(page).toHaveURL(
+      new RegExp(`(?:${CREAR_SALA}|/jugar/nueva-sala)\\?torneo=${torneo.id}&encuentro=5`),
+    );
     await expect(page.locator('[data-zona="nota-torneo"]')).toBeVisible();
     await expect(page.locator('[data-zona="nota-torneo"]')).toContainText('encuentro 5');
     await expect(page.locator('input[name="torneoId"]')).toHaveValue(torneo.id);
