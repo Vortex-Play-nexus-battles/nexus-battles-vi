@@ -8,7 +8,7 @@ cinco estrellas, incluyendo el hilo de comentarios... Los usuarios solo pueden
 calificar un producto una vez, pero podrán agregar o retirar tantos
 comentarios como sea de su agrado».
 
-El contrato vive en `contracts/openapi/comentarios.yaml` (1.8.0).
+El contrato vive en `contracts/openapi/comentarios.yaml` (1.17.0).
 
 ## Qué hace
 
@@ -46,6 +46,13 @@ El contrato vive en `contracts/openapi/comentarios.yaml` (1.8.0).
 - **Filtro automático** con la lista negra (`contexto: COMENTARIO`): lo que la
   política manda a `REVISION` —o todo, si la lista negra no responde— queda
   EN_REVISION (202).
+- **El comentario en su contexto** (1.17.0, SA-16, §7.3.8):
+  `GET /comentarios/moderacion/{id}/contexto` devuelve los comentarios del
+  mismo producto publicados justo antes y justo después, en cualquier estado y
+  con su autor; la moderación los lee junto al comentario reportado.
+- **Los comentarios propios** (1.16.0, SA-14, §7.3.6): `GET /comentarios/mios`,
+  todos los de quien llama en cualquier estado, para la exportación de datos
+  del portal de privacidad.
 
 ### Por qué las imágenes van en PostgreSQL
 

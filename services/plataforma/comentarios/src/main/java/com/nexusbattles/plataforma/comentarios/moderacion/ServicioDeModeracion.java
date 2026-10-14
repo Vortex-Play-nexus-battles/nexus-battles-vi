@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -443,6 +444,39 @@ public class ServicioDeModeracion {
                 paginaEfectiva, tamanoEfectivo);
     }
 
+    /** Contrato 1.17.0: comentarios del hilo a cada lado del que se mira, por omision y como mucho. */
+    static final int CONTEXTO_POR_OMISION = 3;
+    static final int CONTEXTO_MAXIMO = 10;
+
+    /**
+     * El comentario en su contexto — §7.3.8 «Vista previa del comentario en
+     * contexto» (SA-16, contrato 1.17.0): los que lo rodean en el hilo de su
+     * producto, en cualquier estado (el moderador tambien ve lo oculto y lo
+     * retirado, cada uno con su estado), del mas antiguo al mas reciente.
+     *
+     * <p>Dos consultas acotadas a la base —antes y despues de su fecha— y un
+     * conteo: no se trae el hilo entero. {@code alrededor} fuera de rango se
+     * corrige a 1..{@value #CONTEXTO_MAXIMO}.
+     */
+    @Transactional(readOnly = true)
+    public Contexto contexto(String comentarioId, int alrededor) {
+        Comentario comentario = comentarios.findById(comentarioId)
+                .map(RegistroDeComentario::aDominio)
+                .orElseThrow(() -> new ComentarioNoEncontrado(comentarioId));
+        int cuantos = Math.min(Math.max(alrededor, 1), CONTEXTO_MAXIMO);
+        String producto = comentario.productoId();
+        Instant fecha = comentario.fechaPublicacion();
+
+        List<ResumenDeComentario> anteriores = new ArrayList<>(comentarios.findByProductoIdAndFechaPublicacionBefore(
+                producto, fecha, PageRequest.of(0, cuantos, ORDEN_DEL_HISTORIAL)));
+        Collections.reverse(anteriores);
+        List<ResumenDeComentario> posteriores = comentarios.findByProductoIdAndFechaPublicacionAfter(
+                producto, fecha, PageRequest.of(0, cuantos,
+                        Sort.by(Sort.Order.asc("fechaPublicacion"), Sort.Order.asc("id"))));
+        return new Contexto(comentario.id(), producto, List.copyOf(anteriores), List.copyOf(posteriores),
+                comentarios.countByProductoId(producto));
+    }
+
     // ------------------------------------------------------------ RF-COM-008
 
     /**
@@ -704,6 +738,15 @@ public class ServicioDeModeracion {
     /** {@code apodoAutor} es el del comentario mas reciente de la pagina; nulo si no hay ninguno. */
     public record Historial(String autorId, String apodoAutor, List<ResumenDeComentario> comentarios,
             long total, int pagina, int tamano) {
+    }
+
+    /**
+     * Los comentarios que rodean a uno en el hilo de su producto, del mas antiguo
+     * al mas reciente (contrato 1.17.0); {@code totalEnElHilo} cuenta todos los
+     * del producto, en cualquier estado.
+     */
+    public record Contexto(String comentarioId, String productoId, List<ResumenDeComentario> anteriores,
+            List<ResumenDeComentario> posteriores, long totalEnElHilo) {
     }
 
     public record Resuelto(Comentario comentario, AsientoDeModeracion asiento, boolean autorNotificado) {

@@ -121,6 +121,39 @@ class IntentosFallidosServiceTest {
     }
 
     @Test
+    void alBloquearQuedaLaMarcaDelBloqueoParaLaAlertaDeLaConsola() {
+        // SA-20 (§7.3.4, D-45 señal 1): la marca no se borra al volver a
+        // entrar; es lo que deja ver los bloqueos de un periodo.
+        Clock reloj = Clock.fixed(Instant.parse("2026-10-13T20:00:00Z"), ZoneId.of("UTC"));
+        intentosFallidosService.configurar(usuarioRepository, UMBRAL, MINUTOS_BLOQUEO, reloj);
+        Usuario usuario = usuarioConIntentos(UMBRAL - 1);
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+
+        intentosFallidosService.registrarIntentoFallido(1L);
+
+        assertEquals(LocalDateTime.now(reloj), usuario.getUltimoBloqueoEn());
+    }
+
+    @Test
+    void sinBloquearNoHayMarcaYUnFalloConElBloqueoVigenteNoLaMueve() {
+        Clock reloj = Clock.fixed(Instant.parse("2026-10-13T20:00:00Z"), ZoneId.of("UTC"));
+        intentosFallidosService.configurar(usuarioRepository, UMBRAL, MINUTOS_BLOQUEO, reloj);
+        Usuario sinBloquear = usuarioConIntentos(1);
+        Usuario bloqueada = usuarioConIntentos(UMBRAL);
+        LocalDateTime inicio = LocalDateTime.now(reloj).minusMinutes(5);
+        bloqueada.setUltimoBloqueoEn(inicio);
+        bloqueada.setBloqueadoHasta(inicio.plusMinutes(MINUTOS_BLOQUEO));
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(sinBloquear));
+        when(usuarioRepository.findById(2L)).thenReturn(Optional.of(bloqueada));
+
+        intentosFallidosService.registrarIntentoFallido(1L);
+        intentosFallidosService.registrarIntentoFallido(2L);
+
+        assertNull(sinBloquear.getUltimoBloqueoEn());
+        assertEquals(inicio, bloqueada.getUltimoBloqueoEn(), "el bloqueo vigente no vuelve a empezar");
+    }
+
+    @Test
     void debeLanzarExcepcionSiUsuarioNoExiste() {
 
         when(usuarioRepository.findById(99L)).thenReturn(Optional.empty());

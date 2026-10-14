@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 import nexus.api.SolicitudCrearProducto;
+import nexus.auditoria.RegistroDeOperaciones;
 import nexus.dominio.EstadoProducto;
 import nexus.dominio.Producto;
 import nexus.dominio.RespaldoProducto;
@@ -39,7 +40,7 @@ class CrearProductoServicioTest {
                         new CrearProductoServicio(
                                 repositorio,
                                 Mappers.getMapper(ProductoMapper.class),
-                                respaldos);
+                                respaldos, mock(RegistroDeOperaciones.class));
 
                 SolicitudCrearProducto solicitud = new SolicitudCrearProducto(
                         "Espada solar",
@@ -98,7 +99,7 @@ class CrearProductoServicioTest {
                 when(repositorio.insert(any(Producto.class)))
                         .thenAnswer(invocacion -> invocacion.getArgument(0, Producto.class));
                 CrearProductoServicio servicio = new CrearProductoServicio(
-                        repositorio, Mappers.getMapper(ProductoMapper.class), mock(RespaldoProductoRepository.class));
+                        repositorio, Mappers.getMapper(ProductoMapper.class), mock(RespaldoProductoRepository.class), mock(RegistroDeOperaciones.class));
 
                 Producto unico = servicio.crear(arma(EstadoProducto.UNICO), "admin");
                 Producto activo = servicio.crear(arma(null), "admin");

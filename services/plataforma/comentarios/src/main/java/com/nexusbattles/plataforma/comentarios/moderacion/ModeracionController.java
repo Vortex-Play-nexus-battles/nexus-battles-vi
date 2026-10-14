@@ -90,6 +90,17 @@ public class ModeracionController {
      * (1.7.0). Solo lectura. La pagina fuera de rango no es un error: el
      * servicio la corrige.
      */
+    /**
+     * El comentario en su contexto (1.17.0, SA-16, §7.3.8): los que lo rodean
+     * en el hilo de su producto, en cualquier estado, del mas antiguo al mas
+     * reciente. {@code alrededor} es cuantos a cada lado (1..10).
+     */
+    @GetMapping("/{commentId}/contexto")
+    public ContextoResponse contexto(@PathVariable String commentId,
+            @RequestParam(defaultValue = "3") int alrededor) {
+        return ContextoResponse.desde(servicio.contexto(commentId, alrededor));
+    }
+
     @GetMapping("/autores/{autorId}/comentarios")
     public HistorialDelAutorResponse historialDelAutor(
             @PathVariable String autorId,
@@ -246,6 +257,32 @@ public class ModeracionController {
         static ItemDelHistorialResponse desde(ResumenDeComentario r) {
             return new ItemDelHistorialResponse(r.id(), r.productoId(), r.texto(),
                     r.fechaPublicacion().toString(), r.estado().name(), r.editado());
+        }
+    }
+
+    /**
+     * {@code ItemDelContexto} (1.17.0): un comentario del hilo alrededor del que
+     * se mira, con su autor (aqui no es siempre el mismo) y su estado.
+     */
+    public record ItemDelContextoResponse(String id, String apodoAutor, String texto,
+            String fechaPublicacion, String estado, boolean editado) {
+
+        static ItemDelContextoResponse desde(ResumenDeComentario r) {
+            return new ItemDelContextoResponse(r.id(), r.apodoAutor(), r.texto(),
+                    r.fechaPublicacion().toString(), r.estado().name(), r.editado());
+        }
+    }
+
+    /** {@code ContextoDelComentario} (1.17.0). */
+    public record ContextoResponse(String comentarioId, String productoId,
+            List<ItemDelContextoResponse> anteriores, List<ItemDelContextoResponse> posteriores,
+            long totalEnElHilo) {
+
+        static ContextoResponse desde(ServicioDeModeracion.Contexto c) {
+            return new ContextoResponse(c.comentarioId(), c.productoId(),
+                    c.anteriores().stream().map(ItemDelContextoResponse::desde).toList(),
+                    c.posteriores().stream().map(ItemDelContextoResponse::desde).toList(),
+                    c.totalEnElHilo());
         }
     }
 

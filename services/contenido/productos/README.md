@@ -55,6 +55,26 @@ revertir (`POST …/reversiones` con `motivo`) guardan el motivo en la entrada d
 historial (`CambioProducto.motivo`). La consola lo exige; la API lo admite vacío
 para no romper a quien ya llamaba.
 
+### Operaciones administrativas para la bitácora central (SA-18, contrato 1.12.0)
+
+Cada operación de un administrador sobre el catálogo —alta, modificación,
+cambio de balance, importación de diseño, suspensión, reactivación y reversión
+de un producto; alta y retiro de un recurso gráfico; publicación, edición y
+retiro de un banner— se registra en `operaciones_administrativas` con su
+momento, el `uid` de quien la hizo, lo afectado y su nombre, los campos que
+cambiaron (antes y después), el motivo y la IP que fija el borde. Se escribe
+después de aplicarla, y la semilla no se registra (no es una persona).
+
+`GET /api/v1/productos/auditoria/operaciones?desde=&limite=` las entrega por
+lotes a la bitácora central (ms-cumplimiento), que las guarda inmutables: solo
+con token de servicio y solo para los `client_id` de `AUDITORIA_LECTORES`
+(`ms-cumplimiento` por omisión). Por qué la bitácora lee y no al revés, en
+`docs/gobierno/ADR-009-la-bitacora-importa-las-operaciones-del-catalogo.md`.
+
+Los banners guardan `creadoPor` y `modificadoPor`; `GET
+/api/v1/banners/{id}/historial` da su historial a la administración (sin la IP)
+y `DELETE /api/v1/banners/{id}?motivo=` lo deja en el retiro.
+
 ## Despliegue
 
 Este servicio se despliega en el host propio del dominio de contenido (`infrastructure/entornos/contenido/`), por el flujo `cd.yml` (job `desplegar-contenido-dev`) en cada push a `develop` que toque `services/contenido/productos`. Queda publicado en el puerto **8103** del host (8080 dentro del contenedor), con su MongoDB en la misma red de Compose (`MONGODB_URI`); `KEYCLOAK_JWK_SET_URI` apunta por defecto al JWKS de desarrollo de la misma red (`jwks-dev`, ver `postman/LEEME.md`) hasta que cuentas publique su Keycloak; entonces se cambia en el entorno del servidor. Salud: `http://<ip-del-host>:8103/actuator/health`.
