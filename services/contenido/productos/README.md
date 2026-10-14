@@ -19,6 +19,42 @@ de invocar la escritura del producto.
 
 - `GET /api/v1/productos?page=0&size=20&tipo=…&estado=…` (R16, `contracts/openapi/productos.yaml` 1.2.0): listado público y paginado del catálogo, sin token. Por omisión solo ACTIVO y UNICO (SUSPENDIDO únicamente con `estado=SUSPENDIDO`, y desde 1.4.0 solo para un servicio o un administrador), `size` entre 1 y 50 y orden estable (`creadoEn`, luego `id`); responde `{content, page, size, totalElements, totalPages}` y lo consume ms-ecommerce para proyectar su vitrina. Desde R16 el borde manda todo `/api/v1/productos` a este servicio (la vitrina vive en `/api/v1/vitrina`).
 
+### Recursos gráficos (HU-PRD-009, contrato 1.10.0)
+
+La imagen de un producto ya no se escribe como ruta: se sube. `POST
+/api/v1/productos/recursos` (multipart: `archivo`, `clase` y, si se sube desde
+la ficha de un producto, `productoId`) guarda una imagen, un icono o una
+animación después de comprobarla por sus bytes —nunca por el nombre ni por el
+`Content-Type`— (`ExaminadorDeRecursos`):
+
+| Clase | Formatos | Peso / lado máximos por omisión |
+|---|---|---|
+| `IMAGEN` | PNG, JPEG o WebP, fijos | 2 MB / 4096 px |
+| `ICONO` | PNG o WebP, fijos | 256 KB / 512 px |
+| `ANIMACION` | GIF, PNG animado (APNG) o WebP animado | 4 MB / 1024 px |
+
+El archivo tiene que estar completo (ni cortado ni con nada pegado detrás) y el
+rechazo dice el requisito incumplido, con su código en `motivo` (413 por peso o
+medidas, 415 por formato, archivo dañado o imagen fija subida como animación).
+Los límites se cambian por entorno (`CATALOGO_RECURSOS_*`).
+
+`GET /api/v1/productos/recursos/{id}` sirve los bytes en público —son la
+imagen que ve la tienda— con el tipo detectado, `nosniff`,
+`Content-Security-Policy: default-src 'none'`, `ETag` y caché inmutable. Su
+`url` es lo que se guarda en `imagen` con la modificación de siempre, que deja
+respaldo, historial y versión de diseño. `GET /api/v1/productos/recursos` es la
+biblioteca (16 por página, sin los bytes, con los productos que usan cada
+recurso) y `DELETE /api/v1/productos/recursos/{id}?motivo=` lo retira sin
+borrarlo: una versión anterior del diseño puede apuntar a él. La imagen actual
+de un producto no se retira (409).
+
+### Motivo de las acciones críticas (§7.2.5, contrato 1.10.0)
+
+Suspender (`PUT …/suspender?motivo=`), reactivar (`PUT …/reactivar?motivo=`) y
+revertir (`POST …/reversiones` con `motivo`) guardan el motivo en la entrada del
+historial (`CambioProducto.motivo`). La consola lo exige; la API lo admite vacío
+para no romper a quien ya llamaba.
+
 ## Despliegue
 
 Este servicio se despliega en el host propio del dominio de contenido (`infrastructure/entornos/contenido/`), por el flujo `cd.yml` (job `desplegar-contenido-dev`) en cada push a `develop` que toque `services/contenido/productos`. Queda publicado en el puerto **8103** del host (8080 dentro del contenedor), con su MongoDB en la misma red de Compose (`MONGODB_URI`); `KEYCLOAK_JWK_SET_URI` apunta por defecto al JWKS de desarrollo de la misma red (`jwks-dev`, ver `postman/LEEME.md`) hasta que cuentas publique su Keycloak; entonces se cambia en el entorno del servidor. Salud: `http://<ip-del-host>:8103/actuator/health`.

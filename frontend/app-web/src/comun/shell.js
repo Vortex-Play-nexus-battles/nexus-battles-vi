@@ -131,7 +131,11 @@ export const SECCIONES_CONSOLA = Object.freeze([
     icono: 'usuarios',
     barra: false,
   },
-  { id: 'productos', etiqueta: 'Productos', vista: 'productos', icono: 'mochila' },
+  // SA-6 — «Productos» lleva al catálogo (cifras, productos con su ficha y
+  // recursos gráficos); el alta se abre desde allí con «Nuevo producto». Antes
+  // llevaba directo al formulario de alta y el catálogo solo se encontraba
+  // por un enlace dentro de él.
+  { id: 'productos', etiqueta: 'Productos', vista: 'panel-catalogo', icono: 'mochila' },
   // B3 — la cola de comentarios reportados (RF-COM-005/008, 7.3.3). Existía y
   // ninguna entrada de la consola llevaba a ella: solo se llegaba escribiendo
   // su dirección. Mismo nivel que Sanciones y Lista negra (la matriz dice

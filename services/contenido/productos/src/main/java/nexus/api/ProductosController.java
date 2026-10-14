@@ -170,7 +170,8 @@ public class ProductosController {
                 Producto producto = revertirServicio.revertir(
                                 id,
                                 solicitud.respaldoId(),
-                                autenticacion.getName());
+                                autenticacion.getName(),
+                                solicitud.motivo());
                 return ResponseEntity.ok(proyeccion.proyectar(producto, Visibilidad.PRIVILEGIADA));
         }
 
@@ -178,16 +179,22 @@ public class ProductosController {
         @PutMapping("/{id}/suspender")
         public EstadoDisponibilidadProducto suspender(
                         Authentication autenticacion,
-                        @PathVariable String id) {
-                return EstadoDisponibilidadProducto.de(disponibilidad.suspender(id, autenticacion.getName()));
+                        @PathVariable String id,
+                        @RequestParam(name = "motivo", required = false)
+                        @Size(max = 500, message = "motivo admite como máximo 500 caracteres") String motivo) {
+                return EstadoDisponibilidadProducto.de(
+                                disponibilidad.suspender(id, autenticacion.getName(), motivo));
         }
 
         /** HU-PRD-004 (B4): reactivacion al estado anterior, solo ADMINISTRADOR y SUPER_ADMINISTRADOR. */
         @PutMapping("/{id}/reactivar")
         public EstadoDisponibilidadProducto reactivar(
                         Authentication autenticacion,
-                        @PathVariable String id) {
-                return EstadoDisponibilidadProducto.de(disponibilidad.reactivar(id, autenticacion.getName()));
+                        @PathVariable String id,
+                        @RequestParam(name = "motivo", required = false)
+                        @Size(max = 500, message = "motivo admite como máximo 500 caracteres") String motivo) {
+                return EstadoDisponibilidadProducto.de(
+                                disponibilidad.reactivar(id, autenticacion.getName(), motivo));
         }
 
         /**

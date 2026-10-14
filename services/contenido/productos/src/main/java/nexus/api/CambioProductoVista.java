@@ -20,7 +20,24 @@ public record CambioProductoVista(
         Integer versionAnterior,
         Integer versionAplicada,
         String reversionDe,
-        boolean revertible) {
+        boolean revertible,
+        String motivo) {
+
+        /** Sin motivo, como antes de SA-6. */
+        public CambioProductoVista(
+                        String id,
+                        String productoId,
+                        TipoCambioProducto tipo,
+                        List<String> campos,
+                        String autor,
+                        Instant fecha,
+                        Integer versionAnterior,
+                        Integer versionAplicada,
+                        String reversionDe,
+                        boolean revertible) {
+                this(id, productoId, tipo, campos, autor, fecha, versionAnterior, versionAplicada, reversionDe,
+                                revertible, null);
+        }
 
         public static CambioProductoVista de(RespaldoProducto respaldo, int versionActual) {
                 int anterior = respaldo.estadoAnterior() == null ? 0 : respaldo.estadoAnterior().version();
@@ -37,7 +54,8 @@ public record CambioProductoVista(
                                 anterior,
                                 aplicada,
                                 respaldo.reversionDe(),
-                                respaldo.estadoAnterior() != null && aplicada == versionActual);
+                                respaldo.estadoAnterior() != null && aplicada == versionActual,
+                                respaldo.motivo());
         }
 
         private static List<String> camposCambiados(Producto anterior, Producto aplicado) {

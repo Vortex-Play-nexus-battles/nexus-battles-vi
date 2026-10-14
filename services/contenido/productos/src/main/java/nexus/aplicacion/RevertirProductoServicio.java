@@ -27,6 +27,11 @@ public class RevertirProductoServicio {
         }
 
         public Producto revertir(String productoId, String respaldoId, String autor) {
+                return revertir(productoId, respaldoId, autor, null);
+        }
+
+        /** @param motivo por qué se revierte (SA-6); queda en la entrada de la reversión */
+        public Producto revertir(String productoId, String respaldoId, String autor, String motivo) {
                 Producto actual = productos.findById(productoId)
                                 .orElseThrow(ProductoNoEncontradoException::new);
                 RespaldoProducto objetivo = respaldos.findById(respaldoId)
@@ -53,7 +58,8 @@ public class RevertirProductoServicio {
                                 ahora,
                                 autor,
                                 TipoCambioProducto.REVERSION,
-                                objetivo.id());
+                                objetivo.id(),
+                                motivoLimpio(motivo));
 
                 respaldos.save(auditoria);
                 try {
@@ -62,6 +68,10 @@ public class RevertirProductoServicio {
                         respaldos.deleteById(auditoria.id());
                         throw fallo;
                 }
+        }
+
+        static String motivoLimpio(String motivo) {
+                return motivo == null || motivo.isBlank() ? null : motivo.strip();
         }
 
         private static Producto restaurar(

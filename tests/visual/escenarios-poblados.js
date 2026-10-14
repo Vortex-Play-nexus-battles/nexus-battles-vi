@@ -1640,11 +1640,21 @@ function rutasDeMensajesDelServicio() {
 
 const SESION_ADMIN_CATALOGO = () => sesionDe('qa_admin_catalogo', 'ADMINISTRADOR');
 
+/**
+ * SA-6 — una imagen de laboratorio: un recuadro del color dado con una
+ * inicial, como data URI para que la miniatura y la vista previa se vean sin
+ * servidor. DATOS DE LABORATORIO.
+ */
+function imagenDeLaboratorio(color, letra) {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='10' fill='${color}'/><text x='32' y='42' font-family='sans-serif' font-size='30' fill='white' text-anchor='middle'>${letra}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 function productoDelCatalogo(id, cambios = {}) {
   return {
     id: `cccccc${id}-7777-4777-8777-000000000001`,
     nombre: 'Yelmo del Alba',
-    imagen: 'productos/yelmo-del-alba.png',
+    imagen: imagenDeLaboratorio('#1E3F88', 'Y'),
     descripcion: 'Acero claro, forjado al amanecer.',
     tipo: 'ARMADURA',
     tiraje: 40,
@@ -1698,8 +1708,63 @@ const PRODUCTOS_DEL_CATALOGO = [
   }),
 ];
 
+/** SA-6 — la biblioteca de recursos gráficos (productos.yaml 1.10.0). DATOS DE LABORATORIO. */
+function recursoDeLaboratorio(id, cambios = {}) {
+  return {
+    id: `rrrrrr${id}`,
+    clase: 'IMAGEN',
+    formato: 'PNG',
+    tipoContenido: 'image/png',
+    bytes: 46080,
+    ancho: 320,
+    alto: 320,
+    nombre: 'yelmo-del-alba.png',
+    url: imagenDeLaboratorio('#1E3F88', 'Y'),
+    subidoPor: 'a1a1a1a1-0000-4000-8000-000000000001',
+    subidoEn: '2026-10-12T10:00:00Z',
+    usadoEn: [{ productoId: 'cccccc01-7777-4777-8777-000000000001', nombre: 'Yelmo del Alba' }],
+    ...cambios,
+  };
+}
+
+const RECURSOS_DEL_CATALOGO = [
+  recursoDeLaboratorio('01'),
+  recursoDeLaboratorio('02', {
+    clase: 'ICONO',
+    formato: 'WEBP',
+    tipoContenido: 'image/webp',
+    bytes: 18432,
+    ancho: 128,
+    alto: 128,
+    nombre: 'icono-hacha.webp',
+    url: imagenDeLaboratorio('#582784', 'H'),
+    usadoEn: [],
+  }),
+  recursoDeLaboratorio('03', {
+    clase: 'ANIMACION',
+    formato: 'GIF',
+    tipoContenido: 'image/gif',
+    bytes: 1258291,
+    ancho: 480,
+    alto: 480,
+    nombre: 'pack-del-guardian-brillo.gif',
+    url: imagenDeLaboratorio('#086B31', 'P'),
+    usadoEn: [],
+  }),
+];
+
 function rutasDelCatalogo() {
   return [
+    [
+      /\/api\/v1\/productos\/recursos\?/,
+      json({
+        content: RECURSOS_DEL_CATALOGO,
+        page: 0,
+        size: 16,
+        totalElements: RECURSOS_DEL_CATALOGO.length,
+        totalPages: 1,
+      }),
+    ],
     [
       '**/api/v1/productos/estadisticas',
       json({
@@ -3429,7 +3494,38 @@ export const ESCENARIOS = [
       await pagina.locator('[data-accion="gestionar"]').first().click({ timeout: 10_000 });
       await pagina.locator('.dialogo--hoja').waitFor({ timeout: 10_000 });
     },
-    exige: ['.dialogo--hoja .hoja-producto__formulario', '[data-accion="suspender"]'],
+    exige: [
+      '.dialogo--hoja .hoja-producto__formulario',
+      '.dialogo--hoja .selector-recurso img',
+      '.dialogo--hoja [data-zona="vista-previa-hoja"] .product-card',
+      '[data-accion="suspender"]',
+    ],
+  },
+  {
+    // SA-6 (HU-PRD-009) — la biblioteca de recursos gráficos en el panel.
+    id: 'catalogo-recursos',
+    titulo: 'consola: la biblioteca de imágenes, iconos y animaciones del catálogo',
+    ruta: 'contenido/productos/panel-catalogo.html',
+    sesion: SESION_ADMIN_CATALOGO,
+    rutas: rutasDelCatalogo(),
+    interaccion: async (pagina) => {
+      await pagina
+        .locator('.recursos-rejilla .recurso-tarjeta')
+        .first()
+        .waitFor({ timeout: 10_000 });
+      await pagina.locator('#panel-recursos-titulo').scrollIntoViewIfNeeded();
+    },
+    exige: ['.recursos-rejilla .recurso-tarjeta', '[data-accion="subir-a-biblioteca"]'],
+  },
+  {
+    // SA-6 (HU-PRD-009/010) — el alta: imagen subida o elegida, héroe por
+    // nombre y la tarjeta de la tienda al lado.
+    id: 'productos-alta',
+    titulo: 'consola: nuevo producto con su imagen y la vista previa de la tienda',
+    ruta: 'contenido/productos/productos.html',
+    sesion: SESION_ADMIN_CATALOGO,
+    rutas: rutasDelCatalogo(),
+    exige: ['.selector-recurso', '[data-zona="vista-previa-alta"] .product-card'],
   },
   {
     // HU-PRD-013 (#854) — la gestión de banners en la consola: uno vigente y

@@ -12,6 +12,10 @@ import nexus.dominio.ModificacionProductoInvalidaException;
 import nexus.dominio.ProductoNoEncontradoException;
 import nexus.dominio.RespaldoProductoNoEncontradoException;
 import nexus.dominio.ReversionProductoEnConflictoException;
+import nexus.recursos.MotivoInvalidoException;
+import nexus.recursos.RecursoEnUsoException;
+import nexus.recursos.RecursoNoAdmitidoException;
+import nexus.recursos.RecursoNoEncontradoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -26,6 +30,9 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 
 @RestControllerAdvice
@@ -228,6 +235,104 @@ public class ManejadorDeErrores {
                         "Clave de idempotencia reutilizada",
                         excepcion.getMessage(),
                         "urn:nexus:problema:clave-de-idempotencia-reutilizada",
+                        solicitud);
+        }
+
+        // HU-PRD-009 (contrato 1.10.0) — recursos graficos. El motivo viaja en
+        // el problem details para que la consola sepa que requisito fallo sin
+        // leer el texto, y el texto dice ese requisito en palabras.
+        @ExceptionHandler(RecursoNoAdmitidoException.class)
+        ResponseEntity<ProblemDetail> manejarRecursoNoAdmitido(
+                        RecursoNoAdmitidoException excepcion,
+                        HttpServletRequest solicitud) {
+
+                ResponseEntity<ProblemDetail> respuesta = respuesta(
+                        HttpStatus.valueOf(excepcion.motivo().estado()),
+                        "Recurso no admitido",
+                        excepcion.getMessage(),
+                        "urn:nexus:problema:recurso-no-admitido",
+                        solicitud);
+                respuesta.getBody().setProperty("motivo", excepcion.motivo().name());
+                return respuesta;
+        }
+
+        @ExceptionHandler(MaxUploadSizeExceededException.class)
+        ResponseEntity<ProblemDetail> manejarSubidaDemasiadoGrande(
+                        MaxUploadSizeExceededException excepcion,
+                        HttpServletRequest solicitud) {
+
+                ResponseEntity<ProblemDetail> respuesta = respuesta(
+                        HttpStatus.CONTENT_TOO_LARGE,
+                        "Recurso no admitido",
+                        "El archivo pesa más de lo que admite el catálogo.",
+                        "urn:nexus:problema:recurso-no-admitido",
+                        solicitud);
+                respuesta.getBody().setProperty("motivo", RecursoNoAdmitidoException.Motivo.DEMASIADO_GRANDE.name());
+                return respuesta;
+        }
+
+        @ExceptionHandler(MultipartException.class)
+        ResponseEntity<ProblemDetail> manejarMultipartInvalido(
+                        MultipartException excepcion,
+                        HttpServletRequest solicitud) {
+
+                return respuesta(
+                        HttpStatus.BAD_REQUEST,
+                        "Solicitud inválida",
+                        "El archivo no llegó completo. Vuelve a subirlo.",
+                        "urn:nexus:problema:solicitud-invalida",
+                        solicitud);
+        }
+
+        @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+        ResponseEntity<ProblemDetail> manejarTipoDeCuerpoNoAdmitido(
+                        HttpMediaTypeNotSupportedException excepcion,
+                        HttpServletRequest solicitud) {
+
+                return respuesta(
+                        HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+                        "Solicitud inválida",
+                        "El cuerpo de la solicitud no tiene el formato que espera esta operación.",
+                        "urn:nexus:problema:solicitud-invalida",
+                        solicitud);
+        }
+
+        @ExceptionHandler(RecursoNoEncontradoException.class)
+        ResponseEntity<ProblemDetail> manejarRecursoNoEncontrado(
+                        RecursoNoEncontradoException excepcion,
+                        HttpServletRequest solicitud) {
+
+                return respuesta(
+                        HttpStatus.NOT_FOUND,
+                        "Recurso no encontrado",
+                        excepcion.getMessage(),
+                        "urn:nexus:problema:recurso-no-encontrado",
+                        solicitud);
+        }
+
+        @ExceptionHandler(RecursoEnUsoException.class)
+        ResponseEntity<ProblemDetail> manejarRecursoEnUso(
+                        RecursoEnUsoException excepcion,
+                        HttpServletRequest solicitud) {
+
+                return respuesta(
+                        HttpStatus.CONFLICT,
+                        "Recurso en uso",
+                        excepcion.getMessage(),
+                        "urn:nexus:problema:recurso-en-uso",
+                        solicitud);
+        }
+
+        @ExceptionHandler(MotivoInvalidoException.class)
+        ResponseEntity<ProblemDetail> manejarMotivoInvalido(
+                        MotivoInvalidoException excepcion,
+                        HttpServletRequest solicitud) {
+
+                return respuesta(
+                        HttpStatus.BAD_REQUEST,
+                        "Solicitud inválida",
+                        excepcion.getMessage(),
+                        "urn:nexus:problema:solicitud-invalida",
                         solicitud);
         }
 
