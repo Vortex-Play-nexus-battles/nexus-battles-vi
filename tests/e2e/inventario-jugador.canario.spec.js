@@ -128,14 +128,20 @@ async function entrar(page, cuenta) {
   }
 }
 
-/** Va a «Mi inventario» desde la barra del juego, como una persona (§7.1.1). */
+/**
+ * Va a «Mi inventario» desde la barra del juego, como una persona (§7.1.1).
+ * El canario corre en escritorio: la barra está desplegada. Se espera a que la
+ * vista esté montada (sus pestañas) y no solo a que no haya «Cargando»: justo
+ * después de navegar todavía no hay nada que cargue.
+ */
 async function irAlInventario(page) {
   const enlace = page.locator('header[data-cabecera-app] a[data-seccion="inventario"]');
-  if (!(await enlace.isVisible())) {
-    await page.locator('[data-zona="alternar-nav"]').click();
-  }
+  await expect(enlace).toBeVisible({ timeout: 30_000 });
   await enlace.click();
   await expect(page).toHaveURL(/\/inventario(?:[?#]|$)/);
+  await expect(page.getByRole('tablist', { name: 'Secciones de Mi inventario' })).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(page.locator('.estado-carga')).toHaveCount(0, { timeout: 30_000 });
 }
 
@@ -268,9 +274,8 @@ test.describe('Mi inventario en AWS DEV (revisión final §7.1)', () => {
     const visitadas = [];
     for (const seccion of BARRA_DEL_JUGADOR) {
       const enlace = page.locator(`header[data-cabecera-app] a[data-seccion="${seccion.id}"]`);
-      if (!(await enlace.isVisible())) {
-        await page.locator('[data-zona="alternar-nav"]').click();
-      }
+      // Se espera a la barra de la vista recién abierta (no se mira un instante).
+      await expect(enlace).toBeVisible({ timeout: 30_000 });
       await expect(enlace).toContainText(seccion.etiqueta);
       await enlace.click();
       await expect(page).toHaveURL(seccion.ruta, { timeout: 30_000 });
@@ -380,14 +385,16 @@ test.describe('Mi inventario en AWS DEV (revisión final §7.1)', () => {
     await expect(dialogo.locator('.ficha__imagen')).toBeVisible();
     await expect(dialogo.locator('[data-zona="en-tu-inventario"]')).toBeVisible();
     // Promedio y control de calificación (sin enviar: ver la cabecera).
-    await expect(dialogo.getByText(/calificaci/i).first()).toBeVisible({ timeout: 30_000 });
-    await expect(
-      dialogo.locator('[data-accion="calificar"], .calificar-producto').first(),
-    ).toBeVisible();
+    // El promedio en cinco estrellas («N valoraciones» o «sin valoraciones»).
+    await expect(dialogo.locator('.resumen-calificacion').first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(dialogo.locator('.calificar-producto').first()).toBeVisible();
 
     // Opinión con imagen: apodo y fecha; después se retira (la propia).
     const texto = `Opinión de prueba del canario ${MARCA}`;
-    await dialogo.getByLabel('Tu opinión').fill(texto);
+    // `exact`: el formulario también se llama «Escribe tu opinión».
+    await dialogo.getByLabel('Tu opinión', { exact: true }).fill(texto);
     await dialogo
       .locator('.redactor-comentario__archivo')
       .setInputFiles({ name: 'prueba.png', mimeType: 'image/png', buffer: PNG });
