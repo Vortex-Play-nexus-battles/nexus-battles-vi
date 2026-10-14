@@ -43,13 +43,18 @@ criterio aparece, como fragmento y sin tildes ni mayusculas:
 - en lo que guarda el inventario: nombre propio, tipo, parte de armadura e
   identificador del producto (tambien con su nombre legible: «arma», «casco»);
 - en la informacion de su producto en el catalogo —nombre, descripcion, efectos,
-  prototipo y, en los heroes, sus acciones—, resuelta con
+  prototipo, atributos con la etiqueta de la ficha («Poder de ataque 42»,
+  «Defensa 3», «Turnos de carga 2»; 1.7.1) y, en los heroes, sus acciones con su
+  costo y su efecto—, resuelta con
   `IndiceDeBusquedaDelCatalogo`: un **indice invertido de cuatrigramas**
   (`IndiceDeNgramas`) construido con `GET /api/v1/productos` y las fichas de
   `GET /api/v1/heroes/{nombre}`, renovado en segundo plano cada
   `inventario.busqueda.vigencia-del-catalogo` (5 minutos por omision). Si el
   catalogo no responde, la busqueda se queda en lo que guarda el inventario y no
-  falla.
+  falla; tras un fallo (primera construccion o renovacion) no se reintenta hasta
+  pasados 30 s. La primera construccion se serializa con un `ReentrantLock`, no
+  con `synchronized`: en Java 21 un hilo virtual bloqueado dentro de
+  `synchronized` fija su hilo portador.
 
 El inventario sigue sin copiar el catalogo: guarda la referencia y el indice se
 reconstruye desde el servicio de productos, que es el dueno del dato.

@@ -2,6 +2,7 @@ package nexus.inventario.aplicacion;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -51,7 +52,8 @@ class FuenteDelCatalogoHttpTest {
                 cuerpo = """
                         {"nombre":"Mago Fuego","tipo":"Mago",
                          "descripcion":"Entrenado en la magia elemental.",
-                         "acciones":[{"nombre":"Vulcano","efecto":"+3 al ataque, +(3d9) al daño"},
+                         "acciones":[{"nombre":"Vulcano","costo":"6 puntos de poder",
+                                      "efecto":"+3 al ataque, +(3d9) al daño"},
                                      {"nombre":"Misiles de magma","efecto":"+1 al ataque, +2 de daño"}]}
                         """;
             } else {
@@ -105,6 +107,29 @@ class FuenteDelCatalogoHttpTest {
     }
 
     @Test
+    @DisplayName("§7.1: los atributos del producto y el costo de cada acción también se buscan, con su etiqueta")
+    void atributosYCostos() {
+        Map<String, String> textos = fuente().textosBuscables();
+
+        assertTrue(textos.get("p-casco").contains("Defensa 3"));
+        assertTrue(textos.get("p-epica").contains("Turnos de recarga 2"));
+        assertTrue(textos.get("p-heroe").contains("6 puntos de poder"));
+        // Y se encuentran por ellos en el índice.
+        IndiceDeNgramas indice = IndiceDeNgramas.construir(textos);
+        assertEquals(java.util.Set.of("p-epica"), indice.buscar("recarga"));
+        assertTrue(indice.buscar("puntos de poder").contains("p-heroe"));
+    }
+
+    @Test
+    @DisplayName("un atributo se escribe como en la ficha: 1.0 es 1 y 1.50 es 1.5; sin valor, nada")
+    void formatoDeAtributo() {
+        assertEquals("Defensa 1", FuenteDelCatalogoHttp.atributo("Defensa", 1.0));
+        assertEquals("Multiplicador por nivel 1.5", FuenteDelCatalogoHttp.atributo("Multiplicador por nivel", 1.50));
+        assertEquals("Poder de ataque 42", FuenteDelCatalogoHttp.atributo("Poder de ataque", 42));
+        assertNull(FuenteDelCatalogoHttp.atributo("Defensa", null));
+    }
+
+    @Test
     @DisplayName("sin el servicio de héroes el índice se construye igual, sin sus acciones")
     void heroesCaido() {
         heroesCaido = true;
@@ -128,14 +153,16 @@ class FuenteDelCatalogoHttpTest {
               {"id":"p-heroe","nombre":"Mago Fuego","tipo":"HEROE","prototipo":"Mago Fuego",
                "descripcion":"Héroe de tipo Mago Fuego."},
               {"id":"p-casco","nombre":"Corona de hielo","tipo":"ARMADURA","parte":"CASCO",
-               "descripcion":"Armadura de Mago Hielo. Efectos: +1 a la defensa, +1 de vida."}
+               "descripcion":"Armadura de Mago Hielo. Efectos: +1 a la defensa, +1 de vida.",
+               "defensa":3}
             ],"page":0,"size":50,"totalElements":3,"totalPages":2}
             """;
 
     private static final String PAGINA_1 = """
             {"content":[
               {"id":"p-epica","nombre":"Luz cegadora","tipo":"EPICA","heroe":"p-heroe",
-               "efectoGeneral":"+1 a la vida","efectoPotenciado":"+2 al daño +1 % de crítico"}
+               "efectoGeneral":"+1 a la vida","efectoPotenciado":"+2 al daño +1 % de crítico",
+               "turnosRecarga":2}
             ],"page":1,"size":50,"totalElements":3,"totalPages":2}
             """;
 }

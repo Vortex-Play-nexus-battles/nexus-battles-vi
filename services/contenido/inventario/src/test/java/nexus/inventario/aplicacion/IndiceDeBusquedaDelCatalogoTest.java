@@ -106,4 +106,64 @@ class IndiceDeBusquedaDelCatalogoTest {
 
         assertEquals(Set.of("p-1"), indice.productosQueCoinciden("bruma"));
     }
+
+    @Test
+    @DisplayName("una renovación fallida no se reintenta en cada búsqueda: espera el respiro")
+    void renovacionFallidaRespetaElRespiro() {
+        indice.productosQueCoinciden("bruma");
+        caido = true;
+        ahora = ahora.plus(Duration.ofMinutes(6));
+
+        indice.productosQueCoinciden("bruma");
+        pendientes.removeFirst().run();
+        int lecturasTrasElFallo = lecturas.get();
+
+        // Otra búsqueda en seguida: ni una renovación nueva ni otra lectura.
+        indice.productosQueCoinciden("bruma");
+        assertTrue(pendientes.isEmpty());
+        assertEquals(lecturasTrasElFallo, lecturas.get());
+
+        // Pasado el respiro, se vuelve a intentar y, con el catálogo de vuelta, se renueva.
+        caido = false;
+        catalogo = Map.of("p-2", "Escudo de dragón");
+        ahora = ahora.plus(Duration.ofSeconds(31));
+        indice.productosQueCoinciden("bruma");
+        assertEquals(1, pendientes.size());
+        pendientes.removeFirst().run();
+        assertEquals(Set.of("p-2"), indice.productosQueCoinciden("drag"));
+    }
+
+    @Test
+    @DisplayName("muchas primeras búsquedas a la vez, en hilos virtuales, construyen el índice una sola vez")
+    void primerasBusquedasConcurrentes() throws Exception {
+        java.util.concurrent.CountDownLatch dentro = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch soltar = new java.util.concurrent.CountDownLatch(1);
+        FuenteDelCatalogo lenta = () -> {
+            lecturas.incrementAndGet();
+            dentro.countDown();
+            try {
+                soltar.await();
+            } catch (InterruptedException interrumpido) {
+                Thread.currentThread().interrupt();
+            }
+            return catalogo;
+        };
+        IndiceDeBusquedaDelCatalogo concurrido = new IndiceDeBusquedaDelCatalogo(
+                lenta, reloj, Duration.ofMinutes(5), Duration.ofSeconds(30), pendientes::add);
+
+        List<Thread> hilos = new ArrayList<>();
+        List<Set<String>> resultados = java.util.Collections.synchronizedList(new ArrayList<>());
+        for (int i = 0; i < 8; i++) {
+            hilos.add(Thread.ofVirtual().start(() -> resultados.add(concurrido.productosQueCoinciden("bruma"))));
+        }
+        dentro.await();
+        soltar.countDown();
+        for (Thread hilo : hilos) {
+            hilo.join(5_000);
+        }
+
+        assertEquals(1, lecturas.get());
+        assertEquals(8, resultados.size());
+        resultados.forEach(resultado -> assertEquals(Set.of("p-1"), resultado));
+    }
 }

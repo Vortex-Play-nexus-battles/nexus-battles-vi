@@ -32,12 +32,15 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li>{@code GET /api/v1/productos?page=N&size=50} (productos.yaml, lectura
  *       pública): nombre, tipo, parte, descripción, efectos y prototipo de cada
- *       producto. Las épicas y habilidades añaden el nombre del héroe al que van
- *       asociadas.</li>
+ *       producto, y sus atributos con la misma etiqueta que enseña la ficha
+ *       («Poder de ataque 42», «Defensa 3», «Turnos de carga 2»…: §7.1, «cualquier
+ *       información presente en el producto»; segunda auditoría, 13-oct). Las
+ *       épicas y habilidades añaden el nombre del héroe al que van asociadas.</li>
  *   <li>{@code GET /api/v1/heroes} y {@code GET /api/v1/heroes/{nombre}}
  *       (heroes.yaml, públicas): la descripción del prototipo y sus tres acciones
- *       (Tabla 7), que se cuelgan del producto HEROE con ese prototipo. Si el
- *       servicio de héroes no responde, el índice se construye sin ellas.</li>
+ *       (Tabla 7) con su nombre, su costo y su efecto, que se cuelgan del producto
+ *       HEROE con ese prototipo. Si el servicio de héroes no responde, el índice
+ *       se construye sin ellas.</li>
  * </ul>
  *
  * <p>La lectura pública no enseña los productos suspendidos: esos se siguen
@@ -95,6 +98,12 @@ public class FuenteDelCatalogoHttp implements FuenteDelCatalogo {
             partes.add(producto.efectoGeneral());
             partes.add(producto.efectoPotenciado());
             partes.add(producto.prototipo());
+            partes.add(atributo("Costo de poder", producto.costoPoder()));
+            partes.add(atributo("Multiplicador por nivel", producto.multiplicadorNivel()));
+            partes.add(atributo("Turnos de carga", producto.turnosCarga()));
+            partes.add(atributo("Poder de ataque", producto.poderDeAtaque()));
+            partes.add(atributo("Defensa", producto.defensa()));
+            partes.add(atributo("Turnos de recarga", producto.turnosRecarga()));
             if (producto.heroe() != null) {
                 partes.add(nombrePorId.get(producto.heroe()));
             }
@@ -136,7 +145,8 @@ public class FuenteDelCatalogoHttp implements FuenteDelCatalogo {
                         FichaHeroeJson.class, "heroes");
                 Stream<String> acciones = ficha.acciones() == null
                         ? Stream.empty()
-                        : ficha.acciones().stream().flatMap(accion -> Stream.of(accion.nombre(), accion.efecto()));
+                        : ficha.acciones().stream()
+                                .flatMap(accion -> Stream.of(accion.nombre(), accion.costo(), accion.efecto()));
                 fichas.put(resumen.nombre(), unir(Stream.concat(
                         Stream.of(ficha.tipo(), ficha.descripcion()), acciones)));
             }
@@ -183,6 +193,18 @@ public class FuenteDelCatalogoHttp implements FuenteDelCatalogo {
                 .collect(Collectors.joining(SEPARADOR));
     }
 
+    /** «Etiqueta valor», como en la ficha; sin valor, nada. 1.0 se escribe 1. */
+    static String atributo(String etiqueta, Number valor) {
+        if (valor == null) {
+            return null;
+        }
+        double numero = valor.doubleValue();
+        String texto = numero == Math.rint(numero) && !Double.isInfinite(numero)
+                ? Long.toString((long) numero)
+                : java.math.BigDecimal.valueOf(numero).stripTrailingZeros().toPlainString();
+        return etiqueta + " " + texto;
+    }
+
     private static String nombreDelTipo(String tipo) {
         if (tipo == null) {
             return null;
@@ -220,7 +242,13 @@ public class FuenteDelCatalogoHttp implements FuenteDelCatalogo {
             String efectoGeneral,
             String efectoPotenciado,
             String prototipo,
-            String heroe) {
+            String heroe,
+            Number costoPoder,
+            Number multiplicadorNivel,
+            Number turnosCarga,
+            Number poderDeAtaque,
+            Number defensa,
+            Number turnosRecarga) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -232,6 +260,6 @@ public class FuenteDelCatalogoHttp implements FuenteDelCatalogo {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record AccionJson(String nombre, String efecto) {
+    record AccionJson(String nombre, String costo, String efecto) {
     }
 }
