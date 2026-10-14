@@ -254,15 +254,14 @@ test.describe('Metricas tecnicas y de moderacion (HU-MET-004 / HU-MET-001)', () 
     await page.goto(`${BORDE}${VISTA}`);
     const tabla = page.locator('[data-zona="tabla-tecnica"]');
     await expect(tabla).toBeVisible({ timeout: 30000 });
-    await expect(tabla.locator('tr[data-servicio="torneos"]')).not.toHaveAttribute(
-      'data-brecha',
-      'true',
+    // SA-8 (punto 24): cada servicio por su nombre; el que no se pudo medir
+    // lo dice en su fila, sin el motivo técnico de la conexión.
+    await expect(tabla.locator('tr[data-fila="torneos"]')).toContainText('Torneos');
+    await expect(tabla.locator('tr[data-fila="torneos"] [data-brecha="true"]')).toHaveCount(0);
+    await expect(tabla.locator('tr[data-fila="correo"] [data-brecha="true"]')).toContainText(
+      'No se pudo medir en esta ronda',
     );
-    await expect(tabla.locator('tr[data-servicio="correo"]')).toHaveAttribute(
-      'data-brecha',
-      'true',
-    );
-    await expect(page.locator('[data-zona="brechas"]')).toContainText('correo');
+    await expect(page.locator('[data-zona="brechas"]')).toContainText('Correo');
     await expect(page.locator('[data-zona="resumen-moderacion"]')).toContainText(/sanciones/, {
       timeout: 20000,
     });

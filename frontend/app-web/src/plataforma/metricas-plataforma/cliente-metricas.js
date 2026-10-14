@@ -119,3 +119,33 @@ export async function obtenerInforme(opciones = {}) {
 
   return respuesta.json();
 }
+
+/**
+ * Cualquier recurso del servicio de métricas, interpretado igual que el
+ * informe: JSON (o texto, para los informes redactados) o `ErrorDeMetricas`.
+ * SA-8 — el panel de métricas pide a la vez disponibilidad, tiempos, consultas
+ * y degradación, y cada sección decide qué pintar con su propio resultado.
+ *
+ * @param {string} ruta desde `/api/v1`, con su consulta
+ * @param {{fetch?: typeof fetch, aceptar?: string}} [opciones]
+ * @returns {Promise<object|string>}
+ * @throws {ErrorDeMetricas}
+ */
+export async function pedirMetricas(ruta, opciones = {}) {
+  const peticion = opciones.fetch ?? fetchWithHttpErrorInterceptor;
+  const aceptar = opciones.aceptar ?? 'application/json';
+  const respuesta = await peticion(`${baseDeApi()}/api/v1${ruta}`, {
+    method: 'GET',
+    headers: { Accept: aceptar },
+  });
+  if (!respuesta.ok) {
+    let problema = null;
+    try {
+      problema = await respuesta.json();
+    } catch {
+      problema = null;
+    }
+    throw new ErrorDeMetricas(problema, respuesta.status);
+  }
+  return aceptar === 'text/plain' ? respuesta.text() : respuesta.json();
+}
