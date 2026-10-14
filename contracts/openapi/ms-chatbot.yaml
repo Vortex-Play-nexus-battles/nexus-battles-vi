@@ -15,6 +15,9 @@ openapi: 3.1.0
 #   HU-CHA-011  calificacion de respuestas y brechas de conocimiento
 #   HU-CHA-012  panel de administracion: analiticas, base de conocimiento y
 #               "reentrenamiento" (versiones evaluadas antes de desplegarse)
+#   7.4.8 (1.4.0) revision final: nada sensible se guarda, la inyeccion de
+#               codigo se detecta y bloquea, el uid sale solo del claim
+#               `uid`, y limite tambien por direccion de origen
 #   7.4 (1.3.0) lo que faltaba del modulo 7.4: tickets y soporte humano
 #               (RF-CHA-007, RF-ADM-004), sugerencias y autocompletado,
 #               respuestas enriquecidas sin imagenes, vista del jugador y
@@ -54,7 +57,9 @@ openapi: 3.1.0
 #
 #   * Usuario autenticado: `Authorization: Bearer <JWT de ms-identidad>`. La
 #     conversacion se identifica SOLO por el claim `uid` del token (ADR-002).
-#     Con token valido, `X-Id-Sesion-Anonima` se ignora.
+#     Con token valido, `X-Id-Sesion-Anonima` se ignora. Desde 1.4.0 un token
+#     sin `uid` (o con un `uid` que no es UUID) es un visitante: el `sub` es
+#     el apodo y NUNCA se interpreta como uid, aunque tenga forma de UUID.
 #   * Visitante: sin token, con la cabecera `X-Id-Sesion-Anonima` en una de
 #     dos formas:
 #       - EMITIDA POR EL SERVIDOR (`POST /chat/sesiones`, o la cabecera de
@@ -103,7 +108,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.3.9
+  version: 1.4.0
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -113,6 +118,35 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.4.0 — 7.4.8: privacidad, inyeccion e identidad (revision final)
+
+    Todo compatible: respuestas de error nuevas y comportamiento mas
+    estricto sobre lo que se guarda. Ninguna forma cambia.
+
+    * **Ningun dato sensible se guarda.** Todo texto del usuario (la
+      pregunta de `POST /chat/mensajes`, el comentario de una calificacion,
+      el asunto y el mensaje de un ticket) se revisa ANTES de moderarlo,
+      procesarlo o guardarlo: se quitan los caracteres de control y los
+      invisibles, y se tapan contrasenas, tarjetas, tokens y claves. De ahi
+      en adelante solo circula el texto redactado: la lista negra, los
+      motores, las brechas de conocimiento, las analiticas y la base nunca
+      ven el original. Si se tapo algo, la respuesta del bot empieza
+      diciendolo. La migracion V10 redacto lo que ya estaba guardado.
+    * **Inyeccion de codigo detectada y bloqueada** (422, `motivo`
+      INYECCION_DETECTADA): etiquetas y manejadores de HTML, SQL
+      encadenado, expresiones de plantilla (p. ej. `${jndi:...}`), comandos
+      del sistema, operadores de NoSQL y rutas del sistema. No se guarda ni
+      se reenvia nada; se cuenta en la metrica
+      `chatbot_inyecciones_bloqueadas_total` por tipo, sin el texto.
+    * **El comentario de una calificacion pasa por la lista negra** como
+      cualquier texto del usuario: 422 CONTENIDO_BLOQUEADO o 503
+      MODERACION_NO_DISPONIBLE, y no se guarda.
+    * **Limite tambien por direccion de origen** en `POST /chat/mensajes`
+      (`CHATBOT_LIMITE_MENSAJES_POR_ORIGEN`, 120/min por omision), sumando
+      todas las sesiones de esa direccion: 429 con `Retry-After`.
+    * **El uid sale solo del claim `uid`** (ver IDENTIDAD arriba).
+    * **Borrar el historial** dice ahora que se borra y que queda.
 
     ### 1.3.9 — tickets: reabrir con otro abierto y redaccion primero
 
@@ -301,6 +335,14 @@ paths:
         si coincide con un termino prohibido, 422 y no se guarda nada; si la
         lista negra no responde, 503 y tampoco.
 
+        Desde 1.4.0, antes que todo eso: limite tambien por direccion de
+        origen (429); se quitan los caracteres de control y los invisibles
+        (si no queda texto, 400); un intento de inyeccion de codigo responde
+        422 INYECCION_DETECTADA sin guardar nada; y se tapan las
+        contrasenas, tarjetas, tokens y claves. Solo el texto redactado se
+        modera, se procesa y se guarda, y si se tapo algo la respuesta del
+        bot empieza avisandolo.
+
         Un visitante con un identificador declarado (`visitante-...`) lo
         conserva: la primera vez queda registrado y no se emite otro (si
         habia vencido, su mensaje abre una conversacion nueva). Un visitante
@@ -365,8 +407,9 @@ paths:
         '422':
           description: |
             El texto contiene un termino de la lista negra (`motivo`
-            CONTENIDO_BLOQUEADO). No se guarda ni el mensaje ni ninguna
-            respuesta.
+            CONTENIDO_BLOQUEADO) o, desde 1.4.0, un intento de inyeccion de
+            codigo (`motivo` INYECCION_DETECTADA; el detalle no repite el
+            texto). No se guarda ni el mensaje ni ninguna respuesta.
           content:
             application/problem+json:
               schema:
@@ -442,10 +485,21 @@ paths:
       summary: Borra el historial de la conversacion de la sesion
       description: |
         Borra todos los mensajes de la conversacion y, con ellos, sus
-        calificaciones. Las brechas de conocimiento ya registradas NO se
-        borran: son un agregado anonimo, sin vinculo con la sesion.
-        Idempotente: sin conversacion previa, responde igual. Sin token valido
-        ni sesion de visitante vigente y registrada no borra nada (1.2.0).
+        calificaciones. Idempotente: sin conversacion previa, responde igual.
+        Sin token valido ni sesion de visitante vigente y registrada no borra
+        nada (1.2.0).
+
+        Lo que queda (1.4.0, documentado para 7.4.8 «cumplimiento con
+        politicas de proteccion de datos»):
+        * la fila de la conversacion, vacia (solo su clave y sus fechas);
+        * las preferencias del chat (idioma y nivel de detalle), que son una
+          configuracion y no historial; `PUT /chat/preferencias` las cambia;
+        * las brechas de conocimiento: un agregado sin vinculo con la sesion
+          y, desde 1.4.0, siempre redactado;
+        * los tickets de soporte con su contexto (redactado), que son la
+          constancia de una atencion humana: el jugador los sigue viendo en
+          `GET /chat/tickets`;
+        * las copias de respaldo del entorno, hasta que caducan.
       security:
         - {}
         - tokenDeUsuario: []
@@ -470,6 +524,13 @@ paths:
 
         Una calificacion "no util" registra como brecha de conocimiento la
         pregunta del usuario que origino esa respuesta.
+
+        Desde 1.4.0 el `comentario` se revisa como cualquier texto del
+        usuario (sin caracteres de control, inyeccion bloqueada, datos
+        sensibles tapados) y pasa por la lista negra: 422 o 503 y no se
+        guarda la calificacion. La revision va DESPUES de comprobar que la
+        respuesta es de quien llama, asi que un mensaje ajeno sigue siendo
+        404.
       security:
         - {}
         - tokenDeUsuario: []
@@ -515,6 +576,23 @@ paths:
                 $ref: '#/components/schemas/ProblemDetail'
         '409':
           description: Esa respuesta ya fue calificada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: |
+            (1.4.0) El comentario contiene un termino de la lista negra
+            (`motivo` CONTENIDO_BLOQUEADO) o un intento de inyeccion de codigo
+            (`motivo` INYECCION_DETECTADA). No se guarda la calificacion.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: |
+            (1.4.0) La lista negra no responde y el comentario no se puede
+            verificar (`motivo` MODERACION_NO_DISPONIBLE). No se guarda nada.
           content:
             application/problem+json:
               schema:
@@ -695,7 +773,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
         '422':
-          description: El asunto o el mensaje tienen un termino de la lista negra (`motivo` CONTENIDO_BLOQUEADO).
+          description: |
+            El asunto o el mensaje tienen un termino de la lista negra (`motivo`
+            CONTENIDO_BLOQUEADO) o, desde 1.4.0, un intento de inyeccion de
+            codigo (`motivo` INYECCION_DETECTADA). No se guarda nada.
           content:
             application/problem+json:
               schema:

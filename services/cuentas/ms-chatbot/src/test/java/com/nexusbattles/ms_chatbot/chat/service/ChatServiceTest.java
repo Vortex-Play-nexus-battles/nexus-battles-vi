@@ -3,6 +3,8 @@ package com.nexusbattles.ms_chatbot.chat.service;
 import com.nexusbattles.ms_chatbot.chat.consultas.MotorConsultasAsistidas;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.RespuestaEnriquecida;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
+import com.nexusbattles.ms_chatbot.chat.entrada.InyeccionDetectada;
+import com.nexusbattles.ms_chatbot.chat.entrada.RevisionDeEntrada;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.identidad.SesionAnonima;
 import com.nexusbattles.ms_chatbot.chat.limite.LimitadorDeFrecuencia;
@@ -20,8 +22,10 @@ import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
 import com.nexusbattles.ms_chatbot.chat.preferencias.NivelDeDetalle;
 import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasService;
+import com.nexusbattles.ms_chatbot.chat.privacidad.RedactorDeDatosSensibles;
 import com.nexusbattles.ms_chatbot.chat.repository.ConversacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -85,7 +89,8 @@ class ChatServiceTest {
     @BeforeEach
     void configurar() {
         chatService = new ChatService(conversacionRepository, mensajeRepository, motorRespuestas,
-            motorConsultasAsistidas, brechaConocimientoService, limitador, moderacion, registro, preferenciasService);
+            motorConsultasAsistidas, brechaConocimientoService, limitador, moderacion, registro, preferenciasService,
+            new RevisionDeEntrada(new RedactorDeDatosSensibles(), new SimpleMeterRegistry()));
     }
 
     private void registroDevuelveLaRespuesta() {
@@ -112,6 +117,61 @@ class ChatServiceTest {
         verify(registro).guardarIntercambio(eq(visitante), eq("Hola"), any(), any(), eq("Respuesta de prueba"), any(), anyInt());
         assertEquals(Remitente.BOT, respuesta.getRemitente());
         verifyNoInteractions(motorConsultasAsistidas);
+    }
+
+    // 1.4.0 (7.4.8): la contrasena y la tarjeta no llegan a la lista negra, ni
+    // a los motores, ni a la brecha, ni a la base; la respuesta avisa que se taparon.
+    @Test
+    void enviarMensaje_conDatosSensibles_soloCirculaElTextoRedactadoYSeAvisa() {
+        registroDevuelveLaRespuesta();
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.escalado("No estoy seguro.", List.of()));
+
+        Mensaje respuesta = chatService.enviarMensaje(visitante,
+            "mi contraseña es Hunter2! y mi tarjeta 4111 1111 1111 1111 no funciona", null);
+
+        org.mockito.ArgumentCaptor<String> pregunta = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(moderacion).verificar(pregunta.capture());
+        String redactada = pregunta.getValue();
+        assertFalse(redactada.contains("Hunter2!"));
+        assertFalse(redactada.contains("4111 1111 1111 1111"));
+        verify(motorRespuestas).generarRespuesta(redactada);
+        verify(brechaConocimientoService).registrarEscalamiento(redactada);
+        verify(registro).guardarIntercambio(eq(visitante), eq(redactada), any(), any(), anyString(), any(), anyInt());
+        assertTrue(respuesta.getContenido().startsWith(ChatService.AVISO_DATO_TAPADO));
+    }
+
+    // 1.4.0 (7.4.8): un intento de inyeccion no se modera, no se responde ni se guarda.
+    @Test
+    void enviarMensaje_conInyeccion_noProcesaNiGuardaNada() {
+        assertThrows(InyeccionDetectada.class,
+            () -> chatService.enviarMensaje(usuario, "' OR '1'='1", null));
+
+        verifyNoInteractions(moderacion, motorRespuestas, motorConsultasAsistidas, registro, brechaConocimientoService);
+    }
+
+    // 1.4.0 (7.4.8): tambien cuenta lo que escribe cada direccion, sumando sus sesiones.
+    @Test
+    void enviarMensaje_conOrigen_limitaTambienPorDireccion() {
+        registroDevuelveLaRespuesta();
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.deTema("Respuesta de prueba", Categoria.FAQ_GENERAL, TipoRespuesta.DIRECTA));
+
+        chatService.enviarMensaje(visitante, "Hola", null, null, "203.0.113.7");
+
+        verify(limitador).exigir(LimitadorDeFrecuencia.Regla.MENSAJES, visitante.claveDeLimite());
+        verify(limitador).exigir(LimitadorDeFrecuencia.Regla.MENSAJES_POR_ORIGEN, "203.0.113.7");
+    }
+
+    // Un mensaje que solo traia caracteres de control no llega a ningun lado.
+    @Test
+    void enviarMensaje_soloCaracteresDeControl_responde400SinGuardar() {
+        org.springframework.web.server.ResponseStatusException error = assertThrows(
+            org.springframework.web.server.ResponseStatusException.class,
+            () -> chatService.enviarMensaje(visitante, "\u0000\u200B", null));
+
+        assertEquals(400, error.getStatusCode().value());
+        verifyNoInteractions(moderacion, motorRespuestas, registro);
     }
 
     // 7.4.8: un mensaje bloqueado por la lista negra no se procesa ni se guarda.

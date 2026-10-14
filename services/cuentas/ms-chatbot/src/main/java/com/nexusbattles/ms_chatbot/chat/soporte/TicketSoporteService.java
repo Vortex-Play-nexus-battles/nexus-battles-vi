@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_chatbot.chat.soporte;
 
+import com.nexusbattles.ms_chatbot.chat.entrada.RevisionDeEntrada;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.limite.LimitadorDeFrecuencia;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
@@ -9,7 +10,9 @@ import com.nexusbattles.ms_chatbot.chat.privacidad.RedaccionDeDatosSensibles;
 import com.nexusbattles.ms_chatbot.chat.repository.ConversacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Clock;
 import java.util.List;
@@ -22,8 +25,10 @@ import java.util.Set;
 //   2. Limite de frecuencia: la MISMA regla y el mismo cupo que los mensajes
 //      (un ticket es un mensaje mas hacia el servicio). Ademas, solo puede
 //      haber uno abierto a la vez, lo que ya acota el abuso.
-//   3. Se redactan asunto y mensaje ANTES de todo lo demas: ni la lista negra
-//      (otro servicio) ni la base ven nunca una contrasena o una tarjeta.
+//   3. Se revisan asunto y mensaje ANTES de todo lo demas (RevisionDeEntrada,
+//      1.4.0): sin caracteres de control ni inyeccion de codigo (422), y
+//      redactados, asi que ni la lista negra (otro servicio) ni la base ven
+//      nunca una contrasena o una tarjeta.
 //   4. Lista negra sobre el asunto y el mensaje ya redactados (422 / 503),
 //      antes de guardar nada.
 //   5. Un solo ticket abierto por jugador (409 TICKET_ABIERTO). Lo garantiza
@@ -45,26 +50,30 @@ public class TicketSoporteService {
     private final LimitadorDeFrecuencia limitador;
     private final ModeracionDeContenido moderacion;
     private final RedaccionDeDatosSensibles redaccion;
+    private final RevisionDeEntrada revision;
     private final Clock reloj;
 
     public TicketSoporteService(TicketSoporteRepository tickets, ConversacionRepository conversaciones,
                                 MensajeRepository mensajes, LimitadorDeFrecuencia limitador,
                                 ModeracionDeContenido moderacion, RedaccionDeDatosSensibles redaccion,
-                                Clock reloj) {
+                                RevisionDeEntrada revision, Clock reloj) {
         this.tickets = tickets;
         this.conversaciones = conversaciones;
         this.mensajes = mensajes;
         this.limitador = limitador;
         this.moderacion = moderacion;
         this.redaccion = redaccion;
+        this.revision = revision;
         this.reloj = reloj;
     }
 
     public TicketSoporte abrir(IdentidadDelChat identidad, Categoria categoria, String asunto, String mensaje) {
         exigirSesion(identidad);
         limitador.exigir(LimitadorDeFrecuencia.Regla.MENSAJES, identidad.claveDeLimite());
-        String asuntoRedactado = redaccion.redactar(asunto.strip());
-        String mensajeRedactado = redaccion.redactar(mensaje.strip());
+        // 1.4.0: la misma revision que una pregunta del chat (sin caracteres de
+        // control, sin inyeccion de codigo, datos sensibles tapados).
+        String asuntoRedactado = noVacio(revision.textoRevisado(asunto));
+        String mensajeRedactado = noVacio(revision.textoRevisado(mensaje));
         moderacion.verificar(asuntoRedactado + System.lineSeparator() + mensajeRedactado);
 
         if (tickets.existsByUidAndEstadoIn(identidad.uid(), ABIERTOS)) {
@@ -88,6 +97,13 @@ public class TicketSoporteService {
     public List<TicketSoporte> misTickets(IdentidadDelChat identidad) {
         exigirSesion(identidad);
         return tickets.findByUidOrderByCreadoEnDesc(identidad.uid());
+    }
+
+    private static String noVacio(String texto) {
+        if (texto == null || texto.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El asunto y el mensaje no pueden estar vacios.");
+        }
+        return texto;
     }
 
     private static void exigirSesion(IdentidadDelChat identidad) {

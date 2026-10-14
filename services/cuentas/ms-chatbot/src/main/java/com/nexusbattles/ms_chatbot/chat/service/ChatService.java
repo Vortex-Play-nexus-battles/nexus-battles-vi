@@ -2,6 +2,7 @@ package com.nexusbattles.ms_chatbot.chat.service;
 
 import com.nexusbattles.ms_chatbot.chat.consultas.MotorConsultasAsistidas;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
+import com.nexusbattles.ms_chatbot.chat.entrada.RevisionDeEntrada;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.limite.LimitadorDeFrecuencia;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
@@ -15,8 +16,10 @@ import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import org.springframework.data.domain.PageRequest;
 
@@ -27,15 +30,21 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-// HU-CHA-001/004/008/011 con el endurecimiento de B11 (ms-chatbot.yaml 1.2.0):
+// HU-CHA-001/004/008/011 con el endurecimiento de B11 (ms-chatbot.yaml 1.2.0)
+// y el de la revision final del 7.4.8 (1.4.0):
 //
-//   1. Limite de frecuencia por usuario o sesion (7.4.8), antes de nada.
-//   2. El texto pasa por la lista negra (7.4.8) antes de procesarlo o
-//      guardarlo: un mensaje bloqueado no deja rastro.
-//   3. La respuesta se genera SIN transaccion abierta: las consultas en vivo
+//   1. Limite de frecuencia por usuario o sesion y por direccion de origen
+//      (7.4.8), antes de nada.
+//   2. RevisionDeEntrada: sin caracteres de control, sin intentos de
+//      inyeccion de codigo (422) y con los datos sensibles tapados. De aqui
+//      en adelante solo circula el texto redactado: la lista negra, los
+//      motores, la brecha de conocimiento y la base nunca ven el original.
+//   3. El texto redactado pasa por la lista negra (7.4.8) antes de procesarlo
+//      o guardarlo: un mensaje bloqueado no deja rastro.
+//   4. La respuesta se genera SIN transaccion abierta: las consultas en vivo
 //      (inventario, subastas, notificaciones, finanzas, torneos) son HTTP con
 //      tiempo de espera, y no retienen una conexion de la base mientras tanto.
-//   4. Pregunta y respuesta se guardan juntas en una transaccion corta
+//   5. Pregunta y respuesta se guardan juntas en una transaccion corta
 //      (RegistroDeConversaciones).
 //
 // La identidad llega ya resuelta y verificada (ResolutorDeIdentidad): el
@@ -43,6 +52,11 @@ import java.util.UUID;
 @Service
 public class ChatService {
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
+
+    // 1.4.0 (7.4.8): si la revision tapo algo, el jugador lo sabe, y sabe que
+    // no se guardo. Va delante de la respuesta, que sigue siendo la de siempre.
+    static final String AVISO_DATO_TAPADO = "Por tu seguridad tapé un dato sensible de tu mensaje "
+        + "(una contraseña, una tarjeta o un token) y no lo guardé; nunca lo compartas por el chat. ";
 
     private final ConversacionRepository conversacionRepository;
     private final MensajeRepository mensajeRepository;
@@ -53,12 +67,13 @@ public class ChatService {
     private final ModeracionDeContenido moderacion;
     private final RegistroDeConversaciones registro;
     private final PreferenciasService preferenciasService;
+    private final RevisionDeEntrada revision;
 
     public ChatService(ConversacionRepository conversacionRepository, MensajeRepository mensajeRepository,
                        MotorRespuestas motorRespuestas, MotorConsultasAsistidas motorConsultasAsistidas,
                        BrechaConocimientoService brechaConocimientoService, LimitadorDeFrecuencia limitador,
                        ModeracionDeContenido moderacion, RegistroDeConversaciones registro,
-                       PreferenciasService preferenciasService) {
+                       PreferenciasService preferenciasService, RevisionDeEntrada revision) {
         this.conversacionRepository = conversacionRepository;
         this.mensajeRepository = mensajeRepository;
         this.motorRespuestas = motorRespuestas;
@@ -68,6 +83,7 @@ public class ChatService {
         this.moderacion = moderacion;
         this.registro = registro;
         this.preferenciasService = preferenciasService;
+        this.revision = revision;
     }
 
     public Mensaje enviarMensaje(IdentidadDelChat identidad, String contenido, String adjuntoUrl) {
@@ -78,27 +94,47 @@ public class ChatService {
     // usa MotorRespuestas para la respuesta contextual. Puede ser null.
     public Mensaje enviarMensaje(IdentidadDelChat identidad, String contenido, String adjuntoUrl,
                                  VistaDelChat vista) {
+        return enviarMensaje(identidad, contenido, adjuntoUrl, vista, null);
+    }
+
+    // 1.4.0: `origen` es la direccion del cliente (X-Real-IP del borde). Con
+    // ella se limita tambien cuanto escribe una misma direccion, aunque reparta
+    // sus mensajes entre muchas sesiones de visitante. Null en pruebas y en
+    // llamadas internas.
+    public Mensaje enviarMensaje(IdentidadDelChat identidad, String contenido, String adjuntoUrl,
+                                 VistaDelChat vista, String origen) {
         limitador.exigir(LimitadorDeFrecuencia.Regla.MENSAJES, identidad.claveDeLimite());
-        moderacion.verificar(contenido);
+        if (origen != null && !origen.isBlank()) {
+            limitador.exigir(LimitadorDeFrecuencia.Regla.MENSAJES_POR_ORIGEN, origen);
+        }
+        RevisionDeEntrada.Revisada revisada = revision.revisar(contenido);
+        String pregunta = revisada.texto();
+        if (pregunta == null || pregunta.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El mensaje esta vacio.");
+        }
+        moderacion.verificar(pregunta);
 
         // HU-CHA-012: el "tiempo de respuesta" de las analiticas se mide desde
         // que llega la pregunta hasta que la respuesta esta lista para guardar.
         Instant recibido = Instant.now();
         long inicio = System.nanoTime();
 
-        ResultadoMotor resultado = generarRespuesta(identidad, contenido, vista);
+        ResultadoMotor resultado = generarRespuesta(identidad, pregunta, vista);
         if (resultado.requiereEscalamiento()) {
-            registrarPreguntaNoCubierta(contenido);
+            registrarPreguntaNoCubierta(pregunta);
         }
         String textoRespuesta = construirTextoRespuesta(resultado);
+        if (revisada.seTapoAlgo()) {
+            textoRespuesta = AVISO_DATO_TAPADO + textoRespuesta;
+        }
         int tiempo = milisegundosDesde(inicio);
         try {
-            return registro.guardarIntercambio(identidad, contenido, adjuntoUrl, recibido, textoRespuesta, resultado, tiempo);
+            return registro.guardarIntercambio(identidad, pregunta, adjuntoUrl, recibido, textoRespuesta, resultado, tiempo);
         } catch (DataIntegrityViolationException carrera) {
             // Dos primeros mensajes simultaneos de la misma identidad crean la
             // conversacion a la vez y uno choca con el indice unico: se guarda
             // de nuevo en la conversacion que gano.
-            return registro.guardarIntercambio(identidad, contenido, adjuntoUrl, recibido, textoRespuesta, resultado, tiempo);
+            return registro.guardarIntercambio(identidad, pregunta, adjuntoUrl, recibido, textoRespuesta, resultado, tiempo);
         }
     }
 

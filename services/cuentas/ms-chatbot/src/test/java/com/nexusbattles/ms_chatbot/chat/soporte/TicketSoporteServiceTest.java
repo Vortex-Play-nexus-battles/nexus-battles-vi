@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_chatbot.chat.soporte;
 
+import com.nexusbattles.ms_chatbot.chat.entrada.RevisionDeEntrada;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.identidad.SesionAnonima;
 import com.nexusbattles.ms_chatbot.chat.limite.LimitadorDeFrecuencia;
@@ -13,6 +14,7 @@ import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.privacidad.RedaccionDeDatosSensibles;
 import com.nexusbattles.ms_chatbot.chat.repository.ConversacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -68,7 +70,7 @@ class TicketSoporteServiceTest {
         // guarda paso por ella.
         RedaccionDeDatosSensibles redaccion = texto -> texto.replace("clave123", "[REDACTADO]");
         servicio = new TicketSoporteService(tickets, conversaciones, mensajes, limitador, moderacion, redaccion,
-            Clock.fixed(AHORA, ZoneOffset.UTC));
+            new RevisionDeEntrada(redaccion, new SimpleMeterRegistry()), Clock.fixed(AHORA, ZoneOffset.UTC));
     }
 
     @Test
