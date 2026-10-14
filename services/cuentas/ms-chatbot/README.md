@@ -1,7 +1,7 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
-**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.5.0 (compatible con 1.1.0)
-**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V11) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
+**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.6.0 (compatible con 1.1.0)
+**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V12) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
 ## Qué hace
@@ -35,6 +35,55 @@ panel (59 temas y 118 casos): sirve para restaurarla en otro entorno sin tocar l
 datos. `BaseDeConocimientoEnProduccionIT` comprueba que cada caso activo lo responde su
 tema, que ningún tema enlaza a una vista de administración y que una pregunta en inglés se
 responde en inglés.
+
+## Gestión de la base (1.6.0)
+
+§7.4.10 «Gestión de la base de conocimiento» (RF-CHA-013) en el panel
+(`/chatbot/admin/base-conocimiento/**`). Migración **V12**.
+
+- **Intenciones adicionales** («asociar respuestas con múltiples intenciones»): un tema
+  conserva su `categoria` (la intención principal, la que cuentan las analíticas) y puede
+  atender hasta 5 más con la misma respuesta (`intencionesAdicionales`; sin repetir y nunca
+  la principal, si no 400 con el motivo). Tabla `intenciones_adicionales_de_tema` (clave
+  primaria `tema_id`+`categoria`, `ON DELETE CASCADE`); viajan con el tema: crear la
+  candidata las copia (`TemaConocimiento.copiarA`), desplegar o revertir no las mueve,
+  exportar las incluye e importar las respeta (un archivo sin el campo, como
+  `contenido/base-de-conocimiento.json`, entra igual). Cuentan en el desempate por la vista
+  del jugador (`MotorRespuestas.esMejor`), en las preguntas relacionadas
+  (`Enriquecedor`: un tema sale entre las de cada una de sus intenciones; las de un tema,
+  primero de su categoría) y en `GET /chat/sugerencias?categoria=`. En el panel: casillas
+  «También responde a» en el formulario del tema y la columna «Intención».
+- **Título duplicado → 409 `TEMA_DUPLICADO`** (RF-CHA-013 «entrada duplicada»): el mismo
+  título que otro tema de la candidata, sin tildes, mayúsculas ni signos
+  (`NormalizadorTexto`), al agregar o editar. La importación **reemplaza** la candidata
+  entera, así que el duplicado solo puede estar dentro del archivo: también 409, y no se
+  escribe nada. Las variantes repetidas de un tema se guardan una vez, sin error
+  (`VariantesDePregunta.unirSinRepetir`; V11 sigue con `unir`, tal como se aplicó).
+- **Importación acotada → 413 `IMPORTACION_DEMASIADO_GRANDE`**: más de 500 temas (lo
+  comprueba el servicio antes de bloquear nada) o más de 8 MiB. Spring no limita el tamaño
+  de un cuerpo JSON (el `max-http-form-post-size` de Tomcat es solo para formularios) y el
+  borde corta en 10 MB solo lo que pasa por él: `LimiteDelArchivoDeImportacion`, dentro de
+  la cadena de seguridad y después de la autorización, rechaza por `Content-Length` sin
+  leer el cuerpo (o lee como mucho 8 MiB + 1 byte si llega por trozos).
+- **Transiciones en fila → 409 `CAMBIO_CONCURRENTE`**: desplegar (botón y publicación
+  programada), revertir, crear/descartar la candidata, editarla, importarla, evaluarla y
+  programarla empiezan bloqueando la fila de la versión que cambian
+  (`BloqueoDeVersiones`, `SELECT … FOR NO KEY UPDATE`), siempre en el orden producción →
+  candidata. La que llega después espera; si la fila cambió de estado mientras tanto
+  (PostgreSQL ya no la devuelve), falla limpia con 409 en vez del 500 del índice parcial de
+  V4 o de publicar dos veces. La publicación programada que pierde la carrera no hace nada
+  y vuelve a mirar al minuto. Además, `versiones_base_conocimiento.revision` (V12) es el
+  `@Version` de JPA: todo UPDATE de una versión lleva la revisión leída, y un fallo de
+  concurrencia de la base también responde 409 `CAMBIO_CONCURRENTE`, nunca 500.
+  Reemplaza la reclamación con un UPDATE suelto de 1.3.8 (`reclamarDespliegueProgramado`),
+  que además se saltaba la revisión.
+
+`TransicionesDeVersionIT` fuerza las carreras contra PostgreSQL real (desplegar contra
+revertir, dos despliegues, el botón contra la publicación programada): queda exactamente
+una versión en producción y la que pierde recibe 409 (o no hace nada).
+`GestionDeLaBaseDeConocimientoIT` recorre el ciclo de las intenciones (candidata,
+exportación e importación, despliegue y copia siguiente), los 409 de título duplicado, los
+413 de la importación y el esquema de V12.
 
 ## Diálogo (1.5.0)
 
@@ -205,4 +254,5 @@ adivinar; pedir la sesión con `POST /chat/sesiones` la haría de 256 bits. CORS
 (`SeguridadDelHistorialIT`: el ataque de la auditoría, límite de frecuencia, mensaje
 bloqueado, restricción de espacios de claves; `BaseDeConocimientoFielAlJuegoIT`: V10 → V11
 con producción, candidata y respuestas guardadas; `BaseDeConocimientoEnProduccionIT`: los
-139 casos de evaluación contra la base publicada). JaCoCo ≥ 80 %.
+139 casos de evaluación contra la base publicada; `GestionDeLaBaseDeConocimientoIT` y
+`TransicionesDeVersionIT`: V12 y la gestión de la base de 1.6.0). JaCoCo ≥ 80 %.

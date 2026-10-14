@@ -283,6 +283,8 @@ public class MotorRespuestas {
     // 1.3.4: con la vista del jugador, a igual puntaje gana primero el tema de
     // la categoria de esa vista (en «Subastas», una duda sobre "comprar" es de
     // subastas antes que de la tienda); despues, la prioridad.
+    // 1.6.0 (7.4.10): un tema es de la vista si esa es su categoria o una de
+    // sus intenciones adicionales.
     private static boolean esMejor(Coincidencia candidata, Coincidencia actual, Categoria preferida) {
         if (actual == null || candidata.puntaje() > actual.puntaje()) {
             return true;
@@ -290,8 +292,8 @@ public class MotorRespuestas {
         if (candidata.puntaje() != actual.puntaje()) {
             return false;
         }
-        boolean candidataEsDeLaVista = preferida != null && candidata.tema().getCategoria() == preferida;
-        boolean actualEsDeLaVista = preferida != null && actual.tema().getCategoria() == preferida;
+        boolean candidataEsDeLaVista = candidata.tema().atiende(preferida);
+        boolean actualEsDeLaVista = actual.tema().atiende(preferida);
         if (candidataEsDeLaVista != actualEsDeLaVista) {
             return candidataEsDeLaVista;
         }

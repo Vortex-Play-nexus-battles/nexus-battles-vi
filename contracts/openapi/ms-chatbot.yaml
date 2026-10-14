@@ -22,6 +22,10 @@ openapi: 3.1.0
 #               hace (V11), las respuestas en vivo y los escalamientos en
 #               ingles, busqueda en el inventario, seguimiento de la
 #               respuesta anterior e informe de actividad en paralelo
+#   7.4.10 (1.6.0) gestion de la base de conocimiento: intenciones
+#               adicionales por tema (V12), titulo duplicado 409
+#               TEMA_DUPLICADO, importacion acotada (413) y transiciones de
+#               version en fila (409 CAMBIO_CONCURRENTE en vez de un 500)
 #   7.4 (1.3.0) lo que faltaba del modulo 7.4: tickets y soporte humano
 #               (RF-CHA-007, RF-ADM-004), sugerencias y autocompletado,
 #               respuestas enriquecidas sin imagenes, vista del jugador y
@@ -114,7 +118,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.5.0
+  version: 1.6.0
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -124,6 +128,45 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.6.0 — 7.4.10: gestion de la base de conocimiento
+
+    Todo compatible: un campo opcional nuevo en los temas, respuestas de
+    error nuevas y valores nuevos de `motivo`. Ninguna operacion ni campo
+    existente cambia de forma.
+
+    * **Intenciones adicionales** («asociar respuestas con multiples
+      intenciones»). `DatosDeTema` (y con el `Tema` y `TemaIntercambio`)
+      agrega `intencionesAdicionales`: otras categorias que atiende la
+      misma respuesta, ademas de `categoria`. Hasta 5, sin repetir y nunca
+      la propia `categoria` (400 con el motivo en `detail`). Sin valor es
+      ninguna; en las respuestas siempre viene, vacia si no hay. Viajan con
+      el tema (migracion V12): crear la candidata las copia, desplegar o
+      revertir no las toca, exportar las incluye e importar las respeta; un
+      archivo anterior a 1.6.0, sin el campo, se importa igual. El chatbot
+      las usa al desempatar por la seccion del jugador (`vista`), al proponer
+      preguntas relacionadas (un tema sale entre las de cada una de sus
+      intenciones) y en `GET /chat/sugerencias` con `categoria`. Las
+      analiticas siguen contando la categoria principal.
+    * **Titulo duplicado** (RF-CHA-013 «entrada duplicada»): agregar o
+      editar un tema de la candidata con el mismo titulo que otro (sin
+      contar tildes, mayusculas ni signos) responde 409 con `motivo`
+      TEMA_DUPLICADO. La importacion reemplaza la candidata entera, asi que
+      ahi el duplicado solo puede estar dentro del archivo: tambien 409
+      TEMA_DUPLICADO, y no se escribe nada. Las variantes de pregunta
+      repetidas de un tema (con la misma regla) se guardan una sola vez, sin
+      error.
+    * **Importacion acotada**: como mucho 500 temas y 8 MB. Mas responde 413
+      con `motivo` IMPORTACION_DEMASIADO_GRANDE y no se escribe nada.
+    * **Transiciones en fila**: desplegar (el boton y la publicacion
+      programada), revertir, crear o descartar la candidata, editarla,
+      importarla, evaluarla y programarla ya no se cruzan. Nunca quedan dos
+      versiones en produccion ni ninguna; la operacion que llega con un
+      estado que otra acaba de cambiar responde 409 con `motivo`
+      CAMBIO_CONCURRENTE (antes, un 500 o una version publicada dos veces).
+      No se cambia nada: el panel muestra el estado nuevo y el administrador
+      decide otra vez. La publicacion programada que pierde la carrera no
+      hace nada y vuelve a mirar al minuto siguiente.
 
     ### 1.5.0 — 7.4.1 a 7.4.5: lo que dice el chatbot (revision final)
 
@@ -672,7 +715,8 @@ paths:
 
         * Sin `q`: los temas mas consultados, para los botones de preguntas
           rapidas y el menu de temas frecuentes (7.4.6). Con `categoria`,
-          solo los de esa categoria.
+          solo los de esa categoria (desde 1.6.0, tambien los que la
+          atienden como intencion adicional).
         * Con `q` (2 o mas caracteres): autocompletado; los temas cuyo
           titulo o variantes empiezan o contienen lo que el usuario lleva
           escrito, con la misma tolerancia a tildes y mayusculas del motor.
@@ -1076,7 +1120,13 @@ paths:
       tags: [admin-base-conocimiento]
       operationId: agregarTemaALaVersionCandidata
       summary: Agrega un tema a la version candidata
-      description: El tema recibe una `clave` nueva.
+      description: |
+        El tema recibe una `clave` nueva.
+
+        Desde 1.6.0: con `intencionesAdicionales` (hasta 5, sin repetir,
+        nunca la `categoria`; si no, 400); un titulo igual al de otro tema de
+        la candidata, sin contar tildes, mayusculas ni signos, es 409
+        TEMA_DUPLICADO; las variantes repetidas se guardan una vez.
       security:
         - tokenDeAdministrador: []
       requestBody:
@@ -1085,6 +1135,17 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DatosDeTema'
+            example:
+              categoria: SUBASTA_Y_COMERCIO
+              intencionesAdicionales: [CUENTA_Y_REGISTRO]
+              tipoRespuesta: PASO_A_PASO
+              titulo: Cómo conseguir créditos para pujar
+              variantesEs: [como consigo creditos, me faltan creditos para pujar]
+              variantesEn: [how do I get credits]
+              respuestaEs: 'Los créditos se ganan en las misiones y las batallas. 1) Entra a «Misiones». 2) Completa una misión.'
+              respuestaEn: null
+              prioridad: 1
+              activo: true
       responses:
         '201':
           description: Tema creado.
@@ -1093,13 +1154,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Tema'
         '400':
-          $ref: '#/components/responses/PeticionInvalida'
+          $ref: '#/components/responses/TemaInvalido'
         '401':
           $ref: '#/components/responses/NoAutenticado'
         '403':
           $ref: '#/components/responses/SinPermiso'
         '409':
-          $ref: '#/components/responses/ConflictoDeVersion'
+          $ref: '#/components/responses/ConflictoDeTema'
 
   /chatbot/admin/base-conocimiento/borrador/temas/{temaId}:
     parameters:
@@ -1114,7 +1175,13 @@ paths:
       tags: [admin-base-conocimiento]
       operationId: editarTemaDeLaVersionCandidata
       summary: Edita un tema de la version candidata
-      description: La `clave` no cambia. Un tema de otra version responde 404.
+      description: |
+        La `clave` no cambia. Un tema de otra version responde 404.
+
+        Desde 1.6.0 `intencionesAdicionales` reemplaza las que tenia (sin
+        valor = ninguna), con las mismas reglas que al agregar. Conservar el
+        propio titulo no es un duplicado; tomar el de otro tema, si (409
+        TEMA_DUPLICADO).
       security:
         - tokenDeAdministrador: []
       requestBody:
@@ -1131,7 +1198,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Tema'
         '400':
-          $ref: '#/components/responses/PeticionInvalida'
+          $ref: '#/components/responses/TemaInvalido'
         '401':
           $ref: '#/components/responses/NoAutenticado'
         '403':
@@ -1139,7 +1206,7 @@ paths:
         '404':
           $ref: '#/components/responses/NoEncontrado'
         '409':
-          $ref: '#/components/responses/ConflictoDeVersion'
+          $ref: '#/components/responses/ConflictoDeTema'
     delete:
       tags: [admin-base-conocimiento]
       operationId: eliminarTemaDeLaVersionCandidata
@@ -1168,6 +1235,21 @@ paths:
         `temas`. Un tema con `clave` la conserva (asi sigue contando como el
         mismo tema en las analiticas); sin `clave`, se trata como nuevo. Una
         `clave` repetida en el archivo responde 400.
+
+        Desde 1.6.0:
+        * cada tema conserva sus `intencionesAdicionales` (mismas reglas que
+          al agregarlo; el 400 dice que tema del archivo falla). Un archivo
+          anterior a 1.6.0, sin el campo, se importa igual;
+        * como el archivo reemplaza la candidata entera, un titulo duplicado
+          solo puede estar dentro del archivo: dos temas con el mismo
+          titulo (sin contar tildes, mayusculas ni signos) responden 409
+          TEMA_DUPLICADO;
+        * como mucho 500 temas y 8 MB: mas responde 413
+          IMPORTACION_DEMASIADO_GRANDE (el tamano se mira antes de leer el
+          cuerpo).
+
+        Todo se comprueba antes de tocar la candidata: con cualquier error no
+        se escribe nada.
       security:
         - tokenDeAdministrador: []
       requestBody:
@@ -1186,13 +1268,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/Tema'
         '400':
-          $ref: '#/components/responses/PeticionInvalida'
+          $ref: '#/components/responses/TemaInvalido'
         '401':
           $ref: '#/components/responses/NoAutenticado'
         '403':
           $ref: '#/components/responses/SinPermiso'
         '409':
-          $ref: '#/components/responses/ConflictoDeVersion'
+          $ref: '#/components/responses/ConflictoDeTema'
+        '413':
+          $ref: '#/components/responses/ImportacionDemasiadoGrande'
 
   /chatbot/admin/base-conocimiento/borrador/evaluacion:
     post:
@@ -1246,13 +1330,19 @@ paths:
           description: |
             La candidata rinde peor (cuerpo `DespliegueRechazado`), o no hay
             candidata, o no hay casos de evaluacion activos (problem details
-            simple).
+            simple). Desde 1.6.0 tambien si otro despliegue, una reversion o
+            la publicacion programada cambiaron las versiones mientras esta
+            esperaba su turno (`motivo` CAMBIO_CONCURRENTE): no se despliega
+            nada, y nunca quedan dos versiones en produccion.
           content:
             application/problem+json:
               schema:
                 oneOf:
                   - $ref: '#/components/schemas/DespliegueRechazado'
                   - $ref: '#/components/schemas/ProblemDetail'
+              examples:
+                cambioConcurrente:
+                  $ref: '#/components/examples/CambioConcurrente'
   /chatbot/admin/base-conocimiento/borrador/programacion:
     put:
       tags: [admin-reentrenamiento]
@@ -1295,11 +1385,16 @@ paths:
         '403':
           $ref: '#/components/responses/SinPermiso'
         '409':
-          description: No hay version candidata.
+          description: |
+            No hay version candidata, o (1.6.0) otra operacion la cambio
+            mientras esta esperaba su turno (`motivo` CAMBIO_CONCURRENTE).
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+              examples:
+                cambioConcurrente:
+                  $ref: '#/components/examples/CambioConcurrente'
     delete:
       tags: [admin-reentrenamiento]
       operationId: cancelarDespliegueProgramadoDelChatbot
@@ -1319,11 +1414,16 @@ paths:
         '403':
           $ref: '#/components/responses/SinPermiso'
         '409':
-          description: No hay version candidata.
+          description: |
+            No hay version candidata, o (1.6.0) otra operacion la cambio
+            mientras esta esperaba su turno (`motivo` CAMBIO_CONCURRENTE).
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+              examples:
+                cambioConcurrente:
+                  $ref: '#/components/examples/CambioConcurrente'
 
   /chatbot/admin/base-conocimiento/produccion/reversion:
     post:
@@ -1334,6 +1434,11 @@ paths:
         La version en produccion pasa a `RETIRADA` y la retirada que entro a
         produccion mas recientemente vuelve a `PRODUCCION`. Revertir dos
         veces seguidas vuelve a la version de partida.
+
+        Desde 1.6.0, si un despliegue (o la publicacion programada) cambio la
+        version en produccion mientras la reversion esperaba su turno, 409
+        CAMBIO_CONCURRENTE: no se revierte una version que el administrador
+        no estaba viendo.
       security:
         - tokenDeAdministrador: []
       responses:
@@ -1663,11 +1768,138 @@ components:
       description: |
         El estado de las versiones no lo permite: no hay candidata, ya hay
         una, no hay version anterior a la cual revertir, o no hay casos de
-        evaluacion activos.
+        evaluacion activos. Desde 1.6.0 tambien cuando otra operacion
+        (despliegue, reversion, publicacion programada o un cambio en la
+        candidata) cambio las versiones mientras esta esperaba su turno:
+        `motivo` CAMBIO_CONCURRENTE, y no se cambio nada.
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/ProblemDetail'
+          examples:
+            sinCandidata:
+              $ref: '#/components/examples/SinCandidata'
+            cambioConcurrente:
+              $ref: '#/components/examples/CambioConcurrente'
+    ConflictoDeTema:
+      description: |
+        1.6.0. No hay candidata; otro tema de la candidata ya tiene ese
+        titulo, sin contar tildes, mayusculas ni signos (`motivo`
+        TEMA_DUPLICADO; en una importacion, dos temas del mismo archivo); u
+        otra operacion cambio las versiones mientras esta esperaba su turno
+        (`motivo` CAMBIO_CONCURRENTE). No se escribe nada.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          examples:
+            temaDuplicado:
+              $ref: '#/components/examples/TemaDuplicado'
+            temaDuplicadoEnElArchivo:
+              $ref: '#/components/examples/TemaDuplicadoEnElArchivo'
+            cambioConcurrente:
+              $ref: '#/components/examples/CambioConcurrente'
+            sinCandidata:
+              $ref: '#/components/examples/SinCandidata'
+    TemaInvalido:
+      description: |
+        Cuerpo invalido. Desde 1.6.0 tambien `intencionesAdicionales` con mas
+        de 5, una repetida o la propia `categoria` del tema; `detail` dice
+        cual (y, en una importacion, que tema del archivo).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          examples:
+            intencionPrincipal:
+              summary: La categoria principal tambien como adicional
+              value:
+                type: about:blank
+                title: Bad Request
+                status: 400
+                detail: La intencion PRODUCTO ya es la categoria principal del tema; no se repite como adicional.
+                instance: /api/v1/chatbot/admin/base-conocimiento/borrador/temas
+            demasiadasIntenciones:
+              summary: Mas de cinco intenciones adicionales
+              value:
+                type: about:blank
+                title: Bad Request
+                status: 400
+                detail: Un tema atiende como maximo 5 intenciones ademas de su categoria y llegaron 6.
+                instance: /api/v1/chatbot/admin/base-conocimiento/borrador/temas
+            intencionEnLaImportacion:
+              summary: En una importacion, el tema del archivo que falla
+              value:
+                type: about:blank
+                title: Bad Request
+                status: 400
+                detail: "Tema 3 del archivo ('Como pujar'): la intencion SUBASTA_Y_COMERCIO esta repetida en las intenciones adicionales."
+                instance: /api/v1/chatbot/admin/base-conocimiento/borrador/importacion
+    ImportacionDemasiadoGrande:
+      description: |
+        1.6.0. El archivo trae mas de 500 temas o pesa mas de 8 MB (`motivo`
+        IMPORTACION_DEMASIADO_GRANDE). El tamano se mira antes de leer el
+        cuerpo. No se escribe nada.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          examples:
+            demasiadosTemas:
+              summary: Mas de 500 temas
+              value:
+                type: about:blank
+                title: Archivo demasiado grande
+                status: 413
+                detail: El archivo trae 612 temas y se importan como maximo 500. Divide la base o quita temas antes de importarla.
+                instance: /api/v1/chatbot/admin/base-conocimiento/borrador/importacion
+                motivo: IMPORTACION_DEMASIADO_GRANDE
+            demasiadosBytes:
+              summary: Mas de 8 MB
+              value:
+                type: about:blank
+                title: Archivo demasiado grande
+                status: 413
+                detail: El archivo pesa mas de 8 MB, el maximo que se importa (500 temas). Revisa que sea una exportacion de la base de conocimiento.
+                instance: /api/v1/chatbot/admin/base-conocimiento/borrador/importacion
+                motivo: IMPORTACION_DEMASIADO_GRANDE
+
+  examples:
+    CambioConcurrente:
+      summary: Otra operacion cambio las versiones a la vez (1.6.0)
+      value:
+        type: about:blank
+        title: Cambio simultaneo
+        status: 409
+        detail: "Otro administrador cambio la base de conocimiento al mismo tiempo (otro despliegue, una reversion o un cambio en la candidata). No se cambio nada: revisa el estado actual y vuelve a intentarlo."
+        instance: /api/v1/chatbot/admin/base-conocimiento/produccion/reversion
+        motivo: CAMBIO_CONCURRENTE
+    TemaDuplicado:
+      summary: Otro tema de la candidata ya tiene ese titulo (1.6.0)
+      value:
+        type: about:blank
+        title: Tema duplicado
+        status: 409
+        detail: "El titulo '¿COMO crear una CUENTA?' es el mismo que el del tema 'Cómo crear una cuenta' de la version candidata (sin contar tildes, mayusculas ni signos). Cambialo o edita ese tema."
+        instance: /api/v1/chatbot/admin/base-conocimiento/borrador/temas
+        motivo: TEMA_DUPLICADO
+    TemaDuplicadoEnElArchivo:
+      summary: Dos temas del archivo de importacion con el mismo titulo (1.6.0)
+      value:
+        type: about:blank
+        title: Tema duplicado
+        status: 409
+        detail: "Los temas 1 y 3 del archivo tienen el mismo titulo ('Cómo pujar' y 'como PUJAR?', sin contar tildes, mayusculas ni signos). Una version no puede tener dos temas con el mismo titulo: cambia uno o quitalo del archivo."
+        instance: /api/v1/chatbot/admin/base-conocimiento/borrador/importacion
+        motivo: TEMA_DUPLICADO
+    SinCandidata:
+      summary: No hay version candidata
+      value:
+        type: about:blank
+        title: Conflict
+        status: 409
+        detail: No hay una version candidata. Crea una a partir de la version en produccion.
+        instance: /api/v1/chatbot/admin/base-conocimiento/borrador/temas
 
   schemas:
     EnviarMensaje:
@@ -2003,11 +2235,14 @@ components:
         motivo:
           type: string
           enum: [LIMITE_DE_FRECUENCIA, CONTENIDO_BLOQUEADO, MODERACION_NO_DISPONIBLE,
-                 SESION_REQUERIDA, TICKET_ABIERTO, TRANSICION_NO_PERMITIDA]
+                 SESION_REQUERIDA, TICKET_ABIERTO, TRANSICION_NO_PERMITIDA,
+                 TEMA_DUPLICADO, IMPORTACION_DEMASIADO_GRANDE, CAMBIO_CONCURRENTE]
           description: |
             1.2.0. Solo en los errores nuevos de /chat/**. 1.3.0 agrega los de
             los tickets: SESION_REQUERIDA, TICKET_ABIERTO y
-            TRANSICION_NO_PERMITIDA.
+            TRANSICION_NO_PERMITIDA. 1.6.0 agrega los del panel de la base de
+            conocimiento: TEMA_DUPLICADO (409), IMPORTACION_DEMASIADO_GRANDE
+            (413) y CAMBIO_CONCURRENTE (409).
 
     SesionAnonima:
       type: object
@@ -2241,7 +2476,9 @@ components:
       type: array
       description: |
         Frases con las que un usuario haria la pregunta. Ninguna puede
-        contener `,` (400): el motor las guarda separadas por coma.
+        contener `,` (400): el motor las guarda separadas por coma. Desde
+        1.6.0 las repetidas (sin contar tildes, mayusculas ni signos) se
+        guardan una sola vez, sin error.
       items:
         type: string
         minLength: 1
@@ -2253,12 +2490,31 @@ components:
       properties:
         categoria:
           $ref: '#/components/schemas/Categoria'
+        intencionesAdicionales:
+          type: [array, 'null']
+          maxItems: 5
+          uniqueItems: true
+          default: []
+          items:
+            $ref: '#/components/schemas/Categoria'
+          description: |
+            1.6.0 (7.4.10 «asociar respuestas con multiples intenciones»):
+            otras intenciones que atiende la misma respuesta, ademas de
+            `categoria`. Hasta 5, sin repetir y nunca la propia `categoria`
+            (400). Sin valor = ninguna. El chatbot las cuenta al desempatar
+            por la seccion del jugador, en las preguntas relacionadas y en
+            las sugerencias por categoria; las analiticas siguen contando la
+            `categoria`.
+          example: [CUENTA_Y_REGISTRO, PRODUCTO]
         tipoRespuesta:
           $ref: '#/components/schemas/TipoRespuesta'
         titulo:
           type: string
           minLength: 1
           maxLength: 150
+          description: |
+            Desde 1.6.0, unico en la version: el mismo que el de otro tema,
+            sin contar tildes, mayusculas ni signos, es 409 TEMA_DUPLICADO.
         variantesEs:
           allOf:
             - $ref: '#/components/schemas/Variantes'
@@ -2286,7 +2542,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/DatosDeTema'
         - type: object
-          required: [id, clave, prioridad, activo]
+          required: [id, clave, prioridad, activo, intencionesAdicionales]
           properties:
             id:
               type: string
@@ -2296,8 +2552,17 @@ components:
               description: Identifica al mismo tema en todas las versiones; no cambia al editarlo.
             activo:
               type: boolean
+            intencionesAdicionales:
+              type: array
+              items:
+                $ref: '#/components/schemas/Categoria'
+              description: 1.6.0. Siempre viene, en el orden del enum; vacia si el tema no tiene.
 
     TemaIntercambio:
+      description: |
+        Desde 1.6.0 la exportacion trae siempre `intencionesAdicionales`
+        (vacia si no tiene); un archivo anterior, sin el campo, se importa
+        igual (sin intenciones).
       allOf:
         - $ref: '#/components/schemas/DatosDeTema'
         - type: object
@@ -2326,11 +2591,15 @@ components:
     ImportacionBaseConocimiento:
       type: object
       required: [temas]
-      description: Mismo formato que `ExportacionBaseConocimiento`; los demas campos se ignoran.
+      description: |
+        Mismo formato que `ExportacionBaseConocimiento`; los demas campos se
+        ignoran. Desde 1.6.0, como mucho 500 temas y 8 MB en total (413
+        IMPORTACION_DEMASIADO_GRANDE).
       properties:
         temas:
           type: array
           minItems: 1
+          maxItems: 500
           items:
             $ref: '#/components/schemas/TemaIntercambio'
 
