@@ -202,6 +202,22 @@ test.describe('Mi inventario en AWS DEV (revisión final §7.1)', () => {
     });
     expect(corta.status()).toBe(400);
 
+    // RNF-REN-003: la búsqueda indexada, medida desde fuera (borde incluido).
+    // Se informa siempre; el tope aquí es holgado porque mide también la red
+    // del runner, no solo el servicio.
+    // Su nombre propio, o el tipo («héroe», también buscable) si es corto.
+    const criterio = heroe.nombrePropio.length >= 4 ? heroe.nombrePropio.slice(0, 6) : 'heroe';
+    const inicio = Date.now();
+    const busqueda = await api.get(
+      `/api/v1/inventario/elementos/busqueda?criterio=${encodeURIComponent(criterio)}&pagina=0`,
+      { headers: conToken(jugadora.token) },
+    );
+    const milisegundos = Date.now() - inicio;
+    expect(busqueda.status(), await busqueda.text()).toBe(200);
+    expect((await busqueda.json()).elementos.map((e) => e.id)).toContain(heroe.id);
+    console.log(`INVENTARIO-INFO|busqueda-ms|${milisegundos}`);
+    expect(milisegundos).toBeLessThan(2_000);
+
     // Lo de la jugadora, visto por otra cuenta: ni se renombra ni se retira.
     const suyo = heroe.id;
     const renombrar = await api.patch(`/api/v1/inventario/elementos/${suyo}`, {
@@ -312,6 +328,18 @@ test.describe('Mi inventario en AWS DEV (revisión final §7.1)', () => {
     expect(consultas.some((c) => /categoria=OBJETOS/.test(c))).toBe(true);
     await expect(panel.locator('.paginacion__pagina[aria-current="page"]')).toHaveText('1');
     expect(await panel.innerText()).not.toMatch(UUID);
+    // Las imágenes de las tarjetas llegan (ninguna rota).
+    await expect
+      .poll(
+        () =>
+          panel.evaluate((nodo) =>
+            [...nodo.querySelectorAll('img')]
+              .filter((i) => i.getBoundingClientRect().width > 0)
+              .every((i) => i.complete && i.naturalWidth > 0),
+          ),
+        { message: 'las imágenes de la vitrina cargan', timeout: 20_000 },
+      )
+      .toBe(true);
     await sinBarrerasGraves(page, 'Mi inventario · Objetos');
     await capturar(page, testInfo, 'inv-02-objetos');
 
