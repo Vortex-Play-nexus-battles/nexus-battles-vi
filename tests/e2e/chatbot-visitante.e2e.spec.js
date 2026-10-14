@@ -17,6 +17,10 @@
  * ms-chatbot.yaml 1.12.0 (RF-CHA-007, actor Visitante): lo que no entiende
  * también le abre al visitante una solicitud de soporte, que ve en «Tus
  * solicitudes» con su sesión y que nadie más ve.
+ *
+ * ms-chatbot.yaml 1.15.0 (§7.4.3 «sugerencias proactivas»): al abrirlo, el
+ * asistente le propone algo y dice por qué; antes de preguntar, por la sección
+ * donde está, y al volver, por lo que ya preguntó.
  */
 
 import { test, expect, request as apiRequest } from '@playwright/test';
@@ -50,9 +54,17 @@ test.describe('Asistente · visitante (§7.4)', () => {
     await page.goto(`${BORDE}/login`);
     const asistente = await abrirAsistente(page);
 
+    // 0. Antes de preguntar nada, «Quizá te interese» por la sección donde está.
+    const propuesta = asistente.ventana.locator('[data-proactiva]');
+    await expect(
+      propuesta.getByRole('group', { name: 'Por la sección donde estás' }),
+    ).toBeVisible();
+
     // 1. Cómo registrarse: la guía paso a paso y el enlace a «Crear cuenta».
     const registro = await preguntar(page, '¿Cómo me registro?');
     await expect(registro).toContainText('Para crear tu cuenta');
+    // Lo propuesto se va con la pregunta.
+    await expect(propuesta).toHaveCount(0);
     expect(await registro.locator('.chatbot-enriquecido__pasos li').count()).toBeGreaterThanOrEqual(
       3,
     );
@@ -97,6 +109,13 @@ test.describe('Asistente · visitante (§7.4)', () => {
     await expect(otraVista.preguntas.first()).toContainText('¿Cómo me registro?');
     await expect(otraVista.respuestas).toHaveCount(2);
     await expect(otraVista.respuestas.nth(1)).toContainText('Las reglas básicas');
+    // Y le propone lo que sigue de lo que preguntó, diciendo por qué.
+    await expect(
+      otraVista.ventana
+        .locator('[data-proactiva]')
+        .getByRole('group', { name: /^Porque preguntaste por «/ })
+        .first(),
+    ).toBeVisible();
 
     // Navegación asistida: una sección pública, con su enlace.
     const subasta = await preguntar(page, 'llévame a la subasta');
