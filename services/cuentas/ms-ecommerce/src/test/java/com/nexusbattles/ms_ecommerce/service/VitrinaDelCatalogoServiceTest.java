@@ -625,6 +625,21 @@ class VitrinaDelCatalogoServiceTest {
         }
 
         @Test
+        @DisplayName("SA-13: la tarjeta dice si el producto es premium (§7.2.2) y si es unico (§7.2.1)")
+        void marcasDelCatalogo() {
+            catalogoCon(producto("premium", null, "9000", true, "ACTIVO", -1),
+                    producto("unico", 300, null, false, "UNICO", 1),
+                    producto("comun", 300, "6000", false, "ACTIVO", -1));
+
+            assertThat(tarjeta("premium").premium()).isTrue();
+            assertThat(tarjeta("premium").unico()).isFalse();
+            assertThat(tarjeta("unico").premium()).isFalse();
+            assertThat(tarjeta("unico").unico()).isTrue();
+            assertThat(tarjeta("comun").premium()).isFalse();
+            assertThat(tarjeta("comun").unico()).isFalse();
+        }
+
+        @Test
         @DisplayName("sin precio, premium sin COP (no se convierte a creditos), suspendido o agotado: no se vende")
         void noSeVende() {
             catalogoCon(
