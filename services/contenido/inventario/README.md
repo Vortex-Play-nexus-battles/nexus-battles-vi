@@ -30,14 +30,38 @@ El inventario conserva referencias al catalogo y no copia imagenes,
 estadisticas, habilidades, efectos ni precios. Asi, las modificaciones globales
 de productos pueden propagarse a todas las instancias, como exige `RF-ADM-10`.
 
-`SCRUM-322` crea un indice de texto MongoDB sobre la informacion que si pertenece
-al inventario: referencia del producto, tipo, nombre propio y parte de armadura.
-Este indice prepara la busqueda sin duplicar datos administrados por el servicio
-de productos.
+`SCRUM-322` creo un indice de texto MongoDB sobre la informacion que si pertenece
+al inventario (referencia del producto, tipo, nombre propio y parte de armadura).
+Desde 1.7.0 la busqueda ya no lo usa: `$text` solo reconoce palabras completas y
+§7.1 pide encontrar «cualquier informacion presente en el producto» desde cuatro
+caracteres.
 
-`SCRUM-323` expone la consulta indexada del inventario propio. Exige un criterio
-de al menos cuatro caracteres, busca por referencia de producto, tipo, nombre
-propio o parte de armadura y conserva la paginacion de dieciseis elementos.
+**Busqueda (1.7.0, `HU-INV-002`).** `BuscarElementosInventario` lee el inventario
+del propietario por su indice unico y se queda con los elementos en los que el
+criterio aparece, como fragmento y sin tildes ni mayusculas:
+
+- en lo que guarda el inventario: nombre propio, tipo, parte de armadura e
+  identificador del producto (tambien con su nombre legible: «arma», «casco»);
+- en la informacion de su producto en el catalogo —nombre, descripcion, efectos,
+  prototipo, atributos con la etiqueta de la ficha («Poder de ataque 42»,
+  «Defensa 3», «Turnos de carga 2»; 1.7.1) y, en los heroes, sus acciones con su
+  costo y su efecto—, resuelta con
+  `IndiceDeBusquedaDelCatalogo`: un **indice invertido de cuatrigramas**
+  (`IndiceDeNgramas`) construido con `GET /api/v1/productos` y las fichas de
+  `GET /api/v1/heroes/{nombre}`, renovado en segundo plano cada
+  `inventario.busqueda.vigencia-del-catalogo` (5 minutos por omision). Si el
+  catalogo no responde, la busqueda se queda en lo que guarda el inventario y no
+  falla; tras un fallo (primera construccion o renovacion) no se reintenta hasta
+  pasados 30 s. La primera construccion se serializa con un `ReentrantLock`, no
+  con `synchronized`: en Java 21 un hilo virtual bloqueado dentro de
+  `synchronized` fija su hilo portador.
+
+El inventario sigue sin copiar el catalogo: guarda la referencia y el indice se
+reconstruye desde el servicio de productos, que es el dueno del dato.
+
+**Vitrina por pestana (1.7.0).** `GET /elementos?categoria=HEROES|OBJETOS` pagina
+solo los heroes o solo los objetos, de dieciseis en dieciseis, y cada elemento
+de la pagina trae `equipadoEn` (el heroe que lo lleva) cuando esta puesto.
 
 El agregado es inmutable y se guarda como un documento por propietario. Esta
 decision permite que los cambios de una instancia se persistan atomicamente y
@@ -51,6 +75,7 @@ La API deriva el propietario de `X-User-Name`, la convencion temporal de
 token sin cambiar las reglas de propiedad de la aplicacion.
 
 ```text
+GET   /api/v1/inventario/elementos?pagina={numero}&categoria={HEROES|OBJETOS}
 GET   /api/v1/inventario/elementos/busqueda?criterio={texto}&pagina={numero}
 POST  /api/v1/inventario/elementos
 PATCH /api/v1/inventario/elementos/{elementoId}
@@ -88,6 +113,19 @@ OAuth2 `client_credentials`; Inventario valida el bearer token y el claim
 llama a `DELETE` con el mismo elemento, subasta y una clave de idempotencia.
 Repetir el aviso conserva el producto disponible; un aviso de otra subasta
 responde `409` y no levanta el bloqueo vigente.
+
+### Evidencia de los criterios de HU-INV-010
+
+| Criterio | Prueba automatica | Resultado local (2026-09-30) |
+| --- | --- | --- |
+| El producto publicado figura no disponible y no se puede modificar, eliminar ni equipar. | `InventarioApiTest.productoBloqueadoEnSubasta`, `InventarioTest.impedirOperacionesSobreProductoBloqueado` y `bloqueo-subasta.aceptacion.spec.js` sobre Chromium. | Verde |
+| El aviso de cierre o cancelacion levanta el bloqueo. | `InventarioApiTest.liberarProductoAlCerrarSubasta` y `GestionarBloqueoSubastaTest.liberarAlRecibirAvisoDeCierre`. | Verde |
+| Sin respuesta de Subastas se conserva el bloqueo registrado. | `InventarioApiTest.conservarBloqueoSiSubastasNoResponde` y `ConsultarInventarioPaginadoTest.conservaBloqueoSiSubastasNoResponde`. | Verde |
+
+La prueba de navegador abre la ranura de arma y comprueba que el objeto se
+muestra como `en subasta`, permanece visible para explicar el motivo y no se
+puede seleccionar. De esta manera la evidencia sigue el flujo actual de
+equipamiento por ranuras y no una interfaz anterior.
 
 Los documentos historicos cuyo propietario o producto aun sea un apodo o una
 referencia no UUID responden `409` en la consulta interna hasta que se ejecute

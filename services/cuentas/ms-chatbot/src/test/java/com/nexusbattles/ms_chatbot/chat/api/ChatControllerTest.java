@@ -83,7 +83,7 @@ class ChatControllerTest {
         SesionAnonima sesion = sesion();
         when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion));
         Mensaje respuestaBot = crearMensajeBot("Respuesta de prueba");
-        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenReturn(respuestaBot);
+        when(chatService.enviarMensaje(any(), anyString(), any(), any(), any())).thenReturn(respuestaBot);
 
         mockMvc.perform(post("/chat/mensajes")
                 .header(CABECERA, SESION)
@@ -95,7 +95,7 @@ class ChatControllerTest {
             .andExpect(jsonPath("$.contenido").value("Respuesta de prueba"));
 
         ArgumentCaptor<IdentidadDelChat> identidad = ArgumentCaptor.forClass(IdentidadDelChat.class);
-        verify(chatService).enviarMensaje(identidad.capture(), eq("Hola"), any(), any());
+        verify(chatService).enviarMensaje(identidad.capture(), eq("Hola"), any(), any(), any());
         assertThat(identidad.getValue().autenticado()).isFalse();
         assertThat(identidad.getValue().claveDeConversacion()).isEqualTo("anonimo:" + sesion.getId());
     }
@@ -106,7 +106,7 @@ class ChatControllerTest {
     void enviarMensaje_conAdjuntoUrl_loAceptaPeroNoLoGuarda() throws Exception {
         when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion()));
         Mensaje respuestaBot = crearMensajeBot("Respuesta de prueba");
-        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenReturn(respuestaBot);
+        when(chatService.enviarMensaje(any(), anyString(), any(), any(), any())).thenReturn(respuestaBot);
 
         mockMvc.perform(post("/chat/mensajes")
                 .header(CABECERA, SESION)
@@ -115,7 +115,7 @@ class ChatControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.contenido").value("Respuesta de prueba"));
 
-        verify(chatService).enviarMensaje(any(), eq("Hola"), isNull(), any());
+        verify(chatService).enviarMensaje(any(), eq("Hola"), isNull(), any(), any());
     }
 
     // 1.3.4: la vista llega al servicio y la respuesta trae lo enriquecido.
@@ -125,7 +125,7 @@ class ChatControllerTest {
         Mensaje respuestaBot = crearMensajeBot("Para pujar necesitas créditos.");
         when(respuestaBot.getEnriquecido()).thenReturn(new RespuestaEnriquecida(List.of("Elige", "Puja"),
             List.of(new EnlaceInterno("Ir a Subastas", "subastas")), List.of(), List.of("Cómo publicar"), false));
-        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenReturn(respuestaBot);
+        when(chatService.enviarMensaje(any(), anyString(), any(), any(), any())).thenReturn(respuestaBot);
 
         mockMvc.perform(post("/chat/mensajes")
                 .header(CABECERA, SESION)
@@ -137,7 +137,7 @@ class ChatControllerTest {
             .andExpect(jsonPath("$.enriquecido.respuestasRapidas[0]").value("Cómo publicar"))
             .andExpect(jsonPath("$.enriquecido.ofrecerSoporteHumano").value(false));
 
-        verify(chatService).enviarMensaje(any(), eq("como pujo"), isNull(), eq(VistaDelChat.SUBASTAS));
+        verify(chatService).enviarMensaje(any(), eq("como pujo"), isNull(), eq(VistaDelChat.SUBASTAS), any());
     }
 
     @Test
@@ -161,7 +161,7 @@ class ChatControllerTest {
         when(sesiones.validar(declarada)).thenReturn(Optional.empty());
         when(sesiones.declarar(declarada, "203.0.113.7")).thenReturn(sesion);
         Mensaje respuestaBot = crearMensajeBot("Hola visitante");
-        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenReturn(respuestaBot);
+        when(chatService.enviarMensaje(any(), anyString(), any(), any(), any())).thenReturn(respuestaBot);
 
         mockMvc.perform(post("/chat/mensajes")
                 .header(CABECERA, declarada)
@@ -172,7 +172,7 @@ class ChatControllerTest {
             .andExpect(header().doesNotExist(CABECERA));
 
         ArgumentCaptor<IdentidadDelChat> identidad = ArgumentCaptor.forClass(IdentidadDelChat.class);
-        verify(chatService).enviarMensaje(identidad.capture(), eq("Hola"), any(), any());
+        verify(chatService).enviarMensaje(identidad.capture(), eq("Hola"), any(), any(), any());
         assertThat(identidad.getValue().autenticado()).isFalse();
         assertThat(identidad.getValue().claveDeConversacion()).isEqualTo("anonimo:" + sesion.getId());
         verify(sesiones, never()).emitir(anyString());
@@ -187,7 +187,7 @@ class ChatControllerTest {
         when(sesiones.validar(any())).thenReturn(Optional.empty());
         when(sesiones.emitir(anyString())).thenReturn(new SesionesAnonimas.Emitida(emitida, sesion));
         Mensaje respuestaBot = crearMensajeBot("Hola visitante");
-        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenReturn(respuestaBot);
+        when(chatService.enviarMensaje(any(), anyString(), any(), any(), any())).thenReturn(respuestaBot);
 
         mockMvc.perform(post("/chat/mensajes")
                 .header("X-Real-IP", "203.0.113.7")
@@ -203,7 +203,7 @@ class ChatControllerTest {
     @Test
     void enviarMensaje_conJwt_usaSoloElUidDelTokenEIgnoraLaCabecera() throws Exception {
         Mensaje respuestaBot = crearMensajeBot("Hola jugador");
-        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenReturn(respuestaBot);
+        when(chatService.enviarMensaje(any(), anyString(), any(), any(), any())).thenReturn(respuestaBot);
 
         mockMvc.perform(post("/chat/mensajes")
                 .with(jwt().jwt(j -> j.claim("uid", UID.toString())))
@@ -214,7 +214,7 @@ class ChatControllerTest {
             .andExpect(header().doesNotExist(CABECERA));
 
         ArgumentCaptor<IdentidadDelChat> identidad = ArgumentCaptor.forClass(IdentidadDelChat.class);
-        verify(chatService).enviarMensaje(identidad.capture(), eq("Hola"), any(), any());
+        verify(chatService).enviarMensaje(identidad.capture(), eq("Hola"), any(), any(), any());
         assertThat(identidad.getValue().autenticado()).isTrue();
         assertThat(identidad.getValue().claveDeConversacion()).isEqualTo(UID.toString());
         verifyNoInteractions(sesiones);
@@ -226,7 +226,7 @@ class ChatControllerTest {
         when(sesiones.validar(any())).thenReturn(Optional.empty());
         when(sesiones.emitir(anyString())).thenReturn(new SesionesAnonimas.Emitida("anon_" + "C".repeat(43), sesion()));
         Mensaje respuestaBot = crearMensajeBot("Hola");
-        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenReturn(respuestaBot);
+        when(chatService.enviarMensaje(any(), anyString(), any(), any(), any())).thenReturn(respuestaBot);
 
         mockMvc.perform(post("/chat/mensajes")
                 .with(jwt().jwt(j -> j.subject("torneos").claim("rol", "SERVICIO")))
@@ -359,7 +359,7 @@ class ChatControllerTest {
     @Test
     void enviarMensaje_bloqueadoPorLaListaNegra_devuelve422() throws Exception {
         when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion()));
-        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenThrow(new ContenidoBloqueado());
+        when(chatService.enviarMensaje(any(), anyString(), any(), any(), any())).thenThrow(new ContenidoBloqueado());
 
         mockMvc.perform(post("/chat/mensajes")
                 .header(CABECERA, SESION)
@@ -372,7 +372,7 @@ class ChatControllerTest {
     @Test
     void enviarMensaje_sinListaNegra_devuelve503() throws Exception {
         when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion()));
-        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenThrow(new ModeracionNoDisponible());
+        when(chatService.enviarMensaje(any(), anyString(), any(), any(), any())).thenThrow(new ModeracionNoDisponible());
 
         mockMvc.perform(post("/chat/mensajes")
                 .header(CABECERA, SESION)

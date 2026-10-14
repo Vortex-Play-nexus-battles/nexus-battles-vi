@@ -1,6 +1,7 @@
 package nexus.api;
 
 import java.net.URI;
+import java.util.List;
 
 import com.nexusbattles.comun.seguridad.servicio.ActorDeServicio;
 import jakarta.validation.Valid;
@@ -10,12 +11,14 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import nexus.aplicacion.AdquirirProductoServicio;
 import nexus.aplicacion.ConsultarEstadoCatalogoServicio;
+import nexus.aplicacion.ConsultarHistorialProductoServicio;
 import nexus.aplicacion.ConsultarProductoServicio;
 import nexus.aplicacion.CrearProductoServicio;
 import nexus.aplicacion.DisponibilidadDelCatalogoServicio;
 import nexus.aplicacion.ListarProductosServicio;
 import nexus.aplicacion.ModificarProductoServicio;
 import nexus.aplicacion.ProyeccionDeProductos;
+import nexus.aplicacion.RevertirProductoServicio;
 import nexus.aplicacion.Visibilidad;
 import nexus.configuracion.VisibilidadDelLlamador;
 import nexus.dominio.EstadoProducto;
@@ -46,6 +49,8 @@ public class ProductosController {
         private final ConsultarEstadoCatalogoServicio consultaEstado;
         private final ListarProductosServicio listarServicio;
         private final ModificarProductoServicio modificarServicio;
+        private final ConsultarHistorialProductoServicio historialServicio;
+        private final RevertirProductoServicio revertirServicio;
         private final DisponibilidadDelCatalogoServicio disponibilidad;
         private final AdquirirProductoServicio adquisiciones;
         private final ProyeccionDeProductos proyeccion;
@@ -56,6 +61,8 @@ public class ProductosController {
                         ConsultarEstadoCatalogoServicio consultaEstado,
                         ListarProductosServicio listarServicio,
                         ModificarProductoServicio modificarServicio,
+                        ConsultarHistorialProductoServicio historialServicio,
+                        RevertirProductoServicio revertirServicio,
                         DisponibilidadDelCatalogoServicio disponibilidad,
                         AdquirirProductoServicio adquisiciones,
                         ProyeccionDeProductos proyeccion) {
@@ -64,6 +71,8 @@ public class ProductosController {
                 this.consultaEstado = consultaEstado;
                 this.listarServicio = listarServicio;
                 this.modificarServicio = modificarServicio;
+                this.historialServicio = historialServicio;
+                this.revertirServicio = revertirServicio;
                 this.disponibilidad = disponibilidad;
                 this.adquisiciones = adquisiciones;
                 this.proyeccion = proyeccion;
@@ -107,9 +116,10 @@ public class ProductosController {
 
         @PostMapping
         public ResponseEntity<ProductoCreado> crear(
-        @Valid @RequestBody SolicitudCrearProducto solicitud) {
+                        Authentication autenticacion,
+                        @Valid @RequestBody SolicitudCrearProducto solicitud) {
 
-                Producto producto = servicio.crear(solicitud);
+                Producto producto = servicio.crear(solicitud, autenticacion.getName());
                 ProductoCreado respuesta = proyeccion.proyectar(producto, Visibilidad.PRIVILEGIADA);
                 URI ubicacion = URI.create(
                         "/api/v1/productos/" + producto.id());
@@ -145,20 +155,46 @@ public class ProductosController {
                 return ResponseEntity.ok(proyeccion.proyectar(producto, Visibilidad.PRIVILEGIADA));
         }
 
+        /** HU-PRD-007: historial administrativo de solo lectura. */
+        @GetMapping("/{id}/historial")
+        public List<CambioProductoVista> consultarHistorial(@PathVariable String id) {
+                return historialServicio.consultar(id);
+        }
+
+        /** HU-PRD-007: restaura el último estado respaldado sin ocultar la reversión. */
+        @PostMapping("/{id}/reversiones")
+        public ResponseEntity<ProductoCreado> revertir(
+                        Authentication autenticacion,
+                        @PathVariable String id,
+                        @Valid @RequestBody SolicitudRevertirProducto solicitud) {
+                Producto producto = revertirServicio.revertir(
+                                id,
+                                solicitud.respaldoId(),
+                                autenticacion.getName(),
+                                solicitud.motivo());
+                return ResponseEntity.ok(proyeccion.proyectar(producto, Visibilidad.PRIVILEGIADA));
+        }
+
         /** HU-PRD-004 (B4): suspension logica, solo ADMINISTRADOR y SUPER_ADMINISTRADOR. */
         @PutMapping("/{id}/suspender")
         public EstadoDisponibilidadProducto suspender(
                         Authentication autenticacion,
-                        @PathVariable String id) {
-                return EstadoDisponibilidadProducto.de(disponibilidad.suspender(id, autenticacion.getName()));
+                        @PathVariable String id,
+                        @RequestParam(name = "motivo", required = false)
+                        @Size(max = 500, message = "motivo admite como máximo 500 caracteres") String motivo) {
+                return EstadoDisponibilidadProducto.de(
+                                disponibilidad.suspender(id, autenticacion.getName(), motivo));
         }
 
         /** HU-PRD-004 (B4): reactivacion al estado anterior, solo ADMINISTRADOR y SUPER_ADMINISTRADOR. */
         @PutMapping("/{id}/reactivar")
         public EstadoDisponibilidadProducto reactivar(
                         Authentication autenticacion,
-                        @PathVariable String id) {
-                return EstadoDisponibilidadProducto.de(disponibilidad.reactivar(id, autenticacion.getName()));
+                        @PathVariable String id,
+                        @RequestParam(name = "motivo", required = false)
+                        @Size(max = 500, message = "motivo admite como máximo 500 caracteres") String motivo) {
+                return EstadoDisponibilidadProducto.de(
+                                disponibilidad.reactivar(id, autenticacion.getName(), motivo));
         }
 
         /**

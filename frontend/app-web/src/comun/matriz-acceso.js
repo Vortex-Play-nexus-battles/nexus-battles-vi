@@ -102,12 +102,18 @@ const ROLES_POR_NIVEL = Object.freeze({
  *   - `jugador`  — la aplicación del jugador (RF-INV-008: seis destinos)
  *   - `admin`    — la consola de operación
  *
- * R17 — `limpia` es la dirección pública de las vistas que alguien escribe o
- * comparte (/login, /jugar…). La sirve el borde (`borde-dev.conf`), que además
- * redirige la ruta antigua a esta. Solo existe detrás del borde: en
- * `npm run dev` o en el laboratorio visual no hay quien la sirva, y por eso la
- * interfaz solo la usa cuando la página lo declara (`sesion.js`,
- * `hayRutasLimpias`).
+ * R17 — `limpia` es la dirección pública de la vista (/login, /jugar…). La
+ * sirve el borde (`borde-dev.conf`), que además redirige la ruta antigua a
+ * esta. Solo existe detrás del borde: en `npm run dev` o en el laboratorio
+ * visual no hay quien la sirva, y por eso la interfaz solo la usa cuando la
+ * página lo declara (`sesion.js`, `hayRutasLimpias`).
+ *
+ * SA-7 (punto crítico externo del informe de revisión del Super
+ * Administrador) — TODAS las vistas la tienen: las del juego cuelgan de la
+ * suya (/jugar/sala, /subastas/pujar, /cuenta/movimientos…) y las de la
+ * trastienda, de /consola. Ningún enlace enseña ya la carpeta ni el `.html`:
+ * los que pasan por `resolver`/`urlDeVista` salen limpios, y los que una vista
+ * escribe a mano los traduce `enlaces-limpios.js`.
  */
 export const MATRIZ = Object.freeze({
   // --- Portal de entrada ---------------------------------------------------
@@ -132,8 +138,12 @@ export const MATRIZ = Object.freeze({
     acceso: ACCESO.PUBLICA,
     armazon: 'publico',
   },
+  // 6-oct — pedir el código de recuperación («¿Olvidaste tu contraseña?») tiene
+  // su dirección: es de las que una persona escribe o le dicen. La del canje
+  // sigue siendo `/restablecer`.
   'restablecer-solicitar': {
     ruta: 'cuentas/restablecer-solicitar.html',
+    limpia: '/recuperar',
     acceso: ACCESO.PUBLICA,
     armazon: 'publico',
   },
@@ -181,11 +191,13 @@ export const MATRIZ = Object.freeze({
   // No / Sí / Sí».
   productos: {
     ruta: 'contenido/productos/productos.html',
+    limpia: '/consola/productos/nuevo',
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },
   'panel-catalogo': {
     ruta: 'contenido/productos/panel-catalogo.html',
+    limpia: '/consola/productos',
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },
@@ -195,6 +207,7 @@ export const MATRIZ = Object.freeze({
   // (`SeguridadConfig` de productos); solo `GET /banners/vigentes` es público.
   banners: {
     ruta: 'contenido/productos/banners.html',
+    limpia: '/consola/productos/banners',
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },
@@ -204,10 +217,26 @@ export const MATRIZ = Object.freeze({
     acceso: ACCESO.PUBLICA,
     armazon: 'jugador',
   },
-  pujas: { ruta: 'cuentas/pujas.html', acceso: ACCESO.PUBLICA, armazon: 'jugador' },
+  pujas: {
+    ruta: 'cuentas/pujas.html',
+    limpia: '/subastas/pujar',
+    acceso: ACCESO.PUBLICA,
+    armazon: 'jugador',
+  },
   torneos: {
     ruta: 'plataforma/torneos/torneos.html',
     limpia: '/torneos',
+    acceso: ACCESO.PUBLICA,
+    armazon: 'jugador',
+  },
+  // ms-chatbot.yaml 1.8.0 (7.4.3) — el centro de ayuda: lo que el asistente
+  // sabe responder, para leerlo sin chatear. Público como las vitrinas, con
+  // la barra de la aplicación (un visitante ve ahí «Iniciar sesión» y
+  // «Registrarse»). Con su dirección limpia, como todas desde SA-7: la barra
+  // de direcciones nunca enseña la carpeta ni el .html.
+  ayuda: {
+    ruta: 'cuentas/ayuda.html',
+    limpia: '/ayuda',
     acceso: ACCESO.PUBLICA,
     armazon: 'jugador',
   },
@@ -227,10 +256,16 @@ export const MATRIZ = Object.freeze({
   },
   'historial-transacciones': {
     ruta: 'cuentas/historial-transacciones.html',
+    limpia: '/cuenta/movimientos',
     acceso: ACCESO.SESION,
     armazon: 'jugador',
   },
-  'mis-cofres': { ruta: 'cuentas/mis-cofres.html', acceso: ACCESO.SESION, armazon: 'jugador' },
+  'mis-cofres': {
+    ruta: 'cuentas/mis-cofres.html',
+    limpia: '/cofres',
+    acceso: ACCESO.SESION,
+    armazon: 'jugador',
+  },
   inventario: {
     ruta: 'contenido/inventario/inventario.html',
     limpia: '/inventario',
@@ -239,15 +274,23 @@ export const MATRIZ = Object.freeze({
   },
   // UXC-5 — el módulo de misiones (§7.8). Pide sesión: el tablón muestra «las
   // misiones aplicables al jugador» (RF-MIS-001) y la estrategia se prepara
-  // para uno de SUS héroes. Sin dirección limpia: el borde no la sirve.
+  // para uno de SUS héroes. 6-oct — con dirección limpia, como los otros
+  // destinos del jugador: `/misiones`.
   misiones: {
     ruta: 'contenido/misiones/misiones.html',
+    limpia: '/misiones',
     acceso: ACCESO.SESION,
     armazon: 'jugador',
   },
-  tienda: { ruta: 'cuentas/tienda.html', acceso: ACCESO.SESION, armazon: 'jugador' },
+  tienda: {
+    ruta: 'cuentas/tienda.html',
+    limpia: '/tienda',
+    acceso: ACCESO.SESION,
+    armazon: 'jugador',
+  },
   'publicar-subasta': {
     ruta: 'cuentas/publicar-subasta.html',
+    limpia: '/subastas/publicar',
     acceso: ACCESO.SESION,
     armazon: 'jugador',
   },
@@ -259,32 +302,43 @@ export const MATRIZ = Object.freeze({
   },
   'crear-sala': {
     ruta: 'plataforma/salas-partidas/crear-sala.html',
+    limpia: '/jugar/nueva-sala',
     acceso: ACCESO.SESION,
     armazon: 'jugador',
   },
   'sala-batalla': {
     ruta: 'plataforma/salas-partidas/sala-batalla.html',
+    limpia: '/jugar/sala',
     acceso: ACCESO.SESION,
     armazon: 'jugador',
   },
   'validacion-heroe': {
     ruta: 'plataforma/salas-partidas/validacion-heroe.html',
+    limpia: '/jugar/heroe',
     acceso: ACCESO.SESION,
     armazon: 'jugador',
   },
-  chat: { ruta: 'plataforma/salas-partidas/chat.html', acceso: ACCESO.SESION, armazon: 'jugador' },
+  chat: {
+    ruta: 'plataforma/salas-partidas/chat.html',
+    limpia: '/chat',
+    acceso: ACCESO.SESION,
+    armazon: 'jugador',
+  },
   'publicar-comentario': {
     ruta: 'plataforma/comentarios/publicar-comentario.html',
+    limpia: '/comentar',
     acceso: ACCESO.SESION,
     armazon: 'jugador',
   },
   notificaciones: {
     ruta: 'plataforma/notificaciones/notificaciones.html',
+    limpia: '/notificaciones',
     acceso: ACCESO.SESION,
     armazon: 'jugador',
   },
   'mis-sanciones': {
     ruta: 'plataforma/moderacion-sanciones/mis-sanciones.html',
+    limpia: '/cuenta/sanciones',
     acceso: ACCESO.SESION,
     armazon: 'jugador',
   },
@@ -295,6 +349,7 @@ export const MATRIZ = Object.freeze({
   // basta con el nivel más bajo de la trastienda.
   consola: {
     ruta: 'plataforma/consola/consola.html',
+    limpia: '/consola',
     acceso: ACCESO.MODERACION,
     armazon: 'admin',
   },
@@ -305,6 +360,7 @@ export const MATRIZ = Object.freeze({
   // sobre quien ve que es del backend y no de esta tabla.
   'control-integral': {
     ruta: 'plataforma/consola/control-integral.html',
+    limpia: '/consola/control',
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },
@@ -312,11 +368,13 @@ export const MATRIZ = Object.freeze({
   // donde vive el archivo.
   'sanciones-admin': {
     ruta: 'plataforma/moderacion-sanciones/sanciones-admin.html',
+    limpia: '/consola/sanciones',
     acceso: ACCESO.MODERACION,
     armazon: 'admin',
   },
   'lista-negra-admin': {
     ruta: 'plataforma/moderacion-sanciones/lista-negra-admin.html',
+    limpia: '/consola/lista-negra',
     acceso: ACCESO.MODERACION,
     armazon: 'admin',
   },
@@ -326,11 +384,13 @@ export const MATRIZ = Object.freeze({
   // `/api/v1/comentarios/moderacion/**`: un JUGADOR reporta, pero no resuelve.
   'moderar-comentarios': {
     ruta: 'plataforma/comentarios/moderar-comentarios.html',
+    limpia: '/consola/comentarios',
     acceso: ACCESO.MODERACION,
     armazon: 'admin',
   },
   'gestion-usuarios': {
     ruta: 'cuentas/gestion-usuarios.html',
+    limpia: '/consola/usuarios',
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },
@@ -340,21 +400,25 @@ export const MATRIZ = Object.freeze({
   // Tabla 24 da al Administrador y al Super Administrador, no al Moderador.
   'ficha-usuario': {
     ruta: 'plataforma/moderacion-sanciones/ficha-usuario.html',
+    limpia: '/consola/usuarios/ficha',
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },
   'parametros-admin': {
     ruta: 'plataforma/admin-parametros/parametros-admin.html',
+    limpia: '/consola/parametros',
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },
   'panel-metricas': {
     ruta: 'plataforma/metricas-plataforma/panel-metricas.html',
+    limpia: '/consola/metricas',
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },
   'tablero-tecnico': {
     ruta: 'plataforma/metricas-plataforma/tablero-tecnico.html',
+    limpia: '/consola/tecnico',
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },
@@ -363,12 +427,14 @@ export const MATRIZ = Object.freeze({
   // /api/v1/chatbot/admin/** (ADMINISTRADOR o SUPER_ADMINISTRADOR).
   'panel-chatbot': {
     ruta: 'cuentas/panel-chatbot.html',
+    limpia: '/consola/asistente',
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },
   // RF-RBAC-003: «exclusivamente al Super Administrador».
   'crear-cuenta-admin': {
     ruta: 'cuentas/crear-cuenta-admin.html',
+    limpia: '/consola/usuarios/nueva-cuenta',
     acceso: ACCESO.SUPERADMINISTRACION,
     armazon: 'admin',
   },
@@ -376,6 +442,7 @@ export const MATRIZ = Object.freeze({
   // `/api/v1/admin/auditoria` es `hasRole("SUPER_ADMINISTRADOR")`.
   auditoria: {
     ruta: 'cuentas/auditoria.html',
+    limpia: '/consola/auditoria',
     acceso: ACCESO.SUPERADMINISTRACION,
     armazon: 'admin',
   },

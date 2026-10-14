@@ -6,6 +6,7 @@ import { jest } from '@jest/globals';
 
 import { CLAVE_BASE_LOCAL } from '../comun/cliente-chatbot.js';
 import {
+  consultaDeBrechas,
   consultaDePeriodo,
   consultaDeTickets,
   crearClientePanelChatbot,
@@ -119,6 +120,38 @@ test('las rutas de la bandeja de soporte', async () => {
     estado: 'RESUELTO',
     respuesta: 'Listo',
   });
+});
+
+test('consultaDeBrechas: período y estado solo si los hay, siempre la página (de 16)', () => {
+  expect(consultaDeBrechas()).toBe('?pagina=0&tamano=16');
+  expect(
+    consultaDeBrechas({
+      desde: '2026-09-01',
+      hasta: '2026-09-30',
+      estado: 'PENDIENTE',
+      pagina: 2,
+      tamano: 16,
+    }),
+  ).toBe('?desde=2026-09-01&hasta=2026-09-30&estado=PENDIENTE&pagina=2&tamano=16');
+  expect(consultaDeBrechas({ estado: '' })).toBe('?pagina=0&tamano=16');
+});
+
+test('las rutas de las preguntas sin respuesta (1.7.0)', async () => {
+  const fetch = jest.fn(async () => respuesta({}));
+  const panel = cliente(fetch);
+
+  await panel.listarBrechas({ estado: 'ATENDIDA', pagina: 1 });
+  await panel.listarBrechas();
+  await panel.cambiarEstadoDeBrecha('b/1', 'DESCARTADA');
+
+  const llamadas = fetch.mock.calls.map(([url, opciones]) => `${opciones.method} ${url}`);
+  expect(llamadas).toEqual([
+    'GET /api/v1/chatbot/admin/brechas?estado=ATENDIDA&pagina=1&tamano=16',
+    'GET /api/v1/chatbot/admin/brechas?pagina=0&tamano=16',
+    'PATCH /api/v1/chatbot/admin/brechas/b%2F1',
+  ]);
+  expect(JSON.parse(fetch.mock.calls[2][1].body)).toEqual({ estado: 'DESCARTADA' });
+  expect(fetch.mock.calls[2][1].headers.Authorization).toBe('Bearer token-admin');
 });
 
 test('una exportación devuelve el nombre del archivo y su contenido', async () => {

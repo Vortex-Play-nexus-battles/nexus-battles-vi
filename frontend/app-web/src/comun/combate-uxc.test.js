@@ -7,6 +7,7 @@ import { jest } from '@jest/globals';
 import {
   accionDeCombate,
   chipDeEfecto,
+  estelaDeVida,
   impactoEnCampo,
   medidorDePoder,
   registroDeCombate,
@@ -126,6 +127,72 @@ describe('impactoEnCampo (DamageCallout)', () => {
 
     // Sin unidad, como antes.
     expect(impactoEnCampo({ cifra: '+3', tono: 'curacion' }).textContent).toBe('+3');
+  });
+});
+
+describe('impactoEnCampo con icono (MOTION-2)', () => {
+  test('la cifra lleva el icono del golpe delante, decorativo, y el texto no cambia', () => {
+    const golpe = impactoEnCampo({ cifra: '−4', unidad: 'VIDA', tono: 'dano', icono: 'fuego' });
+    const svg = golpe.querySelector('.impacto__icono');
+    expect(svg).not.toBeNull();
+    expect(svg.getAttribute('aria-hidden')).toBe('true');
+    expect(svg.querySelector('use').getAttribute('href')).toMatch(/#fuego$/);
+    expect(golpe.querySelector('.impacto__cifra').textContent).toBe('−4 VIDA');
+  });
+
+  test('un icono que no está en el sprite no se pinta (ni rompe)', () => {
+    expect(
+      impactoEnCampo({ cifra: '−4', icono: 'meteorito' }).querySelector('.impacto__icono'),
+    ).toBeNull();
+    expect(impactoEnCampo({ cifra: '−4' }).querySelector('.impacto__icono')).toBeNull();
+  });
+});
+
+describe('estelaDeVida (MOTION-2)', () => {
+  function barra() {
+    const el = document.createElement('div');
+    el.className = 'barra-vida';
+    el.innerHTML = '<div class="barra-vida__pista"><div class="barra-vida__relleno"></div></div>';
+    document.body.append(el);
+    return el;
+  }
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+    delete Element.prototype.animate;
+    delete globalThis.matchMedia;
+  });
+
+  test('lo que se perdió queda en la pista, desde la vida que queda y con el ancho perdido', () => {
+    const terminada = { finished: Promise.resolve(), cancel() {} };
+    Element.prototype.animate = jest.fn(() => terminada);
+    const el = barra();
+    const estela = estelaDeVida(el, 40, 25, 50);
+    expect(estela).not.toBeNull();
+    expect(estela.parentElement.className).toBe('barra-vida__pista');
+    expect(estela.style.getPropertyValue('--estela-desde')).toBe('50.00');
+    expect(estela.style.getPropertyValue('--estela-ancho')).toBe('30.00');
+    const [cuadros, opciones] = Element.prototype.animate.mock.calls[0];
+    expect(cuadros.at(-1).transform).toBe('scaleX(0)');
+    expect(opciones.duration).toBe(600);
+  });
+
+  test('una segunda estela sustituye a la primera: no se apilan', () => {
+    Element.prototype.animate = jest.fn(() => ({ finished: new Promise(() => {}), cancel() {} }));
+    const el = barra();
+    estelaDeVida(el, 50, 40, 50);
+    estelaDeVida(el, 40, 20, 50);
+    expect(el.querySelectorAll('.barra-vida__estela')).toHaveLength(1);
+  });
+
+  test('sin golpe (curación), sin Web Animations API o con movimiento reducido no hay estela', () => {
+    const el = barra();
+    expect(estelaDeVida(el, 25, 40, 50)).toBeNull();
+    expect(estelaDeVida(el, 40, 25, 50)).toBeNull();
+    globalThis.matchMedia = () => ({ matches: true });
+    Element.prototype.animate = jest.fn(() => ({ finished: Promise.resolve(), cancel() {} }));
+    expect(estelaDeVida(el, 40, 25, 50)).toBeNull();
+    expect(Element.prototype.animate).not.toHaveBeenCalled();
   });
 });
 

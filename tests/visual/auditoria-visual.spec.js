@@ -33,6 +33,7 @@ import { test, expect, request as apiRequest } from '@playwright/test';
 
 import { PANTALLAS, PREFIJO_WEB, VISTAS } from './vistas.js';
 import { auditar } from './auditoria.js';
+import { sinMovimiento } from './movimiento.js';
 import { inyectarSesion } from './identidad.js';
 import { NOMBRE, conseguirPersonas, personasDe } from './personas.js';
 
@@ -124,6 +125,7 @@ for (const vista of VISTAS) {
         const { para } = personasDe(vista);
         const sesion = vista.acceso === 'publica' ? null : (sesiones[para] ?? null);
         await inyectarSesion(contexto, sesion);
+        await sinMovimiento(contexto);
 
         const pagina = await contexto.newPage();
         // Los fallos de red son el estado que se quiere fotografiar sin

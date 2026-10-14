@@ -117,9 +117,20 @@ describe('qué dice del estado', () => {
     const estado = describirEstado({ ...ACTIVO, codigosRecuperacionRestantes: 1 });
     expect(estado.texto).toMatch(/Te queda 1 código de recuperación\./);
     expect(estado.nota.titulo).toBe('Te quedan pocos códigos de recuperación');
-    expect(describirEstado({ ...ACTIVO, obligatorio: true }).nota.detalle).toMatch(
-      /te pediremos activarla de nuevo/,
-    );
+  });
+
+  test('7.3.9 — obligatoria para el rol: no se ofrece desactivarla y se dice a quién acudir', () => {
+    const estado = describirEstado({ ...ACTIVO, obligatorio: true });
+    expect(estado.puedeDesactivar).toBe(false);
+    expect(estado.nota.detalle).toMatch(/no se puede desactivar/);
+    expect(estado.nota.detalle).toMatch(/Super Administrador/);
+    const pocos = describirEstado({
+      ...ACTIVO,
+      obligatorio: true,
+      codigosRecuperacionRestantes: 1,
+    });
+    expect(pocos.nota.titulo).toBe('Te quedan pocos códigos de recuperación');
+    expect(pocos.nota.detalle).not.toMatch(/desactiva la verificación/);
   });
 
   test('si la consulta falla, lo dice y deja reintentar', async () => {

@@ -170,6 +170,9 @@ public class VitrinaDelCatalogoService {
      * {@code precioFinal}, {@code precioOriginal} y {@code moneda} a null, y la
      * promocion se lee de su precio en creditos (es el mismo porcentaje).
      *
+     * <p>SA-13 (contrato 1.8.0): con las marcas {@code premium} y {@code unico}
+     * del catalogo, para que la tienda los identifique (§7.2.1, §7.2.2).
+     *
      * @param precio   en dinero real; null si solo se vende en creditos
      * @param creditos en creditos; null si no se puede pagar asi
      */
@@ -191,7 +194,9 @@ public class VitrinaDelCatalogoService {
                 porcentaje,
                 propio,
                 deseado,
-                creditos == null ? null : creditos.precioFinal());
+                creditos == null ? null : creditos.precioFinal(),
+                Boolean.TRUE.equals(producto.premium()),
+                "UNICO".equals(producto.estado()));
     }
 
     /**

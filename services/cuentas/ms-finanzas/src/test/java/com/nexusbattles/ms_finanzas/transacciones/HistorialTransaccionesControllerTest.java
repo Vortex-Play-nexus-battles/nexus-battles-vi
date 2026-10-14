@@ -89,4 +89,20 @@ class HistorialTransaccionesControllerTest {
 
         controller.miHistorial(principalDe(uid), 0, 0);
     }
+
+    @Test
+    void historialDeUnaCuenta_usaElUidDeLaRutaYAcotaLaPagina() {
+        // transacciones.yaml 1.1.0 (§7.3.4): la ficha administrativa. El rol lo
+        // decide SecurityConfig; aqui, que la cuenta es la de la ruta y que la
+        // pagina tiene el mismo tope que /mi-historial.
+        String uid = UUID.randomUUID().toString();
+        Page<ResumenTransaccion> pagina = new PageImpl<>(List.of(resumen()), PageRequest.of(0, 100), 1);
+        when(consultaService.listarPorUsuario(eq(uid), eq(PageRequest.of(0, 100)))).thenReturn(pagina);
+
+        ResponseEntity<Page<ResumenTransaccion>> respuesta = controller.historialDeUnaCuenta(uid, -3, 5_000);
+
+        assertThat(respuesta.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(respuesta.getBody()).isNotNull();
+        assertThat(respuesta.getBody().getContent()).hasSize(1);
+    }
 }

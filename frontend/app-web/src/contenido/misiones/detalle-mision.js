@@ -13,6 +13,18 @@
  * recompensa ni se deduce ninguna probabilidad. Lo que la misión no traiga,
  * no aparece —una sección vacía con un guion sería una afirmación falsa—.
  *
+ * ## Dos modos (revisión del modo jugador del 6-oct, punto 22)
+ *
+ * «Iniciar misión» y «Ver detalles» llevaban a la misma página, con toda la
+ * misión desplegada y el configurador debajo. Ahora:
+ *
+ *   - **detalles** (`?mision=<id>`): la historia, los objetivos, el jefe
+ *     final en su propio recuadro, los enemigos, el Máster y las recompensas,
+ *     con «Preparar misión» arriba.
+ *   - **preparar** (`?mision=<id>#configurar`): la cabecera de la misión y el
+ *     asistente de cinco pasos (`asistente-mision.js`); la historia se queda
+ *     a un clic («Ver la misión»).
+ *
  * @module contenido/misiones/detalle-mision
  */
 
@@ -23,6 +35,10 @@ import { identidadDePrototipo } from '../../comun/ui/juego/prototipos.js';
 import { numero } from '../../comun/ui/formato.js';
 import { ESCALONES, categoriaDe, textoDeDuracion, textoDeProbabilidad } from './modelo-misiones.js';
 import { chipDeCategoria, indicadorDeDificultad, selloDeMision } from './tablon-misiones.js';
+import { asistenteDeMision } from './asistente-mision.js';
+
+/** Los dos modos del detalle. */
+export const MODOS_DEL_DETALLE = Object.freeze({ DETALLES: 'detalles', PREPARAR: 'preparar' });
 
 /** Estados desde los que se puede mandar a un héroe, y cómo se llama el botón. */
 const TEXTO_DE_INICIO = Object.freeze({
@@ -117,6 +133,14 @@ function tarjetaDeEnemigo(enemigo) {
   });
 }
 
+/**
+ * El jefe final — punto 22: «mejorar el diseño y ubicación del cuadro jefe
+ * final». Ya no es una tarjeta pequeña al lado de los enemigos: tiene su
+ * propia sección, a lo ancho, sobre el cromo y con su emblema grande.
+ *
+ * @param {{nombre: string, prototipo?: string, vida?: number, descripcion?: string}} jefe
+ * @returns {HTMLElement}
+ */
 function tarjetaDeJefe(jefe) {
   const identidad = jefe.prototipo ? identidadDePrototipo(jefe.prototipo) : null;
   return h('div', {
@@ -130,7 +154,7 @@ function tarjetaDeJefe(jefe) {
       h('div', {
         clase: 'mision-jefe__cuerpo',
         hijos: [
-          h('h3', { clase: 'mision-jefe__titulo', texto: 'Jefe final' }),
+          h('p', { clase: 'mision-jefe__titulo', texto: 'Te espera al final' }),
           h('p', { clase: 'mision-jefe__nombre', texto: jefe.nombre }),
           h('dl', {
             clase: 'mision-jefe__datos',
@@ -355,8 +379,13 @@ export async function compartir({ titulo, url, zona, navegador = globalThis.navi
  * @param {() => Promise<void>} [opciones.alIniciar] la página confirma y matricula
  * @param {(favorita: boolean) => Promise<void>} [opciones.alMarcarFavorita]
  * @param {string} opciones.urlParaCompartir
+ * @param {'detalles'|'preparar'} [opciones.modoInicial] `preparar` con `#configurar`
+ * @param {(modo: 'detalles'|'preparar') => void} [opciones.alCambiarModo] para la dirección
+ * @param {string|null} [opciones.hrefEquipamiento] cambiar el equipo del héroe
  * @returns {{elemento: HTMLElement, habilitarInicio: (listo: boolean) => void,
- *   ocupado: (activo: boolean) => void, zonaAviso: HTMLElement}}
+ *   ocupado: (activo: boolean) => void, zonaAviso: HTMLElement,
+ *   modo: () => 'detalles'|'preparar', mostrar: (modo: string, opciones?: {foco?: boolean}) => void,
+ *   asistente: ReturnType<typeof asistenteDeMision>|null}}
  */
 export function detalleDeMision(
   mision,
@@ -368,6 +397,9 @@ export function detalleDeMision(
     alIniciar = async () => {},
     alMarcarFavorita = async () => {},
     urlParaCompartir,
+    modoInicial = MODOS_DEL_DETALLE.DETALLES,
+    alCambiarModo = () => {},
+    hrefEquipamiento = null,
   },
 ) {
   const categoria = categoriaDe(mision.categoria);
@@ -377,10 +409,30 @@ export function detalleDeMision(
     datos: { zona: 'compartir' },
   });
 
+  /** El asistente de preparar la misión, si se puede mandar a un héroe. */
+  let asistente = null;
+  let modoActual = MODOS_DEL_DETALLE.DETALLES;
+
   /* ------------------------------------------------------------- acciones */
 
   const puedeIniciar = admiteInicio(mision) && configurador !== null;
   const textoInicio = TEXTO_DE_INICIO[mision.estado] ?? 'Iniciar misión';
+  // Punto 22: desde los detalles, el paso siguiente es prepararla; la
+  // preparación sale solo cuando se pide.
+  const botonPreparar = puedeIniciar
+    ? h('button', {
+        clase: 'boton boton--primario mision-detalle__preparar',
+        datos: { accion: 'preparar-mision' },
+        atributos: { type: 'button' },
+        hijos: [
+          icono('espada', { etiqueta: null }),
+          h('span', {
+            texto: mision.estado === 'DISPONIBLE' ? 'Preparar misión' : `Preparar: ${textoInicio}`,
+          }),
+        ],
+      })
+    : null;
+  botonPreparar?.addEventListener('click', () => mostrar(MODOS_DEL_DETALLE.PREPARAR));
   const idMotivoInicio = `mision-${mision.id}-motivo-inicio`;
   const botonIniciar = puedeIniciar
     ? h('button', {
@@ -404,8 +456,9 @@ export function detalleDeMision(
   botonIniciar?.addEventListener('click', async () => {
     if (botonIniciar.getAttribute('aria-disabled') === 'true') {
       // Deshabilitado con `aria-disabled` y no con `disabled`: sigue en el
-      // orden del teclado y dice por qué no se puede todavía.
-      configurador?.elemento.querySelector('input, select, button')?.focus();
+      // orden del teclado y dice por qué no se puede todavía. Lo que falta
+      // está en la comprobación de la estrategia.
+      asistente?.irA('comprobar');
       return;
     }
     await alIniciar();
@@ -537,14 +590,7 @@ export function detalleDeMision(
           h('div', {
             clase: 'mision-detalle__acciones',
             hijos: [
-              puedeIniciar
-                ? h('a', {
-                    clase: 'boton boton--primario boton--pequeno',
-                    texto: textoInicio,
-                    datos: { accion: 'ir-a-configurar' },
-                    atributos: { href: '#configurar' },
-                  })
-                : null,
+              botonPreparar,
               mision.estado === 'EN_PROGRESO'
                 ? h('a', {
                     clase: 'boton boton--primario boton--pequeno',
@@ -600,14 +646,17 @@ export function detalleDeMision(
         ])
       : null;
 
+  // Punto 22: el jefe final en su propia sección, a lo ancho; los enemigos
+  // de paso, en la suya.
+  const bloqueJefe = mision.jefe
+    ? seccion('Jefe final', 'jefe', [tarjetaDeJefe(mision.jefe)])
+    : null;
+
   const enemigos = Array.isArray(mision.enemigos) ? mision.enemigos : [];
   const bloqueEnemigos =
-    enemigos.length > 0 || mision.jefe
+    enemigos.length > 0
       ? seccion('Enemigos', 'enemigos', [
-          enemigos.length > 0
-            ? h('ul', { clase: 'mision-enemigos', hijos: enemigos.map(tarjetaDeEnemigo) })
-            : null,
-          mision.jefe ? tarjetaDeJefe(mision.jefe) : null,
+          h('ul', { clase: 'mision-enemigos', hijos: enemigos.map(tarjetaDeEnemigo) }),
         ])
       : null;
 
@@ -633,35 +682,17 @@ export function detalleDeMision(
 
   let bloqueConfigurar = null;
   if (puedeIniciar) {
-    const duracion = textoDeDuracion(mision.duracionHoras);
-    bloqueConfigurar = h('section', {
-      clase: 'mision-detalle__configurar',
-      atributos: { id: 'configurar', 'aria-labelledby': 'mision-seccion-configurar' },
-      hijos: [
-        h('h2', {
-          clase: 'mision-detalle__subtitulo mision-detalle__subtitulo--atmosfera',
-          texto: 'Prepara la misión',
-          atributos: { id: 'mision-seccion-configurar', tabindex: '-1' },
-        }),
-        configurador.elemento,
-        h('div', {
-          clase: 'tarjeta mision-detalle__inicio',
-          hijos: [
-            h('p', {
-              clase: 'mision-detalle__advertencia',
-              hijos: [
-                icono('candado', { etiqueta: null }),
-                h('span', {
-                  texto: `Mientras dure la misión${duracion ? ` (${duracion})` : ''}, tu héroe no podrá jugar en línea, entrar en torneos ni cambiar su equipamiento.`,
-                }),
-              ],
-            }),
-            botonIniciar,
-            motivoInicio,
-          ],
-        }),
-      ],
+    // Puntos 22 y 23: la preparación es un asistente de cinco pasos y solo
+    // sale cuando se quiere iniciar la misión (modo «preparar»).
+    asistente = asistenteDeMision({
+      mision,
+      configurador,
+      botonIniciar,
+      motivoInicio,
+      hrefEquipamiento,
+      alVerDetalles: () => mostrar(MODOS_DEL_DETALLE.DETALLES),
     });
+    bloqueConfigurar = asistente.elemento;
   } else if (mision.estado === 'EN_PROGRESO') {
     bloqueConfigurar = seccion('Tu héroe ya está en esta misión', 'en-curso', [
       h('p', { texto: 'Mira cuánto le queda y cómo va en «En curso».' }),
@@ -695,15 +726,55 @@ export function detalleDeMision(
       cabecera,
       h('div', {
         clase: 'mision-detalle__cuerpo',
-        hijos: [narrativa, bloqueObjetivos, bloqueEnemigos, bloqueMaster, bloqueRecompensas],
+        hijos: [
+          narrativa,
+          bloqueObjetivos,
+          bloqueJefe,
+          bloqueEnemigos,
+          bloqueMaster,
+          bloqueRecompensas,
+        ],
       }),
       bloqueConfigurar,
     ],
   });
 
+  /**
+   * Detalles o preparar. Sin asistente (bloqueada, en curso) solo hay
+   * detalles. Con `foco`, el foco va a lo que se acaba de enseñar.
+   *
+   * @param {'detalles'|'preparar'} modo
+   * @param {{foco?: boolean, avisar?: boolean}} [opciones]
+   */
+  function mostrar(modo, { foco = true, avisar = true } = {}) {
+    const destino =
+      modo === MODOS_DEL_DETALLE.PREPARAR && asistente
+        ? MODOS_DEL_DETALLE.PREPARAR
+        : MODOS_DEL_DETALLE.DETALLES;
+    modoActual = destino;
+    elemento.dataset.modo = destino;
+    if (avisar) {
+      alCambiarModo(destino);
+    }
+    if (!foco) {
+      return;
+    }
+    if (destino === MODOS_DEL_DETALLE.PREPARAR) {
+      elemento.querySelector('#mision-seccion-configurar')?.focus();
+      asistente.elemento.scrollIntoView?.({ block: 'start' });
+    } else {
+      elemento.querySelector('.mision-detalle__nombre')?.focus();
+    }
+  }
+
+  mostrar(modoInicial, { foco: false, avisar: false });
+
   return {
     elemento,
     zonaAviso,
+    asistente,
+    modo: () => modoActual,
+    mostrar,
     /**
      * Mientras se matricula (no mientras se confirma): el botón espera.
      *
@@ -730,6 +801,8 @@ export function detalleDeMision(
       motivoInicio.textContent = listo
         ? 'Tu héroe y su estrategia están listos.'
         : 'Primero elige el héroe y comprueba su estrategia.';
+      // El asistente vuelve a mirar si se puede seguir (paso de comprobar).
+      asistente?.actualizar();
     },
   };
 }

@@ -112,6 +112,31 @@ export function numero(valor, decimales = 0) {
 }
 
 /**
+ * Un importe en moneda real, como lo dice la tienda: la cifra con los
+ * separadores del español de Colombia y el código ISO 4217 detrás
+ * («25.000 COP», «10,50 USD»). Los céntimos solo si los hay.
+ *
+ * @param {number|string|null|undefined} monto
+ * @param {string|null|undefined} moneda
+ * @returns {string}
+ */
+export function dinero(monto, moneda) {
+  const n = Number(monto);
+  if (monto === null || monto === undefined || monto === '' || !Number.isFinite(n)) {
+    return '—';
+  }
+  const decimales = Number.isInteger(n) ? 0 : 2;
+  const cifra = n.toLocaleString(LOCALIZACION, {
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
+  });
+  const codigo = String(moneda ?? '')
+    .trim()
+    .toUpperCase();
+  return codigo ? `${cifra} ${codigo}` : cifra;
+}
+
+/**
  * Proporcion 0..1 como porcentaje entero.
  *
  * @param {number|null|undefined} proporcion

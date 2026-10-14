@@ -1,0 +1,183 @@
+{
+  "descripcion": "V16 (revision final del 7.4): la base dice lo que el juego hace hoy. (1) «Cómo apelar una sanción» (V11) se escribio antes de SA-4a/SA-4b (#962, #965: apelacion sin sesion desde la entrada, panel con 15 dias habiles). (2) 18 temas creados en DEV fuera del repositorio contradecian el codigo o el documento (auditoria del 14-oct, evidencia en contenido/evidencia-v11.md). Cada correccion se aplica solo si el tema sigue diciendo exactamente lo auditado: lo que un administrador ya edito no se toca.",
+  "porClave": [
+    {
+      "clave": "apelar-sancion",
+      "antesEs": "Para apelar necesitas iniciar sesión: una advertencia la puedes apelar, pero con una suspensión o un baneo vigentes no puedes entrar, así que por ahora esas no se pueden apelar desde el juego. Para apelar: 1) Abre el menú de tu apodo y entra a «Mis sanciones». 2) En la sanción que quieres apelar pulsa «Apelar»; solo aparece si todavía estás dentro del plazo que indica esa pantalla. 3) Escribe tus razones en «Tu argumento» y pulsa «Enviar apelación». No puede haber dos apelaciones abiertas de la misma sanción. 4) Un administrador la revisa y decide si la sanción se mantiene, se reduce o se revierte; te avisamos y lo ves en «Mis apelaciones».",
+      "titulo": "Cómo apelar una sanción",
+      "respuestaEs": "Toda sanción se puede apelar dentro del plazo que te indica la pantalla, y no puede haber dos apelaciones abiertas de la misma sanción. 1) Con una advertencia puedes entrar: abre el menú de tu apodo, entra a «Mis sanciones» y, en la sanción, pulsa «Apelar» (solo aparece dentro del plazo); escribe tus razones en «Tu argumento» y pulsa «Enviar apelación». 2) Con una suspensión o un baneo vigentes no puedes entrar, pero sí apelar: en la pantalla de entrada escribe tu «Correo electrónico» y tu «Contraseña» y, en el aviso de la sanción, pulsa «Apelar esta sanción». 3) Ahí ves la sanción y hasta cuándo puedes apelarla; escribe «Por qué crees que la sanción no corresponde» y pulsa «Enviar apelación». 4) Un panel de moderadores y administradores la revisa y responde en un plazo de 15 días hábiles: la sanción se mantiene, se reduce o se revierte. La decisión te llega al correo y, con sesión, también la ves en «Mis apelaciones».",
+      "respuestaEn": "Every sanction can be appealed within the deadline shown on screen, and there can't be two open appeals for the same sanction. 1) With a warning you can sign in: open your nickname menu, go to «Mis sanciones» (My sanctions) and, on the sanction, press «Apelar» (Appeal; it only shows up within the deadline); write your reasons in «Tu argumento» (Your argument) and press «Enviar apelación» (Send appeal). 2) With an active suspension or ban you can't sign in, but you can still appeal: on the sign-in screen enter your «Correo electrónico» (email) and «Contraseña» (password) and, in the sanction notice, press «Apelar esta sanción» (Appeal this sanction). 3) There you see the sanction and until when you can appeal it; fill in «Por qué crees que la sanción no corresponde» (Why you think the sanction is wrong) and press «Enviar apelación» (Send appeal). 4) A panel of moderators and administrators reviews it and replies within 15 business days: the sanction is upheld, reduced or reverted. The decision reaches your email and, when signed in, you also see it in «Mis apelaciones» (My appeals).",
+      "variantesEs": [
+        "apelar",
+        "apelacion",
+        "como apelo una sancion",
+        "apelar una sancion",
+        "recurrir una sancion",
+        "no estoy de acuerdo con mi sancion",
+        "mis apelaciones",
+        "enviar apelacion",
+        "plazo para apelar",
+        "quitar una sancion",
+        "como apelo",
+        "apelar una suspension",
+        "apelar un baneo",
+        "apelar sin iniciar sesion",
+        "me banearon como apelo",
+        "apelar esta sancion"
+      ],
+      "variantesEn": [
+        "appeal",
+        "how to appeal",
+        "appeal a sanction",
+        "appeal a ban",
+        "dispute a suspension",
+        "appeal deadline",
+        "appeal a suspension",
+        "appeal without signing in",
+        "i was banned how do i appeal"
+      ]
+    }
+  ],
+  "porTitulo": [
+    {
+      "titulo": "¿Qué épica tiene cada héroe?",
+      "motivo": "Afirma que toda épica tiene un efecto para cualquier héroe; las del Chamán («Té changua») y del Médico («Reanimador 3000») no tienen efecto general («No aplica») y solo sirven a su tipo.",
+      "antesEs": "Las épicas por héroe son: Guerrero Tanque «Golpe de defensa», Guerrero Armas «Segundo impulso», Mago Fuego «Luz cegadora», Mago Hielo «Frío concentrado», Pícaro Veneno «Toma y lleva», Pícaro Machete «Intimidación sangrienta», Chamán «Té changua» y Médico «Reanimador 3000». Cada una tiene un efecto para todos los héroes y un efecto épico más fuerte solo para su tipo de héroe; por ejemplo, «Segundo impulso» recupera 1d4 de vida a cualquier héroe y, a un Guerrero Armas, además +3 de vida y +5 % de crítico. Se obtienen derrotando a enemigos Máster en las misiones.",
+      "respuestaEs": "Las épicas por héroe son: Guerrero Tanque «Golpe de defensa», Guerrero Armas «Segundo impulso», Mago Fuego «Luz cegadora», Mago Hielo «Frío concentrado», Pícaro Veneno «Toma y lleva», Pícaro Machete «Intimidación sangrienta», Chamán «Té changua» y Médico «Reanimador 3000». Las seis primeras tienen un efecto general para cualquier héroe y uno potenciado solo para su tipo; por ejemplo, «Segundo impulso» recupera 1d4 de vida a cualquier héroe y, a un Guerrero Armas, además +3 de vida y +5 % de crítico. Las del Chamán y el Médico no tienen efecto general: solo sirven a su tipo. Se obtienen derrotando a enemigos Máster en las misiones.",
+      "respuestaEn": "The epics per hero are: «Guerrero Tanque» (Tank Warrior) «Golpe de defensa», «Guerrero Armas» (Weapons Warrior) «Segundo impulso», «Mago Fuego» (Fire Mage) «Luz cegadora», «Mago Hielo» (Ice Mage) «Frío concentrado», «Pícaro Veneno» (Poison Rogue) «Toma y lleva», «Pícaro Machete» (Machete Rogue) «Intimidación sangrienta», «Chamán» (Shaman) «Té changua» and «Médico» (Medic) «Reanimador 3000». The first six have a general effect for any hero and a boosted one only for their own type; for example, «Segundo impulso» heals 1d4 health for any hero and, for a «Guerrero Armas», also gives +3 health and +5% critical. The «Chamán» and «Médico» epics have no general effect: they only work for their own type. You get them by defeating Master enemies in missions."
+    },
+    {
+      "titulo": "¿Cuánta experiencia necesito para el siguiente nivel?",
+      "motivo": "Dice que completar una misión da experiencia según su dificultad; hoy esa experiencia vale 0 y solo suman los enemigos derrotados.",
+      "antesEs": "Todos los héroes empiezan en nivel 1 y pueden llegar hasta el nivel 8. La experiencia para pasar al siguiente nivel es 100 × 1,2^(nivel − 1): 100 puntos para pasar de 1 a 2, 120 de 2 a 3, 144 de 3 a 4, y así sucesivamente. Cada enemigo no jugador derrotado da 10 × 1,2^(1d8) puntos, y completar una misión da experiencia según su dificultad. El nivel multiplica las demás estadísticas: un Mago Fuego de nivel 1 tiene ataque base 10 y uno de nivel 3, ataque base 30.",
+      "respuestaEs": "Todos los héroes empiezan en nivel 1 y pueden llegar hasta el nivel 8. La experiencia para pasar al siguiente nivel es 100 × 1,2^(nivel − 1): 100 puntos para pasar de 1 a 2, 120 de 2 a 3, 144 de 3 a 4, y así sucesivamente. La experiencia se gana en las misiones: cada enemigo derrotado da 10 × 1,2^(1d8) puntos; completar la misión no suma experiencia extra por ahora, y las batallas en línea no dan experiencia. El nivel multiplica las demás estadísticas: un Mago Fuego de nivel 1 tiene ataque base 10 y uno de nivel 3, ataque base 30.",
+      "respuestaEn": "Every hero starts at level 1 and can reach level 8. The experience needed for the next level is 100 × 1.2^(level − 1): 100 points to go from 1 to 2, 120 from 2 to 3, 144 from 3 to 4, and so on. Experience is earned in missions: each defeated enemy gives 10 × 1.2^(1d8) points; completing the mission gives no extra experience for now, and online battles give no experience. Level multiplies the other stats: a level 1 «Mago Fuego» (Fire Mage) has a base attack of 10 and a level 3 one, a base attack of 30."
+    },
+    {
+      "titulo": "¿Cómo funciona una habilidad épica en combate?",
+      "motivo": "Afirma que toda épica trae un efecto que sirve a cualquier héroe; las del Chamán y el Médico no lo tienen y el motor rechaza usarlas con otro tipo de héroe.",
+      "antesEs": "Una épica tiene dos partes: un efecto que sirve a cualquier héroe y un efecto épico potenciado que solo se activa si tu héroe es del tipo de esa épica. Las épicas no consumen puntos de poder y tienen dos turnos de recarga entre un uso y otro.",
+      "respuestaEs": "Una épica tiene dos partes: un efecto general, que puede usar cualquier tipo de héroe, y un efecto épico potenciado que solo se activa si tu héroe es del tipo de esa épica; las del Chamán («Té changua») y el Médico («Reanimador 3000») no tienen efecto general y solo sirven a su tipo. Las épicas no consumen puntos de poder y tienen dos turnos de recarga entre un uso y otro.",
+      "respuestaEn": "An epic has two parts: a general effect, which any hero type can use, and a boosted epic effect that only triggers if your hero is of that epic's type; the «Chamán» (Shaman) epic («Té changua») and the «Médico» (Medic) epic («Reanimador 3000») have no general effect and only work for their own type. Epics use no power points and have a two-turn cooldown between uses."
+    },
+    {
+      "titulo": "¿Cómo juega la inteligencia artificial?",
+      "motivo": "Presenta una IA que aprende de las partidas jugadas; la IA del juego es por reglas y no está entrenada (el modelo de misiones está apagado y no se despliega).",
+      "antesEs": "Los rivales controlados por la IA siguen exactamente las mismas reglas de combate que un jugador humano. En las misiones, la IA controla a tu héroe siguiendo las rotaciones de habilidades que configuraste y controla a los enemigos con sus propias estrategias. El sistema está pensado para aprender de las partidas jugadas y plantear estrategias de juego.",
+      "respuestaEs": "Los rivales controlados por la IA siguen exactamente las mismas reglas de combate que un jugador humano. En «Jugar online», la IA es táctica y por reglas: ensaya las jugadas que tiene y elige la de mejor resultado esperado. En las misiones, la IA dirige a tu héroe con las rotaciones de habilidades que configuraste (salta las que no puede usar) y a los enemigos con sus propias rotaciones. No es una IA entrenada: no aprende de las partidas jugadas.",
+      "respuestaEn": "AI-controlled rivals follow exactly the same combat rules as a human player. In «Jugar online» (Play online), the AI is tactical and rule-based: it tries out the moves it has and picks the one with the best expected result. In missions, the AI plays your hero with the skill rotations you set up (skipping any it can't use) and the enemies with their own rotations. It isn't a trained AI: it doesn't learn from played matches."
+    },
+    {
+      "titulo": "¿Qué es el daño crítico?",
+      "motivo": "Presenta el porcentaje de filas de la tabla de efectos como probabilidad real de crítico; con el índice de distribución normal ese porcentaje no es la probabilidad.",
+      "antesEs": "Un golpe crítico causa entre el 120 % y el 180 % del daño. Cada héroe tiene una probabilidad base (por ejemplo, 5 % el Guerrero Armas y 10 % el Pícaro Veneno) y el equipo puede subirla: lo que sumes de crítico se resta de la probabilidad de «no causar daño». Así, un Guerrero Armas con +6 % de crítico pasa de 5 % a 11 % de críticos y de 30 % a 24 % de golpes sin daño.",
+      "respuestaEs": "Un golpe crítico causa entre el 120 % y el 180 % del daño. Cada héroe tiene una parte de las filas de su tabla de efectos en crítico (por ejemplo, 5 % el Guerrero Armas y 10 % el Pícaro Veneno) y el equipo puede subirla: lo que sumes de crítico se resta de las filas de «no causar daño» (un Guerrero Armas con +6 % pasa de 5 % a 11 % de filas de crítico y de 30 % a 24 % sin daño). Como la fila se elige con un índice de distribución normal, ese porcentaje de filas no es exactamente la probabilidad de un crítico.",
+      "respuestaEn": "A critical hit deals 120% to 180% of the damage. Each hero has a share of the rows of its effects table on criticals (for example, 5% for the «Guerrero Armas» (Weapons Warrior) and 10% for the «Pícaro Veneno» (Poison Rogue)) and gear can raise it: whatever critical you add is taken from the «no causar daño» (no damage) rows (a «Guerrero Armas» with +6% goes from 5% to 11% of critical rows and from 30% to 24% of no-damage rows). Since the row is picked with a normally distributed index, that share of rows isn't exactly the chance of a critical."
+    },
+    {
+      "titulo": "¿Qué es la probabilidad de caída?",
+      "motivo": "Describe un botín que cae al derrotar a un enemigo (de su equipo o inventario); el juego no tiene esa mecánica: la probabilidad de caída del documento no se aplica.",
+      "antesEs": "La probabilidad de caída indica qué tan probable es obtener un objeto al derrotar a un enemigo. Cada arma, armadura e ítem tiene la suya: por ejemplo, la Espada de dos manos cae el 1 % de las veces y los Pinchos de escudo el 20 %. El objeto que cae puede ser uno que el enemigo tenga equipado o almacenado en su inventario.",
+      "respuestaEs": "Las tablas del documento del juego dan a cada arma, armadura e ítem una «probabilidad de caída» (por ejemplo, 1 % la Espada de dos manos y 20 % los Pinchos de escudo), pero hoy el juego no la aplica: derrotar a un enemigo no hace caer objetos de su equipo ni de su inventario, y perder un combate no te quita los tuyos. Los objetos se ganan como botín de las misiones (garantizado o por sorteo, en el reporte), en los cofres de recompensa o comprándolos.",
+      "respuestaEn": "The game document's tables give each weapon, armor piece and item a «probabilidad de caída» (drop chance) (for example, 1% for the «Espada de dos manos» (Two-handed Sword) and 20% for the «Pinchos de escudo» (Shield Spikes)), but the game doesn't apply it today: defeating an enemy doesn't make items drop from its gear or inventory, and losing a fight doesn't take yours. You get items as mission loot (guaranteed or random, in the report), from reward chests or by buying them."
+    },
+    {
+      "titulo": "¿Cada cuánto hay torneos?",
+      "motivo": "Dice que solo los «administradores de torneo» los crean; ese rol no existe: los crean un Administrador o el Super Administrador.",
+      "antesEs": "Los torneos se juegan en una fecha concreta y solo se permite uno cada 91 días. Solo los administradores de torneo pueden crearlos. En «Torneo» ves los que tienen inscripciones abiertas o están en curso.",
+      "respuestaEs": "Los torneos se abren por temporadas: solo se permite uno cada 91 días, con una fecha límite de inscripción. Los crea la administración (un Administrador o el Super Administrador). En «Torneo» ves cada torneo con su estado: «Inscripciones abiertas», «En curso», «Finalizado» o «Cancelado».",
+      "respuestaEn": "Tournaments open by seasons: only one is allowed every 91 days, with a registration deadline. They're created by the administration (an Administrator or the Super Administrator). In «Torneo» (Tournament) you see each tournament with its status: «Inscripciones abiertas» (registration open), «En curso» (in progress), «Finalizado» (finished) or «Cancelado» (cancelled)."
+    },
+    {
+      "titulo": "¿Cómo me inscribo en un torneo?",
+      "motivo": "Dice que la inscripción puede pagarse en dinero real; solo se paga en créditos (puede ser gratis) y los torneos no tienen pago en dinero real.",
+      "antesEs": "1) Entra a «Torneo». 2) Elige un torneo con inscripciones abiertas. 3) Inscribe a tu equipo con su nombre y avatar. 4) Paga la inscripción, que puede ser en créditos del juego o en dinero real. Tu héroe no puede estar en una misión activa.",
+      "respuestaEs": "1) Entra a «Torneo» y abre uno con inscripciones abiertas con «Ver torneo». 2) En «Registrar mi equipo» escribe el «Nombre del equipo», busca a «Tu compañero», elige el «Emblema del equipo» y pulsa «Registrar equipo». 3) Pulsa «Inscribir»: el botón dice cuántos créditos cuesta (puede ser gratis); la inscripción se paga solo en créditos, no en dinero real. Con una sanción activa no puedes inscribirte, y para jugar tu héroe no puede estar en una misión.",
+      "respuestaEn": "1) Go to «Torneo» (Tournament) and open one with registration open via «Ver torneo» (View tournament). 2) In «Registrar mi equipo» (Register my team) enter the «Nombre del equipo» (team name), find «Tu compañero» (your teammate), pick the «Emblema del equipo» (team emblem) and press «Registrar equipo» (Register team). 3) Press «Inscribir» (Enroll): the button shows how many credits it costs (it can be free); the fee is paid only in credits, not real money. You can't enroll with an active sanction, and to play your hero can't be on a mission."
+    },
+    {
+      "titulo": "¿Cómo son los equipos del torneo?",
+      "motivo": "Dice «máximo de seis jugadores por batalla»; cada encuentro del torneo es un equipo de 2 contra otro (2 contra 2).",
+      "antesEs": "El torneo se juega en equipos de dos jugadores, con un máximo de seis jugadores por batalla. El árbol tiene ocho equipos; si no se completan con jugadores, los cupos restantes los ocupan equipos de IA. Cada equipo tiene un nombre y un avatar que deben cumplir la misma política del registro de usuarios (sin palabras ofensivas ni nombres de celebridades o marcas).",
+      "respuestaEs": "El torneo se juega en equipos de dos jugadores, y cada encuentro es un equipo contra otro (2 contra 2). El árbol tiene ocho equipos; si no se completan con jugadores, los cupos restantes los ocupan equipos de la IA. El nombre y el emblema de cada equipo pasan por el mismo filtro que los apodos: sin palabras ofensivas ni nombres de celebridades, políticos, dirigentes o marcas.",
+      "respuestaEn": "The tournament is played in teams of two players, and each match is one team against another (2 vs 2). The bracket has eight teams; if players don't fill it, the remaining slots go to AI teams. Each team's name and emblem go through the same filter as nicknames: no offensive words or names of celebrities, politicians, leaders or brands."
+    },
+    {
+      "titulo": "¿De qué trata La Ciudadela de las Sombras?",
+      "motivo": "Dice que al vencerla se abre El Templo Olvidado; el Templo no exige misiones previas, así que completar la Ciudadela no desbloquea nada.",
+      "antesEs": "Séptima misión de historia (nivel recomendado 7, dificultad difícil; requiere El Volcán Dormido). Es la antesala del Bosque Sombrío: una ciudadela sin puertas con asesinos velados y caballeros negros. Su jefe, El Regente Sombrío, juró que nadie llegaría al Templo. Al vencerla se abre El Templo Olvidado.",
+      "respuestaEs": "Séptima misión de historia (nivel recomendado 7, dificultad difícil; requiere El Volcán Dormido). Es la antesala del Bosque Sombrío: una ciudadela sin puertas con asesinos velados y caballeros negros. Su jefe, El Regente Sombrío, juró que nadie llegaría al Templo. Es la última de la cadena de historia; El Templo Olvidado (nivel recomendado 8) no exige misiones previas.",
+      "respuestaEn": "Seventh story mission (recommended level 7, hard; requires «El Volcán Dormido» (The Sleeping Volcano)). It's the gateway to the Dark Forest: a citadel without gates, with veiled assassins and black knights. Its boss, «El Regente Sombrío» (the Shadow Regent), swore no one would reach the Temple. It's the last mission of the story chain; «El Templo Olvidado» (The Forgotten Temple, recommended level 8) doesn't require any previous mission."
+    },
+    {
+      "titulo": "¿Puedo ver las partidas del torneo en vivo?",
+      "motivo": "Dice que el torneo contempla transmisión en vivo y videos de partidas anteriores; no hay transmisión ni grabación de los encuentros.",
+      "antesEs": "El torneo contempla la transmisión en vivo de las justas y los videos de partidas anteriores, pero por ahora la transmisión no está disponible. En «Torneo» sí puedes consultar los equipos participantes y el estado de cada encuentro.",
+      "respuestaEs": "No. Los encuentros del torneo no se transmiten en vivo ni se graban, así que tampoco hay videos de partidas anteriores. En «Torneo» sí puedes consultar los equipos participantes, el árbol y el estado de cada encuentro; mientras el torneo está en curso, pulsa «Actualizar resultados» para ver los últimos.",
+      "respuestaEn": "No. Tournament matches aren't streamed live or recorded, so there are no videos of past matches either. In «Torneo» (Tournament) you can check the participating teams, the bracket and the status of each match; while the tournament is in progress, press «Actualizar resultados» (Refresh results) to see the latest."
+    },
+    {
+      "titulo": "¿Qué es un enemigo Máster?",
+      "motivo": "Fija la aparición en 0,01–0,1 % y «siempre dos niveles por encima»; El Templo Olvidado trae un Máster propio con otra probabilidad y el nivel del Máster tiene tope 8.",
+      "antesEs": "Los Máster son enemigos especiales que solo aparecen en las misiones, de forma aleatoria. Tienen estadísticas superiores a los enemigos normales, siempre están dos niveles por encima de tu héroe y poseen una habilidad épica exclusiva: si los derrotas, esa épica pasa a tu colección. Su probabilidad de aparición es baja (entre 0,01 % y 0,1 % según la épica) y es mayor en las misiones de exploración, donde pueden aparecer varios.",
+      "respuestaEs": "Los Máster son enemigos especiales que solo aparecen en las misiones, de forma aleatoria, dos niveles por encima de tu héroe (como máximo, nivel 8), y cada uno tiene una épica: si lo derrotas, pasa a tu inventario o, si no está en el catálogo, a tu colección de épicas de Máster. El Máster afín al tipo de tu héroe aparece con una probabilidad muy baja (entre 0,01 % y 0,1 % según la épica); algunas misiones, como El Templo Olvidado, traen además su propio Máster, con la probabilidad que muestra su detalle. En las misiones de exploración pueden aparecer varios.",
+      "respuestaEn": "Masters are special enemies that only appear in missions, at random, two levels above your hero (level 8 at most), and each one has an epic: if you defeat it, it goes to your inventory or, if it isn't in the catalog, to your collection of Master epics. The Master matching your hero's type appears with a very low chance (0.01% to 0.1% depending on the epic); some missions, like «El Templo Olvidado» (The Forgotten Temple), also bring their own Master, with the chance shown in their details. In exploration missions several can appear."
+    },
+    {
+      "titulo": "¿Qué misiones hay?",
+      "motivo": "Dice que El Templo Olvidado exige completar la misión anterior; no tiene requisitos previos y está disponible desde el principio.",
+      "antesEs": "Las misiones de historia se desbloquean en orden: 1) El Sendero de los Aprendices (nivel 1), 2) La Mina Abandonada (nivel 2), 3) El Pantano de los Susurros (nivel 3), 4) La Fortaleza Quebrada (nivel 4), 5) Las Cumbres Heladas (nivel 5), 6) El Volcán Dormido (nivel 6), 7) La Ciudadela de las Sombras (nivel 7) y 8) El Templo Olvidado (nivel 8). Cada una exige haber completado la anterior. En «Misiones» puedes ver el detalle, la duración y las recompensas de cada una.",
+      "respuestaEs": "Las misiones de historia de la cadena de progresión se desbloquean en orden: 1) El Sendero de los Aprendices (nivel 1), 2) La Mina Abandonada (nivel 2), 3) El Pantano de los Susurros (nivel 3), 4) La Fortaleza Quebrada (nivel 4), 5) Las Cumbres Heladas (nivel 5), 6) El Volcán Dormido (nivel 6) y 7) La Ciudadela de las Sombras (nivel 7); cada una exige haber completado la anterior. Además está El Templo Olvidado (nivel 8), la más difícil, que no exige misiones previas. En «Misiones» puedes ver el detalle, la duración y las recompensas de cada una.",
+      "respuestaEn": "The story missions of the progression chain unlock in order: 1) «El Sendero de los Aprendices» (The Apprentices' Path, level 1), 2) «La Mina Abandonada» (The Abandoned Mine, level 2), 3) «El Pantano de los Susurros» (The Swamp of Whispers, level 3), 4) «La Fortaleza Quebrada» (The Broken Fortress, level 4), 5) «Las Cumbres Heladas» (The Frozen Peaks, level 5), 6) «El Volcán Dormido» (The Sleeping Volcano, level 6) and 7) «La Ciudadela de las Sombras» (The Citadel of Shadows, level 7); each one requires completing the previous one. There's also «El Templo Olvidado» (The Forgotten Temple, level 8), the hardest, which doesn't require any previous mission. In «Misiones» (Missions) you can see each one's details, duration and rewards."
+    },
+    {
+      "titulo": "¿Dónde veo mis estadísticas y logros?",
+      "motivo": "Promete logros y estadísticas de torneos en «Mi Cuenta»; no hay logros y la cuenta no resume los torneos.",
+      "antesEs": "En «Mi Cuenta» puedes ver tus estadísticas como jugador (batallas, misiones y torneos) y tus logros. Si inicias sesión, también puedes pedirme «dame un informe de mi actividad».",
+      "respuestaEs": "En «Mi Cuenta», pestaña «Estadísticas», ves tus batallas y tus misiones. Por ahora no hay logros ni un resumen de tus torneos en tu cuenta: lo de cada torneo está en «Torneo». Si inicias sesión, también puedes pedirme «dame un informe de mi actividad».",
+      "respuestaEn": "In «Mi Cuenta» (My Account), «Estadísticas» (Statistics) tab, you see your battles and missions. For now there are no achievements and no summary of your tournaments in your account: each tournament's details are in «Torneo» (Tournament). When signed in, you can also ask me «dame un informe de mi actividad» (give me an activity report)."
+    },
+    {
+      "titulo": "¿Cómo compro en la tienda?",
+      "motivo": "Describe el pago solo con formulario de tarjeta y promete correo en toda compra; la tienda también cobra con «Créditos del Nexo», sin formulario y sin correo de confirmación.",
+      "antesEs": "1) Entra a «Tienda» y elige un producto. 2) Pulsa «Añadir al carrito». 3) Abre el carrito para revisar productos, cambiar cantidades o quitarlos y ver el total. 4) Procede al pago: verás el resumen y un formulario con titular, número de tarjeta, vencimiento y código de seguridad. 5) Confirma; recibirás un correo con el detalle de la compra. El carrito se conserva aunque salgas de la tienda.",
+      "respuestaEs": "1) Entra a «Tienda» y elige un producto. 2) Pulsa «Añadir al carrito». 3) En el carrito revisa productos, cantidades y total, y pulsa «Pagar». 4) En «¿Cómo quieres pagar?» elige «Créditos del Nexo» (sin formulario: ves tu saldo, el precio y cómo queda tu saldo) o «Pago simulado», con titular, número de tarjeta, vencimiento y código de seguridad. 5) Pulsa «Confirmar compra» o «Confirmar pago». Con el pago simulado te llega un correo de confirmación; con créditos, no. El carrito se conserva aunque salgas de la tienda.",
+      "respuestaEn": "1) Go to the «Tienda» (Store) and pick a product. 2) Press «Añadir al carrito» (Add to cart). 3) In the cart review products, quantities and total, and press «Pagar» (Pay). 4) In «¿Cómo quieres pagar?» (How do you want to pay?) choose «Créditos del Nexo» (game credits; no form: you see your balance, the price and your balance afterwards) or «Pago simulado» (simulated payment), with cardholder, card number, expiry date and security code. 5) Press «Confirmar compra» or «Confirmar pago» (Confirm). With the simulated payment you get a confirmation email; with credits, you don't. The cart is kept even if you leave the store."
+    },
+    {
+      "titulo": "¿Puedo vender en la subasta por dinero real?",
+      "motivo": "Dice que los productos del Maestro de Juego se pagan con dinero real; esa cuenta no existe en el juego y el dinero real (simulado) solo se usa en la «Tienda».",
+      "antesEs": "No. Entre jugadores la subasta funciona solo con créditos del juego, que no tienen valor en dinero real ni se pueden cambiar por dinero. Solo los productos del Maestro de Juego (UPB-COMPANY) se pueden pagar con dinero real. Los productos de pago tampoco se pueden revender en la subasta.",
+      "respuestaEs": "No. En la «Subasta» todo se compra y se vende con créditos del juego, que no tienen valor en dinero real ni se pueden cambiar por dinero. El dinero real (con «Pago simulado») solo se usa para comprar en la «Tienda», y los productos premium, que solo se venden así, no se pueden subastar.",
+      "respuestaEn": "No. In the «Subasta» (Auction) everything is bought and sold with game credits, which have no real-money value and can't be exchanged for money. Real money (with «Pago simulado», simulated payment) is only used to buy in the «Tienda» (Store), and premium products, which are only sold that way, can't be auctioned."
+    },
+    {
+      "titulo": "¿Quién es el Maestro de Juego?",
+      "motivo": "Lo presenta como un vendedor activo que ofrece productos exclusivos, épicas y paquetes con precio en dinero real; hoy esa cuenta no existe y las épicas no se venden.",
+      "antesEs": "El Maestro de Juego es el usuario especial con el que UPB-COMPANY participa en la subasta. Puede publicar en cualquier momento sin comisión, ofrecer productos exclusivos, fijar precios en dinero real y sus productos se destacan con una insignia y aparecen primero en los listados. Ofrece, por ejemplo, héroes de edición limitada, épicas exclusivas y paquetes promocionales.",
+      "respuestaEs": "El documento del juego describe al «Maestro de Juego» como el usuario especial de UPB-COMPANY en la subasta, que publicaría sin comisión y con sus productos destacados y primeros en los listados. Hoy esa cuenta no existe: todas las subastas son de jugadores y se pagan con créditos, y la opción «Maestro de Juego» del filtro «Vendedor» no trae resultados. Los productos oficiales se compran en la «Tienda»; las épicas no se venden.",
+      "respuestaEn": "The game document describes the «Maestro de Juego» (Game Master) as UPB-COMPANY's special user in the auction, which would publish without a fee and with its products highlighted and listed first. That account doesn't exist today: all auctions are from players and are paid with credits, and the «Maestro de Juego» option of the «Vendedor» (Seller) filter returns no results. Official products are bought in the «Tienda» (Store); epics aren't sold."
+    },
+    {
+      "titulo": "¿Qué hago si tengo un problema con una subasta?",
+      "motivo": "Promete que soporte puede mediar entre comprador y vendedor o revertir la transacción; ninguna herramienta lo permite: soporte solo revisa, responde y cierra la solicitud.",
+      "antesEs": "Abre una solicitud de soporte humano desde esta ventana (botón «Soporte»), con la categoría de subastas, y explica qué pasó y en qué subasta. El equipo revisa el caso y, si está justificado, puede mediar entre comprador y vendedor o revertir la transacción.",
+      "respuestaEs": "Inicia sesión y abre una solicitud de soporte desde esta ventana (botón «Soporte»): elige el «Tema» «Subastas y comercio», escribe el «Asunto» y cuenta en «Qué pasa» qué ocurrió y en qué subasta, sin contraseñas ni datos de tarjetas. Pulsa «Enviar solicitud»: una persona del equipo revisa el caso y te responde; lo ves en «Tus solicitudes».",
+      "respuestaEn": "Sign in and open a support request from this window («Soporte» (Support) button): choose the «Tema» (Topic) «Subastas y comercio» (Auctions and trade), write the «Asunto» (Subject) and explain in «Qué pasa» (What's happening) what happened and in which auction, without passwords or card details. Press «Enviar solicitud» (Send request): a person from the team reviews the case and replies; you'll see it in «Tus solicitudes» (Your requests)."
+    }
+  ],
+  "casos": [
+    {
+      "pregunta": "¿Puedo apelar si me banearon?",
+      "temaClaveEsperada": "apelar-sancion"
+    },
+    {
+      "pregunta": "estoy suspendido, ¿cómo apelo?",
+      "temaClaveEsperada": "apelar-sancion"
+    },
+    {
+      "pregunta": "Can I appeal a ban without signing in?",
+      "temaClaveEsperada": "apelar-sancion"
+    }
+  ]
+}

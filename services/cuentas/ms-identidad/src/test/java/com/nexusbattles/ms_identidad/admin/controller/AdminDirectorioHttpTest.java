@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_identidad.admin.controller;
 
 import com.nexusbattles.ms_identidad.admin.directorio.AuditoriaDeExportaciones;
+import com.nexusbattles.ms_identidad.admin.directorio.CuentasBloqueadasPorIntentos;
 import com.nexusbattles.ms_identidad.admin.directorio.CuentasDePrueba;
 import com.nexusbattles.ms_identidad.admin.directorio.DirectorioDeCuentas;
 import com.nexusbattles.ms_identidad.admin.directorio.ExportacionDelDirectorio;
@@ -8,6 +9,8 @@ import com.nexusbattles.ms_identidad.admin.directorio.ExportacionDemasiadoGrande
 import com.nexusbattles.ms_identidad.admin.directorio.FiltroDelDirectorio;
 import com.nexusbattles.ms_identidad.admin.directorio.IndicadoresDeCuentas;
 import com.nexusbattles.ms_identidad.admin.directorio.ConsultaInvalidaException;
+import com.nexusbattles.ms_identidad.admin.dto.CuentasBloqueadasResponse;
+import com.nexusbattles.ms_identidad.admin.dto.CuentasBloqueadasResponse.CuentaBloqueada;
 import com.nexusbattles.ms_identidad.admin.dto.IndicadoresDeCuentasResponse;
 import com.nexusbattles.ms_identidad.admin.dto.IndicadoresDeCuentasResponse.RegistrosDelDia;
 import com.nexusbattles.ms_identidad.admin.dto.IndicadoresDeCuentasResponse.RegistrosPorDia;
@@ -42,6 +45,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -75,6 +79,7 @@ class AdminDirectorioHttpTest {
     private static final String DIRECTORIO = "/api/v1/admin/jugadores";
     private static final String EXPORTACION = DIRECTORIO + "/exportacion";
     private static final String INDICADORES = DIRECTORIO + "/indicadores";
+    private static final String BLOQUEOS = DIRECTORIO + "/bloqueos";
     private static final String ERRORES = "https://nexusbattles.upb.edu.co/errors/";
 
     private JwtService jwtService;
@@ -82,6 +87,7 @@ class AdminDirectorioHttpTest {
     private DirectorioDeCuentas directorio;
     private IndicadoresDeCuentas indicadores;
     private ExportacionDelDirectorio exportacion;
+    private CuentasBloqueadasPorIntentos bloqueos;
     /** ms-cumplimiento: el cliente de la bitacora, el resto de la auditoria es la de verdad. */
     private AuditoriaClient bitacora;
     private MockMvc mvc;
@@ -95,6 +101,7 @@ class AdminDirectorioHttpTest {
         directorio = mock(DirectorioDeCuentas.class);
         indicadores = mock(IndicadoresDeCuentas.class);
         exportacion = mock(ExportacionDelDirectorio.class);
+        bloqueos = mock(CuentasBloqueadasPorIntentos.class);
         bitacora = mock(AuditoriaClient.class);
 
         // Respaldo por cabecera APAGADO, como en cualquier entorno desplegado.
@@ -102,7 +109,7 @@ class AdminDirectorioHttpTest {
                 new RbacAuthorizationService(new RbacMatrixRepository()), null, jwtService, null, false);
         AdminDirectorioController controlador = new AdminDirectorioController(usuarioRepository, directorio,
                 new CuentasDePrueba("nexus.test", "qa_"), indicadores, exportacion,
-                new AuditoriaDeExportaciones(bitacora));
+                new AuditoriaDeExportaciones(bitacora), bloqueos);
         mvc = MockMvcBuilders.standaloneSetup(controlador).addInterceptors(interceptor).build();
     }
 
@@ -187,6 +194,88 @@ class AdminDirectorioHttpTest {
                 .andExpect(jsonPath("$.instance").value(INDICADORES));
     }
 
+    // ------------------------------------------------- SA-20: cuentas bloqueadas
+
+    private static CuentasBloqueadasResponse bloqueosDePrueba() {
+        CuentaBloqueada vigente = new CuentaBloqueada(UUID.fromString("0f9a1c2e-1111-4a5b-8c6d-000000000001"),
+                "lince_rojo", "JUGADOR", "ACTIVO", OffsetDateTime.parse("2026-10-14T09:30:00-05:00"), true,
+                OffsetDateTime.parse("2026-10-14T09:45:00-05:00"));
+        CuentaBloqueada pasada = new CuentaBloqueada(UUID.fromString("0f9a1c2e-1111-4a5b-8c6d-000000000002"),
+                "moderadora_luz", "MODERADOR", "ACTIVO", OffsetDateTime.parse("2026-10-12T22:05:00-05:00"), false,
+                null);
+        return new CuentasBloqueadasResponse(LocalDate.of(2026, 10, 8), 3, List.of(vigente, pasada), true,
+                OffsetDateTime.parse("2026-10-14T09:40:00-05:00"));
+    }
+
+    @ParameterizedTest(name = "rol {0}")
+    @ValueSource(strings = {"ADMINISTRADOR", "SUPER_ADMINISTRADOR"})
+    @DisplayName("bloqueos: administracion los ve, con la forma del contrato, sin correo y sin cache")
+    void bloqueosParaAdministracion(String rol) throws Exception {
+        when(bloqueos.consultar("2026-10-08", true, 2)).thenReturn(bloqueosDePrueba());
+
+        mvc.perform(get(BLOQUEOS).param("desde", "2026-10-08").param("ocultarPruebas", "true")
+                        .param("limite", "2").header("Authorization", token(rol)))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith("application/json"))
+                .andExpect(header().string("Cache-Control", containsString("no-store")))
+                .andExpect(jsonPath("$.desde").value("2026-10-08"))
+                .andExpect(jsonPath("$.total").value(3))
+                .andExpect(jsonPath("$.ocultarPruebas").value(true))
+                .andExpect(jsonPath("$.calculadoEn").exists())
+                .andExpect(jsonPath("$.cuentas.length()").value(2))
+                .andExpect(jsonPath("$.cuentas[0].uid").value("0f9a1c2e-1111-4a5b-8c6d-000000000001"))
+                .andExpect(jsonPath("$.cuentas[0].apodo").value("lince_rojo"))
+                .andExpect(jsonPath("$.cuentas[0].rol").value("JUGADOR"))
+                .andExpect(jsonPath("$.cuentas[0].vigente").value(true))
+                .andExpect(jsonPath("$.cuentas[0].bloqueadaEn").exists())
+                .andExpect(jsonPath("$.cuentas[0].bloqueadaHasta").exists())
+                .andExpect(jsonPath("$.cuentas[1].vigente").value(false))
+                .andExpect(jsonPath("$.cuentas[1].bloqueadaHasta").value(nullValue()))
+                .andExpect(jsonPath("$.cuentas[0].email").doesNotExist())
+                .andExpect(jsonPath("$.cuentas[0].correo").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("bloqueos sin parametros: el servicio decide el periodo y el limite")
+    void bloqueosPorOmision() throws Exception {
+        when(bloqueos.consultar(null, false, null)).thenReturn(bloqueosDePrueba());
+
+        mvc.perform(get(BLOQUEOS).header("Authorization", token("ADMINISTRADOR")))
+                .andExpect(status().isOk());
+        verify(bloqueos).consultar(isNull(), eq(false), isNull());
+    }
+
+    @ParameterizedTest(name = "rol {0}")
+    @ValueSource(strings = {"JUGADOR", "MODERADOR"})
+    @DisplayName("bloqueos: 403 para quien no gestiona cuentas, y no se consulta nada")
+    void bloqueosProhibidos(String rol) throws Exception {
+        mvc.perform(get(BLOQUEOS).header("Authorization", token(rol)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.type").value(ERRORES + "forbidden"));
+        verifyNoInteractions(bloqueos);
+    }
+
+    @Test
+    @DisplayName("bloqueos sin token: 403 del interceptor")
+    void bloqueosSinToken() throws Exception {
+        mvc.perform(get(BLOQUEOS)).andExpect(status().isForbidden());
+        verifyNoInteractions(bloqueos);
+    }
+
+    @Test
+    @DisplayName("bloqueos con un periodo invalido: 400 datos-invalidos con el motivo")
+    void bloqueosPeriodoInvalido() throws Exception {
+        when(bloqueos.consultar(anyString(), anyBoolean(), any()))
+                .thenThrow(new ConsultaInvalidaException("«desde» (2031-01-01) es posterior a hoy (2026-10-14)."));
+
+        mvc.perform(get(BLOQUEOS).param("desde", "2031-01-01").header("Authorization", token("SUPER_ADMINISTRADOR")))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                .andExpect(jsonPath("$.type").value(ERRORES + "datos-invalidos"))
+                .andExpect(jsonPath("$.detail").value("«desde» (2031-01-01) es posterior a hoy (2026-10-14)."))
+                .andExpect(jsonPath("$.instance").value(BLOQUEOS));
+    }
+
     // ------------------------------------------------------------- exportacion
 
     @Test
@@ -210,7 +299,22 @@ class AdminDirectorioHttpTest {
         ArgumentCaptor<FiltroDelDirectorio> filtro = ArgumentCaptor.forClass(FiltroDelDirectorio.class);
         verify(exportacion).exportar(filtro.capture());
         assertThat(filtro.getValue()).isEqualTo(new FiltroDelDirectorio("ana", true, "JUGADOR", "SUSPENDIDO",
-                LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)));
+                LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), null));
+    }
+
+    @Test
+    @DisplayName("1.7.0: la exportacion lleva tambien el filtro por historial de sanciones")
+    void exportacionConHistorialDeSanciones() throws Exception {
+        when(exportacion.exportar(any(FiltroDelDirectorio.class)))
+                .thenReturn(new ExportacionDelDirectorio.Exportacion("directorio.csv", new byte[0], 0));
+
+        mvc.perform(get(EXPORTACION).param("historialSanciones", "con")
+                        .header("Authorization", token("ADMINISTRADOR")))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<FiltroDelDirectorio> filtro = ArgumentCaptor.forClass(FiltroDelDirectorio.class);
+        verify(exportacion).exportar(filtro.capture());
+        assertThat(filtro.getValue().historialSanciones()).isEqualTo("CON");
     }
 
     // ------------------------------------------- HU-USR-009: auditoria de la exportacion
@@ -333,6 +437,37 @@ class AdminDirectorioHttpTest {
                 .andExpect(jsonPath("$.contenido.length()").value(0))
                 .andExpect(jsonPath("$.total").value(0));
         verifyNoInteractions(usuarioRepository);
+    }
+
+    @Test
+    @DisplayName("SA-21: las fechas de la fila salen con su zona, el mismo instante que se guardo")
+    @SuppressWarnings("unchecked")
+    void fechasConSuZona() throws Exception {
+        com.nexusbattles.ms_identidad.auth.model.Usuario ana = new com.nexusbattles.ms_identidad.auth.model.Usuario();
+        ana.setId(15L);
+        ana.setPublicId(UUID.fromString("11111111-2222-3333-4444-555555555555"));
+        ana.setApodo("Ana");
+        ana.setEmail("ana@ejemplo.org");
+        ana.setEstado("ACTIVO");
+        ana.setCreadoEn(java.time.LocalDateTime.of(2026, 9, 1, 17, 30));
+        ana.setUltimoAcceso(java.time.LocalDateTime.of(2026, 10, 4, 21, 15));
+        when(directorio.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(ana), PageRequest.of(0, 20), 1));
+
+        String cuerpo = mvc.perform(get(DIRECTORIO).param("rol", "jugador")
+                        .header("Authorization", token("ADMINISTRADOR")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+
+        String creadoEn = com.jayway.jsonpath.JsonPath.read(cuerpo, "$.contenido[0].creadoEn");
+        String ultimoAcceso = com.jayway.jsonpath.JsonPath.read(cuerpo, "$.contenido[0].ultimoAcceso");
+        java.time.ZoneId servidor = java.time.ZoneId.systemDefault();
+        // Con desfase («Z» o «±hh:mm»): un navegador ya no la lee como hora suya.
+        assertThat(creadoEn).matches(".*(Z|[+-]\\d{2}:\\d{2})$");
+        assertThat(OffsetDateTime.parse(creadoEn).toInstant())
+                .isEqualTo(java.time.LocalDateTime.of(2026, 9, 1, 17, 30).atZone(servidor).toInstant());
+        assertThat(OffsetDateTime.parse(ultimoAcceso).toInstant())
+                .isEqualTo(java.time.LocalDateTime.of(2026, 10, 4, 21, 15).atZone(servidor).toInstant());
     }
 
     @Test

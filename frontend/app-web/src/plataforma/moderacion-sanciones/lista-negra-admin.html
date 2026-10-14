@@ -3,12 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Lista negra de términos · The Nexus Battles VI</title>
-    <!--
-      UX-R3.3 — esta vista carga los tres archivos del kit, como las otras
-      treinta, sin hoja propia: las clases de la lista (`lista-terminos*`), los
-      distintivos y los campos ya están en `componentes.css`.
-    -->
+    <title>Lista negra · The Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
@@ -17,108 +12,16 @@
     <div data-cabecera-app></div>
 
     <!--
-      B2 (moderacion-lista-negra.yaml 2.0.x) — cada término lleva su categoría
-      del 7.1.1, su modo de coincidencia, si está activo y quién lo dio de
-      alta. La vista la monta `montarListaNegra` sobre las zonas
-      `[data-zona=...]`, igual que las de sanciones.
+      HU-ADM-002 (moderacion-lista-negra.yaml 2.1.x) con el kit de la consola
+      (SA-4, punto 21 del informe): cifras, alta, tabla con las acciones a un
+      lado y edición completa en un panel lateral. La monta `montarListaNegra`
+      sobre las zonas `[data-zona=...]`.
     -->
-    <main class="pagina consola pila" data-vista="lista-negra-admin">
-      <header class="encabezado-pagina">
-        <div class="pila pila--ajustada">
-          <h1>Lista negra de términos</h1>
-          <p class="t-meta">
-            Palabras ofensivas y nombres de políticos, celebridades, dirigentes o marcas registradas
-            que no se aceptan en apodos, nombres de equipo, torneo o sala, comentarios y chat. Se
-            comparan sin mayúsculas, tildes, separadores ni sustituciones como «sp1der-man».
-          </p>
-        </div>
-      </header>
-
-      <section class="tarjeta pila pila--compacta" aria-labelledby="titulo-alta">
-        <h2 class="t-subtitulo" id="titulo-alta">Añadir un término</h2>
-        <form class="pila pila--compacta" data-zona="alta">
-          <div class="fila">
-            <div class="campo">
-              <label class="campo__etiqueta" for="alta-termino">Término prohibido</label>
-              <input
-                class="campo__control"
-                type="text"
-                id="alta-termino"
-                name="termino"
-                maxlength="120"
-                placeholder="Escribe el término"
-                required
-              />
-            </div>
-            <div class="campo">
-              <label class="campo__etiqueta" for="alta-categoria">Categoría</label>
-              <select class="campo__control desplegable" id="alta-categoria" name="categoria">
-                <option value="OFENSIVO">Ofensivo</option>
-                <option value="MARCA">Marca registrada</option>
-                <option value="CELEBRIDAD">Celebridad</option>
-                <option value="POLITICO">Político</option>
-                <option value="DIRIGENTE">Dirigente</option>
-                <option value="OTRO" selected>Otro</option>
-              </select>
-            </div>
-            <div class="campo">
-              <label class="campo__etiqueta" for="alta-modo">Cómo se busca</label>
-              <select
-                class="campo__control desplegable"
-                id="alta-modo"
-                name="modo"
-                aria-describedby="alta-modo-pista"
-              >
-                <option value="" selected>Automático</option>
-                <option value="SUBCADENA">Dentro de otras palabras</option>
-                <option value="PALABRA">Palabra entera</option>
-              </select>
-              <p class="campo__pista" id="alta-modo-pista">
-                Automático: los de 5 letras o más se buscan dentro de otras palabras; los más
-                cortos, solo como palabra entera.
-              </p>
-            </div>
-          </div>
-          <div class="fila fila--acciones">
-            <button type="submit" class="boton boton--primario">Agregar</button>
-          </div>
-        </form>
-      </section>
-
-      <div data-zona="aviso" hidden></div>
-
-      <section class="tarjeta pila pila--compacta" aria-labelledby="titulo-terminos">
-        <h2 class="t-subtitulo" id="titulo-terminos">Términos vetados</h2>
-        <form class="formulario-en-linea" data-zona="filtros" role="search">
-          <div class="campo">
-            <label class="campo__etiqueta" for="filtro-buscar">Buscar</label>
-            <input class="campo__control" type="search" id="filtro-buscar" name="buscar" />
-          </div>
-          <div class="campo">
-            <label class="campo__etiqueta" for="filtro-categoria">Categoría</label>
-            <select class="campo__control desplegable" id="filtro-categoria" name="categoria">
-              <option value="" selected>Todas</option>
-              <option value="OFENSIVO">Ofensivo</option>
-              <option value="MARCA">Marca registrada</option>
-              <option value="CELEBRIDAD">Celebridad</option>
-              <option value="POLITICO">Político</option>
-              <option value="DIRIGENTE">Dirigente</option>
-              <option value="OTRO">Otro</option>
-            </select>
-          </div>
-          <div class="campo">
-            <label class="campo__etiqueta" for="filtro-activo">Estado</label>
-            <select class="campo__control desplegable" id="filtro-activo" name="activo">
-              <option value="" selected>Todos</option>
-              <option value="true">Activos</option>
-              <option value="false">Inactivos</option>
-            </select>
-          </div>
-          <button type="submit" class="boton boton--secundario">Filtrar</button>
-        </form>
-        <div class="pila pila--compacta" data-zona="terminos" aria-live="polite"></div>
-        <div data-zona="paginacion"></div>
-      </section>
+    <main class="pagina consola-integral" data-vista="lista-negra-admin">
+      <div data-zona="encabezado"></div>
+      <div data-zona="aviso" aria-live="polite" hidden></div>
+      <div data-zona="indicadores"></div>
+      <div data-zona="consola"></div>
     </main>
 
     <script type="module">

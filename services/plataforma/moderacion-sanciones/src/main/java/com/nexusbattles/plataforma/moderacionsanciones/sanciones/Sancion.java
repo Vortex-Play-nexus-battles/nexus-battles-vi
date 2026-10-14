@@ -47,6 +47,11 @@ public class Sancion {
     @Column(nullable = false, length = 1000)
     private String motivo;
 
+    /** SA-4 (§7.3.2): la causal documentada. Nula en las sanciones anteriores a V11. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 40)
+    private Causal causal;
+
     @Column(length = 200)
     private String politica;
 
@@ -80,6 +85,15 @@ public class Sancion {
 
     public Sancion(UUID id, UUID usuarioId, Tipo tipo, String motivo, String politica, String comentarioId,
                    UUID emitidaPor, String rolEmisor, OffsetDateTime emitidaEn, OffsetDateTime vigenteHasta) {
+        this(id, usuarioId, tipo, null, motivo, politica, comentarioId, emitidaPor, rolEmisor, emitidaEn,
+                vigenteHasta);
+    }
+
+    /** SA-4: con la causal documentada (§7.3.2). */
+    public Sancion(UUID id, UUID usuarioId, Tipo tipo, Causal causal, String motivo, String politica,
+                   String comentarioId, UUID emitidaPor, String rolEmisor, OffsetDateTime emitidaEn,
+                   OffsetDateTime vigenteHasta) {
+        this.causal = causal;
         this.id = Objects.requireNonNull(id);
         this.usuarioId = Objects.requireNonNull(usuarioId);
         this.tipo = Objects.requireNonNull(tipo);
@@ -147,6 +161,11 @@ public class Sancion {
 
     public String motivo() {
         return motivo;
+    }
+
+    /** La causal documentada; nula en las sanciones anteriores a SA-4. */
+    public Causal causal() {
+        return causal;
     }
 
     public String politica() {

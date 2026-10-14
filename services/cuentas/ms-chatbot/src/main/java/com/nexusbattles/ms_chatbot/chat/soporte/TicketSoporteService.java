@@ -1,5 +1,7 @@
 package com.nexusbattles.ms_chatbot.chat.soporte;
 
+import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
+import com.nexusbattles.ms_chatbot.chat.entrada.RevisionDeEntrada;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.limite.LimitadorDeFrecuencia;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
@@ -8,22 +10,31 @@ import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.privacidad.RedaccionDeDatosSensibles;
 import com.nexusbattles.ms_chatbot.chat.repository.ConversacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
+import com.nexusbattles.ms_chatbot.chat.service.PreguntaParaSoporte;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 
 // ms-chatbot.yaml 1.3.0 (7.4.3, RF-CHA-007): el jugador abre un ticket de
 // soporte humano y consulta los suyos. Mismo orden que ChatService:
 //
-//   1. Solo jugadores con sesion (401 SESION_REQUERIDA).
+//   1. Con una identidad resuelta por el servidor (401 SESION_REQUERIDA):
+//      un jugador por su token o, desde 1.12.0, un visitante por su sesion.
 //   2. Limite de frecuencia: la MISMA regla y el mismo cupo que los mensajes
 //      (un ticket es un mensaje mas hacia el servicio). Ademas, solo puede
 //      haber uno abierto a la vez, lo que ya acota el abuso.
-//   3. Se redactan asunto y mensaje ANTES de todo lo demas: ni la lista negra
-//      (otro servicio) ni la base ven nunca una contrasena o una tarjeta.
+//   3. Se revisan asunto y mensaje ANTES de todo lo demas (RevisionDeEntrada,
+//      1.4.0): sin caracteres de control ni inyeccion de codigo (422), y
+//      redactados, asi que ni la lista negra (otro servicio) ni la base ven
+//      nunca una contrasena o una tarjeta.
 //   4. Lista negra sobre el asunto y el mensaje ya redactados (422 / 503),
 //      antes de guardar nada.
 //   5. Un solo ticket abierto por jugador (409 TICKET_ABIERTO). Lo garantiza
@@ -31,6 +42,20 @@ import java.util.Set;
 //      error de la base es 409, los demas se relanzan (IndiceDeTicketAbierto).
 //   6. Se guarda lo redactado, con el contexto de la conversacion tambien
 //      redactado.
+//
+// 1.8.0: abrirDesdeConversacion arma el asunto y el mensaje con la pregunta
+// que el asistente no resolvio (PreguntaParaSoporte) y sigue por los mismos
+// pasos 3 a 6; sin ninguna pregunta en la conversacion, 409 SIN_CONVERSACION.
+//
+// 1.12.0 (7.4.3, RF-CHA-007 «generar automaticamente un ticket de soporte»,
+// actores Visitante y Jugador), segunda auditoria del 7.4:
+//   * Un visitante tambien tiene solicitudes. Son de la clave de su
+//     conversacion ('anonimo:<sesion>', V5: ningun uid puede ocuparla) y las
+//     ve mientras dure esa sesion. El paso 1 ya no exige un jugador: exige
+//     una identidad resuelta por el servidor (401 si no hay ninguna).
+//   * alNoResolver: cuando el asistente no pudo responder, la solicitud se
+//     abre sola con la conversacion; si ya hay una abierta, la pregunta se
+//     suma a su contexto. Nunca mas de una abierta por persona.
 //
 // No abre transaccion propia: la lista negra es HTTP y no debe retener una
 // conexion de la base; cada lectura y el guardado usan la suya.
@@ -45,34 +70,139 @@ public class TicketSoporteService {
     private final LimitadorDeFrecuencia limitador;
     private final ModeracionDeContenido moderacion;
     private final RedaccionDeDatosSensibles redaccion;
+    private final RevisionDeEntrada revision;
     private final Clock reloj;
+    private final TransactionTemplate transacciones;
 
     public TicketSoporteService(TicketSoporteRepository tickets, ConversacionRepository conversaciones,
                                 MensajeRepository mensajes, LimitadorDeFrecuencia limitador,
                                 ModeracionDeContenido moderacion, RedaccionDeDatosSensibles redaccion,
-                                Clock reloj) {
+                                RevisionDeEntrada revision, Clock reloj, TransactionTemplate transacciones) {
         this.tickets = tickets;
         this.conversaciones = conversaciones;
         this.mensajes = mensajes;
         this.limitador = limitador;
         this.moderacion = moderacion;
         this.redaccion = redaccion;
+        this.revision = revision;
         this.reloj = reloj;
+        this.transacciones = transacciones;
+    }
+
+    /** Lo que el asistente hizo con una pregunta que no pudo responder. */
+    public record SolicitudAutomatica(TicketSoporte ticket, boolean nueva) {
     }
 
     public TicketSoporte abrir(IdentidadDelChat identidad, Categoria categoria, String asunto, String mensaje) {
-        exigirSesion(identidad);
+        String propietario = propietario(identidad);
         limitador.exigir(LimitadorDeFrecuencia.Regla.MENSAJES, identidad.claveDeLimite());
-        String asuntoRedactado = redaccion.redactar(asunto.strip());
-        String mensajeRedactado = redaccion.redactar(mensaje.strip());
+        // La conversacion se lee al final, solo si el ticket se va a guardar.
+        return revisarYGuardar(propietario, categoria, asunto, mensaje, () -> mensajesDe(identidad));
+    }
+
+    // ms-chatbot.yaml 1.8.0 (7.4.3): la solicitud en un clic, armada con la
+    // pregunta que el asistente no resolvio. La conversacion es la de la
+    // identidad verificada (claveDeConversacion sale del uid del token): nada
+    // de lo que manda el cliente elige de quien es. Despues, exactamente las
+    // mismas reglas que abrir().
+    public TicketSoporte abrirDesdeConversacion(IdentidadDelChat identidad, VistaDelChat vista, String comentario) {
+        String propietario = propietario(identidad);
+        limitador.exigir(LimitadorDeFrecuencia.Regla.MENSAJES, identidad.claveDeLimite());
+        List<Mensaje> conversacion = mensajesDe(identidad);
+        PreguntaParaSoporte pregunta = PreguntaParaSoporte.de(conversacion)
+            .orElseThrow(SinConversacionException::new);
+        // El comentario se revisa antes de componer el mensaje: asi lo que se
+        // recorta, si no cabe, es la pregunta y nunca un dato a medio tapar.
+        String comentarioRevisado = comentario == null ? null : revision.textoRevisado(comentario);
+        return revisarYGuardar(propietario, categoriaDe(pregunta, vista), SolicitudDesdeConversacion.asunto(pregunta),
+            SolicitudDesdeConversacion.mensaje(pregunta, comentarioRevisado), () -> conversacion);
+    }
+
+    /**
+     * 1.12.0 (7.4.3, RF-CHA-007): lo que hace el asistente cuando no pudo
+     * responder (no entendio, o «no me sirvio»), con la respuesta ya guardada
+     * en la conversacion.
+     *
+     * <ul>
+     *   <li>Si la persona ya tiene una solicitud abierta, la ultima pregunta y
+     *       su respuesta se suman a su contexto ({@code nueva} false).</li>
+     *   <li>Si no, se abre una con la pregunta sin resolver y la conversacion,
+     *       con las mismas reglas que la del boton (revision, lista negra, una
+     *       abierta por persona) salvo el limite de frecuencia: el mensaje que
+     *       la provoco ya lo paso.</li>
+     * </ul>
+     *
+     * @return vacio si en la conversacion no hay ninguna pregunta
+     * @throws RuntimeException si no se pudo abrir (la lista negra no
+     *         responde, un error de la base): quien llama ofrece otro camino
+     */
+    public Optional<SolicitudAutomatica> alNoResolver(IdentidadDelChat identidad, VistaDelChat vista) {
+        String propietario = propietario(identidad);
+        List<Mensaje> conversacion = mensajesDe(identidad);
+        Optional<SolicitudAutomatica> sumada = sumarALaAbierta(propietario, conversacion);
+        if (sumada.isPresent()) {
+            return sumada;
+        }
+        Optional<PreguntaParaSoporte> pregunta = PreguntaParaSoporte.de(conversacion);
+        if (pregunta.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            TicketSoporte abierta = revisarYGuardar(propietario, categoriaDe(pregunta.get(), vista),
+                SolicitudDesdeConversacion.asunto(pregunta.get()),
+                SolicitudDesdeConversacion.mensaje(pregunta.get(), null), () -> conversacion);
+            return Optional.of(new SolicitudAutomatica(abierta, true));
+        } catch (TicketAbiertoException otraALaVez) {
+            // Dos preguntas sin respuesta a la vez: la otra abrio la
+            // solicitud (indice unico de V6); esta se suma a ella.
+            return sumarALaAbierta(propietario, conversacion);
+        }
+    }
+
+    // La solicitud abierta de esa persona, con el ultimo intercambio sumado a
+    // su contexto. En una transaccion: el contexto se carga y se cambia junto.
+    private Optional<SolicitudAutomatica> sumarALaAbierta(String propietario, List<Mensaje> conversacion) {
+        return transacciones.execute(estado -> tickets
+            .findFirstByUidAndEstadoInOrderByCreadoEnDesc(propietario, ABIERTOS)
+            .map(abierta -> {
+                abierta.sumarAlContexto(ultimoIntercambio(conversacion), reloj.instant());
+                return new SolicitudAutomatica(tickets.save(abierta), false);
+            }));
+    }
+
+    // La ultima pregunta y la respuesta del bot, redactadas como el resto del
+    // contexto.
+    private List<MensajeDeContexto> ultimoIntercambio(List<Mensaje> conversacion) {
+        int desde = Math.max(0, conversacion.size() - 2);
+        return conversacion.subList(desde, conversacion.size()).stream().map(this::comoContexto).toList();
+    }
+
+    // La del tema de la respuesta; si no hubo tema, la de la vista; si
+    // tampoco, la general.
+    static Categoria categoriaDe(PreguntaParaSoporte pregunta, VistaDelChat vista) {
+        if (pregunta.categoria() != null) {
+            return pregunta.categoria();
+        }
+        if (vista != null && vista.categoria() != null) {
+            return vista.categoria();
+        }
+        return Categoria.FAQ_GENERAL;
+    }
+
+    private TicketSoporte revisarYGuardar(String propietario, Categoria categoria, String asunto,
+                                          String mensaje, Supplier<List<Mensaje>> conversacion) {
+        // 1.4.0: la misma revision que una pregunta del chat (sin caracteres de
+        // control, sin inyeccion de codigo, datos sensibles tapados).
+        String asuntoRedactado = noVacio(revision.textoRevisado(asunto));
+        String mensajeRedactado = noVacio(revision.textoRevisado(mensaje));
         moderacion.verificar(asuntoRedactado + System.lineSeparator() + mensajeRedactado);
 
-        if (tickets.existsByUidAndEstadoIn(identidad.uid(), ABIERTOS)) {
+        if (tickets.existsByUidAndEstadoIn(propietario, ABIERTOS)) {
             throw new TicketAbiertoException();
         }
 
-        TicketSoporte ticket = TicketSoporte.abrir(identidad.uid(), categoria, asuntoRedactado, mensajeRedactado,
-            contextoDe(identidad), reloj.instant());
+        TicketSoporte ticket = TicketSoporte.abrir(propietario, categoria, asuntoRedactado, mensajeRedactado,
+            conversacion.get().stream().map(this::comoContexto).toList(), reloj.instant());
         try {
             return tickets.saveAndFlush(ticket);
         } catch (DataIntegrityViolationException error) {
@@ -86,25 +216,39 @@ public class TicketSoporteService {
     }
 
     public List<TicketSoporte> misTickets(IdentidadDelChat identidad) {
-        exigirSesion(identidad);
-        return tickets.findByUidOrderByCreadoEnDesc(identidad.uid());
+        return tickets.findByUidOrderByCreadoEnDesc(propietario(identidad));
     }
 
-    private static void exigirSesion(IdentidadDelChat identidad) {
-        if (identidad == null || !identidad.autenticado() || identidad.uid() == null) {
+    private static String noVacio(String texto) {
+        if (texto == null || texto.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El asunto y el mensaje no pueden estar vacios.");
+        }
+        return texto;
+    }
+
+    // De quien es una solicitud: el uid de un jugador, o la clave de la
+    // conversacion de un visitante. Ambos los resolvio el servidor
+    // (ResolutorDeIdentidad); sin identidad, 401 SESION_REQUERIDA.
+    static String propietario(IdentidadDelChat identidad) {
+        if (identidad == null) {
             throw new SesionRequeridaException();
         }
+        if (identidad.autenticado()) {
+            if (identidad.uid() == null) {
+                throw new SesionRequeridaException();
+            }
+            return identidad.uid();
+        }
+        return identidad.claveDeConversacion();
     }
 
-    // Los mensajes de la conversacion actual, redactados. El ticket se queda
-    // con los mas recientes (TicketSoporte.MAXIMO_DE_CONTEXTO).
-    private List<MensajeDeContexto> contextoDe(IdentidadDelChat identidad) {
+    // Los mensajes de la conversacion actual, del mas antiguo al mas reciente.
+    // Al ticket van redactados (comoContexto) y solo los mas recientes
+    // (TicketSoporte.MAXIMO_DE_CONTEXTO).
+    private List<Mensaje> mensajesDe(IdentidadDelChat identidad) {
         return conversaciones.findByIdentificadorSesion(identidad.claveDeConversacion())
             .map(c -> mensajes.findByConversacionIdOrderByFechaEnvioAsc(c.getId()))
-            .orElseGet(List::of)
-            .stream()
-            .map(this::comoContexto)
-            .toList();
+            .orElseGet(List::of);
     }
 
     private MensajeDeContexto comoContexto(Mensaje mensaje) {

@@ -12,12 +12,19 @@ import java.util.List;
 
 // HU-CHA-012 (RF-CHA-013): crear o editar un tema de la version candidata.
 //   categoria  = la "intencion" que atiende el tema.
+//   intencionesAdicionales = (1.6.0, 7.4.10) otras intenciones que atiende la
+//                misma respuesta: hasta 5, sin repetir y nunca la categoria
+//                (BaseConocimientoAdminService responde 400 con el motivo).
+//                null = ninguna.
 //   variantes  = frases con las que un usuario haria esa pregunta; al menos
 //                una en espanol. Ninguna puede llevar ',' (ver VariantesDePregunta).
+//                Desde 1.6.0 las repetidas (sin contar tildes ni mayusculas)
+//                se guardan una sola vez.
 //   prioridad  = desempate cuando dos temas empatan en puntaje (mayor gana).
 //   activo     = null se toma como true.
 public record TemaConocimientoRequest(
     @NotNull Categoria categoria,
+    List<Categoria> intencionesAdicionales,
     @NotNull TipoRespuesta tipoRespuesta,
     @NotBlank @Size(max = 150) String titulo,
     @NotEmpty List<@NotBlank @Size(max = 200) String> variantesEs,

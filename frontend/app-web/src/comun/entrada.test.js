@@ -119,6 +119,20 @@ describe('entrarCon', () => {
     entrarCon({ ...LOGIN_OK, uid: undefined }, { almacen: sessionStorage, base: BASE });
     expect(sessionStorage.getItem(CLAVES.usuarioId)).toBe(UID);
   });
+
+  test('7.3.9: al entrar mide cuánto se desvía el reloj de este equipo del servidor', () => {
+    const iat = 1_760_000_000;
+    const token = tokenCon({ uid: UID, sub: 'Lyra', rol: 'ADMINISTRADOR', iat, exp: iat + 900 });
+    // El equipo va 10 minutos adelantado respecto al servidor.
+    const llegada = iat * 1000 + 10 * 60_000;
+
+    entrarCon(
+      { ...LOGIN_OK, token },
+      { almacen: sessionStorage, base: BASE, ahora: () => llegada },
+    );
+
+    expect(JSON.parse(sessionStorage.getItem(CLAVES.desfase))).toEqual({ iat, ms: 10 * 60_000 });
+  });
 });
 
 describe('entrarCon tras verificar el correo (B1)', () => {

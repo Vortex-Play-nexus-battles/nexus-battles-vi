@@ -16,6 +16,11 @@ import java.util.concurrent.ConcurrentHashMap;
 //   * MENSAJES: por usuario (uid del token) o por sesion de visitante. Es lo
 //     caro: cada mensaje escribe en la base y puede consultar a otros
 //     servicios.
+//   * MENSAJES_POR_ORIGEN (1.4.0): por direccion de origen (X-Real-IP), sumando
+//     todas sus sesiones. Sin esto, una direccion que abriera diez sesiones de
+//     visitante por minuto escribia diez veces el cupo de una sola. La cifra
+//     por omision es la del borde para las escrituras (120/min): un aula detras
+//     de un mismo NAT no la alcanza escribiendo a mano.
 //   * SESIONES_POR_ORIGEN: emitir sesiones de visitante, por direccion de
 //     origen. Sin esto un cliente esquivaria el limite de mensajes fabricando
 //     una sesion nueva para cada uno.
@@ -32,7 +37,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class LimitadorDeFrecuencia {
 
-    public enum Regla { MENSAJES, SESIONES_POR_ORIGEN, SESIONES_GLOBAL }
+    public enum Regla { MENSAJES, MENSAJES_POR_ORIGEN, SESIONES_POR_ORIGEN, SESIONES_GLOBAL }
 
     static final Duration VENTANA = Duration.ofMinutes(1);
     static final int MAXIMO_DE_CLAVES = 100_000;
@@ -44,11 +49,12 @@ public class LimitadorDeFrecuencia {
     private final Clock reloj;
 
     public LimitadorDeFrecuencia(@Value("${chatbot.limite.mensajes-por-minuto:20}") int mensajes,
+                                 @Value("${chatbot.limite.mensajes-por-minuto-por-origen:120}") int mensajesPorOrigen,
                                  @Value("${chatbot.limite.sesiones-por-minuto-por-origen:10}") int sesionesPorOrigen,
                                  @Value("${chatbot.limite.sesiones-por-minuto-global:300}") int sesionesGlobal,
                                  Clock reloj) {
-        this.limites = Map.of(Regla.MENSAJES, mensajes, Regla.SESIONES_POR_ORIGEN, sesionesPorOrigen,
-            Regla.SESIONES_GLOBAL, sesionesGlobal);
+        this.limites = Map.of(Regla.MENSAJES, mensajes, Regla.MENSAJES_POR_ORIGEN, mensajesPorOrigen,
+            Regla.SESIONES_POR_ORIGEN, sesionesPorOrigen, Regla.SESIONES_GLOBAL, sesionesGlobal);
         this.reloj = reloj;
     }
 

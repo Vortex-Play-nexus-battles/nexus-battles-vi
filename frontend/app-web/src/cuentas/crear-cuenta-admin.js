@@ -13,6 +13,8 @@ import { distintivo } from '../comun/ui/distintivo.js';
 import { formularioListo, sinCredencialesEnLaDireccion } from '../comun/ui/formulario-seguro.js';
 import { confirmar } from '../comun/ui/dialogo.js';
 import { respaldoPorEstado, textoDeError, textoDelServidor } from '../comun/ui/texto-de-fallo.js';
+import { RUTAS, resolver } from '../comun/sesion.js';
+import { NOMBRE_DEL_PERMISO, permisosDelRol } from '../comun/ui/admin/permisos.js';
 
 const BASE_API = '/api/v1/admin/cuentas';
 const MATRIZ_RBAC_API = '/api/v1/rbac/matrix';
@@ -24,11 +26,23 @@ const PERMISO_CREAR = 'CREAR_ADMIN_MODERADOR';
 
 const ROLES_PERMITIDOS = ['MODERADOR', 'ADMINISTRADOR'];
 
-const PERMISOS_POR_ROL = {
-  MODERADOR: ['GESTIONAR_CUENTAS', 'SUSPENDER_USUARIOS'],
+/** El nombre de cada rol para leerlo. */
+const NOMBRE_DE_ROL = Object.freeze({
+  MODERADOR: 'Moderador',
+  ADMINISTRADOR: 'Administrador',
+});
 
-  ADMINISTRADOR: ['GESTIONAR_CUENTAS', 'SUSPENDER_USUARIOS', 'BANEAR_DEFINITIVAMENTE'],
-};
+/**
+ * Cómo se lee cada acción de la matriz (rbac.yaml) y qué da cada rol. Los
+ * permisos que se muestran salen de la matriz que publica el servidor, no de
+ * una lista escrita aquí: hasta 7.3.9 esta vista decía que un Moderador
+ * «gestiona cuentas», cosa que la Tabla 24 no le da. Desde SA-3 los usa
+ * también la ficha administrativa del usuario y viven en el kit de la consola.
+ */
+export { NOMBRE_DEL_PERMISO as NOMBRE_DE_ACCION, permisosDelRol };
+
+/** La matriz que publicó el servidor, para decir qué puede hacer cada rol. */
+let matrizPublicada = {};
 
 document.addEventListener('DOMContentLoaded', iniciar);
 
@@ -96,6 +110,7 @@ export async function cargarMatrizYVerificarAcceso({
       throw new Error('La matriz RBAC recibida no es válida.');
     }
     setPermissionMatrix(matriz);
+    matrizPublicada = matriz;
     seCargo = true;
   } catch (error) {
     console.error('No fue posible cargar la matriz RBAC:', error);
@@ -103,6 +118,7 @@ export async function cargarMatrizYVerificarAcceso({
   }
 
   verificarAcceso({ matrizDisponible: seCargo });
+  actualizarPermisosVisuales();
 }
 
 function aplicarDirectivas() {
@@ -217,24 +233,27 @@ function actualizarPermisosVisuales() {
 
   vaciar(contenedorPermisos);
 
-  if (!rolSeleccionado || !PERMISOS_POR_ROL[rolSeleccionado]) {
+  if (!ROLES_PERMITIDOS.includes(rolSeleccionado)) {
     contenedorPermisos.append(
-      h('p', { clase: 't-meta', texto: 'Selecciona un rol para consultar sus permisos.' }),
+      h('p', { clase: 't-meta', texto: 'Elige un rol para ver lo que podrá hacer.' }),
     );
 
     return;
   }
 
-  for (const permiso of PERMISOS_POR_ROL[rolSeleccionado]) {
-    contenedorPermisos.append(distintivo(formatearPermiso(permiso)));
+  const permisos = permisosDelRol(matrizPublicada, rolSeleccionado);
+  if (permisos.length === 0) {
+    contenedorPermisos.append(
+      h('p', {
+        clase: 't-meta',
+        texto: 'No pudimos leer los permisos del rol. Vuelve a intentarlo en un momento.',
+      }),
+    );
+    return;
   }
-}
-
-function formatearPermiso(permiso) {
-  return permiso
-    .replaceAll('_', ' ')
-    .toLowerCase()
-    .replace(/\b\w/g, (letra) => letra.toUpperCase());
+  for (const permiso of permisos) {
+    contenedorPermisos.append(distintivo(permiso));
+  }
 }
 
 async function manejarCreacionCuenta(evento) {
@@ -258,13 +277,11 @@ async function manejarCreacionCuenta(evento) {
 
   const email = document.getElementById('email')?.value.trim();
 
-  const password = document.getElementById('password')?.value;
-
   const rol = document.getElementById('rol')?.value;
 
   const archivoAvatar = document.getElementById('avatar')?.files?.[0];
 
-  const error = validarDatos(nombres, apellidos, apodo, email, password, rol);
+  const error = validarDatos(nombres, apellidos, apodo, email, rol);
 
   if (error) {
     mostrarError(error);
@@ -274,7 +291,10 @@ async function manejarCreacionCuenta(evento) {
 
   const confirmado = await confirmar({
     titulo: 'Crear cuenta administrativa',
-    mensaje: `Se creará la cuenta "${apodo}" con rol ${rol}. Podrás cambiarle el rol después, pero la cuenta no se puede borrar desde esta vista.`,
+    mensaje:
+      `Se creará la cuenta «${apodo}» como ${NOMBRE_DE_ROL[rol] ?? rol} y se enviará el correo ` +
+      `de activación a ${email}. Podrás cambiarle el rol después; la creación queda en la ` +
+      'auditoría.',
     textoConfirmar: 'Crear cuenta',
     peligro: false,
   });
@@ -292,7 +312,6 @@ async function manejarCreacionCuenta(evento) {
     cuerpo.append('nombres', nombres);
     cuerpo.append('apellidos', apellidos);
     cuerpo.append('email', email);
-    cuerpo.append('password', password);
     cuerpo.append('apodo', apodo);
     cuerpo.append('rolNombre', rol);
 
@@ -315,7 +334,7 @@ async function manejarCreacionCuenta(evento) {
 
     const usuarioCreado = await obtenerJsonSeguro(respuesta);
 
-    mostrarResultado(usuarioCreado, apodo, rol);
+    mostrarResultado(usuarioCreado, { apodo, rol, email });
   } catch (fallo) {
     // Se llama 'fallo' y no 'error' porque en la linea 311 ya hay un
     // 'error' con el mensaje de validacion. Con los dos llamados igual,
@@ -328,7 +347,7 @@ async function manejarCreacionCuenta(evento) {
   }
 }
 
-function validarDatos(nombres, apellidos, apodo, email, password, rol) {
+function validarDatos(nombres, apellidos, apodo, email, rol) {
   if (!nombres) {
     return 'Debes ingresar los nombres.';
   }
@@ -347,14 +366,6 @@ function validarDatos(nombres, apellidos, apodo, email, password, rol) {
 
   if (!validarEmail(email)) {
     return 'Ingresa un correo electrónico válido.';
-  }
-
-  if (!password) {
-    return 'Debes ingresar una contraseña inicial.';
-  }
-
-  if (password.length < 9) {
-    return 'La contraseña debe tener al menos 9 caracteres.';
   }
 
   if (!ROLES_PERMITIDOS.includes(rol)) {
@@ -394,7 +405,7 @@ async function obtenerJsonSeguro(respuesta) {
   }
 }
 
-function mostrarResultado(usuarioCreado, apodo, rol) {
+function mostrarResultado(usuarioCreado, { apodo, rol, email }) {
   const formularioContenedor = document.getElementById('formulario-contenedor');
 
   const resultado = document.getElementById('resultado-creacion');
@@ -405,14 +416,13 @@ function mostrarResultado(usuarioCreado, apodo, rol) {
     return;
   }
 
-  let identificador = 'No disponible';
-
-  if (usuarioCreado) {
-    identificador = usuarioCreado.id ?? usuarioCreado.usuarioId ?? 'No disponible';
-  }
+  const nombre = usuarioCreado?.apodo ?? apodo;
+  const nombreDeRol = NOMBRE_DE_ROL[usuarioCreado?.rol ?? rol] ?? rol;
+  const correo = usuarioCreado?.email ?? email;
 
   resultadoTexto.textContent =
-    `La cuenta "${apodo}" fue creada con el rol ${rol}. ` + `ID de usuario: ${identificador}.`;
+    `La cuenta «${nombre}» quedó creada como ${nombreDeRol}. Enviamos a ${correo} el ` +
+    'correo para activarla y elegir su contraseña.';
 
   formularioContenedor.hidden = true;
 
@@ -494,8 +504,6 @@ function ocultarMensajes() {
 }
 
 function volverInicio() {
-  // El menú principal (index.html) vive en la MISMA carpeta que esta página
-  // (frontend/app-web/src/cuentas/), no un nivel arriba: '../index.html' no
-  // existe y devolvía 404 al usuario que hacía clic en Volver.
-  window.location.href = './index.html';
+  // Desde la trastienda se vuelve a la consola, no al menú del jugador.
+  window.location.href = resolver(RUTAS.consola);
 }

@@ -88,6 +88,11 @@
                                    componente «Cabecera» de Figma       */
   --pista:            #CBD4E6;  /* riel de la barra de vida y de las
                                    barras de progreso                   */
+  --velo-fondo:       #0D1026;  /* velo de los fondos ilustrados
+                                   (fondos.css, HU-UX-002): la noche más
+                                   honda de la paleta del cromo. Sobre
+                                   él se mide el contraste del texto que
+                                   cae directamente sobre la escena     */
 
   --superficie-2:     #F2F5FA;  /* panel ANIDADO dentro de una tarjeta:
                                    la cabecera de una tabla, un bloque
@@ -207,6 +212,18 @@
      30-sep). Por encima de los menús de la cabecera (30) y del desenlace del
      combate (40); por debajo de los avisos flotantes, que se ven siempre. */
   --capa-modal: 50;
+
+  /* #506 — los dos escalones de abajo de la misma escala, que va de diez en
+     diez: avisos de una vista (10) · asistente (20) · menús de la cabecera
+     (30) · desenlace del combate (40) · modales (50) · avisos flotantes.
+     El asistente (botón flotante y ventana, RF-CHA-001) queda sobre el
+     contenido y los avisos de cualquier vista —el aviso cruzado de las
+     pujas lo tapaba entero— y bajo los menús, el chat grupal del combate
+     (35), el desenlace y los modales: lo que bloquea la página lo tapa
+     también a él. Antes no tenía capa, y cualquier pieza de una vista con
+     `z-index` propio (1, 10…) se le ponía encima. */
+  --capa-aviso-de-vista: 10;
+  --capa-asistente: 20;
 
   /* UX-R2.9 — estas cuatro subieron a 44 px, el objetivo tactil minimo.
      Venian de la maqueta, donde un boton pequeno eran 32 px y un campo 40.
@@ -361,8 +378,53 @@
   --curva-entrada:  cubic-bezier(0.4, 0, 1, 1);
   --curva-estandar: cubic-bezier(0.4, 0, 0.2, 1);
   --curva-impulso:  cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* MOTION-1 — el golpe: sale disparada y frena en seco. */
+  --curva-impacto:  cubic-bezier(0.2, 0.9, 0.3, 1);
 
   --transicion: var(--duracion-rapido) var(--curva-estandar);
+
+  /* ---------------------------------------------------------------------
+     Nexus Motion System (MOTION-1)
+     Los nombres que usa la especificación de movimiento y el módulo
+     `src/comun/ui/motion.js`. Son ALIAS: los valores viven arriba, en
+     `--duracion-*` y `--curva-*`, para que haya una sola fuente y para que
+     con movimiento reducido todos valgan cero a la vez.
+     --------------------------------------------------------------------- */
+  --motion-instant: var(--duracion-instantaneo);
+  --motion-fast:    var(--duracion-rapido);
+  --motion-normal:  var(--duracion-normal);
+  --motion-slow:    var(--duracion-pausado);
+  --motion-turn:    var(--duracion-turno);
+
+  --ease-standard:  var(--curva-estandar);
+  --ease-enter:     var(--curva-salida);    /* entra frenando          */
+  --ease-exit:      var(--curva-entrada);   /* sale acelerando         */
+  --ease-impact:    var(--curva-impacto);
+  --ease-spring:    var(--curva-impulso);
+}
+
+/* =======================================================================
+   Modo determinista para capturas y pruebas (MOTION-1)
+   `<html data-test-motion="off">`: sin animaciones ni transiciones de CSS
+   (cada elemento en su estado de reposo), igual que con movimiento
+   reducido, y `motion.js` no arranca ninguna por la Web Animations API.
+   Las capturas del laboratorio visual no dependen del instante en que se
+   toman.
+   ======================================================================= */
+html[data-test-motion='off'] {
+  --duracion-instantaneo: 0ms;
+  --duracion-rapido:      0ms;
+  --duracion-normal:      0ms;
+  --duracion-pausado:     0ms;
+  --duracion-turno:       0ms;
+  --transicion:           0ms linear;
+}
+html[data-test-motion='off'] *,
+html[data-test-motion='off'] *::before,
+html[data-test-motion='off'] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
 }
 
 /* =======================================================================
@@ -380,10 +442,15 @@
     --duracion-turno:       0ms;
     --transicion:           0ms linear;
   }
+  /* MOTION-1: `none`, no «0,01 ms». Una transición de 0,01 ms sobre `*`
+     enciende `transition-property: all` en todos los elementos: cada cambio
+     de padding, rejilla o margen pintaba un cuadro con el valor viejo y
+     disparaba cientos de eventos de transición (el HUD del combate salía a
+     dos filas durante 160 ms al empezar). Sin animación el elemento muestra
+     su estado de reposo, que es el estado final de todas las del kit. */
   *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    animation: none !important;
+    transition: none !important;
     scroll-behavior: auto !important;
   }
 }

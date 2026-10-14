@@ -4,6 +4,7 @@ import com.nexusbattles.plataforma.observabilidad.InterceptorDeTraza;
 import com.nexusbattles.plataforma.resiliencia.parametros.LectorDeParametros;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.HeroesDeLaMaquina;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.EstadisticasDeJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.MisPartidas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Partida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.PartidaModificadaConcurrentemente;
@@ -54,6 +55,12 @@ public class ConfiguracionDelCombate {
     @Bean
     public MisPartidas misPartidas(RepositorioDePartidas partidas, RepositorioDeSalas salas) {
         return new MisPartidas(partidas, salas);
+    }
+
+    /** {@code GET /partidas/jugadores/{idJugador}/estadisticas} (1.11.0). */
+    @Bean
+    public EstadisticasDeJugador estadisticasDeJugador(RepositorioDePartidas partidas, RepositorioDeSalas salas) {
+        return new EstadisticasDeJugador(partidas, salas);
     }
 
     /**

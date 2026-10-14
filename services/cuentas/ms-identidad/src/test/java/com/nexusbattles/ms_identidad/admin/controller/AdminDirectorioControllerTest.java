@@ -2,6 +2,7 @@ package com.nexusbattles.ms_identidad.admin.controller;
 
 import com.nexusbattles.ms_identidad.admin.directorio.AuditoriaDeExportaciones;
 import com.nexusbattles.ms_identidad.admin.directorio.ConsultaInvalidaException;
+import com.nexusbattles.ms_identidad.admin.directorio.CuentasBloqueadasPorIntentos;
 import com.nexusbattles.ms_identidad.admin.directorio.CuentasDePrueba;
 import com.nexusbattles.ms_identidad.admin.directorio.DirectorioDeCuentas;
 import com.nexusbattles.ms_identidad.admin.directorio.ExportacionDelDirectorio;
@@ -25,6 +26,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.lang.reflect.RecordComponent;
+import java.time.ZoneId;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
@@ -76,15 +78,18 @@ class AdminDirectorioControllerTest {
     @Mock
     private AuditoriaDeExportaciones auditoriaDeExportaciones;
 
+    @Mock
+    private CuentasBloqueadasPorIntentos cuentasBloqueadas;
+
     private AdminDirectorioController controlador() {
         return new AdminDirectorioController(usuarioRepository, directorio, CRITERIO, indicadores, exportacion,
-                auditoriaDeExportaciones);
+                auditoriaDeExportaciones, cuentasBloqueadas);
     }
 
     /** El listado sin los filtros de 1.3.0 (rol, estado, fechas): la llamada de siempre. */
     private static PaginaAdminResponse<AdminUsuarioDirectorioResponse> listar(
             AdminDirectorioController controlador, String buscar, boolean ocultarPruebas, int page, int size) {
-        return controlador.listar(buscar, ocultarPruebas, null, null, null, null, page, size);
+        return controlador.listar(buscar, ocultarPruebas, null, null, null, null, null, page, size);
     }
 
     private static Usuario usuario(String apodo, String email, String rol) {
@@ -198,8 +203,11 @@ class AdminDirectorioControllerTest {
         assertEquals("ana@nexus.test", fila.email());
         assertEquals("ACTIVO", fila.estado());
         assertEquals("JUGADOR", fila.rol());
-        assertEquals(LocalDateTime.of(2026, 1, 5, 10, 0), fila.creadoEn());
-        assertEquals(LocalDateTime.of(2026, 9, 20, 18, 30), fila.ultimoAcceso());
+        // SA-21: con la zona del servidor, el mismo instante.
+        assertEquals(LocalDateTime.of(2026, 1, 5, 10, 0).atZone(ZoneId.systemDefault()).toOffsetDateTime(),
+                fila.creadoEn());
+        assertEquals(LocalDateTime.of(2026, 9, 20, 18, 30).atZone(ZoneId.systemDefault()).toOffsetDateTime(),
+                fila.ultimoAcceso());
         assertEquals(jugador.getPublicId(), fila.uid());
         assertFalse(
                 Arrays.stream(AdminUsuarioDirectorioResponse.class.getRecordComponents())
@@ -239,7 +247,8 @@ class AdminDirectorioControllerTest {
         AdminUsuarioDirectorioResponse fila = listar(controlador, null, false, 0, 20).contenido().get(0);
 
         assertTrue(fila.bloqueada());
-        assertEquals(LocalDateTime.of(2026, 12, 31, 0, 0), fila.suspendidoHasta());
+        assertEquals(LocalDateTime.of(2026, 12, 31, 0, 0).atZone(ZoneId.systemDefault()).toOffsetDateTime(),
+                fila.suspendidoHasta());
     }
 
     /** Un bloqueo que ya vencio no bloquea: la fecha esta, el estado no. */
@@ -281,7 +290,7 @@ class AdminDirectorioControllerTest {
                         PageRequest.of(1, 20), 21));
 
         PaginaAdminResponse<AdminUsuarioDirectorioResponse> respuesta = controlador()
-                .listar(null, false, "MODERADOR", "ACTIVO", "2026-09-01", "2026-09-30", 1, 20);
+                .listar(null, false, "MODERADOR", "ACTIVO", "2026-09-01", "2026-09-30", null, 1, 20);
 
         ArgumentCaptor<Pageable> pedido = ArgumentCaptor.forClass(Pageable.class);
         verify(directorio).findAll(any(Specification.class), pedido.capture());
@@ -296,7 +305,7 @@ class AdminDirectorioControllerTest {
         AdminDirectorioController controlador = controlador();
 
         assertThrows(ConsultaInvalidaException.class,
-                () -> controlador.listar(null, false, "PIRATA", null, null, null, 0, 20));
+                () -> controlador.listar(null, false, "PIRATA", null, null, null, null, 0, 20));
 
         verifyNoInteractions(usuarioRepository, directorio);
     }

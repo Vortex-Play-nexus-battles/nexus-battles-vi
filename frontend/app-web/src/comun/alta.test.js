@@ -16,6 +16,7 @@ import {
 const BASE = 'http://localhost:8099/frontend/app-web/src/comun/alta.js';
 const INICIO = 'http://localhost:8099/frontend/app-web/src/cuentas/index.html';
 const PREPARANDO = 'http://localhost:8099/frontend/app-web/src/cuentas/preparando.html';
+const CONSOLA = 'http://localhost:8099/frontend/app-web/src/plataforma/consola/consola.html';
 
 function respuesta(status, cuerpo = {}) {
   return Promise.resolve({
@@ -100,6 +101,18 @@ describe('destinoTrasEntrar', () => {
   test('una respuesta sin el campo (servidor anterior a R17) no manda a preparar nada', () => {
     expect(destinoTrasEntrar({}, null, BASE)).toBe(INICIO);
     expect(destinoTrasEntrar(null, null, BASE)).toBe(INICIO);
+  });
+
+  test('el inicio de una cuenta de administración es la consola (SA-7, punto 1)', () => {
+    for (const rol of ['MODERADOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR']) {
+      expect(destinoTrasEntrar({ rol }, null, BASE)).toBe(CONSOLA);
+    }
+    expect(destinoTrasEntrar({ rol: 'JUGADOR' }, null, BASE)).toBe(INICIO);
+    expect(destinoTrasEntrar({ rol: null }, null, BASE)).toBe(INICIO);
+    // Con vuelta, a donde iba: la consola es el inicio, no un desvío.
+    expect(destinoTrasEntrar({ rol: 'SUPER_ADMINISTRADOR' }, '/consola/auditoria', BASE)).toBe(
+      'http://localhost:8099/consola/auditoria',
+    );
   });
 });
 

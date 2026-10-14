@@ -11,8 +11,9 @@ import java.time.Instant;
 // revisa si la candidata tiene una publicacion programada que ya vencio y,
 // si es asi, la despliega con la misma evaluacion que el boton del panel.
 //
-// Con varias instancias del servicio no se publica dos veces: la reclama una
-// sola (VersionBaseConocimientoRepository.reclamarDespliegueProgramado).
+// Con varias instancias del servicio no se publica dos veces: desde 1.6.0 la
+// publicacion bloquea produccion y la candidata (BloqueoDeVersiones), y la
+// instancia que llega despues la encuentra ya publicada y no hace nada.
 @Component
 public class DespliegueProgramadoTarea {
 

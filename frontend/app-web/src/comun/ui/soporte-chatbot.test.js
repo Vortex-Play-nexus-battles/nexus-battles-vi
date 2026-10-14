@@ -34,13 +34,18 @@ function clienteFalso(sobrescribir = {}) {
   };
 }
 
-async function montar({ cliente = clienteFalso(), autenticado = true, login = '/login' } = {}) {
+async function montar({
+  cliente = clienteFalso(),
+  autenticado = true,
+  login = '/login',
+  registro = '/registro',
+} = {}) {
   const alVolver = jest.fn();
   const panel = crearPanelSoporte({
     cliente,
     sesion: () => ({ autenticado }),
     login,
-    chatGeneral: '/chat.html',
+    registro,
     alVolver,
   });
   document.body.append(panel.elemento);
@@ -73,25 +78,59 @@ beforeEach(() => {
 });
 
 describe('visitante', () => {
-  test('no ve el formulario: se le ofrece iniciar sesión y el chat general', async () => {
+  // #506 — antes: «necesitas iniciar sesión», un enlace al login sin vuelta y
+  // el chat general, que también pide sesión. Quien no tenía cuenta no tenía
+  // salida. ms-chatbot.yaml 1.12.0 (RF-CHA-007, actor Visitante): ahora pide
+  // ayuda como cualquiera, y la cuenta queda como salida secundaria.
+  test('ve el formulario y sus solicitudes, con la nota de su sesión y la cuenta como salida', async () => {
     const vista = await montar({ autenticado: false });
 
-    expect(vista.formulario).toBeNull();
-    expect(vista.el.textContent).toContain(TEXTOS_SOPORTE.visitante);
-    expect(vista.el.querySelector('[data-accion="iniciar-sesion"]').getAttribute('href')).toBe(
-      '/login',
-    );
-    expect(vista.el.querySelector('[data-accion="chat-general"]').getAttribute('href')).toBe(
-      '/chat.html',
-    );
-    expect(vista.cliente.misTickets).not.toHaveBeenCalled();
+    expect(vista.formulario).not.toBeNull();
+    expect(vista.cliente.misTickets).toHaveBeenCalled();
+    const nota = vista.el.querySelector('[data-zona="visitante"]');
+    expect(nota.textContent).toContain(TEXTOS_SOPORTE.visitante);
+    expect(TEXTOS_SOPORTE.visitante).toContain('mientras sigas en esta sesión del navegador');
+    const entrar = nota.querySelector('[data-accion="iniciar-sesion"]');
+    const crear = nota.querySelector('[data-accion="crear-cuenta"]');
+    expect(entrar.getAttribute('href')).toBe('/login');
+    expect(entrar.textContent).toBe(TEXTOS_SOPORTE.iniciarSesion);
+    expect(entrar.classList.contains('boton--secundario')).toBe(true);
+    expect(crear.getAttribute('href')).toBe('/registro');
+    expect(crear.textContent).toBe('Crear cuenta');
+    expect(vista.el.querySelector('[data-accion="chat-general"]')).toBeNull();
+    // Nada de «null» pintado como texto.
+    expect(vista.el.textContent).not.toContain('null');
   });
 
-  test('sin ruta de login solo ofrece el chat general', async () => {
-    const vista = await montar({ autenticado: false, login: null });
+  test('un jugador no ve la nota del visitante', async () => {
+    const vista = await montar({ autenticado: true });
 
+    expect(vista.el.querySelector('[data-zona="visitante"]')).toBeNull();
+    expect(vista.el.textContent).not.toContain('null');
+  });
+
+  test('las rutas pueden darse como funciones, que se leen al abrir el panel', async () => {
+    let volver = '/cuentas/subastas.html';
+    const login = jest.fn(() => `/login?volver=${encodeURIComponent(volver)}`);
+    const vista = await montar({ autenticado: false, login, registro: () => '/registro' });
+    expect(vista.el.querySelector('[data-accion="iniciar-sesion"]').getAttribute('href')).toBe(
+      '/login?volver=%2Fcuentas%2Fsubastas.html',
+    );
+
+    volver = '/plataforma/torneos/torneos.html';
+    vista.panel.abrir();
+    expect(vista.el.querySelector('[data-accion="iniciar-sesion"]').getAttribute('href')).toBe(
+      '/login?volver=%2Fplataforma%2Ftorneos%2Ftorneos.html',
+    );
+    expect(login).toHaveBeenCalledTimes(2);
+  });
+
+  test('sin ruta de login ni de registro, el texto sigue y no hay enlaces rotos', async () => {
+    const vista = await montar({ autenticado: false, login: null, registro: null });
+
+    expect(vista.el.textContent).toContain(TEXTOS_SOPORTE.visitante);
     expect(vista.el.querySelector('[data-accion="iniciar-sesion"]')).toBeNull();
-    expect(vista.el.querySelector('[data-accion="chat-general"]')).not.toBeNull();
+    expect(vista.el.querySelector('[data-accion="crear-cuenta"]')).toBeNull();
   });
 });
 
@@ -216,11 +255,48 @@ describe('avisoDeError', () => {
     [new ErrorDelChatbot(null, 403), TEXTOS_SOPORTE.sinSesion, 'advertencia'],
     [con('CONTENIDO_BLOQUEADO', 422), TEXTOS_SOPORTE.bloqueado, 'advertencia'],
     [con('LIMITE_DE_FRECUENCIA', 429), TEXTOS_SOPORTE.muchas, 'advertencia'],
-    [con('MODERACION_NO_DISPONIBLE', 503), TEXTOS_SOPORTE.noDisponible, 'error'],
+    // 1.7.0: si lo que no responde es la revisión del texto, se dice eso, no
+    // que soporte no está.
+    [con('MODERACION_NO_DISPONIBLE', 503), TEXTOS_SOPORTE.sinRevision, 'error'],
+    [new ErrorDelChatbot(null, 503), TEXTOS_SOPORTE.noDisponible, 'error'],
     [new ErrorDelChatbot(null, 0), TEXTOS_SOPORTE.noDisponible, 'error'],
     [new ErrorDelChatbot({ title: 'Bad Request' }, 400), TEXTOS_SOPORTE.invalido, 'advertencia'],
     [new ErrorDelChatbot({ title: 'x' }, 500), TEXTOS_SOPORTE.error, 'error'],
+    // #506 — contrato 1.4.0, y el 429 del borde, que no trae `motivo`.
+    [con('INYECCION_DETECTADA', 422), TEXTOS_SOPORTE.conCodigo, 'advertencia'],
+    [new ErrorDelChatbot(null, 429), TEXTOS_SOPORTE.muchas, 'advertencia'],
   ])('%#: se elige el aviso por motivo y estado', (error, titulo, tono) => {
     expect(avisoDeError(error)).toMatchObject({ titulo, tono });
   });
+
+  test('#506: un 429 dice cuántos segundos esperar si el servidor lo dijo', () => {
+    expect(
+      avisoDeError(
+        new ErrorDelChatbot({ motivo: 'LIMITE_DE_FRECUENCIA' }, 429, { reintentarEn: 20 }),
+      ).detalle,
+    ).toBe('Espera 20 s y vuelve a intentarlo.');
+    expect(avisoDeError(new ErrorDelChatbot(null, 429)).detalle).toBe(TEXTOS_SOPORTE.muchasDetalle);
+  });
+
+  test('#506: una solicitud con código se explica y conserva lo escrito', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({
+        abrirTicket: jest.fn(async () => {
+          throw new ErrorDelChatbot({ title: 'x', motivo: 'INYECCION_DETECTADA' }, 422);
+        }),
+      }),
+    });
+
+    await enviar(vista, 'Asunto', '<script>alert(1)</script>');
+
+    expect(vista.aviso()).toContain(TEXTOS_SOPORTE.conCodigo);
+    expect(vista.aviso()).toContain(TEXTOS_SOPORTE.conCodigoDetalle);
+    expect(vista.mensaje.value).toBe('<script>alert(1)</script>');
+  });
+});
+
+// 1.7.0 — el detalle del 503 de la revisión del texto.
+test('sin revisión del texto, explica que no se envió nada', () => {
+  const sinRevision = new ErrorDelChatbot({ title: 'x', motivo: 'MODERACION_NO_DISPONIBLE' }, 503);
+  expect(avisoDeError(sinRevision).detalle).toContain('no enviamos nada');
 });

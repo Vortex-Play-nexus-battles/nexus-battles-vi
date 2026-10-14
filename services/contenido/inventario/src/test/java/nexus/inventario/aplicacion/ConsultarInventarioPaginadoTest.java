@@ -2,6 +2,7 @@ package nexus.inventario.aplicacion;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -120,5 +121,73 @@ class ConsultarInventarioPaginadoTest {
     @DisplayName("una pagina negativa es una solicitud invalida")
     void rechazaPaginaNegativa() {
         assertThrows(IllegalArgumentException.class, () -> consulta.consultar("jugador-A", -1));
+    }
+
+    /** 1.7.0: veinte héroes y treinta objetos mezclados, en el orden en que llegaron. */
+    private void conHeroesYObjetos() {
+        Inventario inventario = Inventario.vacio("jugador-C");
+        for (int i = 0; i < 50; i++) {
+            boolean heroe = i % 5 < 2;
+            inventario = inventario.agregar(new ElementoInventario(
+                    "elemento-" + i, "producto-" + i,
+                    heroe ? TipoElementoInventario.HEROE : TipoElementoInventario.ITEM,
+                    (heroe ? "Heroe " : "Objeto ") + i));
+        }
+        repositorio.guardar(inventario);
+    }
+
+    @Test
+    @DisplayName("1.7.0: la categoría HEROES pagina solo los héroes, de dieciséis en dieciséis")
+    void paginaSoloHeroes() {
+        conHeroesYObjetos();
+
+        var primera = consulta.consultar("jugador-C", 0, CategoriaInventario.HEROES);
+        var segunda = consulta.consultar("jugador-C", 1, CategoriaInventario.HEROES);
+
+        assertEquals(20, primera.totalElementos());
+        assertEquals(2, primera.totalPaginas());
+        assertEquals(16, primera.elementos().size());
+        assertEquals(4, segunda.elementos().size());
+        assertTrue(segunda.ultima());
+        assertTrue(primera.elementos().stream()
+                .allMatch(e -> e.tipo() == TipoElementoInventario.HEROE));
+    }
+
+    @Test
+    @DisplayName("1.7.0: la categoría OBJETOS pagina todo lo que no es héroe")
+    void paginaSoloObjetos() {
+        conHeroesYObjetos();
+
+        var pagina = consulta.consultar("jugador-C", 1, CategoriaInventario.OBJETOS);
+
+        assertEquals(30, pagina.totalElementos());
+        assertEquals(2, pagina.totalPaginas());
+        assertEquals(14, pagina.elementos().size());
+        assertTrue(pagina.elementos().stream()
+                .noneMatch(e -> e.tipo() == TipoElementoInventario.HEROE));
+    }
+
+    @Test
+    @DisplayName("1.7.0: sin categoría se pagina el inventario entero, como antes")
+    void sinCategoriaComoAntes() {
+        conHeroesYObjetos();
+
+        assertEquals(50, consulta.consultar("jugador-C", 0, null).totalElementos());
+        assertEquals(50, consulta.consultar("jugador-C", 0).totalElementos());
+    }
+
+    @Test
+    @DisplayName("1.7.0: cada página dice qué héroe lleva cada objeto, y nada de los que no están puestos")
+    void paginaConPortadores() {
+        Inventario inventario = Inventario.vacio("jugador-D")
+                .agregar(new ElementoInventario("heroe-1", "p-h", TipoElementoInventario.HEROE, "Ignis"))
+                .agregar(new ElementoInventario("arma-1", "p-a", TipoElementoInventario.ARMA, "Espada"))
+                .agregar(new ElementoInventario("item-1", "p-i", TipoElementoInventario.ITEM, "Pluma"));
+        repositorio.guardar(inventario.equipar("heroe-1", "arma-1"));
+
+        var pagina = consulta.consultar("jugador-D", 0, CategoriaInventario.OBJETOS);
+
+        assertEquals(new EquipadoEn("heroe-1", "Ignis"), pagina.equipadoEn("arma-1"));
+        assertNull(pagina.equipadoEn("item-1"));
     }
 }

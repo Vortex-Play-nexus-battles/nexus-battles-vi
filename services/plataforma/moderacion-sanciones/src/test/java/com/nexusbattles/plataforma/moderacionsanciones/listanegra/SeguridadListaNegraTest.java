@@ -191,7 +191,25 @@ class SeguridadListaNegraTest {
                 .andExpect(jsonPath("$.termino").value("spiderman"));
         mvc.perform(con(delete("/api/v1/lista-negra/terminos/spiderman"), token))
                 .andExpect(status().isNoContent());
-        verify(admin).eliminar("spiderman", "super");
+        verify(admin).eliminar("spiderman", "super", null);
+    }
+
+    @Test
+    @DisplayName("2.2.0: el motivo de la edicion y de la baja llega al servicio, para la bitacora central")
+    void motivoDeEdicionYBaja() throws Exception {
+        String token = emisor.tokenDeUsuario("super", UID, "SUPER_ADMINISTRADOR");
+        when(admin.editar(eq("spiderman"), any(), eq("super"))).thenReturn(spiderman());
+
+        mvc.perform(con(put("/api/v1/lista-negra/terminos/spiderman"), token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"termino\":\"spiderman\",\"activo\":false,\"motivo\":\"Falsos positivos\"}"))
+                .andExpect(status().isOk());
+        verify(admin).editar(eq("spiderman"), org.mockito.ArgumentMatchers.argThat(datos ->
+                "Falsos positivos".equals(datos.motivo()) && Boolean.FALSE.equals(datos.activo())), eq("super"));
+
+        mvc.perform(con(delete("/api/v1/lista-negra/terminos/spiderman"), token).param("motivo", "Repetido"))
+                .andExpect(status().isNoContent());
+        verify(admin).eliminar("spiderman", "super", "Repetido");
     }
 
     @Test

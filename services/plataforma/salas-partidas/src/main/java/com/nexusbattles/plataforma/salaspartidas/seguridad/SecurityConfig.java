@@ -51,6 +51,11 @@ public class SecurityConfig {
                 // administrador: quien responde un reporte de una partida no
                 // podia ni ver la partida. Es una ampliacion de LECTURA y
                 // nada mas.
+                // 1.11.0 — §7.3.4: el historial y las estadisticas de OTRA
+                // cuenta son para su ficha administrativa. Va antes de la
+                // regla general de lectura: un jugador no lee los de nadie.
+                .requestMatchers(HttpMethod.GET, "/api/v1/partidas/jugadores/**")
+                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                 .requestMatchers(HttpMethod.GET, "/api/v1/salas/**", "/api/v1/partidas/**")
                 .hasAnyRole("JUGADOR", "MODERADOR", "ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                 // Todo lo que ESCRIBE sigue siendo del jugador: crear una sala,

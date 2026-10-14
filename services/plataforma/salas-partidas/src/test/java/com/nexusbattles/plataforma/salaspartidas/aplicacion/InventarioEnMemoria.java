@@ -4,8 +4,8 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoDelHeroe;
 import com.nexusbattles.plataforma.salaspartidas.dominio.HeroeDeCombate;
 import com.nexusbattles.plataforma.salaspartidas.dominio.InventarioNoDisponible;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Inventario de mentira para las pruebas de la puerta de heroe (SCRUM-1074).
@@ -24,8 +24,12 @@ public class InventarioEnMemoria implements HeroeDelJugador {
     private final EstadoDelHeroe respuesta;
     private final RuntimeException fallo;
 
-    /** A quien se le pregunto, en orden. */
-    public final List<JugadorAutenticado> consultados = new ArrayList<>();
+    /**
+     * A quien se le pregunto, en orden. Admite consultas a la vez:
+     * {@code IngresoConcurrenteIT} manda a dos jugadores contra el mismo doble
+     * y un {@code ArrayList} perdia (o rompia) una de las dos anotaciones.
+     */
+    public final List<JugadorAutenticado> consultados = new CopyOnWriteArrayList<>();
 
     private InventarioEnMemoria(EstadoDelHeroe respuesta, RuntimeException fallo) {
         this.respuesta = respuesta;

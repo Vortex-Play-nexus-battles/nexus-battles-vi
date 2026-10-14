@@ -39,7 +39,7 @@ describe('consultar: cada codigo tiene su desenlace', () => {
     const d = await consultar('/torneos', { buscar: buscarQueDevuelve(200, []) });
 
     expect(d.resultado).toBe(RESULTADO.VACIO);
-    expect(d.motivo).toMatch(/no hay registros/i);
+    expect(d.motivo).toBe('Todavía no hay registros.');
   });
 
   test('401 es falta de permiso, no servicio caido', async () => {
@@ -68,11 +68,13 @@ describe('consultar: cada codigo tiene su desenlace', () => {
     expect(d.resultado).toBe(RESULTADO.SERVICIO_DEGRADADO);
   });
 
-  test('un codigo raro se admite como no disponible y se dice cual era', async () => {
+  test('un codigo raro se admite como no disponible; el codigo queda para depurar, no para pintar', async () => {
     const d = await consultar('/algo', { buscar: buscarQueDevuelve(418) });
 
     expect(d.resultado).toBe(RESULTADO.NO_DISPONIBLE);
-    expect(d.detalle).toBe('HTTP 418');
+    expect(d.detalle).toBe(418);
+    expect(d.motivo).toBe('No pudimos cargar esta información.');
+    expect(d.motivo).not.toMatch(/HTTP|418/);
   });
 
   test('si fetch revienta, la consulta no lanza: devuelve degradado', async () => {
@@ -119,7 +121,7 @@ describe('consultar: un rechazo que se explica', () => {
     const d = await consultar('/algo', { buscar: buscarQueDevuelve(400) });
 
     expect(d.resultado).toBe(RESULTADO.NO_DISPONIBLE);
-    expect(d.motivo).toMatch(/no sabe interpretar/);
+    expect(d.motivo).toBe('No pudimos cargar esta información.');
   });
 });
 
@@ -209,6 +211,8 @@ describe('totalDe: un guion no es un cero', () => {
   test('lee el total de una pagina propia y de una de Spring', () => {
     expect(totalDe({ contenido: [1], total: 42 })).toBe(42);
     expect(totalDe({ content: [1], totalElements: 7 })).toBe(7);
+    // SA-7 — la página de salas y subastas: el total, no las filas de la página.
+    expect(totalDe({ contenido: [1], totalElementos: 40, totalPaginas: 3 })).toBe(40);
   });
 
   test('cuenta los elementos de una lista suelta', () => {

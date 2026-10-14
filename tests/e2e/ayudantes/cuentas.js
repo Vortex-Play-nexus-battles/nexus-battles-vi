@@ -22,9 +22,14 @@
  * @module tests/e2e/ayudantes/cuentas
  */
 
+import { closeSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { expect } from '@playwright/test';
 
 import { baseDelEntorno, correosVistos, enlaceEnElEntorno, esperarCodigo } from './correo.js';
+import { pasoDe, totp } from './totp.js';
 
 /** La contraseña de los jugadores del banco (la misma que usa `sembrar.sh`). */
 export const CLAVE_DEL_BANCO = process.env.E2E_CLAVE ?? 'Contrasena-E2E-2026';
@@ -244,6 +249,234 @@ export async function verificarCorreo(api, email, { base = baseDelEntorno() } = 
   return canje;
 }
 
+// ------------------------------------------------- cuentas administrativas
+
+/**
+ * Las cuentas administrativas de pruebas — 7.3.9.
+ *
+ * Desde que el segundo factor es obligatorio para Moderador, Administrador y
+ * Super Administrador, ninguna de esas cuentas entra solo con la contraseña.
+ * ms-identidad crea estas tres al arrancar, ya con su secreto TOTP enrolado
+ * (`ADMINS_QA`, `CuentaAdministrativaDePruebas`), y aquí está el mismo valor
+ * para calcular el código. Son las del BANCO DE PRUEBAS (`tests/e2e/compose.yml`),
+ * no las de ningún entorno; contra AWS DEV llegan por `E2E_ADMINS_QA`, un
+ * secreto de Actions que nunca se imprime.
+ *
+ * Formato: `apodo|correo|clave|secretoTotpBase32|ROL`, separadas por `;`.
+ */
+export const CUENTAS_ADMINISTRATIVAS_DEL_BANCO = [
+  'moderadora_e2e|moderadora_e2e@nexus.test|Contrasena-E2E-2026|MUZGKLLNN5SGK4TBMRXXEYJNORXXI4BNMJQW4Y3P|MODERADOR',
+  'admin_e2e|admin_e2e@nexus.test|Contrasena-E2E-2026|MUZGKLLBMRWWS3TJON2HEYLEN5ZC25DPORYC2YTDN4|ADMINISTRADOR',
+  'super_e2e|super_e2e@nexus.test|Contrasena-E2E-2026|MUZGKLLTOVYGK4TBMRWWS3RNORXXI4BNMJQW4Y3PEE|SUPER_ADMINISTRADOR',
+].join(';');
+
+/**
+ * Las cuentas administrativas de pruebas del entorno, por apodo.
+ *
+ * @param {string} [texto]
+ * @returns {Map<string, {apodo: string, email: string, clave: string, secreto: string, rol: string}>}
+ */
+export function cuentasAdministrativas(
+  texto = process.env.E2E_ADMINS_QA || CUENTAS_ADMINISTRATIVAS_DEL_BANCO,
+) {
+  const cuentas = new Map();
+  for (const entrada of String(texto ?? '').split(';')) {
+    const partes = entrada.split('|').map((parte) => parte.trim());
+    if (partes.length < 4 || !partes[0]) {
+      continue;
+    }
+    const [apodo, email, clave, secreto, rol = 'SUPER_ADMINISTRADOR'] = partes;
+    cuentas.set(apodo, { apodo, email: email.toLowerCase(), clave, secreto, rol: rol.toUpperCase() });
+  }
+  return cuentas;
+}
+
+/** La cuenta de pruebas de un rol (la primera que lo tenga), o `null`. */
+export function cuentaAdministrativaDeRol(rol) {
+  for (const cuenta of cuentasAdministrativas().values()) {
+    if (cuenta.rol === rol) {
+      return cuenta;
+    }
+  }
+  return null;
+}
+
+const dormir = (ms) => new Promise((resolver) => setTimeout(resolver, ms));
+
+/**
+ * Lo que comparten los workers de Playwright de una misma corrida: la última
+ * sesión de cada cuenta administrativa y el último paso TOTP usado. Es un
+ * directorio temporal por entorno: el banco y AWS DEV no se mezclan.
+ */
+function directorioCompartido(base) {
+  const directorio = join(
+    process.env.E2E_ESTADO ?? join(tmpdir(), 'nexus-e2e-estado'),
+    encodeURIComponent(base ?? 'local'),
+  );
+  mkdirSync(directorio, { recursive: true });
+  return directorio;
+}
+
+function leerJson(ruta) {
+  try {
+    return JSON.parse(readFileSync(ruta, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/** Escritura atómica: otro worker nunca lee un archivo a medias. */
+function escribirJson(ruta, valor) {
+  const temporal = `${ruta}.${process.pid}.tmp`;
+  writeFileSync(temporal, JSON.stringify(valor), { mode: 0o600 });
+  renameSync(temporal, ruta);
+}
+
+/**
+ * Un cerrojo entre procesos (archivo creado en exclusiva). El servidor no
+ * acepta dos veces el mismo paso TOTP ni uno anterior al último: dos workers
+ * entrando a la vez con la misma cuenta se pisarían, y cada código rechazado
+ * cuenta como intento fallido (RF-AUT-009).
+ */
+async function conCerrojo(directorio, nombre, trabajo, { esperaMaximaMs = 180_000 } = {}) {
+  const ruta = join(directorio, `${nombre}.cerrojo`);
+  const inicio = Date.now();
+  for (;;) {
+    try {
+      closeSync(openSync(ruta, 'wx'));
+      break;
+    } catch (error) {
+      if (error?.code !== 'EEXIST') {
+        throw error;
+      }
+      try {
+        // Un worker que murió con el cerrojo puesto no bloquea la corrida.
+        if (Date.now() - statSync(ruta).mtimeMs > 120_000) {
+          unlinkSync(ruta);
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      if (Date.now() - inicio > esperaMaximaMs) {
+        throw new Error(`no se pudo tomar el cerrojo de ${nombre}`);
+      }
+      await dormir(250);
+    }
+  }
+  try {
+    return await trabajo();
+  } finally {
+    try {
+      unlinkSync(ruta);
+    } catch {
+      // Ya no estaba.
+    }
+  }
+}
+
+/**
+ * El código TOTP para un paso que el servidor todavía no vio. Espera si hace
+ * falta: el siguiente paso al último usado vale desde un paso antes (el
+ * servidor admite ±1).
+ */
+async function codigoNuevo(directorio, cuenta) {
+  const archivo = join(directorio, `${cuenta.apodo}.paso.json`);
+  const ultimo = leerJson(archivo)?.paso ?? Number.NEGATIVE_INFINITY;
+  let paso = Math.max(pasoDe(), ultimo + 1);
+  while (paso > pasoDe() + 1) {
+    await dormir(1_000);
+  }
+  escribirJson(archivo, { paso });
+  return totp(cuenta.secreto, paso);
+}
+
+/** POST a una ruta del login en dos pasos, con problem details. */
+async function enviar(api, ruta, datos) {
+  return leer(
+    await respetandoElLimite(() => api.post(ruta, { headers: { Accept: ACEPTA }, data: datos })),
+  );
+}
+
+/**
+ * Login completo de una cuenta con segundo factor: contraseña, desafío y
+ * código. Si la cuenta todavía no lo tiene enrolado (403
+ * `segundo-factor-enrolamiento-requerido`: una cuenta recién ascendida a un
+ * rol administrativo), lo enrola como lo haría la persona y guarda el secreto
+ * para la próxima vez.
+ */
+async function entrarConSegundoFactor(api, directorio, cuenta) {
+  const login = await iniciarSesion(api, cuenta.email, cuenta.clave);
+  if (login.estado === 200) {
+    return login;
+  }
+  if (login.estado === 403 && login.tipo === 'segundo-factor-enrolamiento-requerido') {
+    const enrolamiento = await enviar(api, '/api/v1/auth/login/segundo-factor/enrolamiento', {
+      desafio: login.cuerpo.desafio,
+    });
+    expect(enrolamiento.estado, `enrolamiento de ${cuenta.apodo}: ${enrolamiento.texto}`).toBe(200);
+    cuenta.secreto = enrolamiento.cuerpo.secreto;
+    escribirJson(join(directorio, `${cuenta.apodo}.secreto.json`), { secreto: cuenta.secreto });
+    const activacion = await enviar(api, '/api/v1/auth/login/segundo-factor/activacion', {
+      desafio: login.cuerpo.desafio,
+      codigo: await codigoNuevo(directorio, cuenta),
+    });
+    expect(activacion.estado, `activación de ${cuenta.apodo}: ${activacion.texto}`).toBe(200);
+    return activacion;
+  }
+  expect(
+    [login.estado, login.tipo],
+    `login de ${cuenta.apodo}: ${login.texto}`,
+  ).toEqual([403, 'segundo-factor-requerido']);
+  if (!cuenta.secreto) {
+    cuenta.secreto = leerJson(join(directorio, `${cuenta.apodo}.secreto.json`))?.secreto ?? null;
+  }
+  expect(cuenta.secreto, `no hay secreto TOTP conocido para ${cuenta.apodo}`).toBeTruthy();
+  // Un rechazo por paso ya visto (otra corrida que dejó el servidor por
+  // delante) se reintenta una vez con el paso siguiente, nunca más: cada
+  // rechazo cuenta como intento fallido.
+  for (let intento = 1; ; intento += 1) {
+    const canje = await enviar(api, '/api/v1/auth/login/segundo-factor', {
+      desafio: login.cuerpo.desafio,
+      codigo: await codigoNuevo(directorio, cuenta),
+    });
+    if (canje.estado === 200 || intento >= 2) {
+      expect(canje.estado, `segundo paso de ${cuenta.apodo}: ${canje.texto}`).toBe(200);
+      return canje;
+    }
+  }
+}
+
+/**
+ * La sesión de una cuenta administrativa de pruebas, compartida entre los
+ * workers de la corrida: si ya hay una, se renueva (`POST
+ * /auth/sesion/renovacion`, sin segundo factor: la sesión ya lo pasó); si no,
+ * o si ya no se puede renovar, se entra de nuevo con contraseña y código.
+ */
+async function sesionAdministrativa(api, cuenta, base) {
+  const directorio = directorioCompartido(base);
+  const archivo = join(directorio, `${cuenta.apodo}.sesion.json`);
+  return conCerrojo(directorio, cuenta.apodo, async () => {
+    const guardada = leerJson(archivo);
+    if (guardada?.token) {
+      const renovada = await respetandoElLimite(() =>
+        api.post('/api/v1/auth/sesion/renovacion', {
+          headers: { Accept: ACEPTA, Authorization: `Bearer ${guardada.token}` },
+        }),
+      );
+      if (renovada.status() === 200) {
+        const { token } = await renovada.json();
+        const sesion = { ...guardada, token };
+        escribirJson(archivo, sesion);
+        return sesion;
+      }
+    }
+    const login = await entrarConSegundoFactor(api, directorio, { ...cuenta });
+    escribirJson(archivo, login.cuerpo);
+    return login.cuerpo;
+  });
+}
+
 /**
  * La sesión de un jugador de prueba: registra si hace falta, verifica el
  * correo si la cuenta está pendiente y entra.
@@ -267,6 +500,19 @@ export async function sesionDe(
     base = baseDelEntorno(),
   } = {},
 ) {
+  // 7.3.9 — las cuentas administrativas de pruebas ya existen (ms-identidad
+  // las crea al arrancar) y entran en dos pasos.
+  const administrativa = cuentasAdministrativas().get(apodo);
+  if (administrativa) {
+    const sesion = await sesionAdministrativa(api, administrativa, base);
+    return {
+      ...sesion,
+      apodo: sesion.apodo ?? apodo,
+      email: administrativa.email,
+      claims: cuerpoDelToken(sesion.token),
+    };
+  }
+
   const registro = await registrar(api, { apodo, email, clave, nombres, apellidos });
   // 400/409 si ya existe (de la semilla o de una corrida anterior): no es un
   // fallo del flujo. Cualquier otra cosa sí.
@@ -278,6 +524,17 @@ export async function sesionDe(
   if (login.estado === 403 && login.tipo === 'cuenta-no-verificada') {
     await verificarCorreo(api, email, { base });
     login = await iniciarSesion(api, email, clave);
+  }
+  // Una cuenta de prueba que un spec ascendió a un rol administrativo: desde
+  // 7.3.9 entra en dos pasos (y se enrola la primera vez).
+  if (
+    login.estado === 403 &&
+    ['segundo-factor-requerido', 'segundo-factor-enrolamiento-requerido'].includes(login.tipo)
+  ) {
+    const directorio = directorioCompartido(base);
+    login = await conCerrojo(directorio, apodo, () =>
+      entrarConSegundoFactor(api, directorio, { apodo, email, clave, secreto: null }),
+    );
   }
   expect(login.estado, `login de ${apodo}: ${login.texto}`).toBe(200);
   return {

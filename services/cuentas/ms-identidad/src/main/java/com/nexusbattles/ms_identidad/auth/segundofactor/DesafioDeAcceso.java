@@ -34,7 +34,13 @@ public class DesafioDeAcceso {
         /** La cuenta tiene segundo factor: falta el codigo. */
         VERIFICAR,
         /** El rol lo exige y la cuenta aun no lo tiene: falta enrolarse. */
-        ENROLAR
+        ENROLAR,
+        /**
+         * SA-4 (§7.3.2): la cuenta esta suspendida o baneada y no puede entrar.
+         * Con la contrasena ya comprobada, el desafio deja ver la sancion que
+         * se lo impide y presentar UNA apelacion. No abre ninguna sesion.
+         */
+        APELAR
     }
 
     @Id

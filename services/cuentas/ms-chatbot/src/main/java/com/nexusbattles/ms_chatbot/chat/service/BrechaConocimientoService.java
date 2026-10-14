@@ -1,6 +1,8 @@
 package com.nexusbattles.ms_chatbot.chat.service;
 
 import com.nexusbattles.ms_chatbot.chat.model.BrechaConocimiento;
+import com.nexusbattles.ms_chatbot.chat.privacidad.RedaccionDeDatosSensibles;
+import com.nexusbattles.ms_chatbot.chat.privacidad.RedactorDeDatosSensibles;
 import com.nexusbattles.ms_chatbot.chat.repository.BrechaConocimientoRepository;
 import com.nexusbattles.ms_chatbot.chat.texto.NormalizadorTexto;
 import org.springframework.stereotype.Service;
@@ -10,7 +12,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Optional;
 
 // HU-CHA-011: agrupa las preguntas no cubiertas por su texto normalizado,
-// para alimentar despues la base de conocimiento (HU-CHA-004). Dos fuentes:
+// para alimentar despues la base de conocimiento (HU-CHA-004). La pregunta
+// llega ya redactada (ChatService, y la pregunta guardada en el caso de la
+// calificacion); se vuelve a redactar aqui igual, porque una brecha sobrevive
+// a que el usuario borre su historial y no puede guardar nunca un secreto
+// (1.4.0, 7.4.8). Redactar dos veces no cambia nada. Dos fuentes:
 //   - registrarNoUtil: el usuario califico "no util" la respuesta.
 //   - registrarEscalamiento: MotorRespuestas no entendio la pregunta.
 //
@@ -28,9 +34,12 @@ public class BrechaConocimientoService {
     static final int LONGITUD_MAXIMA_TEXTO_NORMALIZADO = 500;
 
     private final BrechaConocimientoRepository brechaConocimientoRepository;
+    private final RedaccionDeDatosSensibles redaccion;
 
-    public BrechaConocimientoService(BrechaConocimientoRepository brechaConocimientoRepository) {
+    public BrechaConocimientoService(BrechaConocimientoRepository brechaConocimientoRepository,
+                                     RedaccionDeDatosSensibles redaccion) {
         this.brechaConocimientoRepository = brechaConocimientoRepository;
+        this.redaccion = redaccion;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -51,9 +60,12 @@ public class BrechaConocimientoService {
 
     // Vacio si la pregunta no deja texto util al normalizarla (por ejemplo,
     // "???" o solo emojis): no tiene sentido agrupar eso como brecha.
-    private Optional<BrechaConocimiento> obtenerOCrear(String pregunta) {
+    private Optional<BrechaConocimiento> obtenerOCrear(String preguntaRecibida) {
+        String pregunta = redaccion.redactar(preguntaRecibida);
         String normalizado = NormalizadorTexto.normalizar(pregunta);
-        if (normalizado.isBlank()) {
+        // Si quitando lo que se tapo no queda pregunta (solo era un token o
+        // una contrasena), no hay nada que agrupar.
+        if (normalizado.isBlank() || NormalizadorTexto.normalizar(RedactorDeDatosSensibles.sinMarcas(pregunta)).isBlank()) {
             return Optional.empty();
         }
         if (normalizado.length() > LONGITUD_MAXIMA_TEXTO_NORMALIZADO) {

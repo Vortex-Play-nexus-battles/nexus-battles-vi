@@ -3,7 +3,6 @@ package nexus.inventario.persistencia;
 import java.util.List;
 import java.util.Optional;
 import nexus.inventario.dominio.ConflictoDeEscrituraException;
-import nexus.inventario.dominio.ElementoInventario;
 import nexus.inventario.dominio.FalloPersistenciaInventarioException;
 import nexus.inventario.dominio.Inventario;
 import nexus.inventario.dominio.RepositorioDeInventarios;
@@ -13,8 +12,6 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.mongodb.core.MongoOperations;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.TextCriteria;
-import org.springframework.data.mongodb.core.query.TextQuery;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Repository;
 
@@ -82,24 +79,6 @@ public class RepositorioInventariosMongo implements RepositorioDeInventarios {
     public List<Inventario> buscarTodosPorElementoId(String elementoId) {
         return documentos.findAllByElementosId(elementoId).stream()
                 .map(InventarioDocumento::aDominio)
-                .toList();
-    }
-
-    @Override
-    public List<ElementoInventario> buscarElementos(String propietarioId, String criterio) {
-        TextCriteria texto = TextCriteria.forDefaultLanguage()
-                .matching(criterio)
-                .caseSensitive(false)
-                .diacriticSensitive(false);
-        TextQuery consulta = TextQuery.queryText(texto);
-        consulta.addCriteria(Criteria.where("propietarioId").is(propietarioId));
-
-        InventarioDocumento inventario = mongo.findOne(consulta, InventarioDocumento.class);
-        if (inventario == null) {
-            return List.of();
-        }
-        return inventario.aDominio().elementos().stream()
-                .filter(elemento -> CoincidenciaDeElemento.conTexto(elemento, criterio))
                 .toList();
     }
 }

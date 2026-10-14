@@ -37,8 +37,7 @@ public class AdminCuentaService {
 
         String rolSolicitado = datos.getRolNombre().trim().toUpperCase();
         if (!ROLES_PERMITIDOS.contains(rolSolicitado)) {
-            throw new IllegalArgumentException(
-                "Solo se pueden crear cuentas con rol MODERADOR o ADMINISTRADOR desde este endpoint.");
+            throw new IllegalArgumentException("Solo se pueden crear cuentas de Moderador o Administrador.");
         }
 
         Role rol = Role.valueOf(rolSolicitado);
@@ -56,8 +55,14 @@ public class AdminCuentaService {
             usuarioCreado, datos.getNombres(), datos.getApellidos(), urlAvatar
         );
 
+        // La cuenta afectada por su uid (el mismo identificador con que la
+        // ficha administrativa filtra su historial, 7.3.5); el apodo solo si
+        // la cuenta aun no tiene uid (dobles de prueba).
+        String afectado = usuarioCreado.getPublicId() != null
+            ? usuarioCreado.getPublicId().toString()
+            : usuarioCreado.getApodo();
         auditoriaClient.registrar(
-            "CREACION", administradorId, usuarioCreado.getApodo(),
+            "CREACION", administradorId, afectado,
             null, "rol=" + rolSolicitado + ", estado=INACTIVO",
             "Creación de cuenta administrativa", ipOrigen
         );

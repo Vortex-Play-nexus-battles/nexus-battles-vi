@@ -16,6 +16,11 @@ public interface TemaConocimientoRepository extends JpaRepository<TemaConocimien
     // versiones eso mezclaria la candidata y las retiradas con la vigente.
     List<TemaConocimiento> findByVersionEstadoAndActivoTrue(EstadoVersion estado);
 
+    // 7.4.9 (ms-chatbot.yaml 1.9.0): los temas activos de UNA version. El
+    // motor los lee una vez por version en produccion (TemasEnProduccion) y
+    // no en cada mensaje: los temas de una version publicada no cambian.
+    List<TemaConocimiento> findByVersionIdAndActivoTrue(UUID versionId);
+
     // HU-CHA-012: titulos de los temas frecuentes a partir de su clave estable.
     List<TemaConocimiento> findByClaveIn(Collection<String> claves);
 

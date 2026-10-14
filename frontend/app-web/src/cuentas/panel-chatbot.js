@@ -1,14 +1,15 @@
 /**
  * Panel de administración del asistente — HU-CHA-012.
  *
- * Cuatro pestañas:
+ * Cinco pestañas:
  *
- * | Pestaña             | Requisito  | Módulo                               |
- * |---------------------|------------|--------------------------------------|
- * | Analíticas          | RF-CHA-012 | `panel-chatbot-analiticas.js`        |
- * | Base de conocimiento| RF-CHA-013 | `panel-chatbot-base.js`              |
- * | Reentrenamiento     | RF-CHA-014 | `panel-chatbot-reentrenamiento.js`   |
- * | Soporte             | RF-ADM-004 | `panel-chatbot-soporte.js`           |
+ * | Pestaña                 | Requisito  | Módulo                               |
+ * |-------------------------|------------|--------------------------------------|
+ * | Analíticas              | RF-CHA-012 | `panel-chatbot-analiticas.js`        |
+ * | Preguntas sin respuesta | 7.4.5      | `panel-chatbot-brechas.js`           |
+ * | Base de conocimiento    | RF-CHA-013 | `panel-chatbot-base.js`              |
+ * | Reentrenamiento         | RF-CHA-014 | `panel-chatbot-reentrenamiento.js`   |
+ * | Soporte                 | RF-ADM-004 | `panel-chatbot-soporte.js`           |
  *
  * Cada pestaña carga sus datos al abrirse, no al entrar a la vista: quien
  * solo mira analíticas no dispara las consultas de las otras.
@@ -22,6 +23,7 @@ import { encabezadoDePagina } from '../comun/ui/pagina.js';
 import { crearClientePanelChatbot, descargar } from './cliente-panel-chatbot.js';
 import { montarAnaliticas } from './panel-chatbot-analiticas.js';
 import { montarBaseConocimiento } from './panel-chatbot-base.js';
+import { montarBrechas } from './panel-chatbot-brechas.js';
 import { montarReentrenamiento } from './panel-chatbot-reentrenamiento.js';
 import { montarSoporte } from './panel-chatbot-soporte.js';
 
@@ -42,9 +44,13 @@ export function montarPanelChatbot(
     }),
   );
 
-  const dependencias = { cliente, descargarArchivo };
+  // Las pestañas se montan antes de existir el control que las cambia: `irA`
+  // lo busca cuando se usa («Preguntas sin respuesta» lleva a la base).
+  let control = null;
+  const dependencias = { cliente, descargarArchivo, irA: (id) => control?.mostrar(id) };
   const secciones = [
     { id: 'analiticas', etiqueta: 'Analíticas', montar: montarAnaliticas },
+    { id: 'brechas', etiqueta: 'Preguntas sin respuesta', montar: montarBrechas },
     { id: 'base', etiqueta: 'Base de conocimiento', montar: montarBaseConocimiento },
     { id: 'reentrenamiento', etiqueta: 'Reentrenamiento', montar: montarReentrenamiento },
     { id: 'soporte', etiqueta: 'Soporte', montar: montarSoporte },
@@ -66,5 +72,6 @@ export function montarPanelChatbot(
   }
 
   // montarPestanas ya muestra (y por tanto carga) la pestaña inicial.
-  return montarPestanas(raiz, pestanas, { alCambiar, hash });
+  control = montarPestanas(raiz, pestanas, { alCambiar, hash });
+  return control;
 }

@@ -2,6 +2,7 @@ package com.nexusbattles.ms_identidad.admin.controller;
 
 import com.nexusbattles.ms_identidad.admin.directorio.AuditoriaDeExportaciones;
 import com.nexusbattles.ms_identidad.admin.directorio.ConsultaInvalidaException;
+import com.nexusbattles.ms_identidad.admin.directorio.CuentasBloqueadasPorIntentos;
 import com.nexusbattles.ms_identidad.admin.directorio.CuentasDePrueba;
 import com.nexusbattles.ms_identidad.admin.directorio.DirectorioDeCuentas;
 import com.nexusbattles.ms_identidad.admin.directorio.ExportacionDelDirectorio;
@@ -9,6 +10,7 @@ import com.nexusbattles.ms_identidad.admin.directorio.ExportacionDemasiadoGrande
 import com.nexusbattles.ms_identidad.admin.directorio.FiltroDelDirectorio;
 import com.nexusbattles.ms_identidad.admin.directorio.IndicadoresDeCuentas;
 import com.nexusbattles.ms_identidad.admin.dto.AdminUsuarioDirectorioResponse;
+import com.nexusbattles.ms_identidad.admin.dto.CuentasBloqueadasResponse;
 import com.nexusbattles.ms_identidad.admin.dto.IndicadoresDeCuentasResponse;
 import com.nexusbattles.ms_identidad.admin.dto.PaginaAdminResponse;
 import com.nexusbattles.ms_identidad.auth.codigos.Problemas;
@@ -67,6 +69,12 @@ import org.springframework.web.bind.annotation.RestController;
  * ({@link AuditoriaDeExportaciones}): leer no cambia nada, pero sacar datos
  * personales del sistema se registra.
  *
+ * ## SA-20 (ms-identidad-admin.yaml 1.11.0)
+ *
+ * Las cuentas bloqueadas por intentos fallidos en un periodo
+ * ({@link CuentasBloqueadasPorIntentos}): la señal 1 de «comportamiento
+ * sospechoso» (§7.3.4, D-45). Tambien de solo lectura.
+ *
  * Mismo permiso que la gestion de cuentas: quien puede abrir la ficha de un
  * jugador puede buscarla. El guarda es {@code @RequirePermission}, el mismo
  * de siempre; no hay una segunda matriz que se pueda desincronizar.
@@ -86,19 +94,22 @@ public class AdminDirectorioController {
     private final IndicadoresDeCuentas indicadoresDeCuentas;
     private final ExportacionDelDirectorio exportacion;
     private final AuditoriaDeExportaciones auditoriaDeExportaciones;
+    private final CuentasBloqueadasPorIntentos cuentasBloqueadas;
 
     public AdminDirectorioController(UsuarioRepository usuarioRepository,
                                      DirectorioDeCuentas directorio,
                                      CuentasDePrueba cuentasDePrueba,
                                      IndicadoresDeCuentas indicadores,
                                      ExportacionDelDirectorio exportacion,
-                                     AuditoriaDeExportaciones auditoriaDeExportaciones) {
+                                     AuditoriaDeExportaciones auditoriaDeExportaciones,
+                                     CuentasBloqueadasPorIntentos cuentasBloqueadas) {
         this.usuarioRepository = usuarioRepository;
         this.directorio = directorio;
         this.cuentasDePrueba = cuentasDePrueba;
         this.indicadoresDeCuentas = indicadores;
         this.exportacion = exportacion;
         this.auditoriaDeExportaciones = auditoriaDeExportaciones;
+        this.cuentasBloqueadas = cuentasBloqueadas;
     }
 
     /**
@@ -113,6 +124,7 @@ public class AdminDirectorioController {
      * @param estado          1.3.0: solo ese estado
      * @param registradoDesde 1.3.0: registradas ese dia o despues
      * @param registradoHasta 1.3.0: registradas ese dia o antes
+     * @param historialSanciones 1.7.0 (§7.3.4): CON o SIN sanciones emitidas
      * @param page            pagina, desde 0
      * @param size            filas por pagina, tope {@value #TAMANO_MAXIMO}
      */
@@ -125,11 +137,12 @@ public class AdminDirectorioController {
             @RequestParam(name = "estado", required = false) String estado,
             @RequestParam(name = "registradoDesde", required = false) String registradoDesde,
             @RequestParam(name = "registradoHasta", required = false) String registradoHasta,
+            @RequestParam(name = "historialSanciones", required = false) String historialSanciones,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
 
-        FiltroDelDirectorio filtro =
-                FiltroDelDirectorio.de(buscar, ocultarPruebas, rol, estado, registradoDesde, registradoHasta);
+        FiltroDelDirectorio filtro = FiltroDelDirectorio.de(
+                buscar, ocultarPruebas, rol, estado, registradoDesde, registradoHasta, historialSanciones);
         int pagina = Math.max(page, 0);
         int tamano = Math.min(Math.max(size, 1), TAMANO_MAXIMO);
         PageRequest pedido = PageRequest.of(pagina, tamano, Sort.by(Sort.Direction.DESC, "id"));
@@ -165,10 +178,11 @@ public class AdminDirectorioController {
             @RequestParam(name = "estado", required = false) String estado,
             @RequestParam(name = "registradoDesde", required = false) String registradoDesde,
             @RequestParam(name = "registradoHasta", required = false) String registradoHasta,
+            @RequestParam(name = "historialSanciones", required = false) String historialSanciones,
             HttpServletRequest peticion) {
 
-        FiltroDelDirectorio filtro =
-                FiltroDelDirectorio.de(buscar, ocultarPruebas, rol, estado, registradoDesde, registradoHasta);
+        FiltroDelDirectorio filtro = FiltroDelDirectorio.de(
+                buscar, ocultarPruebas, rol, estado, registradoDesde, registradoHasta, historialSanciones);
         ExportacionDelDirectorio.Exportacion archivo = exportacion.exportar(filtro);
         auditoriaDeExportaciones.registrar(filtro, archivo.filas(),
                 (String) peticion.getAttribute("usuarioActual"), uidDe(peticion),
@@ -194,6 +208,22 @@ public class AdminDirectorioController {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .body(indicadoresDeCuentas.calcular(desde, hasta, ocultarPruebas));
+    }
+
+    /**
+     * SA-20 (§7.3.4, D-45 señal 1) — las cuentas bloqueadas por intentos
+     * fallidos desde {@code desde} (por omision, la ultima semana), la de
+     * bloqueo mas reciente primero.
+     */
+    @GetMapping("/bloqueos")
+    @RequirePermission(Action.GESTIONAR_CUENTAS)
+    public ResponseEntity<CuentasBloqueadasResponse> bloqueos(
+            @RequestParam(name = "desde", required = false) String desde,
+            @RequestParam(name = "ocultarPruebas", defaultValue = "false") boolean ocultarPruebas,
+            @RequestParam(name = "limite", required = false) Integer limite) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(cuentasBloqueadas.consultar(desde, ocultarPruebas, limite));
     }
 
     /** El {@code uid} que deja el interceptor (claim {@code uid} del token), o null. */

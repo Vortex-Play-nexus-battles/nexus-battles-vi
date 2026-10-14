@@ -54,6 +54,9 @@ sanciones:
     # Plazo para apelar una sancion desde su emision (HU-USR-007). Respaldo:
     # el valor vigente lo da admin-parametros (sanciones.apelacion.plazo-dias).
     plazo-dias: ${SANCIONES_APELACION_PLAZO_DIAS:30}
+    # SA-4 (§7.3.2): el panel decide en quince dias habiles (de lunes a
+    # viernes). Festivos que no cuentan, como fechas ISO separadas por coma.
+    festivos: ${SANCIONES_FESTIVOS:}
   parametros:
     # HU-ADM-001 (CA-04): rango de la suspension y plazo de apelacion por API
     # de admin-parametros. Vacio = solo las variables de entorno de arriba.
@@ -97,6 +100,16 @@ lista-negra:
     chat-sala: ${LISTA_NEGRA_ACCION_CHAT_SALA:BLOQUEAR}
     mensaje-privado: ${LISTA_NEGRA_ACCION_MENSAJE_PRIVADO:BLOQUEAR}
     generico: ${LISTA_NEGRA_ACCION_GENERICO:RECHAZAR}
+
+# --- Bitacora central (§7.3.5, SA-5; ms-cumplimiento-auditoria.yaml 1.3.0) --
+# Cada accion administrativa que entra por el borde (emitir, levantar,
+# resolver una apelacion, cambiar la lista negra) deja su asiento en la cola
+# local y se entrega a ms-cumplimiento con la credencial de servicio. Sin URL,
+# los asientos esperan en la cola y en la bitacora JSON.
+auditoria:
+  url: ${AUDITORIA_URL:}
+  reintento-ms: ${AUDITORIA_REINTENTO_MS:10000}
+  espera-maxima-ms: ${AUDITORIA_ESPERA_MAXIMA_MS:900000}
 
 # Credencial de servicio (ADR-005) con la que este servicio habla a
 # notificaciones, ms-identidad y correo. Sin client-id no se crea ninguna: las

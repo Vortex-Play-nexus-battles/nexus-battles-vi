@@ -99,6 +99,16 @@ jobs:
           chmod +x ./mvnw
           ./mvnw -B -DskipTests package
 
+      # SA-1 (#951) metió la auditoría (srv-ms-cumplimiento) en el banco E2E y
+      # este flujo se quedó sin su jar: «Levantar el banco» moría con «lstat
+      # .../ms-cumplimiento/target» en todo PR que tocara
+      # docker-compose.deploy.yml (visto en #962). Mismo paso que e2e.yml.
+      - name: Construir el jar de ms-cumplimiento (Maven)
+        working-directory: services/cuentas/ms-cumplimiento
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B -DskipTests package
+
       - name: Flags y límites de la variante
         id: variante
         run: |
@@ -125,6 +135,7 @@ jobs:
                 srv-ms-finanzas) limite=256m ;;
                 srv-ms-subastas) limite=256m ;;
                 srv-ms-ecommerce) limite=256m ;;
+                srv-ms-cumplimiento) limite=256m ;;
                 *) limite=384m ;;
               esac
               echo "  $s:"

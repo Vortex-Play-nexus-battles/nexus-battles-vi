@@ -14,6 +14,8 @@
  *     se modifica. El servidor valida el resultado fusionado: su motivo se
  *     enseña tal cual si lo rechaza.
  *   - `PUT /api/v1/productos/{id}/suspender|reactivar` — con confirmación.
+ *   - `GET  /api/v1/productos/{id}/historial` y `POST /reversiones` — historial
+ *     inmutable y restauración confirmada (HU-PRD-007).
  *
  * Aquí no se decide nada del catálogo: la validación de cada campo es la
  * misma del alta (`solicitud-producto.js`) y la última palabra es del servidor.
@@ -22,7 +24,7 @@
  */
 
 import { h } from '../../comun/ui/dom.js';
-import { abrirDialogo, confirmar } from '../../comun/ui/dialogo.js';
+import { abrirDialogo, confirmar, confirmarConMotivo } from '../../comun/ui/dialogo.js';
 import { campo } from '../../comun/ui/campo.js';
 import { distintivo } from '../../comun/ui/distintivo.js';
 import { limpiarAviso, pintarAviso, tonoPorEstado } from '../../comun/ui/aviso.js';
@@ -35,7 +37,16 @@ import {
   estadoVacio,
   pintarEstado,
 } from '../../comun/ui/estado-vista.js';
-import { cambiarDisponibilidad, listarProductos, modificarProducto } from './cliente-productos.js';
+import {
+  cambiarDisponibilidad,
+  consultarHistorialProducto,
+  consultarVersionesDiseno,
+  exportarPlantillaDiseno,
+  importarPlantillaDiseno,
+  listarProductos,
+  modificarProducto,
+  revertirProducto,
+} from './cliente-productos.js';
 import {
   CAMPOS_DE_PROMOCION,
   LIMITES_DE_PROMOCION,
@@ -45,6 +56,11 @@ import {
   TIPOS_PRODUCTO,
   valorLocalDe,
 } from './solicitud-producto.js';
+import { consultar } from '../../plataforma/consola/cliente-consola.js';
+import { directorioDeTitulares } from '../../plataforma/consola/titulares.js';
+import { rellenarHeroes } from './heroes-del-catalogo.js';
+import { miniaturaDeRecurso, selectorDeRecurso } from './recursos-graficos.js';
+import { vistaPreviaDeProducto } from './vista-previa-producto.js';
 
 /** RNF-USA-001: dieciséis por página. */
 export const PRODUCTOS_POR_PAGINA = 16;
@@ -73,11 +89,6 @@ const ETIQUETA_DE_PARTE = Object.freeze({
 const CAMPOS_COMUNES = [
   { nombre: 'nombre', etiqueta: 'Nombre', atributos: { maxlength: 120 } },
   { nombre: 'descripcion', etiqueta: 'Descripción', multilinea: true },
-  {
-    nombre: 'imagen',
-    etiqueta: 'Referencia de imagen',
-    pista: 'La ruta o referencia con la que se guardó la imagen.',
-  },
   {
     nombre: 'tiraje',
     etiqueta: 'Tiraje',
@@ -109,10 +120,12 @@ const TASA_DE_CAIDA = {
   atributos: { step: '0.01', min: 0, max: 100 },
 };
 
+// SA-6 — el héroe se elige por su nombre (heroes-del-catalogo.js): antes
+// había que escribir el identificador del producto de tipo héroe.
 const HEROE_ASOCIADO = {
   nombre: 'heroe',
   etiqueta: 'Héroe asociado',
-  pista: 'El identificador del producto de tipo héroe.',
+  heroe: true,
 };
 
 export const CAMPOS_POR_TIPO = Object.freeze({
@@ -339,17 +352,41 @@ export function distintivoDeEstado(estado) {
  * @param {object} producto
  * @returns {{formulario: HTMLFormElement, marcarErrores: (motivo: string|null) => void}}
  */
-function formularioDeEdicion(producto) {
+function formularioDeEdicion(
+  producto,
+  { fetchImpl, listarHeroes, subir, listar, alCambiar = () => {} } = {},
+) {
   const campos = [];
   const crear = (definicion) => {
+    const valor =
+      producto[definicion.nombre] === undefined || producto[definicion.nombre] === null
+        ? ''
+        : String(producto[definicion.nombre]);
+    const { heroe, ...resto } = definicion;
     const creado = campo({
-      ...definicion,
-      valor: producto[definicion.nombre] === undefined ? '' : String(producto[definicion.nombre]),
+      ...resto,
+      ...(heroe ? { opciones: [{ valor, texto: valor ? 'Héroe actual' : 'Elige el héroe' }] } : {}),
+      valor,
       requerido: true,
     });
+    if (heroe) {
+      void rellenarHeroes(creado.control, {
+        valor: valor || null,
+        listar: listarHeroes,
+        fetchImpl,
+      });
+    }
     campos.push(creado);
     return creado.elemento;
   };
+  const selectorImagen = selectorDeRecurso({
+    valor: producto.imagen ?? '',
+    productoId: producto.id,
+    subir,
+    listar,
+    fetchImpl,
+    alCambiar,
+  });
 
   const casillaPremium = h('input', {
     clase: 'casilla__entrada',
@@ -373,6 +410,7 @@ function formularioDeEdicion(producto) {
       // El tipo va oculto: la validación del alta lo necesita para saber qué
       // campos exigir, y no se modifica (no viaja en el PATCH).
       h('input', { atributos: { type: 'hidden', name: 'tipo', value: producto.tipo } }),
+      selectorImagen.elemento,
       h('div', {
         clase: 'hoja-producto__rejilla',
         hijos: CAMPOS_COMUNES.map(crear),
@@ -412,7 +450,12 @@ function formularioDeEdicion(producto) {
   repasarPrecio();
   return {
     formulario,
+    selectorImagen,
     marcarErrores: (motivo) => {
+      selectorImagen.marcarError(null);
+      if (motivo && /imagen/i.test(motivo)) {
+        selectorImagen.marcarError(motivo);
+      }
       for (const c of campos) {
         c.marcarError(null);
       }
@@ -492,26 +535,175 @@ export function camposDePromocion(promocion, campos = []) {
   });
 }
 
+/** Cómo se dice cada dato que puede cambiar en la ficha (para «Se publicarán: …»). */
+export const ETIQUETA_DE_CAMPO = Object.freeze({
+  nombre: 'nombre',
+  descripcion: 'descripción',
+  imagen: 'imagen',
+  tiraje: 'tiraje',
+  premium: 'premium',
+  precioCreditos: 'precio en créditos',
+  precioMonedaReal: 'precio en moneda real',
+  promocion: 'promoción',
+  prototipo: 'prototipo',
+  heroe: 'héroe asociado',
+  costoPoder: 'costo de poder',
+  multiplicadorNivel: 'multiplicador de nivel',
+  turnosCarga: 'turnos de carga',
+  turnosRecarga: 'turnos de recarga',
+  efectoGeneral: 'efecto general',
+  efectoPotenciado: 'efecto potenciado',
+  defensa: 'defensa',
+  parte: 'parte',
+  efecto: 'efecto',
+  poderDeAtaque: 'poder de ataque',
+  tasaDeCaida: 'tasa de caída',
+});
+
+/** Cómo se dice cada entrada del historial (HU-PRD-007). */
+export const ETIQUETA_DE_CAMBIO = Object.freeze({
+  CREACION: 'Alta del producto',
+  MODIFICACION: 'Modificación',
+  SUSPENSION: 'Suspensión',
+  REACTIVACION: 'Reactivación',
+  REVERSION: 'Reversión',
+  IMPORTACION_DISENO: 'Diseño importado',
+});
+
+/**
+ * «imagen», «imagen y descripción», «nombre, imagen y precio en créditos».
+ *
+ * @param {string[]} claves
+ * @returns {string}
+ */
+export function listaDeCampos(claves) {
+  const nombres = claves.map((clave) => ETIQUETA_DE_CAMPO[clave] ?? clave);
+  if (nombres.length <= 1) {
+    return nombres.join('');
+  }
+  return `${nombres.slice(0, -1).join(', ')} y ${nombres[nombres.length - 1]}`;
+}
+
+/**
+ * Quién hizo un cambio: el apodo de su cuenta, o de dónde salió si no lo hizo
+ * una persona (la semilla del catálogo no tiene autor).
+ *
+ * @param {string|null|undefined} autor
+ * @param {{de: (uid: string) => ({apodo?: string}|null)}|null} titulares
+ * @returns {string}
+ */
+export function autorLegible(autor, titulares) {
+  if (!autor) {
+    return 'Catálogo inicial';
+  }
+  return titulares?.de(autor)?.apodo ?? 'Cuenta sin apodo';
+}
+
+/** Lo que se lleva escrito en la ficha, para la vista previa (sin validar). */
+function borradorDeLaFicha(formulario, actual) {
+  const leer = (nombre) => {
+    const candidatos = [...formulario.querySelectorAll(`[name="${nombre}"]`)];
+    const activo = candidatos.find((c) => !c.disabled) ?? candidatos[0];
+    if (!activo) {
+      return null;
+    }
+    return activo.type === 'checkbox' ? activo.checked : String(activo.value ?? '').trim();
+  };
+  const premium = Boolean(leer('premium'));
+  return {
+    ...actual,
+    nombre: leer('nombre') || actual.nombre,
+    descripcion: leer('descripcion') ?? actual.descripcion,
+    imagen: leer('imagen') || null,
+    premium,
+    precioCreditos: premium ? null : Number(leer('precioCreditos')) || null,
+    precioMonedaReal: premium ? Number(leer('precioMonedaReal')) || null : null,
+  };
+}
+
 /**
  * ProductAdminSheet: la ficha de gestión de un producto.
  *
+ * SA-6 — HU-PRD-009/010 y §7.2.5:
+ *   - la imagen se sube o se elige de la biblioteca (`selectorDeRecurso`);
+ *   - los cambios se previsualizan con la tarjeta de la tienda y no se
+ *     publican hasta confirmarlos; «Descartar cambios» deja la ficha como está
+ *     publicada;
+ *   - suspender, reactivar y revertir piden el motivo, que queda en el
+ *     historial;
+ *   - el historial y las versiones dicen quién hizo cada cambio por su apodo,
+ *     y cada versión de diseño se ve y se puede restaurar.
+ *
  * @param {object} producto `ProductoCreado`
  * @param {{alCambiar?: (producto: object) => void, fetchImpl?: Function,
- *   confirmarAccion?: typeof confirmar}} [opciones]
- *   `alCambiar` recibe el producto como quedó tras guardar, suspender o reactivar.
+ *   confirmarAccion?: typeof confirmar, pedirMotivo?: typeof confirmarConMotivo,
+ *   titulares?: ReturnType<typeof directorioDeTitulares>|null,
+ *   listarHeroes?: Function, subir?: Function, listar?: Function}} [opciones]
+ *   `alCambiar` recibe el producto como quedó tras publicar, suspender, reactivar o revertir.
  * @returns {{cerrar: () => void, elemento: HTMLElement}}
  */
 export function abrirHojaDeProducto(
   producto,
-  { alCambiar = () => {}, fetchImpl, confirmarAccion = confirmar } = {},
+  {
+    alCambiar = () => {},
+    fetchImpl,
+    confirmarAccion = confirmar,
+    pedirMotivo = confirmarConMotivo,
+    titulares = directorioDeTitulares({ consultarApi: consultar }),
+    listarHeroes,
+    subir,
+    listar,
+  } = {},
 ) {
   let actual = { ...producto };
   const zonaAviso = h('div', { datos: { zona: 'aviso-hoja' }, atributos: { hidden: true } });
   const resumen = h('div', { clase: 'hoja-producto__resumen' });
+  const zonaFormulario = h('section', {
+    clase: 'hoja-producto__datos',
+    atributos: { 'aria-labelledby': 'datos-producto-titulo' },
+  });
+  const zonaVistaPrevia = h('div', { datos: { zona: 'vista-previa-hoja' } });
+  const estadoDePublicacion = h('p', {
+    clase: 't-meta hoja-producto__pendientes',
+    atributos: { 'aria-live': 'polite' },
+  });
+  const descartar = h('button', {
+    clase: 'boton boton--secundario',
+    texto: 'Descartar cambios',
+    atributos: { type: 'button', disabled: true },
+    datos: { accion: 'descartar-cambios' },
+  });
+  const publicar = h('button', {
+    clase: 'boton boton--primario',
+    texto: 'Publicar cambios',
+    atributos: { type: 'button', disabled: true },
+    datos: { accion: 'guardar-producto' },
+  });
+  const vistaPrevia = h('section', {
+    clase: 'hoja-producto__vista-previa',
+    atributos: { 'aria-labelledby': 'vista-previa-hoja-titulo' },
+    hijos: [
+      h('h3', { texto: 'Vista previa', atributos: { id: 'vista-previa-hoja-titulo' } }),
+      zonaVistaPrevia,
+      estadoDePublicacion,
+      h('div', { clase: 'hoja-producto__acciones', hijos: [descartar, publicar] }),
+    ],
+  });
   const disponibilidad = h('section', {
     clase: 'hoja-producto__disponibilidad',
     atributos: { 'aria-label': 'Disponibilidad' },
   });
+  const historial = h('section', {
+    clase: 'hoja-producto__historial',
+    atributos: { 'aria-labelledby': 'historial-producto-titulo' },
+  });
+  const diseno = h('section', {
+    clase: 'hoja-producto__diseno',
+    atributos: { 'aria-labelledby': 'versiones-diseno-titulo' },
+  });
+
+  /** @type {{formulario: HTMLFormElement, marcarErrores: Function, selectorImagen: object}} */
+  let edicion;
 
   function pintarResumen() {
     const promocion = textoDePromocion(actual.promocion);
@@ -541,10 +733,119 @@ export function abrirHojaDeProducto(
         clase: 't-meta',
         texto: `Versión ${actual.version ?? '—'} · modificado el ${fechaHora(actual.modificadoEn)} · creado el ${fechaHora(actual.creadoEn)}`,
       }),
-      h('p', { clase: 't-meta hoja-producto__id', texto: `Identificador: ${actual.id}` }),
     ];
     resumen.replaceChildren(...lineas.filter(Boolean));
   }
+
+  /** Lo que cambiaría al publicar, o el motivo por el que todavía no se puede. */
+  function pendientes() {
+    try {
+      const solicitud = construirSolicitudProducto(edicion.formulario);
+      return { cambios: cambiosDe(actual, solicitud), problema: null };
+    } catch (error) {
+      return { cambios: null, problema: error.message };
+    }
+  }
+
+  function repintarVistaPrevia() {
+    zonaVistaPrevia.replaceChildren(
+      vistaPreviaDeProducto(borradorDeLaFicha(edicion.formulario, actual)),
+    );
+    const { cambios, problema } = pendientes();
+    const claves = cambios ? Object.keys(cambios) : [];
+    if (problema) {
+      estadoDePublicacion.textContent = `Para publicar, revisa el formulario: ${problema}`;
+    } else if (claves.length) {
+      estadoDePublicacion.textContent = `Cambios sin publicar: ${listaDeCampos(claves)}.`;
+    } else {
+      estadoDePublicacion.textContent = 'Es lo que hoy ven los jugadores.';
+    }
+    publicar.disabled = Boolean(problema) || claves.length === 0;
+    descartar.disabled = !problema && claves.length === 0;
+  }
+
+  function montarFormulario() {
+    edicion = formularioDeEdicion(actual, {
+      fetchImpl,
+      listarHeroes,
+      subir,
+      listar,
+      alCambiar: () => repintarVistaPrevia(),
+    });
+    edicion.formulario.addEventListener('input', () => repintarVistaPrevia());
+    edicion.formulario.addEventListener('change', () => repintarVistaPrevia());
+    edicion.formulario.addEventListener('submit', (evento) => {
+      evento.preventDefault();
+      void publicarCambios();
+    });
+    zonaFormulario.replaceChildren(
+      h('h3', { texto: 'Diseño y datos', atributos: { id: 'datos-producto-titulo' } }),
+      edicion.formulario,
+    );
+    repintarVistaPrevia();
+  }
+
+  async function publicarCambios() {
+    limpiarAviso(zonaAviso);
+    let solicitud;
+    try {
+      solicitud = construirSolicitudProducto(edicion.formulario);
+    } catch (error) {
+      edicion.marcarErrores(error.message);
+      pintarAviso(zonaAviso, {
+        tono: 'advertencia',
+        titulo: 'Revisa el formulario',
+        detalle: error.message,
+      });
+      return;
+    }
+    edicion.marcarErrores(null);
+    const cambios = cambiosDe(actual, solicitud);
+    const claves = Object.keys(cambios);
+    if (claves.length === 0) {
+      pintarAviso(zonaAviso, {
+        tono: 'info',
+        titulo: 'No hay nada que publicar',
+        detalle: 'Los datos son los mismos que ya tiene el producto.',
+      });
+      return;
+    }
+    const seguro = await confirmarAccion({
+      titulo: `¿Publicar los cambios de «${actual.nombre}»?`,
+      mensaje: `Se publicará: ${listaDeCampos(claves)}. Los jugadores lo verán en cuanto confirmes; la versión anterior queda como respaldo y se puede revertir.`,
+      textoConfirmar: 'Publicar',
+    });
+    if (!seguro) {
+      return;
+    }
+    conCarga(publicar, true, 'Publicando…');
+    try {
+      const guardado = await modificarProducto(actual.id, cambios, { fetchImpl });
+      aplicar(guardado);
+      montarFormulario();
+      pintarAviso(zonaAviso, {
+        tono: 'exito',
+        titulo: 'Cambios publicados',
+        detalle: `Queda en la versión ${guardado.version ?? '—'}; la anterior se conserva como respaldo.`,
+      });
+    } catch (error) {
+      pintarAviso(zonaAviso, avisoDeFallo(error, 'publicar los cambios'));
+    } finally {
+      conCarga(publicar, false);
+      repintarVistaPrevia();
+    }
+  }
+
+  descartar.addEventListener('click', () => {
+    limpiarAviso(zonaAviso);
+    montarFormulario();
+    pintarAviso(zonaAviso, {
+      tono: 'info',
+      titulo: 'Cambios descartados',
+      detalle: 'La ficha vuelve a mostrar lo que está publicado.',
+    });
+  });
+  publicar.addEventListener('click', () => void publicarCambios());
 
   function pintarDisponibilidad() {
     const suspendido = actual.estado === 'SUSPENDIDO';
@@ -570,21 +871,31 @@ export function abrirHojaDeProducto(
 
   async function cambiarEstado(accion, boton) {
     const suspender = accion === 'suspender';
-    const seguro = await confirmarAccion({
+    // §7.2.5 — acción crítica: confirmación con sus consecuencias y motivo.
+    const motivo = await pedirMotivo({
       titulo: suspender ? `¿Suspender «${actual.nombre}»?` : `¿Reactivar «${actual.nombre}»?`,
       mensaje: suspender
-        ? 'Nadie podrá adquirirlo mientras esté suspendido. No se borra y su tiraje no cambia.'
-        : 'Vuelve al estado que tenía antes de suspenderse y conserva su tiraje.',
+        ? 'Nadie podrá adquirirlo mientras esté suspendido.'
+        : 'Vuelve al estado que tenía antes de suspenderse.',
+      consecuencias: suspender
+        ? [
+            'Desaparece de la tienda.',
+            'Quien ya lo tiene lo conserva en su inventario.',
+            'No se borra y su tiraje no cambia.',
+          ]
+        : ['Vuelve a la tienda con el mismo tiraje.'],
+      etiquetaMotivo: suspender ? 'Motivo de la suspensión' : 'Motivo de la reactivación',
+      pistaMotivo: 'Queda en el historial del producto con tu nombre y la fecha.',
       textoConfirmar: suspender ? 'Suspender' : 'Reactivar',
       peligro: suspender,
     });
-    if (!seguro) {
+    if (motivo === null || motivo === undefined) {
       return;
     }
     limpiarAviso(zonaAviso);
     conCarga(boton, true, suspender ? 'Suspendiendo…' : 'Reactivando…');
     try {
-      const disponible = await cambiarDisponibilidad(actual.id, accion, { fetchImpl });
+      const disponible = await cambiarDisponibilidad(actual.id, accion, { fetchImpl, motivo });
       aplicar({ ...actual, estado: disponible.estado, tiraje: disponible.tiraje ?? actual.tiraje });
       pintarAviso(zonaAviso, {
         tono: 'exito',
@@ -593,6 +904,9 @@ export function abrirHojaDeProducto(
           ? 'Ya no se puede adquirir. Puedes reactivarlo cuando quieras.'
           : 'Ya se puede adquirir de nuevo.',
       });
+      if (historial.dataset.cargado === 'si') {
+        void cargarHistorial();
+      }
     } catch (error) {
       conCarga(boton, false);
       pintarAviso(zonaAviso, avisoDeFallo(error, suspender ? 'suspender' : 'reactivar'));
@@ -606,60 +920,356 @@ export function abrirHojaDeProducto(
     alCambiar(actual);
   }
 
-  const { formulario, marcarErrores } = formularioDeEdicion(actual);
-  const guardar = h('button', {
-    clase: 'boton boton--primario',
-    texto: 'Guardar cambios',
-    atributos: { type: 'submit' },
-    datos: { accion: 'guardar-producto' },
-  });
-  formulario.append(h('div', { clase: 'hoja-producto__acciones', hijos: [guardar] }));
-  formulario.addEventListener('submit', async (evento) => {
-    evento.preventDefault();
-    limpiarAviso(zonaAviso);
-    let solicitud;
-    try {
-      solicitud = construirSolicitudProducto(formulario);
-    } catch (error) {
-      marcarErrores(error.message);
-      pintarAviso(zonaAviso, {
-        tono: 'advertencia',
-        titulo: 'Revisa el formulario',
-        detalle: error.message,
-      });
+  const tituloHistorial = () =>
+    h('h3', { texto: 'Historial y reversión', atributos: { id: 'historial-producto-titulo' } });
+
+  async function revertir(cambio, boton) {
+    const motivo = await pedirMotivo({
+      titulo: `¿Revertir «${actual.nombre}»?`,
+      mensaje: `Deshace «${(ETIQUETA_DE_CAMBIO[cambio.tipo] ?? 'el cambio').toLowerCase()}» del ${fechaHora(cambio.fecha)}: el producto vuelve a como estaba antes.`,
+      consecuencias: [
+        'Los jugadores verán el producto como era antes de ese cambio.',
+        'La reversión también queda en el historial y se puede deshacer.',
+      ],
+      etiquetaMotivo: 'Motivo de la reversión',
+      pistaMotivo: 'Queda en el historial del producto con tu nombre y la fecha.',
+      textoConfirmar: 'Revertir',
+      peligro: true,
+    });
+    if (motivo === null || motivo === undefined) {
       return;
     }
-    marcarErrores(null);
-    const cambios = cambiosDe(actual, solicitud);
-    if (Object.keys(cambios).length === 0) {
-      pintarAviso(zonaAviso, {
-        tono: 'info',
-        titulo: 'No hay nada que guardar',
-        detalle: 'Los datos son los mismos que ya tiene el producto.',
-      });
-      return;
-    }
-    conCarga(guardar, true, 'Guardando…');
+    conCarga(boton, true, 'Revirtiendo…');
     try {
-      const guardado = await modificarProducto(actual.id, cambios, { fetchImpl });
-      aplicar(guardado);
+      const restaurado = await revertirProducto(actual.id, cambio.id, { fetchImpl, motivo });
+      aplicar(restaurado);
+      montarFormulario();
       pintarAviso(zonaAviso, {
         tono: 'exito',
-        titulo: 'Cambios guardados',
-        detalle: `Queda en la versión ${guardado.version ?? '—'}; la anterior se conserva como respaldo.`,
+        titulo: 'Producto restaurado',
+        detalle: `El estado anterior quedó aplicado como versión ${restaurado.version}.`,
+      });
+      await cargarHistorial();
+    } catch (error) {
+      pintarAviso(zonaAviso, avisoDeFallo(error, 'revertir el producto'));
+      conCarga(boton, false);
+    }
+  }
+
+  async function cargarHistorial() {
+    historial.dataset.cargado = 'si';
+    historial.replaceChildren(
+      tituloHistorial(),
+      h('p', { clase: 't-meta', texto: 'Consultando los cambios registrados…' }),
+    );
+    try {
+      const cambios = await consultarHistorialProducto(actual.id, { fetchImpl });
+      await titulares?.nombrar(cambios.map((cambio) => cambio.autor).filter(Boolean));
+      const elementos = cambios.map((cambio) => {
+        const acciones = [];
+        if (cambio.revertible) {
+          const boton = h('button', {
+            clase: 'boton boton--secundario boton--pequeno',
+            texto: 'Revertir',
+            atributos: { type: 'button' },
+            datos: { accion: 'revertir-producto', respaldo: cambio.id },
+          });
+          boton.addEventListener('click', () => void revertir(cambio, boton));
+          acciones.push(boton);
+        }
+        const campos = (cambio.campos ?? []).filter(
+          (c) => !['producto creado', 'estado del producto'].includes(c),
+        );
+        return h('li', {
+          datos: { cambio: cambio.id, tipo: cambio.tipo },
+          hijos: [
+            h('div', {
+              hijos: [
+                h('strong', { texto: ETIQUETA_DE_CAMBIO[cambio.tipo] ?? 'Modificación' }),
+                h('p', {
+                  clase: 't-meta',
+                  texto: `${fechaHora(cambio.fecha)} · ${autorLegible(cambio.autor, titulares)}`,
+                }),
+                campos.length && cambio.tipo !== 'CREACION'
+                  ? h('p', { clase: 't-meta', texto: `Cambió: ${campos.join(', ')}.` })
+                  : null,
+                cambio.motivo
+                  ? h('p', { clase: 'hoja-producto__motivo', texto: `Motivo: ${cambio.motivo}` })
+                  : null,
+              ],
+            }),
+            ...acciones,
+          ],
+        });
+      });
+      const partes = [
+        tituloHistorial(),
+        cambios.length
+          ? h('ul', { clase: 'hoja-producto__cambios', hijos: elementos })
+          : h('p', {
+              clase: 't-meta',
+              texto: 'Este producto todavía no tiene cambios registrados.',
+            }),
+        cambios.some((cambio) => cambio.revertible)
+          ? h('p', {
+              clase: 't-meta',
+              texto: 'Solo se revierte el último cambio: así nunca se pisa uno posterior.',
+            })
+          : null,
+      ];
+      historial.replaceChildren(...partes.filter(Boolean));
+    } catch (error) {
+      historial.replaceChildren(
+        tituloHistorial(),
+        h('p', { clase: 't-meta', texto: avisoDeFallo(error, 'consultar el historial').detalle }),
+        botonConsultarHistorial,
+      );
+    }
+  }
+
+  const botonConsultarHistorial = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: 'Ver historial',
+    atributos: { type: 'button' },
+    datos: { accion: 'consultar-historial' },
+  });
+  botonConsultarHistorial.addEventListener('click', () => void cargarHistorial());
+  historial.append(
+    tituloHistorial(),
+    h('p', {
+      clase: 't-meta',
+      texto: 'Quién cambió el producto, cuándo y por qué; el último cambio se puede revertir.',
+    }),
+    botonConsultarHistorial,
+  );
+
+  const listaVersionesDiseno = h('div', { datos: { zona: 'versiones-diseno' } });
+  const archivoPlantilla = h('input', {
+    atributos: { type: 'file', accept: 'application/json,.json', hidden: true },
+    datos: { accion: 'archivo-plantilla-diseno' },
+  });
+  const botonVersionesDiseno = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: 'Ver versiones',
+    atributos: { type: 'button' },
+    datos: { accion: 'consultar-versiones-diseno' },
+  });
+  const botonExportarDiseno = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: 'Exportar plantilla',
+    atributos: { type: 'button' },
+    datos: { accion: 'exportar-plantilla-diseno' },
+  });
+  const botonImportarDiseno = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: 'Importar plantilla',
+    atributos: { type: 'button' },
+    datos: { accion: 'importar-plantilla-diseno' },
+  });
+
+  async function restaurarDiseno(version, boton) {
+    const seguro = await confirmarAccion({
+      titulo: `¿Restaurar el diseño de la versión ${version.version}?`,
+      mensaje:
+        'Vuelven la imagen y la descripción de esa versión. Precios, tiraje y reglas no cambian, y el diseño de ahora queda como una versión más.',
+      textoConfirmar: 'Restaurar diseño',
+    });
+    if (!seguro) {
+      return;
+    }
+    conCarga(boton, true, 'Restaurando…');
+    try {
+      const actualizado = await importarPlantillaDiseno(
+        actual.id,
+        {
+          formato: 'nexus-producto-diseno',
+          versionFormato: 1,
+          productoOrigenId: actual.id,
+          versionProducto: version.version,
+          imagen: version.imagen,
+          descripcion: version.descripcion,
+          exportadaEn: new Date().toISOString(),
+        },
+        { fetchImpl },
+      );
+      aplicar(actualizado);
+      montarFormulario();
+      pintarAviso(zonaAviso, {
+        tono: 'exito',
+        titulo: 'Diseño restaurado',
+        detalle: `Queda publicado como versión ${actualizado.version}.`,
+      });
+      await cargarVersionesDiseno();
+    } catch (error) {
+      conCarga(boton, false);
+      pintarAviso(zonaAviso, avisoDeFallo(error, 'restaurar el diseño'));
+    }
+  }
+
+  async function cargarVersionesDiseno() {
+    conCarga(botonVersionesDiseno, true, 'Consultando…');
+    try {
+      const versiones = await consultarVersionesDiseno(actual.id, { fetchImpl });
+      await titulares?.nombrar(versiones.map((version) => version.autor).filter(Boolean));
+      listaVersionesDiseno.replaceChildren(
+        versiones.length
+          ? h('ol', {
+              clase: 'hoja-producto__versiones',
+              hijos: versiones.map((version) => {
+                const restaurar = version.actual
+                  ? null
+                  : h('button', {
+                      clase: 'boton boton--secundario boton--pequeno',
+                      texto: 'Restaurar este diseño',
+                      atributos: {
+                        type: 'button',
+                        'aria-label': `Restaurar el diseño de la versión ${version.version}`,
+                      },
+                      datos: { accion: 'restaurar-diseno', version: version.version },
+                    });
+                restaurar?.addEventListener(
+                  'click',
+                  () => void restaurarDiseno(version, restaurar),
+                );
+                return h('li', {
+                  clase: 'version-diseno',
+                  datos: { version: version.version },
+                  hijos: [
+                    miniaturaDeRecurso(version.imagen, `Imagen de la versión ${version.version}`),
+                    h('div', {
+                      clase: 'version-diseno__datos',
+                      hijos: [
+                        h('p', {
+                          hijos: [
+                            h('strong', { texto: `Versión ${version.version}` }),
+                            version.actual ? distintivo('Publicada') : null,
+                          ],
+                        }),
+                        h('p', {
+                          clase: 't-meta',
+                          texto: `${fechaHora(version.fecha)} · ${autorLegible(version.autor, titulares)}`,
+                        }),
+                        h('p', {
+                          clase: 'version-diseno__descripcion',
+                          texto: version.descripcion,
+                        }),
+                      ],
+                    }),
+                    restaurar,
+                  ],
+                });
+              }),
+            })
+          : h('p', { clase: 't-meta', texto: 'Todavía no hay versiones de diseño.' }),
+      );
+    } catch (error) {
+      listaVersionesDiseno.replaceChildren(
+        h('p', { clase: 't-meta', texto: avisoDeFallo(error, 'consultar las versiones').detalle }),
+      );
+    } finally {
+      conCarga(botonVersionesDiseno, false);
+    }
+  }
+
+  botonVersionesDiseno.addEventListener('click', () => void cargarVersionesDiseno());
+  botonExportarDiseno.addEventListener('click', async () => {
+    conCarga(botonExportarDiseno, true, 'Exportando…');
+    try {
+      const plantilla = await exportarPlantillaDiseno(actual.id, { fetchImpl });
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(plantilla, null, 2)], { type: 'application/json' }),
+      );
+      const enlace = h('a', {
+        atributos: {
+          href: url,
+          download: `diseno-${actual.nombre
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[̀-ͯ]/g, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '')}-v${plantilla.versionProducto}.json`,
+        },
+      });
+      document.body.append(enlace);
+      enlace.click();
+      enlace.remove();
+      URL.revokeObjectURL(url);
+      pintarAviso(zonaAviso, {
+        tono: 'exito',
+        titulo: 'Plantilla exportada',
+        detalle: 'El archivo lleva la imagen y la descripción; no lleva precios ni reglas.',
       });
     } catch (error) {
-      pintarAviso(zonaAviso, avisoDeFallo(error, 'guardar los cambios'));
+      pintarAviso(zonaAviso, avisoDeFallo(error, 'exportar la plantilla'));
     } finally {
-      conCarga(guardar, false);
+      conCarga(botonExportarDiseno, false);
+    }
+  });
+  botonImportarDiseno.addEventListener('click', () => archivoPlantilla.click());
+  archivoPlantilla.addEventListener('change', async () => {
+    const archivo = archivoPlantilla.files?.[0];
+    archivoPlantilla.value = '';
+    if (!archivo) {
+      return;
+    }
+    let plantilla;
+    try {
+      plantilla = JSON.parse(await archivo.text());
+    } catch {
+      pintarAviso(zonaAviso, {
+        tono: 'advertencia',
+        titulo: 'Plantilla inválida',
+        detalle: 'Elige un archivo de plantilla exportado desde el catálogo.',
+      });
+      return;
+    }
+    const seguro = await confirmarAccion({
+      titulo: `¿Importar el diseño en «${actual.nombre}»?`,
+      mensaje:
+        'Se reemplazan la imagen y la descripción. Precios, tiraje y reglas no cambian, y el diseño de ahora queda como una versión más.',
+      textoConfirmar: 'Importar',
+    });
+    if (!seguro) {
+      return;
+    }
+    conCarga(botonImportarDiseno, true, 'Importando…');
+    try {
+      const actualizado = await importarPlantillaDiseno(actual.id, plantilla, { fetchImpl });
+      aplicar(actualizado);
+      montarFormulario();
+      pintarAviso(zonaAviso, {
+        tono: 'exito',
+        titulo: 'Diseño importado',
+        detalle: `Queda publicado como versión ${actualizado.version}.`,
+      });
+      await cargarVersionesDiseno();
+    } catch (error) {
+      pintarAviso(zonaAviso, avisoDeFallo(error, 'importar la plantilla'));
+    } finally {
+      conCarga(botonImportarDiseno, false);
     }
   });
 
+  diseno.append(
+    h('h3', { texto: 'Versiones de diseño', atributos: { id: 'versiones-diseno-titulo' } }),
+    h('p', {
+      clase: 't-meta',
+      texto:
+        'Cada cambio de imagen o descripción deja una versión: se puede ver, restaurar o llevar a otro producto como plantilla.',
+    }),
+    h('div', {
+      clase: 'hoja-producto__acciones-diseno',
+      hijos: [botonVersionesDiseno, botonExportarDiseno, botonImportarDiseno, archivoPlantilla],
+    }),
+    listaVersionesDiseno,
+  );
+
   pintarResumen();
   pintarDisponibilidad();
+  montarFormulario();
   const cuerpo = h('div', {
     clase: 'hoja-producto',
-    hijos: [resumen, zonaAviso, formulario, disponibilidad],
+    hijos: [resumen, zonaAviso, zonaFormulario, vistaPrevia, disponibilidad, historial, diseno],
   });
   const dialogo = abrirDialogo({ titulo: actual.nombre, cuerpo, cerrableFuera: false });
   dialogo.elemento.classList.add('dialogo--hoja');
@@ -675,7 +1285,13 @@ export function abrirHojaDeProducto(
  */
 export function montarCatalogoAdmin(
   zona,
-  { fetchImpl, alCambiarCatalogo = () => {}, hrefCrear = './productos.html' } = {},
+  {
+    fetchImpl,
+    alCambiarCatalogo = () => {},
+    hrefCrear = './productos.html',
+    titulares = directorioDeTitulares({ consultarApi: consultar }),
+    ...dependencias
+  } = {},
 ) {
   const criterios = { tipo: '', estado: '', pagina: 0 };
   let peticion = 0;
@@ -753,7 +1369,9 @@ export function montarCatalogoAdmin(
     });
     gestionar.addEventListener('click', () =>
       abrirHojaDeProducto(producto, {
+        ...dependencias,
         fetchImpl,
+        titulares,
         alCambiar: () => {
           alCambiarCatalogo();
           cargar({ conservarFoco: true });
@@ -766,10 +1384,20 @@ export function montarCatalogoAdmin(
         h('th', {
           atributos: { scope: 'row' },
           hijos: [
-            h('span', { clase: 'catalogo-admin__nombre', texto: producto.nombre }),
             h('span', {
-              clase: 'catalogo-admin__tipo t-meta',
-              texto: ETIQUETA_DE_TIPO[producto.tipo] ?? producto.tipo,
+              clase: 'catalogo-admin__producto',
+              hijos: [
+                miniaturaDeRecurso(producto.imagen ?? null, ''),
+                h('span', {
+                  hijos: [
+                    h('span', { clase: 'catalogo-admin__nombre', texto: producto.nombre }),
+                    h('span', {
+                      clase: 'catalogo-admin__tipo t-meta',
+                      texto: ETIQUETA_DE_TIPO[producto.tipo] ?? producto.tipo,
+                    }),
+                  ],
+                }),
+              ],
             }),
           ],
         }),

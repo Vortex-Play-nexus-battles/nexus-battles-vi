@@ -159,3 +159,145 @@ test('si el servidor rechaza el producto, el formulario muestra su mensaje', asy
   expect(raiz.querySelectorAll('.vitrina__producto')).toHaveLength(0);
   consola.mockRestore();
 });
+
+/*
+ * HU-INV-008 — el jugador retira de su inventario lo que ya no usa.
+ */
+
+test('criterio 1: un elemento libre se retira del inventario', async () => {
+  let elementos = [elemento('Amuleto de Niebla')];
+  const consultar = async () => pagina(elementos);
+  const eliminar = async (_identidad, elementoId) => {
+    elementos = elementos.filter((e) => e.id !== elementoId);
+  };
+
+  await montarInventario(raiz, 'jugador-A', 0, { consultar, eliminar, confirmar: () => true });
+  await esperarHasta(() => raiz.querySelectorAll('.vitrina__producto').length === 1);
+  raiz.querySelector('.vitrina__eliminar').click();
+
+  await esperarHasta(() => raiz.querySelectorAll('.vitrina__producto').length === 0);
+  expect(raiz.querySelector('.inventario__mensaje').textContent).toMatch(/eliminado/i);
+});
+
+test('eliminar se confirma antes: si el jugador dice que no, no se toca nada', async () => {
+  const eliminar = jest.fn();
+
+  await montarInventario(raiz, 'jugador-A', 0, {
+    consultar: async () => pagina([elemento()]),
+    eliminar,
+    confirmar: () => false,
+  });
+  await esperarHasta(() => raiz.querySelectorAll('.vitrina__producto').length === 1);
+  raiz.querySelector('.vitrina__eliminar').click();
+
+  expect(eliminar).not.toHaveBeenCalled();
+  expect(raiz.querySelectorAll('.vitrina__producto')).toHaveLength(1);
+});
+
+/*
+ * Revision de integracion del 13-oct: el `confirmar` del kit devuelve una
+ * PROMESA y recibe `{titulo, mensaje, textoConfirmar}`. Las dos pruebas de
+ * arriba usan dobles sincronos y no veian que, sin `await`, `!promesa` es
+ * siempre falso: el elemento se borraba antes de que el jugador contestara.
+ */
+test('eliminar espera la respuesta del dialogo: un «no» que llega despues no borra', async () => {
+  const eliminar = jest.fn();
+  let responder;
+  const confirmar = jest.fn(
+    () =>
+      new Promise((resolver) => {
+        responder = resolver;
+      }),
+  );
+
+  await montarInventario(raiz, 'jugador-A', 0, {
+    consultar: async () => pagina([elemento('Amuleto de Niebla')]),
+    eliminar,
+    confirmar,
+  });
+  await esperarHasta(() => raiz.querySelectorAll('.vitrina__producto').length === 1);
+  raiz.querySelector('.vitrina__eliminar').click();
+  await esperarHasta(() => confirmar.mock.calls.length === 1);
+
+  // Mientras el dialogo esta abierto no se ha borrado nada.
+  expect(eliminar).not.toHaveBeenCalled();
+  const [opciones] = confirmar.mock.calls[0];
+  expect(opciones).toEqual(
+    expect.objectContaining({
+      titulo: expect.stringContaining('Amuleto de Niebla'),
+      mensaje: expect.stringMatching(/no se puede deshacer/i),
+      textoConfirmar: 'Eliminar',
+    }),
+  );
+
+  responder(false);
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(eliminar).not.toHaveBeenCalled();
+  expect(raiz.querySelectorAll('.vitrina__producto')).toHaveLength(1);
+});
+
+test('eliminar espera la respuesta del dialogo: un «si» que llega despues borra', async () => {
+  let elementos = [elemento('Amuleto de Niebla')];
+  const eliminar = jest.fn(async (_identidad, elementoId) => {
+    elementos = elementos.filter((e) => e.id !== elementoId);
+  });
+
+  await montarInventario(raiz, 'jugador-A', 0, {
+    consultar: async () => pagina(elementos),
+    eliminar,
+    confirmar: () => Promise.resolve(true),
+  });
+  await esperarHasta(() => raiz.querySelectorAll('.vitrina__producto').length === 1);
+  raiz.querySelector('.vitrina__eliminar').click();
+
+  await esperarHasta(() => raiz.querySelectorAll('.vitrina__producto').length === 0);
+  expect(eliminar).toHaveBeenCalledTimes(1);
+});
+
+test('criterio 2: un elemento comprometido se rechaza diciendo el motivo del bloqueo', async () => {
+  const eliminar = async () => {
+    const fallo = new Error('409');
+    fallo.status = 409;
+    // Lo que manda el servicio en el problem detail.
+    fallo.detalle = 'El heroe esta en una mision y no se puede modificar hasta que vuelva.';
+    throw fallo;
+  };
+
+  await montarInventario(raiz, 'jugador-A', 0, {
+    consultar: async () => pagina([elemento()]),
+    eliminar,
+    confirmar: () => true,
+  });
+  await esperarHasta(() => raiz.querySelectorAll('.vitrina__producto').length === 1);
+  raiz.querySelector('.vitrina__eliminar').click();
+
+  await esperarHasta(() => /mision/i.test(raiz.querySelector('.inventario__mensaje').textContent));
+  const mensaje = raiz.querySelector('.inventario__mensaje').textContent;
+  expect(mensaje).toMatch(/mision/i);
+  // El cliente tiene dicho que un codigo HTTP no se le ensena al jugador.
+  expect(mensaje).not.toMatch(/409|http/i);
+  // Y el elemento sigue ahi: el rechazo no retira nada.
+  expect(raiz.querySelectorAll('.vitrina__producto')).toHaveLength(1);
+});
+
+test('criterio 3: eliminar un elemento ajeno se rechaza diciendo que no es suyo', async () => {
+  const eliminar = async () => {
+    const fallo = new Error('403');
+    fallo.status = 403;
+    throw fallo;
+  };
+
+  await montarInventario(raiz, 'jugador-A', 0, {
+    consultar: async () => pagina([elemento()]),
+    eliminar,
+    confirmar: () => true,
+  });
+  await esperarHasta(() => raiz.querySelectorAll('.vitrina__producto').length === 1);
+  raiz.querySelector('.vitrina__eliminar').click();
+
+  await esperarHasta(() =>
+    /no es tuyo/i.test(raiz.querySelector('.inventario__mensaje').textContent),
+  );
+  expect(raiz.querySelector('.inventario__mensaje').textContent).not.toMatch(/403|http/i);
+});
