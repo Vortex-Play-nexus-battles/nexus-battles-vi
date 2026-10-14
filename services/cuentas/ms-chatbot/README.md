@@ -1,7 +1,7 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
 **Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.10.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.0.0 (canal en tiempo real, 7.4.9)
-**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V13) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
+**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V14) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
 ## Qué hace
@@ -257,6 +257,12 @@ La migración **V10** (Java, `db.migration`) redactó lo que ya estaba guardado:
 usuario, comentarios, tickets y su contexto, y brechas (las que solo diferían por el secreto se
 fundieron sumando sus contadores; las que solo eran un secreto se borraron).
 
+**1.11.0: el valor entero.** Hasta la 1.10.0 la puntuación en que terminaba una contraseña
+quedaba a la vista: «mi contraseña es Hunter2024!» se guardaba «… ***!», y ese símbolo es parte
+de la contraseña (la política de claves exige uno). Desde la 1.11.0 se tapa el valor entero (se
+pierde, a lo sumo, el punto de la frase) y la migración **V14** vuelve a redactar lo guardado con
+la regla nueva, con la misma implementación de V10.
+
 **Cifrado (7.4.8).** En tránsito: TLS 1.2/1.3 en el borde (`https://nexusbattlesvi.com`);
 del borde al servicio y del servicio a su base el tráfico no sale del host. En reposo: el
 volumen EBS del host de plataforma, donde vive `chatbot-db`, está cifrado con llave de AWS
@@ -353,6 +359,19 @@ propio token; el chatbot no tiene credencial de servicio.
 | Torneos en curso y mi equipo (B11) | torneos `GET /torneos`, `GET /torneos/{id}` | ninguna (dato público) |
 | Misiones en curso (1.3.0) | misiones `GET /api/v1/misiones/en-curso` | token del jugador |
 | Catálogo de productos (1.10.0, también visitantes) | productos `GET /api/v1/productos` | ninguna (dato público) |
+
+**Cómo se reconoce (1.11.0).** El inventario, las subastas, las notificaciones, las
+transacciones y las misiones se reconocen igual (`IntencionDeConsulta`): habla de ese tema,
+pregunta por lo suyo («mi», «mis», «tengo», «my», «I have») y no es una pregunta de reglas.
+Así «¿tengo alguna misión activa?», «¿cuáles son mis últimas transacciones?» o «¿qué subastas
+tengo?» llegan a la consulta en vivo, y «¿puedo cancelar mi puja?», «¿qué pasa si abandono mi
+misión?» o «¿tengo que pagar para subastar?» los responde la base aunque digan «mi».
+
+**Un visitante (1.11.0)** que pide algo de esto, o ir a una sección suya, recibe que hace falta
+una sesión, con enlaces a «Entrar» y «Crear cuenta»: no se consulta nada ni se registra como
+pregunta sin respuesta. **Navegación pública** (`NavegacionPublica`, para todos): «llévame a la
+subasta», «ir al centro de ayuda», «take me to the store»… con el enlace a la vista; la tienda,
+el chat general y «Jugar online» piden sesión, y a un visitante se le dice que entre.
 
 «Busca espada en mi inventario», «¿tengo alguna poción en mi inventario?» o «search my
 inventory for a sword» usan la búsqueda real (criterio de 4 letras o más, como pide el
@@ -503,4 +522,5 @@ con producción, candidata y respuestas guardadas; `BaseDeConocimientoEnProducci
 V13, preguntas sin respuesta y fórmulas del tablero de 1.7.0;
 `SoporteDesdeLaConversacionYAyudaIT`: la solicitud desde la conversación y el centro de ayuda
 de 1.8.0; `CanalDelChatbotIT` y `RespuestasFrecuentesIT`: el canal en tiempo real y la caché
-de 7.4.9). JaCoCo ≥ 80 %.
+de 7.4.9; `CatalogoEnVivoIT`: el catálogo de 1.10.0; `RedactarLaPuntuacionDeLosSecretosIT`: V14
+de 1.11.0). JaCoCo ≥ 80 %.

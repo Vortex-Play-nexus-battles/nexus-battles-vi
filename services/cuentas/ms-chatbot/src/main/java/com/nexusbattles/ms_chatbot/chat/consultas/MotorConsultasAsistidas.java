@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_chatbot.chat.consultas;
 
+import com.nexusbattles.ms_chatbot.chat.consultas.IntencionDeConsulta.Dominio;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.AvisoDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.BandejaResponseDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.ElementoInventarioDto;
@@ -200,28 +201,83 @@ public class MotorConsultasAsistidas {
         if (criterio.isPresent()) {
             return Optional.of(buscarEnInventario(tokenBearer, criterio.get(), t));
         }
-        // El inventario no va por frase: IntencionDeConsulta separa "que tengo
-        // en mi inventario" (datos en vivo) de "dame consejos para organizar mi
-        // inventario" (base de conocimiento).
-        if (IntencionDeConsulta.consultaSuInventario(mensaje)) {
-            return Optional.of(consultarInventario(tokenBearer, t));
-        }
-        if (contieneAlguna(mensaje, PALABRAS_SUBASTAS)) {
-            return Optional.of(consultarSubastas(tokenBearer, t));
-        }
-        if (contieneAlguna(mensaje, PALABRAS_NOTIFICACIONES)) {
-            return Optional.of(consultarNotificaciones(tokenBearer, uid, t));
-        }
-        if (contieneAlguna(mensaje, PALABRAS_MOVIMIENTOS)) {
-            return Optional.of(consultarMovimientos(tokenBearer, uid, t));
-        }
-        if (contieneAlguna(mensaje, PALABRAS_MISIONES)) {
-            return Optional.of(consultarMisiones(tokenBearer, t));
+        Optional<Dominio> dominio = dominioPedido(mensaje);
+        if (dominio.isPresent()) {
+            return Optional.of(switch (dominio.get()) {
+                case INVENTARIO -> consultarInventario(tokenBearer, t);
+                case SUBASTAS -> consultarSubastas(tokenBearer, t);
+                case NOTIFICACIONES -> consultarNotificaciones(tokenBearer, uid, t);
+                case MOVIMIENTOS -> consultarMovimientos(tokenBearer, uid, t);
+                case MISIONES -> consultarMisiones(tokenBearer, t);
+            });
         }
         if (contieneAlguna(mensaje, PALABRAS_TORNEOS)) {
             return Optional.of(consultarTorneos(uid, t));
         }
         return Optional.empty();
+    }
+
+    /**
+     * 1.11.0 (7.4.4, 7.4.8): si el mensaje pide datos de la propia cuenta —su
+     * inventario o una búsqueda en él, sus subastas y pujas, notificaciones,
+     * movimientos de créditos, misiones en curso, un informe de actividad— o
+     * ir a una sección privada. No consulta nada: con esto ChatService le dice
+     * a un visitante que hace falta una sesión, en vez de buscarle un tema que
+     * no hay y registrar la pregunta como sin respuesta.
+     */
+    public boolean pideDatosDeSuCuenta(String mensajeUsuario) {
+        if (mensajeUsuario == null || mensajeUsuario.isBlank()) {
+            return false;
+        }
+        String mensaje = corregirPalabras(NormalizadorTexto.normalizar(mensajeUsuario), PALABRAS_INVENTARIO);
+        return esNavegacionPrivada(mensaje)
+            || contieneAlguna(mensaje, PALABRAS_INFORME_ACTIVIDAD)
+            || criterioDeBusqueda(mensaje).isPresent()
+            || dominioPedido(mensaje).isPresent();
+    }
+
+    // Que datos de su cuenta pide el mensaje, en este orden. El inventario no
+    // va por frase: IntencionDeConsulta separa "que tengo en mi inventario"
+    // (datos en vivo) de "dame consejos para organizar mi inventario" (base de
+    // conocimiento). Los demas, por sus frases de siempre o, desde 1.11.0,
+    // por la misma clasificacion ("tengo alguna mision activa", "mis ultimas
+    // transacciones"). Una pregunta de reglas sobre lo suyo ("puedo cancelar
+    // mi puja", "que pasa si abandono mi mision") no es ninguno: la responde
+    // la base.
+    static Optional<Dominio> dominioPedido(String mensaje) {
+        if (IntencionDeConsulta.pideReglas(mensaje)) {
+            return Optional.empty();
+        }
+        if (IntencionDeConsulta.consultaSuInventario(mensaje)) {
+            return Optional.of(Dominio.INVENTARIO);
+        }
+        if (contieneAlguna(mensaje, PALABRAS_SUBASTAS) || IntencionDeConsulta.consultaSus(mensaje, Dominio.SUBASTAS)) {
+            return Optional.of(Dominio.SUBASTAS);
+        }
+        if (contieneAlguna(mensaje, PALABRAS_NOTIFICACIONES)
+            || IntencionDeConsulta.consultaSus(mensaje, Dominio.NOTIFICACIONES)) {
+            return Optional.of(Dominio.NOTIFICACIONES);
+        }
+        if (contieneAlguna(mensaje, PALABRAS_MOVIMIENTOS)
+            || IntencionDeConsulta.consultaSus(mensaje, Dominio.MOVIMIENTOS)) {
+            return Optional.of(Dominio.MOVIMIENTOS);
+        }
+        if (contieneAlguna(mensaje, PALABRAS_MISIONES) || IntencionDeConsulta.consultaSus(mensaje, Dominio.MISIONES)) {
+            return Optional.of(Dominio.MISIONES);
+        }
+        return Optional.empty();
+    }
+
+    // Ir a una seccion de lo suyo. De las subastas, solo «mis subastas» /
+    // «mis pujas»: el listado de subastas es publico (NavegacionPublica).
+    private static final List<String> PALABRAS_NAVEGACION_MIS_SUBASTAS = PALABRAS_NAVEGACION_SUBASTAS.stream()
+        .filter(frase -> frase.contains("mis ") || frase.contains("my "))
+        .toList();
+
+    private static boolean esNavegacionPrivada(String mensaje) {
+        return Stream.of(PALABRAS_NAVEGACION_INVENTARIO, PALABRAS_NAVEGACION_MIS_SUBASTAS,
+                PALABRAS_NAVEGACION_NOTIFICACIONES, PALABRAS_NAVEGACION_PERFIL, PALABRAS_NAVEGACION_MISIONES)
+            .anyMatch(frases -> contieneAlguna(mensaje, frases));
     }
 
     private static boolean enIngles(String mensaje, IdiomaPreferido idioma) {

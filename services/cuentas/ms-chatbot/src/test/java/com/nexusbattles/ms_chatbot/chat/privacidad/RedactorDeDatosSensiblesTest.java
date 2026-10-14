@@ -70,10 +70,16 @@ class RedactorDeDatosSensiblesTest {
             Arguments.of("mi contraseña Hunter2024 no funciona", "mi contraseña *** no funciona"),
             Arguments.of("contraseña es \"mi perro 2020\"", "contraseña es \"***\""),
             Arguments.of("contraseña:\nabc", "contraseña:\n***"),
-            Arguments.of("contraseña: abc123.", "contraseña: ***."),
+            // 1.11.0: la puntuacion final se tapa con el valor; la de una
+            // contrasena es parte de ella.
+            Arguments.of("contraseña: abc123.", "contraseña: ***"),
+            Arguments.of("mi contraseña es Hunter2024! como me registro", "mi contraseña es *** como me registro"),
+            Arguments.of("password: S3cret!?", "password: ***"),
+            Arguments.of("(mi clave: abc)", "(mi clave: ***"),
+            Arguments.of("contraseña: ab!", "contraseña: ***"),
             Arguments.of("pwd=ab", "pwd=**"),
             Arguments.of("contraseña contraseña: abc", "contraseña contraseña: ***"),
-            Arguments.of("usuario: juan, contraseña: x1, correo: a@b.co", "usuario: juan, contraseña: **, correo: a@b.co"),
+            Arguments.of("usuario: juan, contraseña: x1, correo: a@b.co", "usuario: juan, contraseña: *** correo: a@b.co"),
             Arguments.of("pin: 4111 1111 1111 1111", "pin: ***"));
     }
 
