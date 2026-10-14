@@ -82,6 +82,22 @@ public class ConfiguracionDeSanciones {
     }
 
     /**
+     * SA-4 — el plazo de decision de las apelaciones (§7.3.2, quince dias
+     * habiles). Los festivos se configuran como fechas ISO separadas por coma
+     * ({@code SANCIONES_FESTIVOS}); sin ellos, de lunes a viernes.
+     */
+    @Bean
+    public PlazoDeDecision plazoDeDecision(@Value("${sanciones.apelacion.festivos:}") String festivos) {
+        java.util.Set<java.time.LocalDate> dias = new java.util.HashSet<>();
+        for (String dia : festivos.split(",")) {
+            if (!dia.isBlank()) {
+                dias.add(java.time.LocalDate.parse(dia.strip()));
+            }
+        }
+        return new PlazoDeDecision(dias);
+    }
+
+    /**
      * El cliente HTTP de las salidas: credencial de servicio si esta
      * configurada ({@code DIRECTORIO_ACTIVO_*}), traza (regla 5) y tiempos de
      * espera de conexion y de lectura, para que un destino colgado no tenga

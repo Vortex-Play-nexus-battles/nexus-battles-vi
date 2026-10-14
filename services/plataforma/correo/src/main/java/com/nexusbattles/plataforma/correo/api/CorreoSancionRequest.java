@@ -5,6 +5,7 @@ import com.nexusbattles.plataforma.correo.template.Plantilla;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
@@ -28,6 +29,10 @@ import java.util.Map;
  * @param hasta              fin de la suspensión (solo SUSPENSION)
  * @param apelableHasta      último día para apelar (30 días, 7.3.2)
  * @param resultadoApelacion solo APELACION_RESUELTA
+ * @param causal             1.6.0 (SA-4): la causal de 7.3.2, ya escrita como
+ *                           la dice el documento oficial; opcional
+ * @param politica           1.6.0 (SA-4): la política violada (7.3.7
+ *                           «referencias a las políticas violadas»); opcional
  */
 public record CorreoSancionRequest(
         @NotBlank @Email String email,
@@ -36,7 +41,16 @@ public record CorreoSancionRequest(
         @NotBlank String motivo,
         OffsetDateTime hasta,
         OffsetDateTime apelableHasta,
-        ResultadoDeApelacion resultadoApelacion) {
+        ResultadoDeApelacion resultadoApelacion,
+        @Size(max = 120) String causal,
+        @Size(max = 200) String politica) {
+
+    /** Como antes de 1.6.0: sin causal ni política. */
+    public CorreoSancionRequest(String email, String apodo, TipoDeSancion tipo, String motivo,
+                                OffsetDateTime hasta, OffsetDateTime apelableHasta,
+                                ResultadoDeApelacion resultadoApelacion) {
+        this(email, apodo, tipo, motivo, hasta, apelableHasta, resultadoApelacion, null, null);
+    }
 
     public enum TipoDeSancion {
         ADVERTENCIA("Recibiste una advertencia en The Nexus Battles VI"),
@@ -69,6 +83,12 @@ public record CorreoSancionRequest(
         datos.put("hasta", FechaLegible.de(hasta));
         datos.put("apelableHasta", FechaLegible.de(apelableHasta));
         datos.put("resultadoApelacion", resultadoApelacion == null ? null : resultadoApelacion.name());
+        datos.put("causal", vacioANulo(causal));
+        datos.put("politica", vacioANulo(politica));
         return CorreoPedido.paraEnviar(Plantilla.SANCION, email, tipo.asunto(), datos);
+    }
+
+    private static String vacioANulo(String texto) {
+        return texto == null || texto.isBlank() ? null : texto.trim();
     }
 }

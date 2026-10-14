@@ -19,8 +19,20 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Administracion de cuentas (ms-identidad)
-  version: 1.7.0
+  version: 1.8.0
   description: |
+    ### Cambios en 1.8.0 (§7.3.2 y §7.3.7, causal de la sancion — SA-4, implementado, aditivo)
+
+    - **Causal y politica al suspender y al banear.** `PUT
+      .../suspender` y el cuerpo opcional de `PUT .../banear` admiten
+      `causal` (una de las ocho causales de §7.3.2, el enumerado `Causal` de
+      `moderacion-sanciones-admin.yaml` 1.4.0) y `politica` (la politica
+      violada, §7.3.7). Las dos son opcionales y viajan tal cual a `POST
+      /api/v1/sanciones`; moderacion las guarda con la sancion y las lleva al
+      aviso y al correo del sancionado. Una causal que no es de las ocho es
+      `400` aqui, sin llegar a moderacion. `motivo` sigue siendo el hecho
+      concreto.
+
     ### Cambios en 1.7.0 (§7.3.4, ficha y directorio — SA-3, implementado, aditivo)
 
     - **Filtro por historial de sanciones (7.3.4, RF-USR-009).** `GET
@@ -569,7 +581,14 @@ paths:
                   description: Fin de la suspension; debe ser futuro.
                 motivo:
                   type: string
-                  description: Causal documentada (7.3.2 «Causales de sancion»). Opcional por compatibilidad.
+                  maxLength: 1000
+                  description: El hecho concreto que motiva la sancion. Opcional por compatibilidad.
+                causal:
+                  $ref: '#/components/schemas/CausalDeSancion'
+                politica:
+                  type: string
+                  maxLength: 200
+                  description: 1.8.0 — la politica violada (§7.3.7). Opcional.
       responses:
         '204':
           description: Cuenta suspendida.
@@ -608,7 +627,13 @@ paths:
                 motivo:
                   type: string
                   maxLength: 1000
-                  description: Causal documentada (7.3.2 «Causales de sancion»).
+                  description: El hecho concreto que motiva el baneo.
+                causal:
+                  $ref: '#/components/schemas/CausalDeSancion'
+                politica:
+                  type: string
+                  maxLength: 200
+                  description: 1.8.0 — la politica violada (§7.3.7). Opcional.
       responses:
         '204':
           description: Cuenta baneada.
@@ -1212,6 +1237,21 @@ components:
             $ref: '#/components/schemas/ProblemDetail'
 
   schemas:
+    CausalDeSancion:
+      type: string
+      description: >-
+        1.8.0 — una de las ocho causales de §7.3.2, como las nombra
+        `moderacion-sanciones-admin.yaml` 1.4.0 (`Causal`). Opcional.
+      enum:
+        - LENGUAJE_OFENSIVO
+        - ACOSO
+        - FRAUDE
+        - SOFTWARE_NO_AUTORIZADO
+        - SUPLANTACION_DE_IDENTIDAD
+        - VIOLACION_DE_PRIVACIDAD
+        - INCUMPLIMIENTO_DE_TERMINOS
+        - TERMINACION_DE_RELACION_LEGAL
+
     PaginaDeDirectorio:
       type: object
       required: [contenido, pagina, tamano, total, totalPaginas]

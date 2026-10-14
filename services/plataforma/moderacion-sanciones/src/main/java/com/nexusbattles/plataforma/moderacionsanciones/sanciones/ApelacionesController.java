@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -20,18 +21,31 @@ import java.util.UUID;
 public class ApelacionesController {
 
     private final SancionesService servicio;
+    private final PlazoDeDecision plazo;
+    private final Clock reloj;
 
-    public ApelacionesController(SancionesService servicio) {
+    public ApelacionesController(SancionesService servicio, PlazoDeDecision plazo, Clock reloj) {
         this.servicio = servicio;
+        this.plazo = plazo;
+        this.reloj = reloj;
     }
 
-    /** Pendientes para el panel ({@code ?mias=true}: las del propio usuario, con su estado). */
+    /**
+     * El panel ({@code ?mias=true}: las del propio usuario, con su estado).
+     * 1.4.0 (SA-4): {@code estado} elige las pendientes (por omision), las
+     * resueltas o todas; cada una con su fecha limite de decision.
+     */
     @GetMapping
     public List<SancionesAdminController.ApelacionResponse> listar(
-            @AuthenticationPrincipal Jwt actor, @RequestParam(defaultValue = "false") boolean mias) {
+            @AuthenticationPrincipal Jwt actor, @RequestParam(defaultValue = "false") boolean mias,
+            @RequestParam(required = false) SancionesService.EstadoDeLaLista estado) {
         Actor quien = SancionesAdminController.actorDe(actor);
-        List<Apelacion> apelaciones = mias ? servicio.misApelaciones(quien) : servicio.apelacionesPendientes(quien);
-        return apelaciones.stream().map(SancionesAdminController.ApelacionResponse::desde).toList();
+        List<Apelacion> apelaciones = mias ? servicio.misApelaciones(quien)
+                : servicio.apelacionesDelPanel(quien, estado);
+        OffsetDateTime ahora = OffsetDateTime.now(reloj);
+        return apelaciones.stream()
+                .map(a -> SancionesAdminController.ApelacionResponse.desde(a, plazo, ahora))
+                .toList();
     }
 
     @PostMapping("/{apelacionId}/resolucion")
@@ -40,7 +54,7 @@ public class ApelacionesController {
                                                                @RequestBody ResolucionRequest request) {
         return SancionesAdminController.ApelacionResponse.desde(servicio.resolver(
                 SancionesAdminController.actorDe(actor), apelacionId, request.decision(), request.motivo(),
-                request.nuevaVigencia()));
+                request.nuevaVigencia()), plazo, OffsetDateTime.now(reloj));
     }
 
     public record ResolucionRequest(Apelacion.Estado decision, String motivo, OffsetDateTime nuevaVigencia) {

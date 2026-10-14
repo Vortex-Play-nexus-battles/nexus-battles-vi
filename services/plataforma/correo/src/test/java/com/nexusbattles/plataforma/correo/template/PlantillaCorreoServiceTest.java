@@ -348,6 +348,24 @@ class PlantillaCorreoServiceTest {
     }
 
     @Test
+    void laCausalYLaPoliticaVanJuntoAlMotivoCuandoLlegan() {
+        // 1.6.0 (SA-4): 7.3.7 pide las referencias a las politicas violadas.
+        String html = service.renderizar("email/sancion", Map.of(
+                "apodo", "ElGuerrero", "tipo", "ADVERTENCIA", "motivo", "Insulto en el chat de la sala",
+                "causal", "Uso de lenguaje ofensivo o abusivo en comentarios o chat",
+                "politica", "Normas de convivencia 2.1"));
+
+        assertThat(html)
+                .contains("Causal: <strong>Uso de lenguaje ofensivo o abusivo en comentarios o chat</strong>")
+                .contains("Motivo: <strong>Insulto en el chat de la sala</strong>")
+                .contains("Política: <strong>Normas de convivencia 2.1</strong>");
+
+        String sinElla = service.renderizar("email/sancion", Map.of(
+                "apodo", "ElGuerrero", "tipo", "ADVERTENCIA", "motivo", "Insulto en el chat de la sala"));
+        assertThat(sinElla).doesNotContain("Causal:").doesNotContain("Política:");
+    }
+
+    @Test
     void elBaneoEsDefinitivoYCongelaElInventario() {
         // Las frases de la plantilla estan partidas en varias lineas del
         // fuente; en HTML esos saltos son espacios.
