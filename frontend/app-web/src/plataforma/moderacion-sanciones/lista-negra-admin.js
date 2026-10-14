@@ -15,6 +15,7 @@
  * el estado HTTP, nunca comparando textos (`shared/ui-kit/MAPEO-ERRORES.md`).
  */
 
+import { NOMBRE_DE_CATEGORIA_DE_TERMINO } from '../../comun/ui/admin/nombres.js';
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 import { construirPaginacion } from '../../comun/paginacion.js';
 import { limpiarAviso, pintarAviso, tonoPorEstado } from '../../comun/ui/aviso.js';
@@ -34,14 +35,7 @@ export const BASE_URL = '/api/v1/lista-negra/terminos';
 export const TAMANO_DE_PAGINA = 16;
 
 /** Categorías del contrato, con el texto que ve el moderador (7.1.1). */
-export const CATEGORIAS = Object.freeze({
-  OFENSIVO: 'Ofensivo',
-  MARCA: 'Marca registrada',
-  CELEBRIDAD: 'Celebridad',
-  POLITICO: 'Político',
-  DIRIGENTE: 'Dirigente',
-  OTRO: 'Otro',
-});
+export const CATEGORIAS = NOMBRE_DE_CATEGORIA_DE_TERMINO;
 
 /** Modos de coincidencia del contrato. */
 export const MODOS = Object.freeze({

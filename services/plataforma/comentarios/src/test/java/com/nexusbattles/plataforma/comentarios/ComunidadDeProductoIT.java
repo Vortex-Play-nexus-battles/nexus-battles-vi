@@ -19,6 +19,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -76,7 +78,9 @@ import jakarta.persistence.EntityManagerFactory;
  *   <li>que el multipart real corta a los 2 MB con el problem detail del
  *       servicio, y que las cabeceras de una imagen salen como deben;</li>
  *   <li>que ocultar o eliminar un comentario ya no se lleva la calificacion de
- *       su autor, el defecto que encontro la auditoria.</li>
+ *       su autor, el defecto que encontro la auditoria;</li>
+ *   <li>que la deteccion de HU-COM-007 se guarda y se lee de PostgreSQL, con
+ *       sus reglas en una columna {@code bigint[]}.</li>
  * </ul>
  */
 @Testcontainers
@@ -785,6 +789,39 @@ class ComunidadDeProductoIT {
                     "{\"accion\":\"DESMARCAR\",\"motivo\":\"ya no hace falta\"}").statusCode());
             assertEquals(0, (Integer) leer(pedir("GET",
                     "/api/v1/comentarios/moderacion?marcado=true&productoId=" + producto, moderadora(), null), "$.total"));
+        }
+
+        /**
+         * HU-COM-007 CA-01 (contrato 1.10.0) contra PostgreSQL real: las reglas
+         * se guardan en una columna bigint[], y los dobles en memoria de
+         * FlujoDeModeracionTest no la leen de la base. La lista negra de
+         * VecinosDePrueba senala «prohibido» con las reglas 7 y 9, categoria
+         * OFENSIVO.
+         */
+        @Test
+        @DisplayName("HU-COM-007: la cola y el detalle devuelven la deteccion leida de PostgreSQL, sin las coincidencias")
+        void deteccionLeidaDePostgres() throws Exception {
+            String producto = productoNuevo();
+            HttpResponse<String> retenido = comentar(producto, jugador(UUID.randomUUID()), "esto esta prohibido", null);
+            assertEquals(202, retenido.statusCode(), retenido.body());
+            String id = leer(retenido, "$.id");
+
+            HttpResponse<String> cola = pedir("GET", "/api/v1/comentarios/moderacion?productoId=" + producto,
+                    moderadora(), null);
+            assertEquals(List.of(id), leer(cola, "$.entradas[*].comentario.id"), cola.body());
+            afirmarDeteccionDeLaListaNegra(leer(cola, "$.entradas[0].deteccion"));
+
+            HttpResponse<String> detalle = pedir("GET", "/api/v1/comentarios/moderacion/" + id, moderadora(), null);
+            assertEquals(200, detalle.statusCode(), detalle.body());
+            afirmarDeteccionDeLaListaNegra(leer(detalle, "$.deteccion"));
+        }
+
+        private void afirmarDeteccionDeLaListaNegra(Map<String, Object> deteccion) {
+            assertEquals(List.of(7, 9), deteccion.get("reglas"), "las reglas vuelven del bigint[]");
+            assertEquals("OFENSIVO", deteccion.get("categoria"));
+            assertEquals(false, deteccion.get("servicioNoDisponible"));
+            assertEquals(Set.of("fecha", "reglas", "categoria", "motivo", "servicioNoDisponible"), deteccion.keySet(),
+                    "los nombres del contrato y nada mas: ni las coincidencias ni el texto");
         }
     }
 

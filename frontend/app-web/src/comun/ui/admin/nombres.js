@@ -31,3 +31,25 @@ export const NOMBRE_DE_ACCION = Object.freeze({
 export function nombreDeAccion(tipo) {
   return NOMBRE_DE_ACCION[String(tipo ?? '')] ?? humanizar(tipo);
 }
+
+/**
+ * La categoría de un término de la lista negra (moderacion-lista-negra.yaml,
+ * `CategoriaDeTermino`), como la lee quien modera (7.1.1). La usan la lista
+ * negra y la cola de comentarios (lo que retuvo el filtro automático).
+ */
+export const NOMBRE_DE_CATEGORIA_DE_TERMINO = Object.freeze({
+  OFENSIVO: 'Ofensivo',
+  MARCA: 'Marca registrada',
+  CELEBRIDAD: 'Celebridad',
+  POLITICO: 'Político',
+  DIRIGENTE: 'Dirigente',
+  OTRO: 'Otro',
+});
+
+/**
+ * @param {string|null|undefined} categoria
+ * @returns {string}
+ */
+export function nombreDeCategoriaDeTermino(categoria) {
+  return NOMBRE_DE_CATEGORIA_DE_TERMINO[String(categoria ?? '')] ?? humanizar(categoria);
+}
