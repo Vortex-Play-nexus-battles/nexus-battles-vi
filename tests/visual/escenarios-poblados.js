@@ -1628,7 +1628,6 @@ function rutasDeMensajesDelServicio() {
   ];
 }
 
-
 /* ---------------------------------------------------------------------------
    UXC-7 — consola y cuenta. DATOS DE LABORATORIO con la forma exacta de
    productos.yaml (ProductoCreado, PaginaDeProductos, ResumenCatalogo) y de
@@ -3375,22 +3374,43 @@ export const ESCENARIOS = [
     exige: ['[data-estado-cuenta="suspendida"] time.cuenta-atras', '[data-accion="apelar"]'],
   },
   {
+    // SA-4 — la consola de sanciones con datos: las cuatro cifras, el listado
+    // global con causal y estado, y la emisión con la cuenta elegida y su
+    // historial en línea de tiempo (`?usuario=` como desde la ficha).
     id: 'sanciones-admin-linea-de-tiempo',
-    titulo: 'consola de sanciones: estado de la cuenta y su historial en línea de tiempo',
-    ruta: 'plataforma/moderacion-sanciones/sanciones-admin.html',
+    titulo: 'consola de sanciones: cifras, listado global y la cuenta con su historial',
+    ruta: `plataforma/moderacion-sanciones/sanciones-admin.html?usuario=${UID_SANCIONADO}`,
     sesion: () => sesionDe('qa_moderador', 'MODERADOR'),
     rutas: [
+      [
+        '**/api/v1/sanciones?*',
+        json({
+          contenido: historialDeSanciones().map((s) => ({ ...s, causal: 'LENGUAJE_OFENSIVO' })),
+          pagina: 0,
+          tamano: 16,
+          total: 2,
+          totalPaginas: 1,
+        }),
+      ],
       ['**/api/v1/sanciones/usuarios/*', json(historialDeSanciones())],
       ['**/api/v1/apelaciones*', json([])],
       ['**/api/v1/sanciones/limites', json(LIMITES_DE_SANCION)],
+      [
+        '**/api/v1/admin/titulares*',
+        json([
+          { uid: UID_SANCIONADO, apodo: 'qa_sancionado', estado: 'SUSPENDIDO', rol: 'JUGADOR' },
+        ]),
+      ],
     ],
     interaccion: async (pagina) => {
-      const buscar = pagina.locator('[data-zona="buscar"]');
-      await buscar.locator('input').first().fill(UID_SANCIONADO);
-      await buscar.locator('[type="submit"]').click();
-      await pagina.locator('.linea-tiempo__hecho').first().waitFor({ timeout: 10_000 });
+      await pagina
+        .locator('[data-zona="historial"] .linea-tiempo__hecho')
+        .first()
+        .waitFor({ timeout: 10_000 });
     },
     exige: [
+      '[data-zona="cifras-de-sanciones"]',
+      '[data-zona="apodo-elegido"]',
       '[data-estado-cuenta="suspendida"]',
       '.linea-tiempo__hecho--futuro',
       '.linea-tiempo__hecho--exito',
@@ -3974,12 +3994,7 @@ export const ESCENARIOS_UXC8 = [
 // UXC-9 — Mi cuenta · Estadísticas (§7.1.1, RF-USR-012)
 // ---------------------------------------------------------------------------
 
-const HEROES_DE_LAS_PARTIDAS = [
-  'Guerrero Tanque',
-  'Mago Fuego',
-  'Guerrero Armas',
-  'Mago Hielo',
-];
+const HEROES_DE_LAS_PARTIDAS = ['Guerrero Tanque', 'Mago Fuego', 'Guerrero Armas', 'Mago Hielo'];
 const MODALIDADES_DE_LAS_PARTIDAS = ['UNO_CONTRA_UNO', 'CONTRA_IA', 'HASTA_SEIS'];
 const RESULTADOS_DE_LAS_PARTIDAS = ['VICTORIA', 'DERROTA', 'VICTORIA', 'EMPATE'];
 

@@ -331,6 +331,70 @@ public class SancionesService {
         return apelacion;
     }
 
+    /** Por que la sancion que impide entrar no se puede apelar ahora (SA-4, apelacion sin sesion). */
+    public enum MotivoNoApelable { SIN_SANCION, FUERA_DE_PLAZO, APELACION_ABIERTA }
+
+    /**
+     * Lo que ve en la pantalla de inicio de sesion una cuenta suspendida o
+     * baneada (SA-4): la sancion que le impide entrar, hasta cuando puede
+     * apelarla y, si ya apelo, como va la ultima apelacion.
+     *
+     * @param sancion          la que restringe hoy; nula si ya no hay ninguna
+     * @param apelableHasta    emision + plazo de apelacion vigente (§7.3.2, 30 dias)
+     * @param motivoNoApelable nulo si se puede apelar ahora
+     * @param apelacion        la ultima apelacion de esa sancion, abierta o resuelta
+     */
+    public record EstadoDeApelacion(Sancion sancion, OffsetDateTime apelableHasta,
+                                    MotivoNoApelable motivoNoApelable, Apelacion apelacion) {
+
+        public boolean puedeApelar() {
+            return sancion != null && motivoNoApelable == null;
+        }
+    }
+
+    /**
+     * El estado de la apelacion de la sancion que hoy impide entrar a la
+     * cuenta. Las mismas reglas que {@link #apelar}: dentro del plazo y sin
+     * otra apelacion abierta sobre la misma sancion.
+     */
+    @Transactional(readOnly = true)
+    public EstadoDeApelacion estadoDeApelacionDe(UUID usuarioId) {
+        java.util.Optional<Sancion> activa = activaDe(Objects.requireNonNull(usuarioId));
+        if (activa.isEmpty()) {
+            return new EstadoDeApelacion(null, null, MotivoNoApelable.SIN_SANCION, null);
+        }
+        Sancion sancion = activa.get();
+        OffsetDateTime apelableHasta = sancion.emitidaEn().plus(limites.plazoDeApelacion());
+        Apelacion ultima = apelaciones.findFirstBySancionIdOrderByCreadaEnDesc(sancion.id()).orElse(null);
+        MotivoNoApelable motivo = null;
+        if (ultima != null && ultima.estado() == Apelacion.Estado.PENDIENTE) {
+            motivo = MotivoNoApelable.APELACION_ABIERTA;
+        } else if (ahora().isAfter(apelableHasta)) {
+            motivo = MotivoNoApelable.FUERA_DE_PLAZO;
+        }
+        return new EstadoDeApelacion(sancion, apelableHasta, motivo, ultima);
+    }
+
+    /**
+     * La apelacion de quien no puede iniciar sesion (SA-4, §7.3.2: «Los
+     * usuarios sancionados deben tener derecho a apelar»). La presenta
+     * ms-identidad en su nombre despues de comprobar su contrasena, y aqui se
+     * aplican las mismas reglas que a cualquier apelacion ({@link #apelar}),
+     * solo sobre la sancion que le impide entrar: por esta via no se apela
+     * nada mas.
+     */
+    @Transactional
+    public Apelacion apelarSinSesion(UUID usuarioId, UUID sancionId, String argumento) {
+        Sancion activa = activaDe(Objects.requireNonNull(usuarioId)).orElseThrow(() ->
+                new SancionRechazada(SancionRechazada.Motivo.APELACION_NO_PROCEDE,
+                        "la cuenta ya no tiene una sancion que le impida entrar"));
+        if (!activa.id().equals(sancionId)) {
+            throw new SancionRechazada(SancionRechazada.Motivo.APELACION_NO_PROCEDE,
+                    "sin sesion solo se apela la sancion que impide entrar");
+        }
+        return apelar(new Actor(usuarioId, "JUGADOR"), sancionId, argumento);
+    }
+
     /** Que apelaciones ve el panel (SA-4): las pendientes, las resueltas o todas. */
     public enum EstadoDeLaLista { PENDIENTES, RESUELTAS, TODAS }
 

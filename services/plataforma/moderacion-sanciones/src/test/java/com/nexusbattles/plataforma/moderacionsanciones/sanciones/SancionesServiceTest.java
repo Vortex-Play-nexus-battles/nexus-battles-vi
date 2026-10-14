@@ -509,6 +509,89 @@ class SancionesServiceTest {
     }
 
     @Nested
+    @DisplayName("SA-4 · apelacion sin sesion (la cuenta suspendida o baneada no puede entrar)")
+    class ApelacionSinSesion {
+
+        private Sancion suspension;
+
+        @BeforeEach
+        void conSuspension() {
+            suspension = servicio.emitir(MODERADORA, solicitud(Sancion.Tipo.SUSPENSION, 72L, false));
+            lenient().when(sanciones.findById(suspension.id())).thenReturn(Optional.of(suspension));
+            lenient().when(apelaciones.findBySancionIdAndEstado(suspension.id(), Apelacion.Estado.PENDIENTE))
+                    .thenReturn(Optional.empty());
+            lenient().when(apelaciones.findFirstBySancionIdOrderByCreadaEnDesc(suspension.id()))
+                    .thenReturn(Optional.empty());
+        }
+
+        @Test
+        @DisplayName("con la suspension vigente y sin apelacion: se puede apelar hasta la emision + 30 dias")
+        void apelable() {
+            SancionesService.EstadoDeApelacion estado = servicio.estadoDeApelacionDe(JUGADOR);
+
+            assertThat(estado.sancion()).isSameAs(suspension);
+            assertThat(estado.apelableHasta()).isEqualTo(OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC).plusDays(30));
+            assertThat(estado.puedeApelar()).isTrue();
+            assertThat(estado.motivoNoApelable()).isNull();
+            assertThat(estado.apelacion()).isNull();
+        }
+
+        @Test
+        @DisplayName("con una apelacion abierta no se abre otra; fuera de plazo, tampoco; sin sancion, nada que apelar")
+        void noApelable() {
+            Apelacion abierta = new Apelacion(UUID.randomUUID(), suspension.id(), JUGADOR, "x",
+                    OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC));
+            when(apelaciones.findFirstBySancionIdOrderByCreadaEnDesc(suspension.id())).thenReturn(Optional.of(abierta));
+            SancionesService.EstadoDeApelacion conAbierta = servicio.estadoDeApelacionDe(JUGADOR);
+            assertThat(conAbierta.puedeApelar()).isFalse();
+            assertThat(conAbierta.motivoNoApelable()).isEqualTo(SancionesService.MotivoNoApelable.APELACION_ABIERTA);
+            assertThat(conAbierta.apelacion()).isSameAs(abierta);
+
+            Apelacion resuelta = new Apelacion(UUID.randomUUID(), suspension.id(), JUGADOR, "y",
+                    OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC));
+            resuelta.resolver(Apelacion.Estado.MANTENIDA, "Se mantiene", ADMIN.id(),
+                    OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC), null);
+            SancionesService unMesDespues = nuevo(Clock.fixed(AHORA.plus(java.time.Duration.ofDays(31)), ZoneOffset.UTC),
+                    LimitesDeSancion.Fijos.de(1, 60, 30));
+            Sancion larga = servicio.emitir(ADMIN, new SancionesService.SolicitudDeSancion(JUGADOR,
+                    Sancion.Tipo.BANEO, "Fraude", null, null, null, true));
+            when(apelaciones.findFirstBySancionIdOrderByCreadaEnDesc(larga.id())).thenReturn(Optional.of(resuelta));
+            SancionesService.EstadoDeApelacion tarde = unMesDespues.estadoDeApelacionDe(JUGADOR);
+            assertThat(tarde.sancion()).isSameAs(larga);
+            assertThat(tarde.motivoNoApelable()).isEqualTo(SancionesService.MotivoNoApelable.FUERA_DE_PLAZO);
+            assertThat(tarde.apelacion()).as("la ultima, aunque este resuelta").isSameAs(resuelta);
+
+            SancionesService.EstadoDeApelacion otro = servicio.estadoDeApelacionDe(UUID.randomUUID());
+            assertThat(otro.sancion()).isNull();
+            assertThat(otro.puedeApelar()).isFalse();
+            assertThat(otro.motivoNoApelable()).isEqualTo(SancionesService.MotivoNoApelable.SIN_SANCION);
+        }
+
+        @Test
+        @DisplayName("apela en su nombre la sancion que le impide entrar, con las reglas de siempre y su aviso")
+        void apelaSinSesion() {
+            Apelacion a = servicio.apelarSinSesion(JUGADOR, suspension.id(), "  No fui yo  ");
+
+            assertThat(a.estado()).isEqualTo(Apelacion.Estado.PENDIENTE);
+            assertThat(a.usuarioId()).isEqualTo(JUGADOR);
+            assertThat(a.argumento()).isEqualTo("No fui yo");
+            assertThat(avisos().get(avisos().size() - 1).tipo()).isEqualTo("APELACION_RECIBIDA");
+        }
+
+        @Test
+        @DisplayName("otra sancion que no es la que impide entrar, o una cuenta sin sancion: 422 y nada guardado")
+        void soloLaQueImpideEntrar() {
+            Sancion advertencia = servicio.emitir(MODERADORA, solicitud(Sancion.Tipo.ADVERTENCIA, null, false));
+
+            assertThatThrownBy(() -> servicio.apelarSinSesion(JUGADOR, advertencia.id(), "x"))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.APELACION_NO_PROCEDE);
+            assertThatThrownBy(() -> servicio.apelarSinSesion(UUID.randomUUID(), suspension.id(), "x"))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.APELACION_NO_PROCEDE);
+            verify(apelaciones, never()).save(any());
+        }
+    }
+
+    @Nested
     @DisplayName("SA-4 · causal de §7.3.2")
     class CausalDeLaSancion {
 

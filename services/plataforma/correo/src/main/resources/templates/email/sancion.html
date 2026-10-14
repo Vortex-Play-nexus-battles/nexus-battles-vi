@@ -67,9 +67,13 @@
           <div th:if="${apelableHasta != null}"
                style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-top:16px;">
             Si no estás de acuerdo, puedes apelar esta decisión hasta el
-            <strong th:text="${apelableHasta}">—</strong>. Un panel de moderadores y
-            administradores revisará tu apelación, y te notificaremos la decisión final en un
-            plazo de 15 días hábiles.
+            <strong th:text="${apelableHasta}">—</strong>
+            <th:block th:if="${tipo == 'ADVERTENCIA'}">desde «Mis sanciones», en el menú de tu
+              cuenta.</th:block>
+            <th:block th:unless="${tipo == 'ADVERTENCIA'}">desde la pantalla de entrada: escribe tu
+              correo y tu contraseña y elige «Apelar esta sanción».</th:block>
+            Un panel de moderadores y administradores revisará tu apelación, y te notificaremos la
+            decisión final en un plazo de 15 días hábiles.
           </div>
         </td>
       </tr>

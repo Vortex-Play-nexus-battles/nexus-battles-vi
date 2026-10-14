@@ -10,8 +10,13 @@ import { urlDeVista } from '../comun/acceso.js';
 import { montarCabecera } from '../comun/cabecera-app.js';
 import { ESTADOS_DE_CUENTA_ADMIN, estadoSegun } from '../comun/ui/admin/estado.js';
 import { tablaDeDatos } from '../comun/ui/admin/tabla-de-datos.js';
-import { confirmar, confirmarConMotivo } from '../comun/ui/dialogo.js';
+import {
+  confirmar,
+  confirmarConMotivo,
+  confirmarConMotivoYSeleccion,
+} from '../comun/ui/dialogo.js';
 import { h, vaciar } from '../comun/ui/dom.js';
+import { NOMBRE_DE_CAUSAL } from '../comun/ui/sancion.js';
 import { cambiarRol, ROLES_DISPONIBLES } from './cambio-rol.js';
 import { respaldoPorEstado, textoDeError, textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
@@ -21,6 +26,17 @@ const MATRIZ_RBAC_API = '/api/v1/rbac/matrix';
 
 /** Cuántas cuentas enseña una búsqueda: si hay más, se pide afinarla. */
 export const RESULTADOS_POR_BUSQUEDA = 10;
+
+/**
+ * SA-4 (§7.3.2) — la causal de una suspensión o un baneo: una de las ocho del
+ * reglamento, en su orden (`Causal`, ms-identidad-admin 1.8.0).
+ */
+export const SELECCION_DE_CAUSAL = Object.freeze({
+  etiqueta: 'Causal',
+  vacio: 'Elige la causal',
+  opciones: Object.entries(NOMBRE_DE_CAUSAL),
+  pista: 'La cuenta la recibe en el aviso y en el correo, junto al motivo.',
+});
 
 /** La clave interna de una cuenta: un entero positivo (`UsuarioId`). */
 const CLAVE_DE_CUENTA = /^[1-9]\d{0,17}$/;
@@ -842,20 +858,22 @@ async function suspenderUsuario() {
   }
 
   // 7.3.9 — acción crítica: el motivo es obligatorio y se confirma en el
-  // propio diálogo (llega escrito si ya estaba en el formulario).
-  const motivo = await confirmarConMotivo({
+  // propio diálogo (llega escrito si ya estaba en el formulario). SA-4
+  // (§7.3.2): con la causal, una de las del reglamento.
+  const decision = await confirmarConMotivoYSeleccion({
     titulo: `¿Suspender a ${nombreDelSeleccionado()}?`,
     mensaje: `No podrá entrar al juego hasta el ${fechaLegible(suspendidoHasta)}.`,
     consecuencias: [
-      'Sus sesiones abiertas se cierran.',
-      'Recibe un aviso y un correo con el motivo y con cómo apelar.',
+      'Sus sesiones abiertas se cierran; su inventario y su progreso se conservan.',
+      'Recibe un aviso y un correo con la causal, el motivo y cómo apelar.',
     ],
+    seleccion: SELECCION_DE_CAUSAL,
     etiquetaMotivo: 'Motivo de la suspensión',
     motivoInicial: obtenerValor('motivo-sancion'),
     textoConfirmar: 'Suspender',
   });
 
-  if (motivo === null) {
+  if (decision === null) {
     return;
   }
 
@@ -863,7 +881,8 @@ async function suspenderUsuario() {
   // antes la petición salía vacía y el servidor la rechazaba siempre.
   await ejecutarAccionEstado(`/suspender`, 'SUSPENDIDO', 'Cuenta suspendida correctamente.', {
     suspendidoHasta,
-    motivo,
+    motivo: decision.motivo,
+    causal: decision.seleccion,
   });
 }
 
@@ -903,16 +922,17 @@ async function banearUsuario() {
     return;
   }
 
-  // §7.3.9 — el baneo es la acción más grave: motivo obligatorio y, además,
-  // escribir el apodo (o el ID) de la cuenta.
-  const motivo = await confirmarConMotivo({
+  // §7.3.9 — el baneo es la acción más grave: causal y motivo obligatorios
+  // y, además, escribir el apodo (o el ID) de la cuenta.
+  const decision = await confirmarConMotivoYSeleccion({
     titulo: `Banear definitivamente a ${nombreDelSeleccionado()}`,
     mensaje: 'Esta acción es permanente.',
     consecuencias: [
-      'No podrá volver a entrar con esta cuenta.',
+      'No podrá volver a entrar con esta cuenta y su inventario queda congelado.',
       'Solo una apelación aceptada puede revertirlo.',
-      'El motivo queda en su historial de sanciones y en la auditoría.',
+      'La causal y el motivo quedan en su historial de sanciones y en la auditoría.',
     ],
+    seleccion: SELECCION_DE_CAUSAL,
     etiquetaMotivo: 'Motivo del baneo',
     motivoInicial: obtenerValor('motivo-sancion'),
     minimo: 10,
@@ -920,11 +940,14 @@ async function banearUsuario() {
     textoConfirmar: 'Banear',
   });
 
-  if (motivo === null) {
+  if (decision === null) {
     return;
   }
 
-  await ejecutarAccionEstado(`/banear`, 'BANEADO', 'Cuenta baneada definitivamente.', { motivo });
+  await ejecutarAccionEstado(`/banear`, 'BANEADO', 'Cuenta baneada definitivamente.', {
+    motivo: decision.motivo,
+    causal: decision.seleccion,
+  });
 }
 
 async function ejecutarAccionEstado(ruta, estado, mensajeExito, cuerpo = null) {
