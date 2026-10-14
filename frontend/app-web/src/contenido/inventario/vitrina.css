@@ -183,7 +183,6 @@
 .vitrina__editar,
 .vitrina__eliminar,
 .vitrina__equipo,
-.vitrina__detalle,
 .inventario-equipo__cerrar,
 .inventario-equipo__equipar,
 .inventario-equipo__desequipar {
@@ -208,7 +207,6 @@
 .vitrina__editar:hover,
 .vitrina__eliminar:hover,
 .vitrina__equipo:hover,
-.vitrina__detalle:hover,
 .inventario-equipo__cerrar:hover,
 .inventario-equipo__equipar:hover,
 .inventario-equipo__desequipar:hover {
@@ -620,8 +618,7 @@
 
 .vitrina__editar,
 .vitrina__eliminar,
-.vitrina__equipo,
-.vitrina__detalle {
+.vitrina__equipo {
   min-height: 30px;
   padding: 4px 8px;
   font-size: 0.75rem;
