@@ -19,8 +19,24 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Administracion de cuentas (ms-identidad)
-  version: 1.11.0
+  version: 1.12.0
   description: |
+    ### Cambios en 1.12.0 (§7.3.4, las horas de la consola — SA-21, implementado, compatible)
+
+    - **Las fechas de la fila del directorio y de la ficha llevan su zona**
+      (`creadoEn`, `ultimoAcceso`, `suspendidoHasta`), como ya pedia su
+      `format: date-time` (RFC 3339). Antes salian como hora de pared del
+      servidor sin zona («2026-10-14T17:30:00»), y un navegador las leia como
+      hora suya: con el servidor en UTC, la consola en Colombia enseñaba cada
+      registro y cada ultima entrada cinco horas adelantados. Mismo campo y
+      mismo tipo; un cliente que leia ISO-8601 sigue leyendolo.
+    - **Exportacion**: `Registro` y `Última entrada` en hora de Colombia, y
+      la cabecera lo dice (`Registro (hora de Colombia)`, `Última entrada
+      (hora de Colombia)`); el nombre del archivo, tambien.
+    - **Suspender** (`PUT /api/v1/admin/usuarios/{usuarioId}/suspender`):
+      `suspendidoHasta` se lee con su zona (la consola manda el instante). Una
+      hora sin zona se sigue leyendo como hora del servidor.
+
     ### Cambios en 1.11.0 (§7.3.4, alertas de comportamiento sospechoso — SA-20, implementado, aditivo)
 
     - **`GET /api/v1/admin/jugadores/bloqueos`.** La señal 1 de «comportamiento
@@ -351,8 +367,9 @@ paths:
         Columnas, las que el directorio muestra y ninguna mas: `Apodo`,
         `Correo`, `Rol`, `Estado` (`BLOQUEADA` si la cuenta tiene ahora un
         bloqueo temporal por intentos fallidos, como en la tabla), `Registro`
-        y `Última entrada` (fecha y hora `aaaa-mm-dd hh:mm` del reloj del
-        servicio; vacia = sin dato o, en la ultima entrada, nunca ha entrado).
+        y `Última entrada` (1.12.0: `Registro (hora de Colombia)` y `Última
+        entrada (hora de Colombia)`, fecha y hora `aaaa-mm-dd hh:mm` en hora de
+        Colombia; vacia = sin dato o, en la ultima entrada, nunca ha entrado).
         Sin identificadores internos ni credenciales.
 
         Formato: UTF-8 con marca de orden de bytes (para que una hoja de
@@ -725,7 +742,10 @@ paths:
                 suspendidoHasta:
                   type: string
                   format: date-time
-                  description: Fin de la suspension; debe ser futuro.
+                  description: |
+                    Fin de la suspension; debe ser futuro. 1.12.0: con su zona
+                    (`2026-10-15T15:00:00Z`, `2026-10-15T10:00:00-05:00`) es
+                    ese instante; sin zona se lee como hora del servidor.
                 motivo:
                   type: string
                   maxLength: 1000
