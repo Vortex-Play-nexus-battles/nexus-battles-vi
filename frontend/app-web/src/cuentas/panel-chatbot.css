@@ -174,3 +174,130 @@
 .panel-chatbot__contexto--jugador {
   border-left: 3px solid var(--primaria);
 }
+
+/* =======================================================================
+   Analíticas con el aspecto de la consola — punto 25 del informe de
+   revisión del Super Administrador («la tabla se ve muy simple y los datos
+   no son claros»). Cada sección del tablero es un panel claro, como los de
+   Métricas o Técnico; las tablas son las de la consola (`.tabla-admin__*`)
+   y su primera columna de cifras lleva una barra con el peso de cada fila.
+   ======================================================================= */
+.panel-chatbot__panel [data-zona='analiticas'] > section {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+  color: var(--texto);
+  padding: var(--e-4) var(--e-5);
+  background:
+    var(--energia) top left / 100% 3px no-repeat,
+    var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-atmosfera);
+}
+
+/* Dentro del panel claro, la gráfica y las tablas ya no necesitan su propia
+   tarjeta: un borde tenue basta. */
+.panel-chatbot__panel [data-zona='analiticas'] > section .panel-chatbot__grafica {
+  box-shadow: none;
+}
+
+.panel-chatbot__resumen {
+  margin: var(--e-2) 0 0;
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+/* Las del marco de la consola se quedan con sus reglas: separadas, con la
+   línea encima de cada fila y no debajo. */
+.tabla-panel.tabla-admin__tabla {
+  border-collapse: separate;
+}
+
+.tabla-panel.tabla-admin__tabla tbody td {
+  border-bottom: 0;
+}
+
+/* Las tablas que no pasan por el marco de la consola (la de cada día y las
+   de las otras pestañas) toman su mismo encabezado y sus mismas filas. */
+.tabla-panel:not(.tabla-admin__tabla) {
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--radio);
+  overflow: hidden;
+}
+
+.tabla-panel:not(.tabla-admin__tabla) thead th {
+  background: var(--superficie-2);
+  border-bottom: 1px solid var(--borde);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.tabla-panel:not(.tabla-admin__tabla) tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.tabla-panel:not(.tabla-admin__tabla) tbody tr:hover {
+  background: var(--interaccion-velo-hover);
+}
+
+/* La barra de proporción: justo antes de la cifra, que sigue a la derecha,
+   y todas terminando en la misma línea. Es decorativa (`aria-hidden`): el
+   dato es la cifra, que sigue ahí. */
+.tabla-panel td[data-medida] {
+  position: relative;
+  min-width: 15rem;
+}
+
+.tabla-panel__barra {
+  /* Lo fija cada fila desde el script (`style.setProperty`); sin él, vacía. */
+  --proporcion: 0;
+  position: absolute;
+  inset-inline-end: calc(var(--e-4) + 4.5rem);
+  top: 50%;
+  width: 8rem;
+  height: 0.5rem;
+  transform: translateY(-50%);
+  background: var(--superficie-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.tabla-panel__relleno {
+  display: block;
+  width: calc(var(--proporcion) * 100%);
+  height: 100%;
+  background: var(--energia);
+  border-radius: inherit;
+}
+
+/* En el teléfono cada fila es una ficha con la etiqueta de cada dato: la
+   cifra basta y la barra se retira. */
+@media (max-width: 640px) {
+  .panel-chatbot__panel [data-zona='analiticas'] > section {
+    padding: var(--e-3);
+  }
+
+  .tabla-panel td[data-medida] {
+    min-width: 0;
+  }
+
+  .tabla-panel__barra {
+    display: none;
+  }
+
+  /* La etiqueta de cada dato no se parte a media palabra
+     («Conversacione/s»): su columna mide lo que la etiqueta más larga. */
+  .tabla-panel.tabla-admin__tabla tbody td {
+    grid-template-columns: minmax(7.5rem, 45%) minmax(0, 1fr);
+  }
+
+  .tabla-panel.tabla-admin__tabla tbody td::before {
+    overflow-wrap: normal;
+  }
+}

@@ -27,16 +27,24 @@ openapi: 3.1.0
 # `GET /transacciones/mi-historial` lo consulta el propio jugador desde
 # "Mi Cuenta"; nunca un servicio (un token de servicio no tiene `uid`).
 #
+# `GET /transacciones/usuarios/{uid}` (1.1.0, SA-15) lo consulta la ficha
+# administrativa de la cuenta (§7.3.4 «Historial de transacciones»): solo
+# Administrador y Super Administrador.
+#
 # Idempotente por `refId`: reintentar el mismo registro responde 409
 # `transaccion-ya-registrada` en vez de duplicar el asiento.
 # =============================================================================
 
 info:
   title: Nexus Battles VI — Registro de transacciones en moneda real
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Asiento permanente de cada intento de cobro en moneda real (aprobado,
     rechazado o indeterminado) y su consulta desde el historial del jugador.
+
+    1.1.0 (SA-15, aditivo): `GET /transacciones/usuarios/{uid}`, el mismo
+    historial de una cuenta para su ficha administrativa (§7.3.4). Solo
+    Administrador y Super Administrador; el jugador sigue con `mi-historial`.
 
     Errores en formato problem details (regla 4) con `type` estable bajo
     `https://nexusbattles.upb.edu.co/errors/`.
@@ -111,8 +119,7 @@ paths:
       description: |
         El `uid` sale del claim `uid` del token (ADR-002), nunca de query ni
         de path: un jugador no puede consultar el historial de otro. La
-        consulta administrativa (ver el historial de otro usuario) no esta
-        en el alcance de esta HU.
+        consulta administrativa es `GET /transacciones/usuarios/{uid}` (1.1.0).
       security:
         - tokenDeUsuario: []
       parameters:
@@ -142,6 +149,56 @@ paths:
                     items:
                       $ref: '#/components/schemas/ResumenTransaccion'
 
+  /transacciones/usuarios/{uid}:
+    get:
+      tags: [transacciones]
+      operationId: historialDeTransaccionesDeUnaCuenta
+      summary: Historial de pagos en moneda real de una cuenta, para su ficha administrativa
+      description: |
+        1.1.0 (SA-15, §7.3.4 «Historial de transacciones» del perfil de
+        usuario en la vista administrativa). Misma proyeccion y mismo orden
+        que `mi-historial` (sin la referencia de la pasarela), de la cuenta
+        de la ruta. Solo Administrador y Super Administrador: un jugador (ni
+        siquiera sobre si mismo: lo suyo esta en `mi-historial`), un
+        moderador o un servicio reciben 403. Una cuenta sin pagos es `200`
+        con la lista vacia.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          description: Identificador estable de la cuenta (`uid`, ADR-002).
+          schema: { type: string }
+        - name: page
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          required: false
+          description: Tope de 100 aplicado por el servidor, sin importar lo que pida el cliente.
+          schema: { type: integer, minimum: 1, default: 20 }
+      responses:
+        '401':
+          $ref: '#/components/responses/SinCredencial'
+        '403':
+          $ref: '#/components/responses/NoAutorizado'
+        '200':
+          description: Pagina del historial de la cuenta, de lo mas reciente a lo mas antiguo.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ResumenTransaccion'
+                  totalElements:
+                    type: integer
+                    format: int64
+
 components:
   securitySchemes:
     credencialDeServicio:
@@ -165,8 +222,9 @@ components:
     NoAutorizado:
       description: |
         El token es valido pero no puede hacer esto: un jugador intentando
-        registrar una transaccion, o un servicio consultando un historial
-        (no tiene `uid`).
+        registrar una transaccion, un servicio consultando un historial
+        (no tiene `uid`) o, en el historial de una cuenta (1.1.0), quien no
+        es Administrador ni Super Administrador.
 
   schemas:
     RegistrarTransaccion:

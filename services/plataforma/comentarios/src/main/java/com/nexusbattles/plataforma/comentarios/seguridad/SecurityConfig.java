@@ -77,6 +77,9 @@ public class SecurityConfig {
                 // que las dos mitades del flujo se lean de un vistazo.
                 .requestMatchers(HttpMethod.POST, "/api/v1/products/*/comments/*/reportes")
                     .hasAnyRole(ROLES_DE_USUARIO)
+                // SA-14 (1.16.0, §7.3.6) — los comentarios propios, para la
+                // exportación de datos: cualquier persona, solo los suyos.
+                .requestMatchers(HttpMethod.GET, "/api/v1/comentarios/mios").hasAnyRole(ROLES_DE_USUARIO)
                 // NO es /api/v1/moderacion/**: ese prefijo ya es de
                 // metricas-plataforma y el borde lo enruta alli. Ver el
                 // javadoc de ModeracionController.
