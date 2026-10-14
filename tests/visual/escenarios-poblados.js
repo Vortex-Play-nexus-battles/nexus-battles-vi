@@ -5411,3 +5411,133 @@ export const ESCENARIOS_SA4_TABLERO = [
 ];
 
 ESCENARIOS.push(...ESCENARIOS_SA4_TABLERO);
+
+/* =========================================================================
+   SA-7 (informe de revisión, punto 1) — el resumen de la consola: cifras
+   clave de cada servicio, últimos movimientos de la bitácora central,
+   estabilidad del sistema con lo que necesita atención primero y accesos
+   rápidos solo a lo que no está en la barra. El moderador ve lo suyo.
+   ========================================================================= */
+
+const RESPUESTAS_DEL_RESUMEN = [
+  [
+    '**/api/v1/admin/jugadores*',
+    json({
+      contenido: [cuentaDelDirectorio(0)],
+      pagina: 0,
+      tamano: 1,
+      total: 1894,
+      totalPaginas: 1894,
+    }),
+  ],
+  ['**/api/v1/admin/sistema/servicios', json(ESTADO_DEL_SISTEMA)],
+  [
+    '**/api/v1/comentarios/moderacion*',
+    json({
+      entradas: [comentarioReportado(1), comentarioReportado(2), comentarioReportado(3)],
+      total: 3,
+      pagina: 0,
+      tamano: 8,
+    }),
+  ],
+  [
+    '**/api/v1/apelaciones*',
+    json([
+      {
+        id: 'ad000000-0000-4000-8000-000000000001',
+        sancionId: 'ad000000-0000-4000-8000-0000000000a1',
+        usuarioId: UID_AUDITORIA_JUGADORA,
+        argumento: 'No fui yo quien escribió ese mensaje.',
+        creadaEn: '2026-10-08T15:00:00Z',
+        estado: 'PENDIENTE',
+        decisionAntesDe: '2026-10-29T17:00:00Z',
+        vencida: false,
+      },
+    ]),
+  ],
+  [
+    '**/api/v1/salas*',
+    json({ contenido: [sala()], pagina: 0, tamano: 1, totalElementos: 5, totalPaginas: 5 }),
+  ],
+  [
+    '**/api/v1/torneos*',
+    json([
+      {
+        id: 'c0000000-0000-4000-8000-000000000001',
+        nombre: 'Copa del Nexo',
+        estado: 'INSCRIPCIONES_ABIERTAS',
+        creadoEn: '2026-10-01T12:00:00Z',
+        inscripcionesCierranEn: '2026-10-31T23:00:00Z',
+        costoInscripcion: 0,
+        equiposInscritos: 3,
+        cupos: 8,
+        campeonEquipoId: null,
+      },
+    ]),
+  ],
+  [
+    '**/api/v1/admin/titulares*',
+    json([
+      { uid: UID_AUDITORIA_MODERADORA, apodo: 'moderadora_qa', estado: 'ACTIVO', rol: 'MODERADOR' },
+      { uid: UID_AUDITORIA_JUGADORA, apodo: 'thar_vex', estado: 'SUSPENDIDO', rol: 'JUGADOR' },
+    ]),
+  ],
+  [
+    '**/api/v1/admin/auditoria*',
+    json({
+      content: [
+        registroDeAuditoria(1, {
+          administrador: UID_AUDITORIA_MODERADORA,
+          tipoAccion: 'SANCION',
+          afectado: UID_AUDITORIA_JUGADORA,
+          valorAnterior: null,
+          valorNuevo: 'Suspensión de 7 días · Causal: Lenguaje ofensivo o discriminatorio',
+          motivo: 'Insultos reiterados en el chat de la sala.',
+        }),
+        registroDeAuditoria(2, { tipoAccion: 'CAMBIO_ROL' }),
+        registroDeAuditoria(3, {
+          tipoAccion: 'ACTUALIZACION',
+          afectado: 'sanciones.apelacion.plazo-dias',
+          valorAnterior: '15',
+          valorNuevo: '30',
+          motivo: 'Ajuste aprobado por el comité de moderación.',
+        }),
+      ],
+      totalElements: 3,
+      totalPages: 1,
+      number: 0,
+      size: 8,
+    }),
+  ],
+];
+
+export const ESCENARIOS_SA7 = [
+  {
+    id: 'consola-resumen-poblado',
+    titulo: 'consola: resumen con cifras, movimientos y estabilidad (SA-7)',
+    ruta: 'plataforma/consola/consola.html',
+    sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+    rutas: RESPUESTAS_DEL_RESUMEN,
+    exige: [
+      '[data-indicador="Cuentas registradas"]',
+      '[data-indicador="Salas abiertas"]',
+      '[data-panel="movimientos"] table tbody tr',
+      '[data-panel="estabilidad"] .resumen-consola__atencion li',
+      '[data-acceso]',
+    ],
+  },
+  {
+    id: 'consola-resumen-moderador',
+    titulo: 'consola: el moderador ve sus cifras y los comentarios reportados (SA-7)',
+    ruta: 'plataforma/consola/consola.html',
+    sesion: () => sesionDe('qa_moderador', 'MODERADOR'),
+    rutas: RESPUESTAS_DEL_RESUMEN,
+    exige: [
+      '[data-indicador="Comentarios por revisar"]',
+      '[data-indicador="Apelaciones por resolver"]',
+      '[data-panel="movimientos"] li',
+    ],
+  },
+];
+
+ESCENARIOS.push(...ESCENARIOS_SA7);
