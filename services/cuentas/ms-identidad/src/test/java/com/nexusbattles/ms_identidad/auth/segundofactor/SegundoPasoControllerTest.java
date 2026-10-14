@@ -135,8 +135,24 @@ class SegundoPasoControllerTest {
         for (String tipo : new String[] {"cuenta-baneada", "cuenta-inactiva", "cuenta-no-verificada"}) {
             mockMvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
                     .andExpect(status().isForbidden())
-                    .andExpect(jsonPath("$.type").value(TIPOS + tipo));
+                    .andExpect(jsonPath("$.type").value(TIPOS + tipo))
+                    .andExpect(jsonPath("$.apelacion").doesNotExist());
         }
+    }
+
+    @Test
+    @DisplayName("SA-4: el baneo que llega entre los dos pasos tambien trae el codigo para apelar sin sesion")
+    void baneoConCodigoDeApelacion() throws Exception {
+        DesafioEmitido codigo = new DesafioEmitido("codigo-opaco", java.time.Instant.parse("2026-10-06T15:30:00Z"),
+                DesafioDeAcceso.Proposito.APELAR);
+        when(segundoPaso.canjear(any(), any(), any())).thenThrow(new CuentaBaneadaException("Baneada.", codigo));
+
+        mockMvc.perform(post(RUTA).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"desafio\":\"valor\",\"codigo\":\"287082\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.type").value(TIPOS + "cuenta-baneada"))
+                .andExpect(jsonPath("$.apelacion.codigo").value("codigo-opaco"))
+                .andExpect(jsonPath("$.apelacion.expiraEn").value("2026-10-06T15:30:00Z"));
     }
 
     @Test

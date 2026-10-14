@@ -48,6 +48,21 @@ public interface ReporteRepository extends JpaRepository<RegistroDeReporte, Stri
     long countByReportanteIdAndFechaAfter(String reportanteId, Instant desde);
 
     /**
+     * Los reportes de un periodo, con lo justo para contarlos (§7.3.8,
+     * comentarios.yaml 1.15.0): ni la descripcion ni la entidad entera. El
+     * periodo es [desde, hasta), el mismo corte que el resto de periodos de
+     * la moderacion. El indice de V8 sobre la fecha la sirve sin recorrer la
+     * tabla.
+     */
+    @Query("""
+            select new com.nexusbattles.plataforma.comentarios.moderacion.ReporteContado(
+                r.fecha, r.categoria, r.comentarioId, r.reportanteId)
+            from RegistroDeReporte r
+            where r.fecha >= :desde and r.fecha < :hasta
+            """)
+    List<ReporteContado> contablesEntre(@Param("desde") Instant desde, @Param("hasta") Instant hasta);
+
+    /**
      * Los comentarios con algun reporte PENDIENTE: posterior a la ultima
      * decision que atiende reportes ({@link AccionDeModeracion#RESUELVEN_REPORTES}).
      *

@@ -13,6 +13,7 @@ import java.time.Clock;
 import java.time.Duration;
 
 @Configuration
+@org.springframework.scheduling.annotation.EnableScheduling
 public class ConfiguracionDeParametros {
 
     @Bean
@@ -20,24 +21,37 @@ public class ConfiguracionDeParametros {
         return Clock.systemUTC();
     }
 
+    /** La linea de cada cambio en la bitacora JSON (regla 6). */
+    @Bean
+    public Auditoria auditoria() {
+        return new AuditoriaEnBitacora();
+    }
+
     /**
-     * La auditoria de cada cambio (HU-AUD-001): ms-cumplimiento si hay URL, la
-     * bitacora si no.
+     * SA-5 (§7.3.5): la entrega de cada version a ms-cumplimiento si hay URL;
+     * sin ella, las versiones esperan.
      *
-     * <p>B12 — el cliente sale con tiempos de espera de conexion y de lectura.
-     * La auditoria es fail-open, pero sin tiempo de lectura "no responde"
-     * nunca llegaba: con ms-cumplimiento aceptando la conexion y sin contestar,
-     * el cambio de un parametro se quedaba colgado dentro de la peticion del
-     * administrador. 2 s para conectar (en la red de Docker se conecta en
-     * milisegundos) y 5 s para responder, muy por debajo de los 60 s del borde.
+     * <p>B12 — el cliente sale con tiempos de espera de conexion y de lectura:
+     * con ms-cumplimiento aceptando la conexion y callado, la vuelta corta en
+     * 2 s + 5 s y lo intenta despues, sin quedarse colgada.
      */
     @Bean
-    public Auditoria auditoria(@Value("${parametros.auditoria.url:}") String url,
-                               @Value("${parametros.auditoria.tiempo-conexion-ms:2000}") long conexionMs,
-                               @Value("${parametros.auditoria.tiempo-respuesta-ms:5000}") long respuestaMs,
-                               ObjectProvider<InterceptorDePortadorDeServicio> credencial) {
+    public EnvioDeAuditoria envioDeAuditoria(VersionRepository versiones, Clock reloj,
+                                             @Value("${parametros.auditoria.url:}") String url,
+                                             @Value("${parametros.auditoria.tiempo-conexion-ms:2000}") long conexionMs,
+                                             @Value("${parametros.auditoria.tiempo-respuesta-ms:5000}") long respuestaMs,
+                                             @Value("${parametros.auditoria.reintento-ms:10000}") long reintentoMs,
+                                             @Value("${parametros.auditoria.espera-maxima-ms:900000}") long esperaMaximaMs,
+                                             ObjectProvider<InterceptorDePortadorDeServicio> credencial) {
+        return new EnvioDeAuditoria(versiones, clienteAuditoria(url, conexionMs, respuestaMs, credencial), reloj,
+                Duration.ofMillis(reintentoMs), Duration.ofMillis(esperaMaximaMs));
+    }
+
+    /** El cliente HTTP de la bitacora central, o nulo sin URL. */
+    static ClienteAuditoria clienteAuditoria(String url, long conexionMs, long respuestaMs,
+                                             ObjectProvider<InterceptorDePortadorDeServicio> credencial) {
         if (url == null || url.isBlank()) {
-            return new AuditoriaEnBitacora();
+            return null;
         }
         HttpClient http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(conexionMs))
@@ -46,6 +60,6 @@ public class ConfiguracionDeParametros {
         fabrica.setReadTimeout(Duration.ofMillis(respuestaMs));
         RestClient.Builder constructor = RestClient.builder().requestFactory(fabrica);
         credencial.ifAvailable(constructor::requestInterceptor);
-        return new ClienteAuditoria(constructor.build(), url);
+        return new ClienteAuditoria(constructor.build(), url.strip());
     }
 }

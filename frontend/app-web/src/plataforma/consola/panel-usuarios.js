@@ -30,6 +30,7 @@ import { panel, pintarDesenlace } from './panel.js';
 import { h } from '../../comun/ui/dom.js';
 import { barraDeFiltros } from '../../comun/ui/admin/barra-de-filtros.js';
 import { graficoDeBarras } from '../../comun/ui/admin/grafico.js';
+import { diaCompleto, diaCorto } from '../../comun/ui/admin/fechas.js';
 import { humanizar } from '../../comun/ui/admin/estado.js';
 import { rejillaDeIndicadores, tarjetaDeIndicador } from '../../comun/ui/admin/indicador.js';
 
@@ -59,6 +60,12 @@ export const ESTADOS_DE_CUENTA = Object.freeze([
   { estado: 'BANEADO', etiqueta: 'Baneadas', nombre: 'Baneadas', tono: 'error' },
 ]);
 
+/** El filtro «Sanciones» del directorio: el valor del contrato y cómo se lee. */
+export const HISTORIAL_DE_SANCIONES = Object.freeze([
+  ['CON', 'Con sanciones'],
+  ['SIN', 'Sin sanciones'],
+]);
+
 /* -------------------------------------------------------------------------
    Consultas
    ------------------------------------------------------------------------- */
@@ -67,8 +74,12 @@ export const ESTADOS_DE_CUENTA = Object.freeze([
  * Los filtros del directorio, en el orden de la consulta. Solo los que tienen
  * valor: sin filtros, la consulta es la de siempre.
  *
+ * `historialSanciones` (ms-identidad-admin 1.7.0, §7.3.4 «filtros por
+ * historial de sanciones»): `CON` las cuentas a las que se les ha emitido
+ * alguna sanción, también revertida; `SIN` las que nunca.
+ *
  * @param {{buscar?: string, rol?: string, estadoCuenta?: string, desde?: string,
- *          hasta?: string, ocultarPruebas?: boolean}} filtros
+ *          hasta?: string, historialSanciones?: string, ocultarPruebas?: boolean}} filtros
  * @returns {string[]} pares `clave=valor` ya codificados
  */
 function paresDeFiltros(filtros) {
@@ -83,6 +94,7 @@ function paresDeFiltros(filtros) {
   poner('estado', filtros?.estadoCuenta);
   poner('registradoDesde', filtros?.desde);
   poner('registradoHasta', filtros?.hasta);
+  poner('historialSanciones', filtros?.historialSanciones);
   if (filtros?.ocultarPruebas) {
     pares.push('ocultarPruebas=true');
   }
@@ -270,11 +282,11 @@ export function pintarIndicadores(datos) {
 export function graficoDeRegistros(registros) {
   const porDia = Array.isArray(registros?.porDia) ? registros.porDia : [];
   return graficoDeBarras({
-    titulo: `Registros por día · del ${fechaCompleta(registros?.desde)} al ${fechaCompleta(
+    titulo: `Registros por día · del ${diaCompleto(registros?.desde)} al ${diaCompleto(
       registros?.hasta,
     )}`,
     datos: porDia.map((dia) => ({
-      etiqueta: fechaCorta(dia.fecha),
+      etiqueta: diaCorto(dia.fecha),
       valor: cifra(dia.cuentas),
     })),
     unidad: 'cuentas nuevas',
@@ -361,35 +373,6 @@ export function guardarArchivo(nombre, contenido, tipo) {
 /** Un número que llegó, o null (el indicador pinta un guion), nunca un cero inventado. */
 function cifra(valor) {
   return typeof valor === 'number' && Number.isFinite(valor) ? valor : null;
-}
-
-/** `2026-10-05` → «5 oct»: la etiqueta de una barra. */
-function fechaCorta(dia) {
-  if (!dia) {
-    return 'sin fecha';
-  }
-  const fecha = new Date(`${dia}T00:00:00Z`);
-  if (Number.isNaN(fecha.getTime())) {
-    return String(dia);
-  }
-  return fecha.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-}
-
-/** `2026-10-05` → «5 oct 2026». La fecha es un día, sin hora ni zona. */
-function fechaCompleta(dia) {
-  if (!dia) {
-    return 'sin fecha';
-  }
-  const fecha = new Date(`${dia}T00:00:00Z`);
-  if (Number.isNaN(fecha.getTime())) {
-    return String(dia);
-  }
-  return fecha.toLocaleDateString('es-CO', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
 }
 
 /**

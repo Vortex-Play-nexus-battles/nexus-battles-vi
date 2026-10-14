@@ -28,6 +28,7 @@ import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.
 import { baseDeApi } from '../comun/base-api.js';
 import { h, vaciar } from '../comun/ui/dom.js';
 import { creditos as formatoCreditos, fechaHora } from '../comun/ui/formato.js';
+import { comoImporte, nombreDelConcepto } from '../comun/ui/movimiento-de-creditos.js';
 import { boton, conCarga } from '../comun/ui/boton.js';
 import { distintivo } from '../comun/ui/distintivo.js';
 import { fotoDeCuenta } from '../comun/ui/avatar.js';
@@ -115,42 +116,9 @@ async function leer(ruta, fetchImpl) {
   }
 }
 
-/**
- * Texto del movimiento según su signo. La regla la decide ms-finanzas
- * (`signo` del contrato 1.3.0); aquí solo se traduce a algo legible.
- *
- * @param {{signo: string, monto: number|string}} movimiento
- * @returns {{texto: string, tono: string}}
- */
-export function comoImporte({ signo, monto }) {
-  const cantidad = formatoCreditos(monto);
-  switch (signo) {
-    case 'SUMA':
-      return { texto: `+${cantidad}`, tono: 'suma' };
-    case 'RESTA':
-      return { texto: `−${cantidad}`, tono: 'resta' };
-    case 'APARTA':
-      return { texto: `${cantidad} apartados`, tono: 'aparta' };
-    default:
-      return { texto: `${cantidad} devueltos`, tono: 'neutro' };
-  }
-}
-
-/** Nombre de persona para cada concepto que escribe el backend. */
-export function nombreDelConcepto(concepto) {
-  const conocidos = {
-    'apuesta-sala': 'Apuesta de una batalla',
-    'recompensa-victoria': 'Recompensa por ganar',
-    'recompensa-participacion': 'Recompensa por jugar',
-    'inscripcion-torneo': 'Inscripción a un torneo',
-    // R17 — el abono con el que empieza toda cuenta nueva (ms-identidad lo
-    // pide a finanzas con este concepto al completar el alta).
-    'bono-registro': 'Créditos de bienvenida',
-    'DEBITO-DIRECTO': 'Cobro',
-    'CREDITO-PARTIDA': 'Créditos de una partida',
-  };
-  return conocidos[concepto] ?? concepto ?? 'Movimiento de créditos';
-}
+// SA-3 — el texto de un movimiento lo usa también la ficha administrativa
+// del usuario: vive en `comun/` y aquí se reexporta para quien ya lo importaba.
+export { comoImporte, nombreDelConcepto };
 
 // ---------------------------------------------------------------- resumen
 

@@ -24,7 +24,8 @@ public class ManejadorErroresSanciones {
             case PERMISO_INSUFICIENTE, JERARQUIA_INSUFICIENTE -> HttpStatus.FORBIDDEN;
             case NO_ENCONTRADA -> HttpStatus.NOT_FOUND;
             case IDENTIDAD_NO_DISPONIBLE -> HttpStatus.SERVICE_UNAVAILABLE;
-            case USUARIO_BANEADO, APELACION_RESUELTA, SANCION_NO_VIGENTE -> HttpStatus.CONFLICT;
+            case USUARIO_BANEADO, APELACION_RESUELTA, SANCION_NO_VIGENTE, BANEO_SOLO_POR_APELACION ->
+                    HttpStatus.CONFLICT;
             case APELACION_NO_PROCEDE -> HttpStatus.UNPROCESSABLE_ENTITY;
             case SOLICITUD_INVALIDA -> HttpStatus.BAD_REQUEST;
         };
@@ -40,6 +41,7 @@ public class ManejadorErroresSanciones {
             case SANCION_NO_VIGENTE -> "La sancion ya no esta vigente";
             case JERARQUIA_INSUFICIENTE -> "Rol insuficiente sobre esta cuenta";
             case IDENTIDAD_NO_DISPONIBLE -> "No se pudo comprobar la cuenta";
+            case BANEO_SOLO_POR_APELACION -> "El baneo solo lo revierte una apelacion";
         });
         problema.setProperty("motivo", ex.motivo().name());
         ResponseEntity.BodyBuilder respuesta = ResponseEntity.status(estado);

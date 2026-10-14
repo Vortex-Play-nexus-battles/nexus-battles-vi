@@ -163,6 +163,19 @@ public class AdminGestionUsuarioService {
     @Transactional
     public void suspenderCuenta(Long usuarioId, LocalDateTime suspendidoHasta, String motivo, String autorizacion,
                                 String administradorId, String rolActor, String ipOrigen) {
+        suspenderCuenta(usuarioId, suspendidoHasta, motivo, null, null, autorizacion, administradorId, rolActor,
+                ipOrigen);
+    }
+
+    /**
+     * Como {@link #suspenderCuenta(Long, LocalDateTime, String, String, String, String, String)}
+     * con la {@code causal} de 7.3.2 y la {@code politica} violada (SA-4), que
+     * moderacion guarda con la sancion y lleva al aviso y al correo (7.3.7).
+     */
+    @Transactional
+    public void suspenderCuenta(Long usuarioId, LocalDateTime suspendidoHasta, String motivo, String causal,
+                                String politica, String autorizacion, String administradorId, String rolActor,
+                                String ipOrigen) {
         Usuario usuario = cuenta(usuarioId);
         exigirSancion(rolActor, usuario, "suspender a");
         String estadoAnterior = EstadoCuenta.normalizado(usuario.getEstado());
@@ -179,22 +192,30 @@ public class AdminGestionUsuarioService {
         }
 
         exigirCredencial(autorizacion);
-        Sancion sancion = moderacion.emitir(autorizacion, usuario.getPublicId(), "SUSPENSION",
-                motivoOPorOmision(motivo, MOTIVO_SUSPENSION), horasHasta(suspendidoHasta), null);
+        Sancion sancion = moderacion.emitir(autorizacion, usuario.getPublicId(), "SUSPENSION", vacioANulo(causal),
+                motivoOPorOmision(motivo, MOTIVO_SUSPENSION), vacioANulo(politica), horasHasta(suspendidoHasta), null);
         OffsetDateTime fin = sancion.vigenteHasta() != null
                 ? sancion.vigenteHasta()
                 : suspendidoHasta.atZone(reloj.getZone()).toOffsetDateTime();
         proyecciones.aplicar(usuario, EstadoCuenta.SUSPENDIDO, fin, sancion.id());
 
+        // SA-5 (§7.3.5): el motivo de quien actua, no una etiqueta fija; y la causal con lo impuesto.
         auditarSinFrenar("SUSPENSION", administradorId, usuario, estadoAnterior,
-                "SUSPENDIDO hasta " + fin + " (sancion " + sancion.id() + ")",
-                "Suspensión de cuenta (moderacion-sanciones)", ipOrigen);
+                "SUSPENDIDO hasta " + fin + " (sancion " + sancion.id() + ")" + conCausal(causal),
+                motivoOPorOmision(motivo, MOTIVO_SUSPENSION), ipOrigen);
     }
 
     /** Baneo definitivo (7.3.2, sancion 3): {@code POST /sanciones} tipo BANEO con {@code confirmacion: true}. */
     @Transactional
     public void banearCuenta(Long usuarioId, String motivo, String autorizacion, String administradorId,
                              String rolActor, String ipOrigen) {
+        banearCuenta(usuarioId, motivo, null, null, autorizacion, administradorId, rolActor, ipOrigen);
+    }
+
+    /** Como {@link #banearCuenta(Long, String, String, String, String, String)} con causal y politica (SA-4). */
+    @Transactional
+    public void banearCuenta(Long usuarioId, String motivo, String causal, String politica, String autorizacion,
+                             String administradorId, String rolActor, String ipOrigen) {
         Usuario usuario = cuenta(usuarioId);
         exigirSancion(rolActor, usuario, "banear a");
         String estadoAnterior = EstadoCuenta.normalizado(usuario.getEstado());
@@ -209,13 +230,13 @@ public class AdminGestionUsuarioService {
         }
 
         exigirCredencial(autorizacion);
-        Sancion sancion = moderacion.emitir(autorizacion, usuario.getPublicId(), "BANEO",
-                motivoOPorOmision(motivo, MOTIVO_BANEO), null, Boolean.TRUE);
+        Sancion sancion = moderacion.emitir(autorizacion, usuario.getPublicId(), "BANEO", vacioANulo(causal),
+                motivoOPorOmision(motivo, MOTIVO_BANEO), vacioANulo(politica), null, Boolean.TRUE);
         proyecciones.aplicar(usuario, EstadoCuenta.BANEADO, null, sancion.id());
 
         auditarSinFrenar("SANCION", administradorId, usuario, estadoAnterior,
-                EstadoCuenta.BANEADO + " (sancion " + sancion.id() + ")",
-                "Baneo definitivo de cuenta (moderacion-sanciones)", ipOrigen);
+                EstadoCuenta.BANEADO + " (sancion " + sancion.id() + ")" + conCausal(causal),
+                motivoOPorOmision(motivo, MOTIVO_BANEO), ipOrigen);
     }
 
     /**
@@ -267,8 +288,7 @@ public class AdminGestionUsuarioService {
         proyecciones.levantar(usuario);
 
         auditarSinFrenar("ACTUALIZACION", administradorId, usuario, estadoAnterior,
-                EstadoCuenta.normalizado(usuario.getEstado()),
-                "Reactivación de cuenta (moderacion-sanciones)", ipOrigen);
+                EstadoCuenta.normalizado(usuario.getEstado()), MOTIVO_REACTIVACION, ipOrigen);
     }
 
     @Transactional
@@ -391,6 +411,16 @@ public class AdminGestionUsuarioService {
 
     private static String motivoOPorOmision(String motivo, String porOmision) {
         return motivo == null || motivo.isBlank() ? porOmision : motivo.strip();
+    }
+
+    /** Un texto opcional sin espacios sobrantes; en blanco cuenta como ausente. */
+    private static String vacioANulo(String texto) {
+        return texto == null || texto.isBlank() ? null : texto.strip();
+    }
+
+    /** « · causal ACOSO» si la hay; nada si no (SA-5). */
+    private static String conCausal(String causal) {
+        return causal == null || causal.isBlank() ? "" : " · causal " + causal.strip();
     }
 
     private void auditarSinFrenar(String tipo, String administradorId, Usuario usuario, String anterior,

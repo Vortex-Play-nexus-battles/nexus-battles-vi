@@ -74,6 +74,17 @@ public class SalidasDeSancion {
                 sancion.usuarioId(), sancion.id(), apelacion.id(), clave, ahora));
     }
 
+    /**
+     * SA-4: la apelacion llego. Solo el aviso en la aplicacion, con la fecha
+     * limite del panel: no cambia el acceso ni el historial, y correo.yaml no
+     * tiene tipo para ella.
+     */
+    public void apelacionRecibida(Apelacion apelacion, Sancion sancion, String tituloDelAviso,
+                                  String cuerpoDelAviso, OffsetDateTime ahora) {
+        aviso(sancion, "APELACION_RECIBIDA", tituloDelAviso, cuerpoDelAviso,
+                "apelacion-" + apelacion.id() + "-recibida", ahora);
+    }
+
     /** Levantamiento de una sancion vigente por un administrador (1.1.0). */
     public void levantamiento(Sancion sancion, String tituloDelAviso, String cuerpoDelAviso, OffsetDateTime ahora) {
         String clave = "sancion-" + sancion.id() + "-levantamiento";

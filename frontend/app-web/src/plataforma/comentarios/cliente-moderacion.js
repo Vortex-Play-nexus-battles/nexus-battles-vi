@@ -25,20 +25,22 @@
  * comparando textos (`shared/ui-kit/MAPEO-ERRORES.md`).
  */
 
+import { NOMBRE_DE_CATEGORIA_DE_REPORTE } from '../../comun/ui/admin/nombres.js';
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 import { ErrorDeApi, baseDeApi, rutaDeComentarios, urlDeImagen } from './cliente-comentarios.js';
 
 export { ErrorDeApi };
 
-/** Categorias de reporte del contrato, en el orden en que se ofrecen. */
-export const CATEGORIAS = Object.freeze([
-  { valor: 'CONTENIDO_OFENSIVO', etiqueta: 'Contenido ofensivo' },
-  { valor: 'ACOSO', etiqueta: 'Acoso a otra persona' },
-  { valor: 'SPAM', etiqueta: 'Spam o publicidad' },
-  { valor: 'INFORMACION_FALSA', etiqueta: 'Información falsa' },
-  { valor: 'CONTENIDO_INAPROPIADO', etiqueta: 'Contenido inapropiado' },
-  { valor: 'VIOLACION_DE_DERECHOS', etiqueta: 'Violación de derechos' },
-]);
+/**
+ * Categorias de reporte del contrato, en el orden y con el texto de §7.3.3
+ * «Categorías de reporte» (SA-4, informe de revisión: «Violación de
+ * derechos» a secas no decía de qué derechos).
+ */
+export const CATEGORIAS = Object.freeze(
+  Object.entries(NOMBRE_DE_CATEGORIA_DE_REPORTE).map(([valor, etiqueta]) =>
+    Object.freeze({ valor, etiqueta }),
+  ),
+);
 
 /** Los estados desde los que se edita y se marca: todos menos ELIMINADO (1.5.0). */
 const NO_TERMINALES = Object.freeze(['PUBLICADO', 'EN_REVISION', 'OCULTO']);
@@ -338,6 +340,36 @@ export async function historialDelAutor(
   const parametros = new URLSearchParams({ pagina: String(pagina), tamano: String(tamano) });
   return pedir(
     `${rutaDeModeracion()}/autores/${encodeURIComponent(autorId)}/comentarios?${parametros}`,
+    { method: 'GET', headers: { Accept: 'application/json' } },
+    fetchImpl,
+  );
+}
+
+/**
+ * El historico de toda la moderacion — §7.3.3 (SA-4, comentarios.yaml 1.14.0):
+ * las decisiones de la mas reciente a la mas antigua, con su comentario.
+ *
+ * @param {{accion?: string|null, moderador?: string|null, desde?: string|null,
+ *   hasta?: string|null, pagina?: number, tamano?: number}} [filtros] fechas ISO-8601
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<{contenido: object[], pagina: number, tamano: number, total: number,
+ *   totalPaginas: number}>}
+ * @throws {ErrorDeApi} 400 filtro invalido, 401 sin sesion, 403 si el rol no modera
+ */
+export async function historialDeModeracion(
+  { accion = null, moderador = null, desde = null, hasta = null, pagina = 0, tamano = 16 } = {},
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const parametros = new URLSearchParams();
+  for (const [clave, valor] of Object.entries({ accion, moderador, desde, hasta })) {
+    if (valor) {
+      parametros.set(clave, String(valor));
+    }
+  }
+  parametros.set('pagina', String(pagina));
+  parametros.set('tamano', String(tamano));
+  return pedir(
+    `${rutaDeModeracion()}/historial?${parametros}`,
     { method: 'GET', headers: { Accept: 'application/json' } },
     fetchImpl,
   );
