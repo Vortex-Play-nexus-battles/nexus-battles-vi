@@ -254,7 +254,7 @@ public class ModeracionController {
             @JsonInclude(JsonInclude.Include.NON_NULL) String apodoAutor,
             List<ItemDelHistorialResponse> comentarios, long total, int pagina, int tamano) {
 
-        static HistorialDelAutorResponse desde(ServicioDeModeracion.Historial h) {
+        public static HistorialDelAutorResponse desde(ServicioDeModeracion.Historial h) {
             return new HistorialDelAutorResponse(h.autorId(), h.apodoAutor(),
                     h.comentarios().stream().map(ItemDelHistorialResponse::desde).toList(),
                     h.total(), h.pagina(), h.tamano());

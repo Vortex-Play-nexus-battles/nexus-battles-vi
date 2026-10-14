@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Panel de observabilidad · The Nexus Battles VI</title>
+    <title>Métricas de plataforma · The Nexus Battles VI</title>
 
     <!--
       Ejecucion INTEGRADA (Spring Boot sirve esta vista): la API vive en el
@@ -20,64 +20,33 @@
 
   <body>
     <div data-cabecera-app></div>
-    <main class="pagina consola pila">
-      <h1>Panel de observabilidad</h1>
 
-      <p class="campo__pista">
-        <a href="./tablero-tecnico.html">Tablero técnico y de moderación</a>
-      </p>
-
-      <p class="campo__pista">
-        Latencia extremo a extremo medida por
-        <code>shared/libs/plataforma-observabilidad</code>, con las lecturas y las escrituras
-        separadas. Los números los calcula el servicio de métricas: esta pantalla no recalcula nada.
-      </p>
-
-      <!-- El panel se pinta aqui: cargando, informe, vacio o error. -->
-      <div id="panel-metricas" data-panel-metricas></div>
-
-      <p class="campo__pista">
-        <button type="button" class="boton boton--secundario" data-accion="copiar-informe">
-          Copiar informe para el acta
-        </button>
-      </p>
+    <!--
+      HU-DIS-001, HU-REN-001/002/003 y HU-DIS-003 (metricas-plataforma.yaml) con
+      el kit de la consola (SA-8, puntos 23 y 24 del informe): cifras arriba,
+      una tabla por fuente y actualización en vivo. La monta
+      `montarPanelMetricas` sobre las zonas `[data-zona=...]`.
+    -->
+    <main class="pagina consola-integral" data-vista="panel-metricas">
+      <div data-zona="encabezado"></div>
+      <div data-zona="indicadores"></div>
+      <div class="consola-integral__rejilla" data-zona="paneles"></div>
     </main>
 
     <script type="module">
       import { exigirAcceso } from '../../comun/acceso.js';
       import { montarCabecera } from '../../comun/cabecera-app.js';
-      import { iniciarPanel } from './panel-metricas.js';
+      import { montarPanelMetricas } from './panel-metricas.js';
 
-      // UX-R3.0 — la guarda va PRIMERO y en el mismo bloque.
-      //
-      // Estaban en dos `<script type="module">` separados, y el que arrancaba
-      // el panel iba antes: `iniciarPanel()` lanzaba sus consultas a
-      // `ms-metricas` y solo despues se comprobaba la sesion. Quien no tenia
-      // permiso veia la pantalla montarse, dispararse las peticiones y
-      // devolver 403 una por una antes de que el navegador lo sacara de ahi.
-      //
-      // Ahora nada arranca hasta que la guarda dice que si — y la guarda
-      // comprueba rol, no solo sesion: el panel es de administracion.
+      // La guarda va primero y en el mismo bloque: nada consulta al servicio
+      // de métricas hasta que se sabe que quien mira es de administración.
       const sesion = exigirAcceso('panel-metricas');
       if (sesion) {
-        // Cabecera unica de la aplicacion (HU-UX-001).
         montarCabecera(document.querySelector('[data-cabecera-app]'), {
           vista: 'panel-metricas',
           seccionActiva: 'metricas',
         });
-
-        const contenedor = document.querySelector('[data-panel-metricas]');
-        iniciarPanel(contenedor);
-
-        // La exportacion usa el texto que el panel ya dejo preparado con los
-        // mismos datos que se estan viendo: no se vuelve a consultar el
-        // servidor, asi que lo copiado y lo mostrado no pueden discrepar.
-        document.querySelector('[data-accion="copiar-informe"]').addEventListener('click', () => {
-          const texto = contenedor.dataset.ultimoInforme;
-          if (texto) {
-            navigator.clipboard?.writeText(texto);
-          }
-        });
+        montarPanelMetricas(document);
       }
     </script>
   </body>

@@ -493,4 +493,18 @@ class PlantillaCorreoServiceTest {
                 .contains("23/09/2026 a las 10:15")
                 .doesNotContain("�");
     }
+
+    @Test
+    void laConfirmacionDeCierreDiceQueSeEliminoCuandoYQueSeConserva() {
+        String html = service.renderizar("email/cierre-cuenta",
+                Map.of("apodo", "Ana", "fechaHora", "14/10/2026 a las 09:30 (GMT-05:00)"));
+
+        assertThat(html)
+                .contains("Tu cuenta fue eliminada")
+                .contains("Hola, <span>Ana</span>")
+                .contains("Eliminación completada: <strong>14/10/2026 a las 09:30 (GMT-05:00)</strong>")
+                .contains("registros financieros y de auditoría")
+                .contains("sin ningún dato que permita identificarte")
+                .doesNotContain("Comentario de Thymeleaf");
+    }
 }
