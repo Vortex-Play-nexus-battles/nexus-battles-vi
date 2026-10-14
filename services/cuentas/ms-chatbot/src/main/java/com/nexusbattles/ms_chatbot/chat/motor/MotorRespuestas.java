@@ -5,10 +5,8 @@ import com.nexusbattles.ms_chatbot.chat.enriquecido.RespuestaEnriquecida;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
 import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
-import com.nexusbattles.ms_chatbot.chat.motor.model.EstadoVersion;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TipoRespuesta;
-import com.nexusbattles.ms_chatbot.chat.motor.repository.TemaConocimientoRepository;
 import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
 import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.texto.DistanciaDeEdicion;
@@ -33,6 +31,14 @@ import java.util.Set;
  * <p>Desde HU-CHA-012 responde con la versión de la base de conocimiento que
  * está en producción, y {@link #responderCon} permite evaluar cualquier otra
  * versión (la candidata) con exactamente la misma lógica, sin activarla.
+ *
+ * <p>Desde 7.4.9 (ms-chatbot.yaml 1.9.0) los temas de producción salen de
+ * {@link FuenteDeLaBase} ({@link TemasEnProduccion}: leídos una vez por
+ * versión, no en cada mensaje) y la respuesta de la base se guarda en
+ * {@link CacheDeRespuestas}. Solo la de {@link #generarRespuesta(String,
+ * VistaDelChat, PreferenciasDeRespuesta)}: los seguimientos
+ * ({@link #responderTema}, {@link #relacionadosCon}) y la evaluación de una
+ * candidata ({@link #responderCon}) se calculan siempre.
  */
 @Service
 public class MotorRespuestas {
@@ -86,10 +92,12 @@ public class MotorRespuestas {
         + "I can put you in touch with human support to solve it; "
         + "meanwhile, your question was recorded to improve my answers.";
 
-    private final TemaConocimientoRepository temaConocimientoRepository;
+    private final FuenteDeLaBase fuente;
+    private final CacheDeRespuestas cache;
 
-    public MotorRespuestas(TemaConocimientoRepository temaConocimientoRepository) {
-        this.temaConocimientoRepository = temaConocimientoRepository;
+    public MotorRespuestas(FuenteDeLaBase fuente, CacheDeRespuestas cache) {
+        this.fuente = fuente;
+        this.cache = cache;
     }
 
     /** Responde con la versión de la base de conocimiento que está en producción. */
@@ -111,13 +119,17 @@ public class MotorRespuestas {
      * con las preferencias de quien pregunta: el idioma de la respuesta (si el
      * tema lo tiene) y el nivel de detalle. Con las preferencias por defecto
      * responde exactamente igual que sin ellas.
+     *
+     * <p>7.4.9: es la única respuesta que se guarda en {@link CacheDeRespuestas},
+     * con la versión en producción, la pregunta, las preferencias y la vista
+     * como clave: la misma pregunta se responde sin volver a puntuar los temas.
      */
     public ResultadoMotor generarRespuesta(String mensajeUsuario, VistaDelChat vista,
                                            PreferenciasDeRespuesta preferencias) {
-        List<TemaConocimiento> temas =
-            temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION);
-        return responderCon(mensajeUsuario, temas, vista,
-            preferencias == null ? PreferenciasDeRespuesta.POR_DEFECTO : preferencias);
+        PreferenciasDeRespuesta pedidas = preferencias == null ? PreferenciasDeRespuesta.POR_DEFECTO : preferencias;
+        BaseEnProduccion base = fuente.enProduccion();
+        return cache.obtener(CacheDeRespuestas.Clave.de(base.versionId(), mensajeUsuario, vista, pedidas),
+            () -> responderCon(mensajeUsuario, base.temas(), vista, pedidas));
     }
 
     /**
@@ -140,8 +152,7 @@ public class MotorRespuestas {
         if (clave == null) {
             return Optional.empty();
         }
-        List<TemaConocimiento> temas = ordenados(
-            temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION));
+        List<TemaConocimiento> temas = ordenados(fuente.enProduccion().temas());
         return temas.stream()
             .filter(tema -> tema.isActivo() && clave.equals(tema.getClave()))
             .findFirst()
@@ -160,8 +171,7 @@ public class MotorRespuestas {
         if (clave == null) {
             return Optional.empty();
         }
-        List<TemaConocimiento> temas = ordenados(
-            temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION));
+        List<TemaConocimiento> temas = ordenados(fuente.enProduccion().temas());
         return temas.stream()
             .filter(tema -> tema.isActivo() && clave.equals(tema.getClave()))
             .findFirst()

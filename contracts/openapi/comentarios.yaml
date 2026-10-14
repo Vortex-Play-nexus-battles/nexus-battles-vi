@@ -191,7 +191,15 @@ info:
     reportaron. Solo cuentas: ningun identificador sale. La consume el
     tablero de moderacion de metricas-plataforma reenviando el token de quien
     lo mira. Solo anade una operacion y un esquema: es menor.
-  version: 1.15.0
+
+    1.16.0 (§7.3.6 «exportación de inventario, estadísticas, comentarios e
+    historial de transacciones», SA-14): nueva `GET /comentarios/mios`
+    (`misComentarios`), los comentarios de quien llama, en todos sus estados
+    y del mas reciente al mas antiguo, con la misma forma que el historial de
+    un autor que ve la moderacion. El autor sale siempre del token: nadie lee
+    los de otro por aqui. La usa la exportacion de datos del portal de
+    privacidad. Solo anade una operacion: es menor.
+  version: 1.16.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -858,6 +866,55 @@ paths:
                 $ref: "#/components/schemas/ProblemDetail"
         "403":
           description: El rol no modera.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+
+  /comentarios/mios:
+    get:
+      summary: Los comentarios propios, en todos sus estados (§7.3.6)
+      operationId: misComentarios
+      description: >
+        1.16.0 — Cualquier persona con sesion (JUGADOR, MODERADOR,
+        ADMINISTRADOR o SUPER_ADMINISTRADOR). Los comentarios de quien llama,
+        del mas reciente al mas antiguo, tambien los OCULTO y los ELIMINADO:
+        son datos suyos que el servicio guarda, y la exportacion del portal de
+        privacidad los reune aqui. El autor sale del token; un token de
+        servicio es 403. Sin comentarios es `200` con lista vacia y `total: 0`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: tamano
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Pagina de los comentarios propios (puede venir vacia).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HistorialDelAutorResponse"
+        "401":
+          description: Sin token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
+          description: El token no es de una persona.
           content:
             application/problem+json:
               schema:

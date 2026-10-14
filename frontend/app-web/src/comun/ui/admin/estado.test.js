@@ -5,6 +5,7 @@
 
 import {
   ESTADOS_DE_CUENTA_ADMIN,
+  ESTADOS_DE_PAGO,
   ESTADOS_DE_SALA,
   ESTADOS_DE_SERVICIO,
   ESTADOS_DE_TORNEO,
@@ -25,6 +26,12 @@ test('las cuentas en femenino, las salas y los torneos con su nombre', () => {
   expect(ESTADOS_DE_CUENTA_ADMIN.BLOQUEADA.tono).toBe('bloqueado');
   expect(ESTADOS_DE_SALA.EN_JUEGO.texto).toBe('En juego');
   expect(ESTADOS_DE_TORNEO.INSCRIPCIONES_ABIERTAS.texto).toBe('Inscripciones abiertas');
+});
+
+test('SA-15: el resultado de un pago en palabras; el que no se confirmó no va en verde', () => {
+  expect(ESTADOS_DE_PAGO.APROBADO).toEqual({ texto: 'Aprobado', tono: 'exito' });
+  expect(ESTADOS_DE_PAGO.RECHAZADO.tono).toBe('error');
+  expect(ESTADOS_DE_PAGO.INDETERMINADO).toEqual({ texto: 'Sin confirmar', tono: 'advertencia' });
 });
 
 test('el distintivo lleva icono del sprite (o un punto) y su texto', () => {

@@ -116,6 +116,9 @@ services:
       # ms-chatbot.yaml 1.3.0: misiones en curso del propio jugador (con su
       # token). Vive en el host de contenido, igual que inventario (8105).
       MISIONES_BASE_URL: ${MISIONES_BASE_URL:-http://34.193.90.11:8105}
+      # ms-chatbot.yaml 1.10.0: catalogo publico de productos (sin token), en
+      # el host de contenido (8103), igual que lo lee ms-identidad.
+      PRODUCTOS_BASE_URL: ${PRODUCTOS_BASE_URL:-http://34.193.90.11:8103}
       LISTA_NEGRA_VERIFICAR_URL: ${LISTA_NEGRA_VERIFICAR_URL:-http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar}
 
 volumes:

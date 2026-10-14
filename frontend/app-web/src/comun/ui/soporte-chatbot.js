@@ -135,7 +135,8 @@ export function avisoDeError(error) {
  * @param {{cliente: {abrirTicket: Function, misTickets: Function},
  *          sesion: () => {autenticado?: boolean}, login: string|null,
  *          chatGeneral: string, alVolver: () => void}} opciones
- * @returns {{elemento: HTMLElement, abrir: () => void, enfocar: () => void}}
+ * @returns {{elemento: HTMLElement, abrir: () => void, enfocar: () => void,
+ *            actualizarTicket: (ticket: object) => void, recargarLista: () => void}}
  */
 export function crearPanelSoporte({ cliente, sesion, login, chatGeneral, alVolver }) {
   let enviando = false;
@@ -444,7 +445,43 @@ export function crearPanelSoporte({ cliente, sesion, login, chatGeneral, alVolve
     destino.focus();
   }
 
-  return { elemento: panel, abrir, enfocar };
+  // ---------------------------------------------------- 7.4.9, en vivo
+
+  /** Si «Tus solicitudes» está a la vista (panel abierto, con sesión). */
+  function listaALaVista() {
+    return !panel.hidden && contenido.contains(lista);
+  }
+
+  /**
+   * Un cambio que llegó por el canal en tiempo real (`chatbot.yaml` 1.0.0,
+   * `/user/queue/soporte/tickets`): reemplaza esa solicitud en la lista. Si la
+   * lista no la tiene, se relee entera; con el panel cerrado no hace nada,
+   * porque al abrirlo se lee de nuevo.
+   *
+   * @param {{ticketId?: string}} ticket lo que el jugador ve de la solicitud
+   */
+  function actualizarTicket(ticket) {
+    if (!listaALaVista() || !ticket?.ticketId) {
+      return;
+    }
+    const actual = [...lista.querySelectorAll('[data-ticket-id]')].find(
+      (item) => item.dataset.ticketId === ticket.ticketId,
+    );
+    if (actual) {
+      actual.replaceWith(elementoDeTicket(ticket));
+    } else {
+      cargarLista();
+    }
+  }
+
+  /** Relee la lista si está a la vista (al volver el canal tras una caída). */
+  function recargarLista() {
+    if (listaALaVista()) {
+      cargarLista();
+    }
+  }
+
+  return { elemento: panel, abrir, enfocar, actualizarTicket, recargarLista };
 }
 
 /**

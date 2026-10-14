@@ -12,8 +12,10 @@ import {
   horasDeAtencion,
   montarAnaliticas,
   nombreDeCategoria,
+  resumenDeTendencia,
   textoDeErrorDeAnaliticas,
   textoDeErrorDelPanel,
+  zonaLegible,
 } from './panel-chatbot-analiticas.js';
 
 const esperar = () => new Promise((resolver) => setTimeout(resolver, 0));
@@ -383,4 +385,107 @@ test('sin solicitudes ni palabras muestra estados vacíos; sin los campos, no pi
   await antiguo.pestana.cargar();
   expect(antiguo.raiz.querySelector('[data-zona="soporte"]')).toBeNull();
   expect(antiguo.raiz.querySelector('[data-zona="palabras"]')).toBeNull();
+});
+
+/* Punto 25 del informe de revisión del Super Administrador: la tabla de la
+   consola, cifras a la derecha, el peso de cada fila y la serie en palabras. */
+
+test('las tablas son las de la consola: cifras a la derecha y la barra del peso de cada fila', async () => {
+  const conTemas = {
+    ...TABLERO,
+    temasFrecuentes: [
+      { clave: 'a', titulo: 'Subastas', respuestas: 1200 },
+      { clave: 'b', titulo: 'Salas', respuestas: 300 },
+    ],
+  };
+  const { raiz, pestana } = montar({ analiticas: jest.fn(async () => conTemas) });
+  await pestana.cargar();
+
+  const temas = raiz.querySelector('[data-zona="temas"]');
+  expect(temas.tagName).toBe('TABLE');
+  expect(temas.classList.contains('tabla-admin__tabla')).toBe(true);
+  // El marco desplazable se recorre con el teclado y tiene nombre.
+  const marco = temas.closest('.tabla-admin__marco');
+  expect(marco.getAttribute('tabindex')).toBe('0');
+  expect(document.getElementById(marco.getAttribute('aria-labelledby')).textContent).toBe(
+    'Temas más consultados',
+  );
+  const [encabezadoTema, encabezadoCifra] = temas.querySelectorAll('thead th');
+  expect(encabezadoTema.dataset.tipo).toBe('texto');
+  expect(encabezadoCifra.dataset.tipo).toBe('numero');
+
+  const [primera, segunda] = temas.querySelectorAll('tbody tr');
+  const cifra = primera.querySelectorAll('td')[1];
+  expect(cifra.dataset.tipo).toBe('numero');
+  expect(cifra.dataset.etiqueta).toBe('Respuestas');
+  // La barra es decorativa: la celda sigue diciendo solo la cifra.
+  expect(cifra.textContent).toBe('1.200');
+  expect(cifra.querySelector('.tabla-panel__barra').getAttribute('aria-hidden')).toBe('true');
+  const proporcion = (fila) =>
+    Number(fila.querySelector('.tabla-panel__relleno').style.getPropertyValue('--proporcion'));
+  expect(proporcion(primera)).toBe(1);
+  expect(proporcion(segunda)).toBe(0.25);
+  // La celda que nombra la fila no lleva barra ni etiqueta repetida.
+  expect(primera.querySelector('td').classList.contains('tabla-admin__principal')).toBe(true);
+  expect(primera.querySelector('td').dataset.etiqueta).toBeUndefined();
+});
+
+test('una columna con textos no se toma por cifras ni lleva barra', async () => {
+  const conPalabras = {
+    ...TABLERO,
+    tickets: {
+      total: 3,
+      abiertos: 1,
+      enProceso: 0,
+      resueltos: 2,
+      cerrados: 0,
+      horasPromedioDeAtencion: 0.5,
+      porCategoria: [{ categoria: 'SOPORTE_TECNICO', tickets: 3 }],
+    },
+    palabrasClave: [
+      { palabra: 'torneo', preguntas: 5, conversaciones: 3 },
+      { palabra: 'subasta', preguntas: 2, conversaciones: 2 },
+    ],
+  };
+  const { raiz, pestana } = montar({ analiticas: jest.fn(async () => conPalabras) });
+  await pestana.cargar();
+
+  const palabras = raiz.querySelector('[data-zona="palabras-clave"]');
+  const [palabra, preguntas, conversaciones] = palabras.querySelectorAll('thead th');
+  expect([palabra.dataset.tipo, preguntas.dataset.tipo, conversaciones.dataset.tipo]).toEqual([
+    'texto',
+    'numero',
+    'numero',
+  ]);
+  // Solo la primera columna de cifras lleva la barra.
+  const fila = palabras.querySelector('tbody tr');
+  expect(fila.querySelectorAll('.tabla-panel__barra')).toHaveLength(1);
+  expect(fila.querySelectorAll('td')[1].querySelector('.tabla-panel__barra')).not.toBeNull();
+  expect(raiz.querySelector('[data-zona="soporte-por-categoria"] tbody tr').textContent).toBe(
+    'Problema técnico3',
+  );
+});
+
+test('la gráfica dice el total, el día con más preguntas y la zona horaria en palabras', async () => {
+  const { raiz, pestana } = montar({ analiticas: jest.fn(async () => TABLERO) });
+  await pestana.cargar();
+
+  expect(raiz.querySelector('[data-zona="resumen-tendencia"]').textContent).toBe(
+    resumenDeTendencia(TABLERO.tendencia),
+  );
+  expect(resumenDeTendencia(TABLERO.tendencia)).toMatch(
+    /^3 preguntas en 2 días · el día con más: /,
+  );
+  expect(resumenDeTendencia([{ dia: '2026-09-09', preguntas: 1 }])).toMatch(
+    /^1 pregunta en 1 día · /,
+  );
+  expect(raiz.textContent).toContain('en hora de Colombia');
+  expect(raiz.textContent).not.toContain('America/Bogota');
+  expect(raiz.querySelectorAll('.panel-chatbot__eje span')).toHaveLength(2);
+});
+
+test('zonaLegible dice el país o la ciudad, nunca el identificador', () => {
+  expect(zonaLegible('America/Bogota')).toBe('Colombia');
+  expect(zonaLegible('America/New_York')).toBe('New York');
+  expect(zonaLegible(null)).toBeNull();
 });

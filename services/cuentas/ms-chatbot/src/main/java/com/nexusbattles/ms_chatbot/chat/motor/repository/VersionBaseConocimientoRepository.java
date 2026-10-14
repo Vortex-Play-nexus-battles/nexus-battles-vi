@@ -33,6 +33,14 @@ public interface VersionBaseConocimientoRepository extends JpaRepository<Version
     // 1.6.0: si hay una version en ese estado, sin cargarla ni bloquearla.
     boolean existsByEstado(EstadoVersion estado);
 
+    // 7.4.9 (ms-chatbot.yaml 1.9.0): solo el id de la version en ese estado
+    // (una fila por el indice parcial de V4). Es la consulta barata que se
+    // hace en cada mensaje para saber si la base en memoria sigue vigente:
+    // un despliegue o una reversion, hechos en esta instancia o en otra,
+    // cambian este id y lo guardado de la anterior deja de valer.
+    @Query("select v.id from VersionBaseConocimiento v where v.estado = :estado")
+    Optional<UUID> buscarIdDeLaDeEstado(@Param("estado") EstadoVersion estado);
+
     // 1.6.0: si la candidata tiene una publicacion programada que ya vencio.
     // La tarea de cada minuto pregunta esto sin bloquear nada: casi siempre la
     // respuesta es no.
