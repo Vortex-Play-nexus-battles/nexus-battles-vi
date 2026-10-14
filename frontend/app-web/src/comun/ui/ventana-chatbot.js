@@ -162,7 +162,8 @@ export function crearVentanaChatbot({
   cliente = crearClienteChatbot(),
   sesion = () => leerSesion(),
   raiz = document.body,
-  chatGeneral = new URL(CHAT_GENERAL, import.meta.url).href,
+  // SA-7 — la dirección del chat general es la limpia (`/chat`) detrás del borde.
+  chatGeneral = urlDeVista('chat') ?? new URL(CHAT_GENERAL, import.meta.url).href,
   login = urlDeVista('login'),
   confirmarBorrado = confirmar,
   esperaAutocompletar = 250,

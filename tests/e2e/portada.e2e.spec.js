@@ -136,7 +136,8 @@ test.describe('F6 — la portada pública con la tienda', () => {
       await expect(page).toHaveURL(/\/login\?/);
       const destino = new URL(page.url());
       expect(destino.pathname).toBe('/login');
-      expect(destino.searchParams.get('volver')).toMatch(/tienda\.html$/);
+      // SA-7 — la vuelta es la dirección limpia de la tienda detrás del borde.
+      expect(destino.searchParams.get('volver')).toMatch(/^\/tienda$|tienda\.html$/);
       await expect(page.locator('#formLogin')).toBeVisible();
     } finally {
       await contexto.close();

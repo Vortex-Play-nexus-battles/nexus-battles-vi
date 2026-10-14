@@ -32,6 +32,11 @@ const INVITADO = process.env.E2E_INVITADO ?? 'invitado_e2e';
 const CLAVE = 'Contrasena-E2E-2026';
 const SALA = '/frontend/app-web/src/plataforma/salas-partidas/sala-batalla.html';
 const LISTADO = '/frontend/app-web/src/plataforma/salas-partidas/batallas.html';
+// SA-7 — detrás del borde la sala y la verificación del héroe tienen su
+// dirección limpia (`/jugar/sala`, `/jugar/heroe`); la ruta del fichero
+// redirige a ella.
+const EN_LA_SALA = /(?:\/jugar\/sala|sala-batalla\.html)\?sala=/;
+const EN_LA_VERIFICACION = /(?:\/jugar\/heroe|validacion-heroe\.html)\?sala=/;
 
 /**
  * B1 — la cuenta nace pendiente de verificar su correo. Registrar, leer el
@@ -188,7 +193,7 @@ test.describe('Sala privada con codigo de invitacion (RF-JUE-002)', () => {
     // mensaje cambia para que no haya duda de si se envio.
     await expect(formulario).toBeVisible();
     await expect(page.locator('[data-zona="aviso-codigo"]')).toContainText(/no válido/i);
-    await expect(page).not.toHaveURL(/sala-batalla\.html/);
+    await expect(page).not.toHaveURL(EN_LA_SALA);
 
     const dentro = await api.get(`/api/v1/salas/${sala.id}`, {
       headers: conToken(anfitriona.token),
@@ -210,7 +215,7 @@ test.describe('Sala privada con codigo de invitacion (RF-JUE-002)', () => {
       .fill(sala.codigoInvitacion.replace('-', '').toLowerCase());
     await formulario.locator('button[type="submit"]').click();
 
-    await page.waitForURL(/sala-batalla\.html/, { timeout: 20_000 });
+    await page.waitForURL(EN_LA_SALA, { timeout: 20_000 });
 
     const dentro = await api.get(`/api/v1/salas/${sala.id}`, {
       headers: conToken(anfitriona.token),
@@ -240,7 +245,7 @@ test.describe('Sala privada con codigo de invitacion (RF-JUE-002)', () => {
       `${LISTADO}?sala=${otra.id}&codigo=${encodeURIComponent(otra.codigoInvitacion)}`,
     );
 
-    await page.waitForURL(/sala-batalla\.html/, { timeout: 20_000 });
+    await page.waitForURL(EN_LA_SALA, { timeout: 20_000 });
     await expect(page.locator('[data-zona="pedir-codigo"]')).toBeHidden();
 
     const dentro = await api.get(`/api/v1/salas/${otra.id}`, {
@@ -281,12 +286,14 @@ test.describe('Sala privada con codigo de invitacion (RF-JUE-002)', () => {
       await conSesion(page, invitado, INVITADO);
       await page.goto(`${LISTADO}?sala=${conApuesta.id}&codigo=ZZZZ-9999`);
       await expect(page.locator('[data-zona="pedir-codigo"]')).toBeVisible();
-      await expect(page).not.toHaveURL(/validacion-heroe\.html/);
+      await expect(page).not.toHaveURL(EN_LA_VERIFICACION);
 
       // Con el código bueno, entonces sí: a confirmar héroe y apuesta, con el código.
       await page.locator('[name="codigoInvitacion"]').fill(conApuesta.codigoInvitacion);
       await page.locator('[data-zona="pedir-codigo"] button[type="submit"]').click();
-      await page.waitForURL(/validacion-heroe\.html\?sala=.*&codigo=/, { timeout: 20_000 });
+      await page.waitForURL(/(?:\/jugar\/heroe|validacion-heroe\.html)\?sala=.*&codigo=/, {
+        timeout: 20_000,
+      });
 
       const sigue = await api.get(`/api/v1/salas/${conApuesta.id}`, {
         headers: conToken(anfitriona.token),

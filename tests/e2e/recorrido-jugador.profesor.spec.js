@@ -53,13 +53,14 @@ const EN = {
   recuperar: /\/recuperar(?:[?#]|$)|restablecer-solicitar\.html/,
   inicio: /\/inicio(?:[?#]|$)/,
   jugar: /\/jugar(?:[?#]|$)|batallas\.html/,
-  crearSala: /crear-sala\.html/,
-  sala: /sala-batalla\.html\?sala=/,
+  // SA-7 — la sala, crear sala y publicar subasta también tienen dirección limpia.
+  crearSala: /\/jugar\/nueva-sala(?:[?#]|$)|crear-sala\.html/,
+  sala: /(?:\/jugar\/sala|sala-batalla\.html)\?sala=/,
   misiones: /\/misiones(?:[?#]|$)|misiones\.html/,
   torneos: /\/torneos(?:[?#]|$)/,
   inventario: /\/inventario(?:[?#]|$)/,
   subastas: /\/subastas(?:[?#]|$)/,
-  publicar: /publicar-subasta\.html/,
+  publicar: /\/subastas\/publicar(?:[?#]|$)|publicar-subasta\.html/,
 };
 
 /** Un identificador técnico en un texto: lo que el jugador nunca debe leer. */
