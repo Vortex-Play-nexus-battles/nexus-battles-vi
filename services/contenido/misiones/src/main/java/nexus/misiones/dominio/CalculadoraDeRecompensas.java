@@ -1,9 +1,11 @@
 package nexus.misiones.dominio;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import nexus.misiones.dominio.simulacion.Azar;
 import nexus.misiones.dominio.simulacion.ResultadoDeMision;
 
@@ -83,8 +85,10 @@ public final class CalculadoraDeRecompensas {
 
         List<RecompensasDeEjecucion.EpicaGanada> epicas = new ArrayList<>();
         if (exito || !parametros.epicaExigeCompletar()) {
+            // Una epica se aprende una vez: en una exploracion larga el mismo Master puede caer dos veces.
+            Set<String> yaGanadas = new HashSet<>();
             for (ResultadoDeMision.MasterEnfrentado master : resultado.masters()) {
-                if (!master.derrotado()) {
+                if (!master.derrotado() || !yaGanadas.add(master.epica().nombre())) {
                     continue;
                 }
                 Epica epica = master.epica();

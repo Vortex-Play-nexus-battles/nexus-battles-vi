@@ -66,6 +66,13 @@ tasks.named('test') {
     // -Dsimulacion.informe=true y sus companeras. Gradle no pasa los -D a la
     // JVM de las pruebas por su cuenta: se reenvian solo las de este prefijo.
     systemProperties System.getProperties().findAll { k, v -> k.toString().startsWith('simulacion.') }
+
+    // BalanceDeMisionesTest y BalanceDelMasterTest leen las semillas del servicio de misiones como datos
+    // (../misiones/src/main/resources/semilla). Sin declararlas, Gradle da la prueba por al dia aunque alguien
+    // cambie una semilla o la regla del Master, y el equilibrio dejaria de medirse justo cuando cambia.
+    inputs.files(fileTree(dir: '../misiones/src/main/resources/semilla'))
+            .withPropertyName('semillasDeMisiones')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 jacocoTestReport {

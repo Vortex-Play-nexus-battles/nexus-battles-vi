@@ -35,6 +35,7 @@ import nexus.misiones.dominio.simulacion.Combatiente;
 import nexus.misiones.dominio.simulacion.EstadisticasDeCombate;
 import nexus.misiones.dominio.simulacion.EventoDeCombate;
 import nexus.misiones.dominio.simulacion.Formula;
+import nexus.misiones.dominio.simulacion.ReglaDelMaster;
 import nexus.misiones.dominio.simulacion.TurnoParaDecidir;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -645,7 +646,8 @@ class CicloDeUnaMisionTest {
     }
 
     @Test
-    @DisplayName("un Master sin vida fijada (todos los del juego) pelea con la de su prototipo en su nivel")
+    @DisplayName("un Master sin vida fijada (todos los del juego) pelea con la fraccion de la vida de su prototipo "
+            + "en su nivel que fija la regla de equilibrio")
     void masterSinVidaFijada() {
         MasterDeMision delJuego = new MasterDeMision("Sombra del Olvido", "Pícaro Veneno", 1.0,
                 Misiones.VELO_DE_SOMBRAS);
@@ -660,8 +662,12 @@ class CicloDeUnaMisionTest {
                 .filteredOn(c -> c.id().equals("rival") && c.prototipo().equals("Pícaro Veneno"))
                 .isNotEmpty()
                 .allSatisfy(c -> {
-                    assertThat(c.estadisticas().vida()).isEqualTo(50);
-                    assertThat(c.estadisticas().defensa()).isEqualTo(5);
+                    // La regla de HU-SIM-006 reduce la vida del prototipo (50 aqui) segun el nivel del heroe (1);
+                    // solo un Master que la semilla fija (el del banco E2E) pelea con otra cosa.
+                    assertThat(c.estadisticas().vida()).isEqualTo(ReglaDelMaster.publicada().vida(50, 1));
+                    assertThat(c.estadisticas().vida()).isGreaterThan(1);
+                    assertThat(c.estadisticas().defensa()).isGreaterThanOrEqualTo(
+                            ReglaDelMaster.publicada().defensa(5, 1));
                 });
         assertThat(heroes.nivelesPedidos).contains("Pícaro Veneno@3");
     }

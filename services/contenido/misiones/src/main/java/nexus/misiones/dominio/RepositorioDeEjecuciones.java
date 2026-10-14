@@ -30,7 +30,10 @@ public interface RepositorioDeEjecuciones {
 
     List<Ejecucion> enCursoDelJugador(String jugadorUid);
 
-    /** Cuantas empezo el jugador en esa mision desde el instante dado (intentos de desafio). */
+    /**
+     * Cuantas empezo el jugador en esa mision desde el instante dado (intentos de desafio). Las canceladas sin
+     * penalizacion, porque su simulacion fallaba por un error del sistema, no cuentan: no gastan el intento.
+     */
     long iniciadasDesde(String jugadorUid, String misionId, Instant desde);
 
     /** En progreso con el plazo vencido: las que hay que simular. */

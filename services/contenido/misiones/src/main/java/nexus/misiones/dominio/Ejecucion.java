@@ -39,6 +39,13 @@ public final class Ejecucion {
      */
     public static final Duration ESPERA_MAXIMA_ANTES_DE_SIMULAR = Duration.ofMinutes(5);
 
+    /**
+     * Cuanto tiempo es de una vuelta la simulacion que reservo (HU-SIM-007). Una mision entera son cientos de
+     * llamadas a heroes y al motor (menos de un minuto en la practica); cinco minutos dejan margen y, si el proceso
+     * muere, la ejecucion no espera mas que eso. Es el mismo valor que el tope del aplazamiento.
+     */
+    public static final Duration ARRIENDO_DE_SIMULACION = Duration.ofMinutes(5);
+
     private final UUID id;
     private final String misionId;
     private final String jugadorUid;
@@ -61,6 +68,8 @@ public final class Ejecucion {
     private String ultimoError;
     private Integer nivelAlcanzado;
     private Double experienciaAcumulada;
+    private int intentosDeSimulacion;
+    private boolean canceladaSinPenalizacion;
     private Long version;
 
     private Ejecucion(Estado e) {
@@ -91,6 +100,8 @@ public final class Ejecucion {
         this.ultimoError = e.ultimoError;
         this.nivelAlcanzado = e.nivelAlcanzado;
         this.experienciaAcumulada = e.experienciaAcumulada;
+        this.intentosDeSimulacion = e.intentosDeSimulacion == null ? 0 : e.intentosDeSimulacion;
+        this.canceladaSinPenalizacion = Boolean.TRUE.equals(e.sinPenalizacion);
         this.version = e.version;
     }
 
@@ -145,13 +156,30 @@ public final class Ejecucion {
     }
 
     /**
+     * La simulacion de esta ejecucion VIENE FALLANDO: sigue en progreso y hay al menos un intento de simularla
+     * fallido y registrado ({@link #simulacionAplazada}), es decir, un error del sistema y no del jugador la tiene
+     * detenida. Mientras esta en progreso, {@link #intentosDeLiquidacion()} solo lo suma ese aplazamiento (los
+     * reintentos de la liquidacion empiezan cuando termina, y {@code terminar} y {@code cancelar} lo ponen a cero),
+     * asi que es la cuenta de simulaciones fallidas. Reservar para simular no es fallar.
+     */
+    public boolean simulacionFallando() {
+        return estado == EstadoEjecucion.EN_PROGRESO && intentosDeLiquidacion > 0;
+    }
+
+    /**
      * Cancelar (7.8.7, «Abandonada: cancelada por el jugador, con
      * penalizacion»). La penalizacion provisional es perder todo lo de esta
      * ejecucion: no hay resultado ni recompensas, y solo queda liberar al heroe
      * sin experiencia.
+     *
+     * <p>Excepcion (decision del PO, 2026-10-06): si la simulacion venia fallando por un error del sistema
+     * ({@link #simulacionFallando()}), la cancelacion es SIN penalizacion: el jugador no tuvo la culpa de que la
+     * mision no se pudiera resolver, asi que no gasta uno de sus intentos ({@link #canceladaSinPenalizacion()}).
+     * Se decide antes de empezar la liquidacion, que borra la cuenta de fallos.
      */
     public void cancelar(Instant ahora) {
         exigirEnProgreso("cancelar");
+        canceladaSinPenalizacion = simulacionFallando();
         estado = EstadoEjecucion.ABANDONADA;
         terminadaEn = ahora;
         pasos.clear();
@@ -214,6 +242,25 @@ public final class Ejecucion {
             }
         }
         empezarLiquidacion(ahora);
+    }
+
+    /**
+     * Quien va a simular una ejecucion vencida la RESERVA primero y guarda la reserva con la version que leyo: si
+     * otro barrido u otra instancia se adelanto, esa escritura falla y este no simula (HU-SIM-007). La reserva es un
+     * arriendo de {@link #ARRIENDO_DE_SIMULACION} que usa el mismo campo que el aplazamiento de un fallo
+     * ({@link #proximoIntento()}), asi que {@link #listaParaSimular} y la consulta de las vencidas ya la excluyen
+     * sin mas: si el proceso muere simulando, el arriendo vence y otra vuelta la retoma. Cada reserva suma un
+     * intento, que es lo que permite saber, despues, si la reserva que se tiene en la mano sigue siendo la vigente.
+     */
+    public void reservarParaSimular(Instant ahora) {
+        exigirEnProgreso("simular");
+        intentosDeSimulacion++;
+        proximoIntento = ahora.plus(ARRIENDO_DE_SIMULACION);
+    }
+
+    /** El arriendo o la espera de un fallo todavia no vencio: alguna vuelta la tiene o la esta esperando. */
+    public boolean reservaVigente(Instant ahora) {
+        return estado == EstadoEjecucion.EN_PROGRESO && proximoIntento != null && ahora.isBefore(proximoIntento);
     }
 
     /**
@@ -389,6 +436,19 @@ public final class Ejecucion {
         return experienciaAcumulada;
     }
 
+    /** Cuantas veces se reservo para simular, con exito o sin el: el primer intento es el 1. */
+    public int intentosDeSimulacion() {
+        return intentosDeSimulacion;
+    }
+
+    /**
+     * Se cancelo con la simulacion fallando por un error del sistema: no cuenta como intento consumido de un
+     * desafio ni lleva la penalizacion de abandonar.
+     */
+    public boolean canceladaSinPenalizacion() {
+        return canceladaSinPenalizacion;
+    }
+
     public Long version() {
         return version;
     }
@@ -416,6 +476,10 @@ public final class Ejecucion {
         public String ultimoError;
         public Integer nivelAlcanzado;
         public Double experienciaAcumulada;
+        /** Nulo en lo guardado antes de HU-SIM-007: se lee como cero. */
+        public Integer intentosDeSimulacion;
+        /** Nulo en lo guardado antes de la cancelacion sin penalizacion: se lee como falso. */
+        public Boolean sinPenalizacion;
         public Long version;
     }
 }

@@ -646,6 +646,114 @@ class SimuladorDeMisionTest {
         assertThat(segundoTurnoDelHeroe.antes().actor().poder()).isEqualTo(6);
     }
 
+    // ------------------------------------------------------------- la epica del Master (HU-SIM-006)
+
+    private static final Epica FRIO = new Epica("Frío concentrado", "-1 de poder al oponente",
+            "No recibe ningún daño en el siguiente turno", "978446ae-c979-349b-b620-f4215852ab5f");
+
+    private static Rival masterConEpica(Epica epica, String prototipo, int vida) {
+        return new Rival("Hija de la Escarcha", TipoDeRival.MASTER, prototipo, 3, vida, 8, 8, List.of(), epica);
+    }
+
+    private static List<String> accionesPedidasPor(Dobles.Motor motor, String ejecutor) {
+        String prefijo = "acciones " + ejecutor + " ";
+        return motor.llamadas.stream().filter(l -> l.startsWith(prefijo)).map(l -> l.substring(prefijo.length()))
+                .toList();
+    }
+
+    @Test
+    @DisplayName("el Master lleva su epica al motor y la juega en cuanto puede: no gasta poder y tiene dos turnos de recarga")
+    void masterJuegaSuEpica() {
+        Dobles.Motor motor = new Dobles.Motor();
+        motor.danoDelHeroe = 3;
+        motor.danoDeLosEnemigos = 0;
+        SimuladorDeMision simulador = new SimuladorDeMision(new DecisorBasico(), motor, dado -> 1);
+
+        Simulacion simulacion = simular(simulador, List.of(), List.of(masterConEpica(FRIO, "Mago Hielo", 12)),
+                new AzarGuionado(false, 1), null);
+
+        // Empieza el Master: epica, ataque basico mientras se recarga, epica otra vez y ataque basico.
+        assertThat(accionesPedidasPor(motor, Dobles.Motor.RIVAL)).containsExactly("Frío concentrado", "ATAQUE_BASICO",
+                "Frío concentrado", "ATAQUE_BASICO");
+        assertThat(motor.recibidos.getFirst()).filteredOn(c -> c.id().equals(Dobles.Motor.RIVAL)).singleElement()
+                .satisfies(c -> assertThat(c.epicas()).containsExactly("Frío concentrado"));
+        assertThat(motor.recibidos.getFirst()).filteredOn(c -> c.id().equals(Dobles.Motor.HEROE)).singleElement()
+                .satisfies(c -> assertThat(c.epicas()).isEmpty());
+
+        List<EventoDeCombate.Jugada> delMaster = simulacion.eventos().stream()
+                .filter(e -> e.actor().lado() == EventoDeCombate.Lado.MASTER).map(EventoDeCombate::jugada).toList();
+        assertThat(delMaster).extracting(EventoDeCombate.Jugada::ejecutada)
+                .containsExactly("Frío concentrado", "Ataque básico", "Frío concentrado", "Ataque básico");
+        EventoDeCombate.Jugada laEpica = delMaster.getFirst();
+        assertThat(laEpica.decidida()).isEqualTo("Frío concentrado");
+        assertThat(laEpica.costoDePoder()).as("«no usan puntos de poder»").isZero();
+        assertThat(laEpica.rechazadas()).isEmpty();
+        // No salio de ninguna estrategia: el evento no dice que sea una rotacion de la mision ni una predefinida.
+        assertThat(laEpica.estrategia()).isNull();
+        assertThat(laEpica.estrategiaId()).isNull();
+        assertThat(laEpica.decididaPor()).isEqualTo(DecididaPor.REGLA);
+    }
+
+    @Test
+    @DisplayName("si el motor no conoce la epica del Master (la del ejemplo del documento no esta en la Tabla 20), se intenta una vez y no mas")
+    void epicaQueElMotorNoConoce() {
+        Dobles.Motor motor = new Dobles.Motor();
+        motor.danoDelHeroe = 3;
+        motor.danoDeLosEnemigos = 0;
+        motor.rechazadas.put("Velo de Sombras", "ACCION_DESCONOCIDA");
+        SimuladorDeMision simulador = new SimuladorDeMision(new DecisorBasico(), motor, dado -> 1);
+
+        Simulacion simulacion = simular(simulador, List.of(), List.of(masterConEpica(VELO, "Pícaro Veneno", 12)),
+                new AzarGuionado(false, 1), null);
+
+        assertThat(accionesPedidasPor(motor, Dobles.Motor.RIVAL)).containsExactly("Velo de Sombras",
+                "ATAQUE_BASICO", "ATAQUE_BASICO", "ATAQUE_BASICO", "ATAQUE_BASICO");
+        List<EventoDeCombate.Jugada> delMaster = simulacion.eventos().stream()
+                .filter(e -> e.actor().lado() == EventoDeCombate.Lado.MASTER).map(EventoDeCombate::jugada).toList();
+        assertThat(delMaster.getFirst().rechazadas())
+                .containsExactly(new EventoDeCombate.Rechazo("Velo de Sombras", "ACCION_DESCONOCIDA"));
+        assertThat(delMaster.getFirst().ejecutada()).isEqualTo("Ataque básico");
+        assertThat(delMaster.subList(1, delMaster.size())).allSatisfy(j -> assertThat(j.rechazadas()).isEmpty());
+        assertThat(simulacion.resultado().masters()).singleElement()
+                .satisfies(m -> assertThat(m.derrotado()).isTrue());
+    }
+
+    @Test
+    @DisplayName("si el motor la rechaza por carga, el Master lo vuelve a intentar en su turno siguiente")
+    void epicaEnCargaSeReintenta() {
+        Dobles.Motor motor = new Dobles.Motor();
+        motor.danoDelHeroe = 3;
+        motor.danoDeLosEnemigos = 0;
+        motor.rechazadas.put("Frío concentrado", "EN_CARGA");
+        SimuladorDeMision simulador = new SimuladorDeMision(new DecisorBasico(), motor, dado -> 1);
+
+        simular(simulador, List.of(), List.of(masterConEpica(FRIO, "Mago Hielo", 12)), new AzarGuionado(false, 1),
+                null);
+
+        assertThat(accionesPedidasPor(motor, Dobles.Motor.RIVAL)).containsExactly("Frío concentrado",
+                "ATAQUE_BASICO", "Frío concentrado", "ATAQUE_BASICO", "Frío concentrado", "ATAQUE_BASICO",
+                "Frío concentrado", "ATAQUE_BASICO");
+    }
+
+    @Test
+    @DisplayName("un regular y un jefe no llevan epica ni la piden al motor; las del heroe las juega solo la regla de heroes")
+    void soloElMasterJuegaEpicaPorSuCuenta() {
+        Dobles.Motor motor = new Dobles.Motor();
+        motor.danoDelHeroe = 3;
+        motor.danoDeLosEnemigos = 0;
+        SimuladorDeMision simulador = new SimuladorDeMision(new DecisorBasico(), motor, dado -> 1);
+        PerfilDeCombate conEpicas = new PerfilDeCombate(new EstadisticasDeCombate(8, 44, 11, ATAQUE, DANO, null),
+                List.of(), List.of("Frío concentrado"));
+
+        simulador.simular(EJECUCION, MISION, HEROE, conEpicas, List.of(), List.of(regular("A", 6), jefe(6)),
+                new AzarGuionado(true, 1, true, 1), null);
+
+        assertThat(accionesPedidasPor(motor, Dobles.Motor.RIVAL)).containsOnly("ATAQUE_BASICO");
+        assertThat(accionesPedidasPor(motor, Dobles.Motor.HEROE)).containsOnly("ATAQUE_BASICO");
+        assertThat(motor.recibidos).flatExtracting(l -> l).filteredOn(c -> c.id().equals(Dobles.Motor.RIVAL))
+                .allSatisfy(c -> assertThat(c.epicas()).isEmpty());
+    }
+
     // ------------------------------------------------------------- dobles
 
     /** El decisor sin estrategia: siempre ataque basico, sin gastar poder. */
