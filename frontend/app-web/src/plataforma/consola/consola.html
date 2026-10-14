@@ -11,17 +11,16 @@
   <body>
     <div data-cabecera-app></div>
 
-    <main class="pagina consola">
+    <!--
+      SA-7 (informe de revisión, punto 1): el resumen del sistema. Cifras clave,
+      últimos movimientos, estabilidad y accesos rápidos; cada dato de su
+      servicio y solo lo que el rol puede consultar (consola.js).
+    -->
+    <main class="pagina consola resumen-consola">
       <div data-zona="encabezado"></div>
-
-      <section class="pila pila--compacta">
-        <h2 class="t-subtitulo">Herramientas</h2>
-        <!-- Se pinta desde la matriz de permisos: aquí solo aparecen las
-             herramientas que este rol puede abrir de verdad. -->
-        <div class="consola__rejilla" data-zona="herramientas"></div>
-      </section>
-
-      <section class="pila pila--compacta" data-zona="alcance"></section>
+      <section aria-label="Cifras clave" data-zona="indicadores"></section>
+      <div class="resumen-consola__paneles" data-zona="paneles"></div>
+      <section class="pila pila--compacta" data-zona="accesos" hidden></section>
     </main>
 
     <script type="module">

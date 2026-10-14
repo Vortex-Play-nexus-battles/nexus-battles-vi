@@ -23,6 +23,7 @@
    texto sale claro sobre blanco: axe lo canta en el laboratorio visual.
    ======================================================================= */
 .tarjeta,
+.indicador-admin,
 .dialogo,
 .estado-vista,
 .tabla,
@@ -3084,6 +3085,16 @@ button.tarjeta--partida:disabled {
   display: flex;
   flex-wrap: wrap;
   gap: var(--e-2);
+}
+
+/* ms-chatbot.yaml 1.8.0 — «Crear solicitud con esta conversación», encima
+   del formulario, que sigue debajo para quien prefiere escribirla. */
+.chatbot-soporte__desde-conversacion {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--e-1);
+  margin: var(--e-2) 0;
 }
 
 .chatbot-soporte__formulario {
@@ -11701,8 +11712,12 @@ body:has(.chatbot-flotante) main:not(.combate) {
 
 .indicador-admin__etiqueta {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--e-2);
+  /* SA-7 — el rótulo reserva dos líneas: así la cifra cae a la misma altura
+     en toda la fila aunque un rótulo ocupe dos líneas y otro una, y aunque
+     una tarjeta lleve detalle debajo de la cifra y otra no. */
+  min-height: calc(2lh);
   margin: 0;
   font-family: var(--t-etiqueta-familia);
   font-size: var(--t-etiqueta-tam);
@@ -11733,9 +11748,7 @@ body:has(.chatbot-flotante) main:not(.combate) {
   align-items: baseline;
   flex-wrap: wrap;
   gap: var(--e-2);
-  /* La cifra, abajo: en una fila de tarjetas las cifras caen a la misma
-     altura aunque un rótulo ocupe dos líneas. */
-  margin: auto 0 0;
+  margin: var(--e-1) 0 0;
   font-family: var(--fuente-titulo);
   font-size: 2.25rem;
   font-weight: 700;
@@ -11761,6 +11774,8 @@ body:has(.chatbot-flotante) main:not(.combate) {
 }
 
 .indicador-admin__enlace {
+  /* El enlace, al pie: alineado en toda la fila. */
+  margin-top: auto;
   padding-top: var(--e-2);
   font-weight: 600;
 }
@@ -12345,4 +12360,77 @@ body:has(.chatbot-flotante) main:not(.combate) {
   overflow: hidden;
   max-width: 22rem;
   overflow-wrap: anywhere;
+}
+
+/* SA-7 — el resumen de la consola (plataforma/consola/consola.js): cifras
+   clave, últimos movimientos, estabilidad y accesos rápidos. En escritorio los
+   movimientos ocupan dos tercios y la estabilidad uno; en tableta y teléfono,
+   uno debajo del otro. Va más junto que el resto de la consola: es una sola
+   lectura. */
+.resumen-consola {
+  gap: var(--e-5);
+}
+
+.resumen-consola__paneles {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--e-4);
+  align-items: start;
+}
+
+/* Aquí la tabla de movimientos comparte fila con la estabilidad: no ocupa el
+   ancho entero como en el resto de la consola. */
+.resumen-consola__paneles > .panel-admin {
+  grid-column: auto;
+}
+
+@media (min-width: 1100px) {
+  .resumen-consola__paneles {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+}
+
+.resumen-consola__estabilidad {
+  margin: 0;
+  font-weight: 600;
+}
+
+.resumen-consola__atencion,
+.resumen-consola__lista {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resumen-consola__atencion li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.resumen-consola__servicio {
+  font-weight: 600;
+}
+
+.resumen-consola__lista li {
+  display: grid;
+  gap: 2px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--borde);
+}
+
+.resumen-consola__texto {
+  overflow-wrap: anywhere;
+}
+
+.resumen-consola__accesos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }

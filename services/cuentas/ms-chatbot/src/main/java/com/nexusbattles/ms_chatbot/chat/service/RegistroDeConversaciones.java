@@ -40,8 +40,9 @@ public class RegistroDeConversaciones {
         mensajeRepository.save(new Mensaje(conversacion, Remitente.USUARIO, contenido, adjuntoUrl, recibido));
 
         Mensaje respuestaBot = new Mensaje(conversacion, Remitente.BOT, textoRespuesta, null);
+        // 1.7.0: con el resultado que dio el motor, para la tasa de resolucion.
         respuestaBot.registrarDatosDeRespuesta(resultado.temaClave(), resultado.categoria(),
-            resultado.requiereEscalamiento(), tiempoRespuestaMs);
+            resultado.requiereEscalamiento(), tiempoRespuestaMs, resultado.resultado());
         respuestaBot.registrarEnriquecido(resultado.enriquecido());
         mensajeRepository.save(respuestaBot);
 

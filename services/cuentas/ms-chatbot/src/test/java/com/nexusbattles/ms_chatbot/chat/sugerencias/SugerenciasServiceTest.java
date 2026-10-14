@@ -79,6 +79,22 @@ class SugerenciasServiceTest {
         assertThat(servicio.sugerir("", Categoria.CUENTA_Y_REGISTRO, 6)).containsExactly(contrasena);
     }
 
+    // 1.6.0 (7.4.10): con categoria tambien salen los temas que la atienden
+    // como intencion adicional.
+    @Test
+    void conCategoriaTambienLosQueLaAtiendenComoIntencionAdicional() {
+        TemaConocimiento creditos = tema("k-creditos", Categoria.SUBASTA_Y_COMERCIO, "Créditos para pujar",
+            "creditos", 1);
+        creditos.asignarIntencionesAdicionales(List.of(Categoria.CUENTA_Y_REGISTRO));
+        when(temas.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(subasta, torneo, contrasena, creditos));
+        when(mensajes.contarRespuestasPorTemaEntre(any(), any(), any(), any())).thenReturn(List.of());
+
+        assertThat(servicio.sugerir(null, Categoria.CUENTA_Y_REGISTRO, 6)).containsExactly(contrasena, creditos);
+        assertThat(servicio.sugerir(null, Categoria.SUBASTA_Y_COMERCIO, 6)).containsExactly(creditos, subasta);
+        assertThat(servicio.sugerir(null, Categoria.MODALIDAD_JUEGO, 6)).containsExactly(torneo);
+    }
+
     @Test
     void elLimiteSeRespetaYSeAcota() {
         when(mensajes.contarRespuestasPorTemaEntre(any(), any(), any(), any())).thenReturn(List.of());

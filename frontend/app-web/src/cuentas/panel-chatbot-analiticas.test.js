@@ -12,6 +12,7 @@ import {
   horasDeAtencion,
   montarAnaliticas,
   nombreDeCategoria,
+  textoDeErrorDeAnaliticas,
   textoDeErrorDelPanel,
 } from './panel-chatbot-analiticas.js';
 
@@ -80,7 +81,8 @@ test('sin fechas pide el período por omisión, lo muestra en el filtro y pinta 
   const cifras = [
     ...raiz.querySelector('.panel-chatbot__cifras').querySelectorAll('.metrica__valor'),
   ].map((nodo) => nodo.textContent);
-  expect(cifras).toEqual(['2', '3', '67 %', '—', expect.stringMatching(/s$/)]);
+  // Sin `tickets` (servicio anterior a 1.3.7) no hay cifra de solicitudes.
+  expect(cifras).toEqual(['2', '3', '67 %', '1', '—', expect.stringMatching(/s$/)]);
   expect(raiz.textContent).toContain('Nadie calificó respuestas en el período');
   expect(raiz.querySelectorAll('.grafica-tendencia__barra')).toHaveLength(2);
   expect(raiz.querySelector('[data-zona="temas"] tbody').textContent).toContain('Subastas');
@@ -144,12 +146,171 @@ test('Descargar CSV entrega el archivo del servicio', async () => {
   expect(descargarArchivo).toHaveBeenCalledWith(archivo);
 });
 
-test('textoDeErrorDelPanel distingue permiso, período inválido y caída', () => {
-  expect(textoDeErrorDelPanel(new ErrorDelChatbot(null, 403)).titulo).toContain('permiso');
-  expect(textoDeErrorDelPanel(new ErrorDelChatbot({ title: 'Bad Request' }, 400)).titulo).toBe(
+test('textoDeErrorDeAnaliticas: un 400 es el período; lo demás dice qué falló y por qué', () => {
+  expect(textoDeErrorDeAnaliticas(new ErrorDelChatbot({ title: 'Bad Request' }, 400)).titulo).toBe(
     'El período no es válido',
   );
-  expect(textoDeErrorDelPanel(new ErrorDelChatbot(null, 0)).titulo).toContain('no responde');
+  const caido = textoDeErrorDeAnaliticas(new ErrorDelChatbot(null, 0));
+  expect(caido.titulo).toBe('No se pudieron cargar las analíticas');
+  expect(caido.detalle).toContain('no responde');
+  const sinPermiso = textoDeErrorDeAnaliticas(new ErrorDelChatbot(null, 403));
+  expect(sinPermiso.titulo).toBe('No se pudieron cargar las analíticas');
+  expect(sinPermiso.detalle).toContain('permiso');
+  expect(
+    textoDeErrorDeAnaliticas(new ErrorDelChatbot(null, 500), 'No se pudo descargar el CSV').titulo,
+  ).toBe('No se pudo descargar el CSV');
+});
+
+test('textoDeErrorDelPanel se sigue pudiendo importar desde la pestaña de analíticas', () => {
+  expect(textoDeErrorDelPanel(new ErrorDelChatbot(null, 0), 'No se pudo X').titulo).toBe(
+    'No se pudo X',
+  );
+});
+
+test('si la descarga del CSV falla, dice que falló la descarga y por qué', async () => {
+  const cliente = {
+    analiticas: jest.fn(async () => TABLERO),
+    exportarAnaliticas: jest.fn(async () => {
+      throw new ErrorDelChatbot(null, 503);
+    }),
+  };
+  const { raiz, descargarArchivo } = montar(cliente);
+
+  raiz.querySelector('[data-accion="exportar-analiticas"]').click();
+  await esperar();
+
+  expect(descargarArchivo).not.toHaveBeenCalled();
+  expect(raiz.querySelector('.panel-chatbot__nota').textContent).toBe(
+    'No se pudo descargar el CSV. El servicio del asistente no responde. Vuelve a intentarlo en unos minutos.',
+  );
+});
+
+// 1.7.0 (7.4.7): fórmulas explicadas, resultado de cada respuesta, preguntas
+// frecuentes y tendencia de las palabras.
+const COMPLETO = {
+  ...TABLERO,
+  conversaciones: 3,
+  conversacionesConActividad: 2,
+  preguntas: 9,
+  respuestasMedidas: 8,
+  escalamientos: 2,
+  respuestasClasificadas: 7,
+  respuestasResueltas: 3,
+  tasaResolucion: 3 / 7,
+  resultados: [
+    { resultado: 'TEMA', respuestas: 2 },
+    { resultado: 'CONSULTA_EN_VIVO', respuestas: 1 },
+    { resultado: 'NAVEGACION', respuestas: 0 },
+    { resultado: 'NO_DISPONIBLE', respuestas: 1 },
+    { resultado: 'ESCALADO', respuestas: 2 },
+    { resultado: 'NO_SIRVIO', respuestas: 1 },
+    { resultado: 'PIDE_REFORMULAR', respuestas: 0 },
+  ],
+  preguntasFrecuentes: [{ texto: 'como pujo en una subasta', preguntas: 3, conversaciones: 3 }],
+  tickets: {
+    total: 1,
+    abiertos: 1,
+    enProceso: 0,
+    resueltos: 0,
+    cerrados: 0,
+    horasPromedioDeAtencion: null,
+    porCategoria: [{ categoria: 'SOPORTE_TECNICO', tickets: 1 }],
+  },
+  palabrasClave: [
+    {
+      palabra: 'subasta',
+      preguntas: 3,
+      conversaciones: 3,
+      preguntasPeriodoAnterior: 1,
+      tendencia: 'SUBE',
+    },
+    {
+      palabra: 'pujo',
+      preguntas: 3,
+      conversaciones: 3,
+      preguntasPeriodoAnterior: 0,
+      tendencia: 'NUEVA',
+    },
+  ],
+};
+
+test('1.7.0: cada cifra dice lo que cuenta, y lo que ofreció el asistente va aparte de las solicitudes', async () => {
+  const { raiz, pestana } = montar({ analiticas: jest.fn(async () => COMPLETO) });
+
+  await pestana.cargar();
+
+  const tarjetas = [
+    ...raiz.querySelector('.panel-chatbot__cifras').querySelectorAll('.metrica'),
+  ].map((tarjeta) => tarjeta.textContent);
+  expect(tarjetas).toHaveLength(7);
+  expect(tarjetas[0]).toContain('Conversaciones iniciadas');
+  expect(tarjetas[0]).toContain('2 con preguntas en el período');
+  expect(tarjetas[2]).toContain('43 %');
+  expect(tarjetas[2]).toContain('3 de 7 resueltas sin una persona del equipo');
+  expect(tarjetas[3]).toContain('Ofreció soporte');
+  expect(tarjetas[4]).toContain('Solicitudes de soporte');
+  // Que el asistente ofrezca soporte no es que lo atendiera una persona.
+  expect(raiz.textContent).not.toMatch(/human/i);
+});
+
+test('1.7.0: muestra cómo terminaron las respuestas y cuáles cuentan como resueltas', async () => {
+  const { raiz, pestana } = montar({ analiticas: jest.fn(async () => COMPLETO) });
+
+  await pestana.cargar();
+
+  const filas = [...raiz.querySelectorAll('[data-zona="tabla-resultados"] tbody tr')].map((fila) =>
+    [...fila.querySelectorAll('td')].map((celda) => celda.textContent),
+  );
+  expect(filas[0]).toEqual(['Respondió con un tema de la base', '2', 'Resuelta']);
+  expect(filas[2]).toEqual(['Llevó a la sección pedida', '0', 'Resuelta']);
+  expect(filas[4]).toEqual(['No entendió y ofreció soporte', '2', 'No resuelta']);
+  expect(filas).toHaveLength(7);
+});
+
+test('1.7.0: las preguntas frecuentes y la tendencia de las palabras', async () => {
+  const { raiz, pestana } = montar({ analiticas: jest.fn(async () => COMPLETO) });
+
+  await pestana.cargar();
+
+  expect(raiz.querySelector('[data-zona="tabla-preguntas-frecuentes"] tbody tr').textContent).toBe(
+    'como pujo en una subasta33',
+  );
+  const encabezados = [...raiz.querySelectorAll('[data-zona="palabras-clave"] thead th')].map(
+    (celda) => celda.textContent,
+  );
+  expect(encabezados).toEqual([
+    'Palabra',
+    'Preguntas',
+    'Conversaciones',
+    'Período anterior',
+    'Tendencia',
+  ]);
+  const palabras = [...raiz.querySelectorAll('[data-zona="palabras-clave"] tbody tr')].map(
+    (fila) => fila.textContent,
+  );
+  expect(palabras).toEqual(['subasta331Sube', 'pujo330Nueva']);
+});
+
+test('1.7.0: sin preguntas repetidas ni resultados guardados lo dice', async () => {
+  const sinDatos = {
+    ...COMPLETO,
+    tasaResolucion: null,
+    respuestasClasificadas: 0,
+    respuestasResueltas: 0,
+    resultados: COMPLETO.resultados.map((fila) => ({ ...fila, respuestas: 0 })),
+    preguntasFrecuentes: [],
+  };
+  const { raiz, pestana } = montar({ analiticas: jest.fn(async () => sinDatos) });
+
+  await pestana.cargar();
+
+  expect(raiz.querySelector('[data-zona="resultados"]').textContent).toContain(
+    'Ninguna respuesta del período guardó su resultado',
+  );
+  expect(raiz.querySelector('[data-zona="preguntas-frecuentes"]').textContent).toContain(
+    'Ninguna pregunta se repitió lo suficiente',
+  );
+  expect(raiz.querySelector('.panel-chatbot__cifras').textContent).toContain('—');
 });
 
 // 1.3.7 (7.4.7): solicitudes de soporte y palabras clave.

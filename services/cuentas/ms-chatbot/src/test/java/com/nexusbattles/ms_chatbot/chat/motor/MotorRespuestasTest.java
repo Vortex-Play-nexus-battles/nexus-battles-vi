@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_chatbot.chat.motor;
 
 import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
+import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.EstadoVersion;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
@@ -26,7 +27,7 @@ class MotorRespuestasTest {
     @BeforeEach
     void configurar() {
         temaConocimientoRepository = mock(TemaConocimientoRepository.class);
-        motorRespuestas = new MotorRespuestas(temaConocimientoRepository);
+        motorRespuestas = MotoresDePrueba.sobre(temaConocimientoRepository);
 
         when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
             .thenReturn(List.of(temaRegistro(0), temaSubasta()));
@@ -40,6 +41,8 @@ class MotorRespuestasTest {
         assertThat(resultado.categoria()).isEqualTo(Categoria.CUENTA_Y_REGISTRO);
         assertThat(resultado.texto()).contains("Para crear tu cuenta");
         assertThat(resultado.temaClave()).isEqualTo("clave-registro");
+        // 1.7.0: lo respondio un tema de la base.
+        assertThat(resultado.resultado()).isEqualTo(ResultadoDeRespuesta.TEMA);
     }
 
     @Test
@@ -83,6 +86,7 @@ class MotorRespuestasTest {
         assertThat(resultado.requiereEscalamiento()).isTrue();
         assertThat(resultado.enriquecido().ofrecerSoporteHumano()).isTrue();
         assertThat(resultado.enriquecido().respuestasRapidas()).contains("Cómo publicar en subasta");
+        assertThat(resultado.resultado()).isEqualTo(ResultadoDeRespuesta.ESCALADO);
     }
 
     // Un saludo nunca sale como "pregunta relacionada" de un escalamiento.
@@ -117,6 +121,31 @@ class MotorRespuestasTest {
             .isEqualTo("clave-compra-subasta");
         assertThat(motorRespuestas.generarRespuesta("quiero comprar algo", VistaDelChat.INICIO).temaClave())
             .isEqualTo("clave-tienda");
+    }
+
+    // 1.6.0 (7.4.10): un tema es de la vista tambien por una intencion
+    // adicional. En «Subastas», el tema de creditos que atiende ademas
+    // SUBASTA_Y_COMERCIO gana el empate al de la tienda, aunque su categoria
+    // principal sea otra y su prioridad, menor.
+    @Test
+    void generarRespuesta_conEmpate_cuentaLaIntencionAdicionalComoDeLaVista() {
+        TemaConocimiento tienda = new TemaConocimiento(null, "clave-tienda", Categoria.PRODUCTO,
+            TipoRespuesta.DIRECTA, "Comprar en la tienda", "comprar", null, "En la tienda.", null, 9, true);
+        TemaConocimiento creditos = new TemaConocimiento(null, "clave-creditos", Categoria.CUENTA_Y_REGISTRO,
+            TipoRespuesta.DIRECTA, "Créditos para comprar", "comprar", null, "Con tus créditos.", null, 0, true);
+        creditos.asignarIntencionesAdicionales(List.of(Categoria.SUBASTA_Y_COMERCIO));
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(tienda, creditos));
+
+        ResultadoMotor enSubastas = motorRespuestas.generarRespuesta("quiero comprar algo", VistaDelChat.SUBASTAS);
+
+        assertThat(enSubastas.temaClave()).isEqualTo("clave-creditos");
+        // Lo que se guarda para las analiticas sigue siendo su categoria principal.
+        assertThat(enSubastas.categoria()).isEqualTo(Categoria.CUENTA_Y_REGISTRO);
+        assertThat(motorRespuestas.generarRespuesta("quiero comprar algo", VistaDelChat.INVENTARIO).temaClave())
+            .as("PRODUCTO es la categoria principal de la tienda").isEqualTo("clave-tienda");
+        assertThat(motorRespuestas.generarRespuesta("quiero comprar algo").temaClave())
+            .as("sin vista decide la prioridad").isEqualTo("clave-tienda");
     }
 
     // 1.3.3: pulsar una sugerencia manda el titulo del tema tal cual.
@@ -322,12 +351,16 @@ class MotorRespuestasTest {
 
         assertThat(resultado.texto()).isEqualTo("Siento que no sirviera.");
         assertThat(resultado.requiereEscalamiento()).isTrue();
+        // 1.7.0: no es un escalamiento cualquiera: la respuesta no le sirvio.
+        assertThat(resultado.resultado()).isEqualTo(ResultadoDeRespuesta.NO_SIRVIO);
         assertThat(resultado.temaClave()).isNull();
         assertThat(resultado.temasSugeridos()).isEmpty();
         assertThat(resultado.categoria()).isEqualTo(Categoria.CUENTA_Y_REGISTRO);
         assertThat(resultado.enriquecido().ofrecerSoporteHumano()).isTrue();
         assertThat(resultado.enriquecido().respuestasRapidas()).containsExactly("Recuperar mi contraseña");
-        assertThat(resultado.enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("registro");
+        // 1.8.0: y el centro de ayuda, abierto en la categoria del tema.
+        assertThat(resultado.enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("registro", "ayuda");
+        assertThat(resultado.enriquecido().enlaces().get(1).ancla()).isEqualTo("categoria-cuenta-y-registro");
         assertThat(motorRespuestas.relacionadosCon("clave-retirada", "x", false)).isEmpty();
         assertThat(motorRespuestas.relacionadosCon(null, "x", true)).isEmpty();
     }

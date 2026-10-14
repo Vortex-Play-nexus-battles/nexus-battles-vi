@@ -46,6 +46,11 @@
  * - un visitante que pide soporte humano recibe cómo conseguirlo (entrar con
  *   vuelta a esta página, o crear una cuenta), no un callejón sin salida.
  *
+ * 7.4.9 — con un `canal` (`../canal-chatbot.js`, lo pasa `asistente.js`), las
+ * preguntas van por el canal en tiempo real mientras está abierto y por HTTP
+ * si no; «escribiendo…» sale cuando el servidor lo dice, las solicitudes de
+ * soporte se actualizan solas y el estado del canal se ve en su píldora.
+ *
  * Todo el texto del servidor entra con `textContent` (`h()`), nunca como HTML.
  *
  * @module comun/ui/ventana-chatbot
@@ -62,6 +67,7 @@ import { introAntesDePasos, pintarEnriquecido, vistaDelChat } from './enriquecid
 import { estadoDeCarga } from './estado-vista.js';
 import { fechaHora } from './formato.js';
 import { crearPanelPreferencias } from './preferencias-chatbot.js';
+import { pintarEstadoDelCanal } from './reconexion.js';
 import { crearPanelSoporte } from './soporte-chatbot.js';
 import { conectarAutocompletado, crearPreguntasRapidas } from './sugerencias-chatbot.js';
 
@@ -239,9 +245,11 @@ let contador = 0;
  *          registro?: string|(() => string|null)|null,
  *          esperaAutocompletar?: number, vista?: () => string|null,
  *          confirmarBorrado?: (opciones: object) => Promise<boolean>,
- *          reloj?: {setTimeout: Function, clearTimeout: Function}}} [opciones]
+ *          reloj?: {setTimeout: Function, clearTimeout: Function},
+ *          canal?: ReturnType<typeof import('../canal-chatbot.js').crearCanalChatbot>|null}} [opciones]
  *          `login`: por omisión, la entrada con vuelta a esta página (#506).
  *          `reloj`: el de la espera tras un 429, inyectable en pruebas.
+ *          `canal`: 7.4.9, el canal en tiempo real; sin él, todo va por HTTP.
  * @returns {{elemento: HTMLElement, abrir: (desde?: HTMLElement|null) => void,
  *            cerrar: () => void, alternar: (desde?: HTMLElement|null) => void,
  *            abierta: () => boolean}}
@@ -250,12 +258,14 @@ export function crearVentanaChatbot({
   cliente = crearClienteChatbot(),
   sesion = () => leerSesion(),
   raiz = document.body,
-  chatGeneral = new URL(CHAT_GENERAL, import.meta.url).href,
+  // SA-7 — la dirección del chat general es la limpia (`/chat`) detrás del borde.
+  chatGeneral = urlDeVista('chat') ?? new URL(CHAT_GENERAL, import.meta.url).href,
   login = () => urlDeLogin({ volver: rutaDeEstaPagina() }),
   registro: destinoRegistro = urlDeVista('registro'),
   confirmarBorrado = confirmar,
   esperaAutocompletar = 250,
   vista = () => vistaDelChat(),
+  canal = null,
   reloj = globalThis,
 } = {}) {
   contador += 1;
@@ -282,6 +292,15 @@ export function crearVentanaChatbot({
   const titulo = h('h2', { clase: 'chatbot-ventana__titulo', texto: TEXTOS.titulo });
   titulo.id = idTitulo;
   const estado = h('p', { clase: 'chatbot-ventana__estado' });
+  // 7.4.9 — el estado del canal en tiempo real: la píldora del kit en modo
+  // discreto (solo se ve si algo va distinto), no un aviso (MAPEO-ERRORES §5.4).
+  const pildoraDelCanal = canal
+    ? h('span', {
+        clase: 'conexion',
+        atributos: { hidden: true },
+        datos: { zona: 'conexion-asistente' },
+      })
+    : null;
 
   const botonPreferencias = h('button', {
     clase: 'chatbot-ventana__accion',
@@ -342,6 +361,9 @@ export function crearVentanaChatbot({
         hijos: [botonMinimizar, botonCerrar],
       }),
       estado,
+      pildoraDelCanal
+        ? h('div', { clase: 'chatbot-ventana__canal', hijos: [pildoraDelCanal] })
+        : null,
     ],
   });
 
@@ -440,6 +462,17 @@ export function crearVentanaChatbot({
     alVolver: () => mostrarPreferencias(false),
   });
   ventana.append(panelPreferencias.elemento);
+  // 7.4.9 — lo que llega por el canal: su estado, los cambios de las
+  // solicitudes de soporte y, al volver de una caída, la relectura de la lista.
+  canal?.alEstado((datos) =>
+    pintarEstadoDelCanal(pildoraDelCanal, {
+      ...datos,
+      alReintentar: () => canal.reintentar(),
+      discreto: true,
+    }),
+  );
+  canal?.alTicket((ticket) => panelSoporte.actualizarTicket(ticket));
+  canal?.alReconectar(() => panelSoporte.recargarLista());
   ventana.id = `chatbot-ventana-${contador}`;
   registro.id = `chatbot-ventana-registro-${contador}`;
   botonMinimizar.setAttribute('aria-controls', registro.id);
@@ -775,6 +808,8 @@ export function crearVentanaChatbot({
       habilitarFormulario(true);
       rapidas.cargar();
       recuperarFoco();
+      // 7.4.9 — el canal se abre cuando el asistente ya respondió por HTTP.
+      canal?.abrir();
     } catch (error) {
       vaciar(registro);
       habilitarFormulario(false);
@@ -923,20 +958,32 @@ export function crearVentanaChatbot({
       clase: 'chatbot-ventana__escribiendo',
       texto: TEXTOS.escribiendo,
     });
+    // 7.4.9 — con canal, «escribiendo…» espera al ESCRIBIENDO del servidor.
+    escribiendo.hidden = Boolean(canal);
     registro.append(escribiendo);
     registro.scrollTop = registro.scrollHeight;
 
     try {
       const donde = vista();
-      const respuesta = await (donde
-        ? cliente.enviarMensaje(contenido, { vista: donde })
-        : cliente.enviarMensaje(contenido));
+      const respuesta = await preguntar(contenido, donde, () => {
+        escribiendo.hidden = false;
+      });
       alResponder(escribiendo, respuesta);
     } catch (error) {
       alFallarElEnvio({ escribiendo, pregunta, contenido, error });
     } finally {
       terminarEnvio();
     }
+  }
+
+  // 7.4.9 — por el canal (que decide si va en vivo o por HTTP) o, sin él, por HTTP.
+  function preguntar(contenido, donde, alEscribiendo) {
+    if (canal) {
+      return canal.enviarMensaje(contenido, { vista: donde, alEscribiendo });
+    }
+    return donde
+      ? cliente.enviarMensaje(contenido, { vista: donde })
+      : cliente.enviarMensaje(contenido);
   }
 
   // Fuera de enviarMensaje a propósito: lo que se toca después de un `await`
@@ -1041,7 +1088,7 @@ export function crearVentanaChatbot({
     ocultarConversacion(si);
     if (si) {
       limpiarAviso();
-      panelSoporte.abrir();
+      panelSoporte.abrir({ conConversacion: hayPreguntaSinResolver(), vista: vista() });
     } else {
       panelSoporte.elemento.hidden = true;
     }
@@ -1054,6 +1101,13 @@ export function crearVentanaChatbot({
   }
 
   botonSoporte.addEventListener('click', () => mostrarSoporte(!soporteAbierto()));
+
+  // ms-chatbot.yaml 1.8.0 — si alguna respuesta de esta conversación ofreció
+  // soporte (no entendió, o «no me sirvió»), «Soporte» ofrece crear la
+  // solicitud con ella en un clic.
+  function hayPreguntaSinResolver() {
+    return registro.querySelector('[data-accion="ofrecer-soporte"]') !== null;
+  }
 
   // ---------------------------------------------------------- preferencias
 

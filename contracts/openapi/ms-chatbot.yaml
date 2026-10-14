@@ -22,6 +22,32 @@ openapi: 3.1.0
 #               hace (V11), las respuestas en vivo y los escalamientos en
 #               ingles, busqueda en el inventario, seguimiento de la
 #               respuesta anterior e informe de actividad en paralelo
+#   7.4.10 (1.6.0) gestion de la base de conocimiento: intenciones
+#               adicionales por tema (V12), titulo duplicado 409
+#               TEMA_DUPLICADO, importacion acotada (413) y transiciones de
+#               version en fila (409 CAMBIO_CONCURRENTE en vez de un 500)
+#   7.4.5 y 7.4.7 (1.7.0) aprendizaje continuo y analiticas: las preguntas
+#               sin respuesta (brechas) llegan al panel con su estado (V13),
+#               el resultado de cada respuesta del bot se guarda (V13) y las
+#               formulas del tablero quedan corregidas y documentadas; el CSV
+#               ya no puede llevar formulas
+#   7.4.3 (1.8.0) soporte desde la conversacion y centro de ayuda: la
+#               solicitud se arma con la pregunta que el asistente no
+#               resolvio (`POST /chat/tickets/desde-conversacion`) y lo que
+#               sabe responder se lee sin chatear (`GET /chat/ayuda`)
+#   7.4.9 (1.9.0) requisitos tecnicos: canal en tiempo real (STOMP sobre
+#               WebSocket, contracts/websocket/chatbot.yaml 1.0.0) y cache de
+#               las respuestas frecuentes de la base de conocimiento
+#   7.4.1, 7.4.2 y 7.4.5 (1.10.0) catalogo en vivo: los productos que se
+#               venden hoy, sus precios y su ficha salen del catalogo publico
+#               (productos.yaml), no de un texto copiado en la base
+#   7.4.4 y 7.4.8 (1.11.0) lo que se vio en DEV: la redaccion tapa tambien
+#               la puntuacion en que termina un secreto (V14), un visitante
+#               que pide datos de su cuenta recibe que hace falta una sesion,
+#               las consultas en vivo se reconocen con mas formas de
+#               preguntar, la navegacion a secciones publicas es para todos,
+#               las reglas del juego tienen su tema (V15) y la base dice lo
+#               que el juego hace hoy (V16)
 #   7.4 (1.3.0) lo que faltaba del modulo 7.4: tickets y soporte humano
 #               (RF-CHA-007, RF-ADM-004), sugerencias y autocompletado,
 #               respuestas enriquecidas sin imagenes, vista del jugador y
@@ -104,7 +130,9 @@ openapi: 3.1.0
 # reenviando el MISMO token del jugador: esos servicios derivan el dueno del
 # claim `uid`. El
 # chatbot NUNCA usa una credencial de servicio para leer datos de un jugador.
-# Los torneos se consultan como dato publico (`torneos.yaml`, `GET /torneos`).
+# Los torneos se consultan como dato publico (`torneos.yaml`, `GET /torneos`),
+# y desde 1.10.0, para visitantes y jugadores, el catalogo de productos
+# (`productos.yaml`, `GET /api/v1/productos`, sin credencial).
 # Todo el texto del usuario pasa antes por la lista negra
 # (`moderacion-lista-negra.yaml` 2.0.0, contexto CHAT_GENERAL). Todas las
 # llamadas tienen tiempo de espera y ninguna ocurre dentro de una transaccion.
@@ -114,7 +142,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.5.0
+  version: 1.11.0
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -124,6 +152,222 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.11.0 — 7.4.4 y 7.4.8: lo que se vio en DEV
+
+    Todo compatible: ninguna operacion ni forma cambia; cambia lo que se
+    guarda y lo que se responde.
+
+    * **Redaccion (7.4.8).** El valor anunciado de un secreto se tapa
+      entero, tambien la puntuacion en que termina: «mi contrasena es
+      Hunter2024!» se guarda «mi contrasena es ***», no «***!» (ese simbolo
+      es parte de la contrasena; la politica de claves exige uno). La
+      migracion V14 vuelve a redactar lo guardado con la regla nueva.
+    * **Un visitante que pide datos de su cuenta** («¿que tengo en mi
+      inventario?», «mis ultimas transacciones», «llevame a mi inventario»)
+      recibe que hace falta una sesion, con enlaces a `login` y `registro`
+      (`resultado` TEMA). No se consulta nada, no se busca un tema y no se
+      registra como pregunta sin respuesta. Antes acababa en «no te
+      entendi» y en las brechas.
+    * **Consultas en vivo con mas formas de preguntar (7.4.3, 7.4.4).**
+      Subastas, notificaciones, transacciones y misiones se reconocen como
+      el inventario: tema + «mi/mis/tengo/my» y no una pregunta de reglas
+      («¿tengo alguna mision activa?», «¿cuales son mis ultimas
+      transacciones?», «¿que subastas tengo?»). Y una pregunta de reglas
+      sobre lo propio («¿puedo cancelar mi puja?», «¿que pasa si abandono mi
+      mision?», «¿tengo que pagar para subastar?») ya no se toma por una
+      consulta: la responde la base.
+    * **Reglas del juego (7.4.2).** «¿Cuales son las reglas del juego?»,
+      «¿como se juega?» y «what are the game rules?» no tenian respuesta:
+      V15 publica una version nueva de la base con el tema «Reglas basicas
+      del juego» (`reglas-del-juego`), que resume lo ya verificado en V11, y
+      sus casos de evaluacion.
+    * **La base dice lo que el juego hace hoy (7.4.2, 7.4.5).** V16 corrige
+      «Como apelar una sancion» (`apelar-sancion`): desde SA-4 una suspension
+      o un baneo se apelan sin sesion, en la pantalla de entrada. Corrige
+      tambien temas creados en DEV que contradecian el juego, solo si siguen
+      diciendo exactamente lo auditado. Ninguna operacion ni forma cambia.
+    * **Navegacion a secciones publicas, para todos (7.4.4).** «Llevame a la
+      subasta», «ir al centro de ayuda», «take me to the store»: enlace a la
+      vista (`resultado` NAVEGACION). La tienda, el chat general y «Jugar
+      online» piden sesion: a un visitante se le dice que entre, con enlaces
+      a `login` y `registro`. «Ir al inicio» lleva a `portada` o a `home`.
+
+    ### 1.10.0 — 7.4.1, 7.4.2 y 7.4.5: el catalogo de hoy
+
+    Todo compatible: ninguna forma cambia; cambia lo que se responde.
+
+    * **Productos, precios y fichas en vivo**, para visitantes y jugadores:
+      «¿que productos hay en la tienda?», «¿que armas venden?», «¿cuanto
+      cuesta la espada de una mano?», «¿que hace el Orbe de manos
+      ardientes?» se responden con el catalogo publico de `productos.yaml`
+      (`GET /api/v1/productos`, sin credencial: la proyeccion que ve
+      cualquier visitante). Un producto nuevo, un precio cambiado o uno
+      retirado se ven en el chat sin editar la base de conocimiento: es la
+      «actualizacion automatica con nueva informacion del sistema» de 7.4.5.
+    * Se guarda una sola copia del catalogo para todo el servicio (es dato
+      publico, igual para todos) durante 5 minutos; si el catalogo no
+      responde, se sigue usando la ultima copia hasta 30 minutos (D-CHA-10).
+    * Una pregunta de precio o de ficha que no nombra ningun producto
+      («¿cuanto cuesta publicar una subasta?») y las de como hacer algo
+      («¿como compro en la tienda?») siguen respondiendolas los temas de la
+      base. Sin catalogo, el listado dice que no esta disponible
+      (`resultado` NO_DISPONIBLE) y el precio lo intenta la base.
+    * Las respuestas del catalogo guardan `resultado` CONSULTA_EN_VIVO y
+      enlazan a la «Tienda».
+
+    ### 1.9.0 — 7.4.9: tiempo real y respuestas frecuentes en cache
+
+    Todo compatible: ninguna operacion ni forma cambia. 7.4.9 («Requisitos
+    tecnicos») pide «WebSocket para comunicacion en tiempo real» y «sistema
+    de cache para respuestas frecuentes»; hasta aqui el chat era solo esta
+    API y no habia cache.
+
+    * **Canal en tiempo real** (`contracts/websocket/chatbot.yaml` 1.0.0):
+      STOMP sobre WebSocket en `/api/v1/ws-chatbot`, con la identidad de
+      siempre en el CONNECT (`Authorization` o `X-Id-Sesion-Anonima`, las
+      reglas de «IDENTIDAD EN EL CHAT»). Una pregunta enviada por el canal
+      recorre el mismo camino que `POST /chat/mensajes` (limites, revision de
+      la entrada, lista negra, motores, guardado) y su respuesta es el mismo
+      `Mensaje`: el historial es uno solo. El canal ademas avisa
+      «escribiendo» y le lleva al dueno de una solicitud de soporte cada
+      cambio que hace un administrador
+      (`PATCH /chatbot/admin/tickets/{ticketId}`), con la forma de
+      `GET /chat/tickets`. Esta API no cambia: es el camino cuando el canal
+      no abre o se cae. El handshake no exige token (la identidad va en el
+      CONNECT) y solo admite los origenes de `CORS_ORIGENES`. El broker es
+      en memoria de la instancia; en DEV hay una sola.
+    * **Respuestas frecuentes en cache.** La respuesta de la base de
+      conocimiento se guarda en memoria por version en produccion, pregunta
+      normalizada (sin tildes, mayusculas ni signos), idioma pedido, nivel de
+      detalle y `vista`: la misma pregunta se responde sin volver a puntuar
+      los temas. Como mucho 500 respuestas y 30 minutos cada una (D-CHA-08,
+      provisional). Nunca se guardan las consultas en vivo (inventario,
+      subastas, notificaciones, creditos, misiones, torneos), los
+      seguimientos («mas detalle», «no me sirvio») ni nada que dependa de
+      quien pregunta; tampoco el aviso de un dato tapado, que se anade
+      despues. Desplegar o revertir la base cambia la version en produccion:
+      lo guardado de la anterior deja de valer y se descarta. Los temas de
+      produccion tambien se leen de la base una vez por version, no en cada
+      mensaje. Una pregunta escalada que sale de la cache se sigue
+      registrando como brecha, y cuenta en las analiticas como cualquier
+      otra (con su tiempo de respuesta, menor). Cache por instancia; sus
+      metricas, en Actuator (`chatbot_cache_*`).
+
+    ### 1.8.0 — 7.4.3: solicitud desde la conversacion y centro de ayuda
+
+    Todo compatible: dos operaciones nuevas, un campo opcional nuevo en
+    `EnlaceInterno` y un valor nuevo de `motivo`. Ninguna operacion ni campo
+    existente cambia de forma. Sin migracion: no hace falta nada nuevo en la
+    base.
+
+    * **`POST /chat/tickets/desde-conversacion`** («escalamiento a agente
+      humano con contexto de la conversacion»). Despues de que el asistente
+      no entendio o de un «no me sirvio», el jugador abre la solicitud con
+      un clic: el servidor toma de SU conversacion (la del `uid` del token,
+      nunca un id que mande el cliente) la ultima pregunta sin resolver, y
+      si no hay ninguna, la ultima pregunta. El tema sale de la respuesta
+      que no sirvio, o de `vista`, o es FAQ_GENERAL. Mismas reglas que
+      `POST /chat/tickets`: solo jugadores (401 SESION_REQUERIDA), limite
+      (429), revision y lista negra (422 y 503), una abierta a la vez (409
+      TICKET_ABIERTO). Sin ninguna pregunta en la conversacion: 409
+      SIN_CONVERSACION. El borde la cuenta en su zona de escritura, como
+      `POST /chat/tickets`.
+    * **`GET /chat/ayuda`** (centro de ayuda, 7.4.3 «enlaces a documentacion
+      relevante»): los temas activos de la version EN PRODUCCION agrupados
+      por categoria, con su respuesta en espanol e ingles y sus pasos.
+      Publica y sin identidad; nada de lo interno de un tema (clave,
+      variantes, prioridad, version). `Cache-Control: public, max-age=300`.
+    * **`EnlaceInterno.ancla`** (opcional): el fragmento dentro de la vista,
+      p. ej. `categoria-cuenta-y-registro` en el centro de ayuda. Al no
+      entender una pregunta o tras un «no me sirvio», la respuesta trae
+      ademas el enlace «Ver el centro de ayuda» (`destino` `ayuda`), con el
+      ancla de la categoria cuando se sabe.
+
+    ### 1.7.0 — 7.4.5 y 7.4.7: preguntas sin respuesta y analiticas
+
+    Todo compatible: operaciones nuevas, campos nuevos en las respuestas y
+    definiciones corregidas. Ningun campo existente cambia de forma.
+
+    * **Preguntas sin respuesta** (7.4.5 «registro de preguntas frecuentes
+      no cubiertas», «analisis de patrones de consulta»). Las brechas de
+      conocimiento (HU-CHA-011) se guardaban y nadie las veia.
+      `GET /chatbot/admin/brechas` las lista, las mas repetidas primero
+      (escalamientos + «no util»), por periodo y estado, por paginas;
+      `PATCH /chatbot/admin/brechas/{brechaId}` las marca ATENDIDA (un tema
+      ya la cubre) o DESCARTADA (ruido), o las devuelve a PENDIENTE, y
+      guarda quien y cuando (migracion V13). Una brecha ATENDIDA que se
+      vuelve a preguntar vuelve sola a PENDIENTE y suma una `reaperturas`:
+      el tema que la cubria no basta. La pregunta de ejemplo sale ya
+      redactada (1.4.0).
+    * **Resultado de cada respuesta del bot** (V13, columna
+      `mensajes.resultado`): TEMA, CONSULTA_EN_VIVO, NAVEGACION,
+      NO_DISPONIBLE, ESCALADO, NO_SIRVIO o PIDE_REFORMULAR, decidido por el
+      motor que respondio, no adivinado despues. Las respuestas anteriores a
+      V13 no lo tienen y no cuentan en la tasa de resolucion.
+    * **Formulas del tablero corregidas** (`GET /chatbot/admin/analiticas`;
+      cada una explicada en su campo de `AnaliticaChatbot`):
+      - `conversaciones` son las conversaciones INICIADAS en el periodo
+        (`fecha_inicio`), no las que tuvieron una pregunta: borrar un
+        historial ya no cambia el pasado. Lo que contaba antes sigue, con su
+        nombre, en `conversacionesConActividad`; tambien la tendencia diaria
+        cuenta las iniciadas ese dia.
+      - `tasaResolucion` es resueltas / clasificadas: solo un tema de la
+        base, una consulta en vivo que trajo datos o una navegacion asistida
+        resuelven (D-CHA-07). Antes una consulta en vivo que decia «no
+        disponible» contaba como resuelta.
+      - `escalamientos` son las veces que el ASISTENTE ofrecio soporte
+        humano; las solicitudes que de verdad se abrieron son
+        `tickets.total`. Son dos cifras distintas.
+      - Nuevo `preguntasFrecuentes`: las preguntas mas repetidas del
+        periodo, normalizadas y ya redactadas, solo las que hicieron al
+        menos 3 conversaciones distintas (D-CHA-06).
+      - `palabrasClave` agrega la tendencia de cada palabra contra el
+        periodo anterior de la misma duracion.
+      - `tiempoRespuestaPromedioMs` dice por fin que mide.
+    * **CSV sin formulas**: en la exportacion, una celda que empieza por
+      `=`, `+`, `-`, `@`, tabulador o retorno de carro lleva delante una
+      comilla simple, para que Excel no la ejecute. Bloques nuevos:
+      resultado de las respuestas y preguntas frecuentes.
+
+    ### 1.6.0 — 7.4.10: gestion de la base de conocimiento
+
+    Todo compatible: un campo opcional nuevo en los temas, respuestas de
+    error nuevas y valores nuevos de `motivo`. Ninguna operacion ni campo
+    existente cambia de forma.
+
+    * **Intenciones adicionales** («asociar respuestas con multiples
+      intenciones»). `DatosDeTema` (y con el `Tema` y `TemaIntercambio`)
+      agrega `intencionesAdicionales`: otras categorias que atiende la
+      misma respuesta, ademas de `categoria`. Hasta 5, sin repetir y nunca
+      la propia `categoria` (400 con el motivo en `detail`). Sin valor es
+      ninguna; en las respuestas siempre viene, vacia si no hay. Viajan con
+      el tema (migracion V12): crear la candidata las copia, desplegar o
+      revertir no las toca, exportar las incluye e importar las respeta; un
+      archivo anterior a 1.6.0, sin el campo, se importa igual. El chatbot
+      las usa al desempatar por la seccion del jugador (`vista`), al proponer
+      preguntas relacionadas (un tema sale entre las de cada una de sus
+      intenciones) y en `GET /chat/sugerencias` con `categoria`. Las
+      analiticas siguen contando la categoria principal.
+    * **Titulo duplicado** (RF-CHA-013 «entrada duplicada»): agregar o
+      editar un tema de la candidata con el mismo titulo que otro (sin
+      contar tildes, mayusculas ni signos) responde 409 con `motivo`
+      TEMA_DUPLICADO. La importacion reemplaza la candidata entera, asi que
+      ahi el duplicado solo puede estar dentro del archivo: tambien 409
+      TEMA_DUPLICADO, y no se escribe nada. Las variantes de pregunta
+      repetidas de un tema (con la misma regla) se guardan una sola vez, sin
+      error.
+    * **Importacion acotada**: como mucho 500 temas y 8 MB. Mas responde 413
+      con `motivo` IMPORTACION_DEMASIADO_GRANDE y no se escribe nada.
+    * **Transiciones en fila**: desplegar (el boton y la publicacion
+      programada), revertir, crear o descartar la candidata, editarla,
+      importarla, evaluarla y programarla ya no se cruzan. Nunca quedan dos
+      versiones en produccion ni ninguna; la operacion que llega con un
+      estado que otra acaba de cambiar responde 409 con `motivo`
+      CAMBIO_CONCURRENTE (antes, un 500 o una version publicada dos veces).
+      No se cambia nada: el panel muestra el estado nuevo y el administrador
+      decide otra vez. La publicacion programada que pierde la carrera no
+      hace nada y vuelve a mirar al minuto siguiente.
 
     ### 1.5.0 — 7.4.1 a 7.4.5: lo que dice el chatbot (revision final)
 
@@ -339,12 +583,16 @@ tags:
     description: Calificacion de respuestas del chatbot (HU-CHA-011)
   - name: admin-analiticas
     description: Tablero de analiticas del chatbot (HU-CHA-012, RF-CHA-012)
+  - name: admin-aprendizaje
+    description: Preguntas sin respuesta (brechas de conocimiento) y su atencion (1.7.0, 7.4.5, RF-CHA-011)
   - name: admin-base-conocimiento
     description: Versiones y temas de la base de conocimiento (HU-CHA-012, RF-CHA-013)
   - name: admin-reentrenamiento
     description: Casos de evaluacion, despliegue evaluado y reversion (HU-CHA-012, RF-CHA-014)
   - name: soporte
     description: Tickets de soporte humano del jugador (1.3.0, 7.4.3, RF-CHA-007)
+  - name: ayuda
+    description: Centro de ayuda publico con lo que el chatbot sabe responder (1.8.0, 7.4.3)
   - name: admin-soporte
     description: Atencion de los tickets de soporte (1.3.0, RF-ADM-004)
 
@@ -422,8 +670,17 @@ paths:
            o un informe de actividad, se responde con datos en vivo
            (HU-CHA-008). Desde 1.3.0 tambien sus misiones en curso
            (`misiones.yaml`); desde 1.5.0, buscar en su inventario.
-        2. Si no, se busca en la base de conocimiento (HU-CHA-004).
-        3. Si la pregunta no se entiende, se escala: la respuesta ofrece
+           Desde 1.11.0, un visitante que pide algo de eso recibe que hace
+           falta una sesion (enlaces a `login` y `registro`), sin consultar
+           nada.
+        1b. Desde 1.11.0, para todos: ir a una seccion publica («llevame a
+           la subasta», «ir al centro de ayuda»); las que piden sesion, a un
+           visitante se le dice que entre.
+        2. Desde 1.10.0, para todos: si pregunta por los productos que se
+           venden, por el precio o por la ficha de un producto del catalogo,
+           se responde con el catalogo publico de hoy (`productos.yaml`).
+        3. Si no, se busca en la base de conocimiento (HU-CHA-004).
+        4. Si la pregunta no se entiende, se escala: la respuesta ofrece
            soporte humano y temas relacionados, y la pregunta se registra
            como brecha de conocimiento (HU-CHA-011).
 
@@ -674,7 +931,8 @@ paths:
 
         * Sin `q`: los temas mas consultados, para los botones de preguntas
           rapidas y el menu de temas frecuentes (7.4.6). Con `categoria`,
-          solo los de esa categoria.
+          solo los de esa categoria (desde 1.6.0, tambien los que la
+          atienden como intencion adicional).
         * Con `q` (2 o mas caracteres): autocompletado; los temas cuyo
           titulo o variantes empiezan o contienen lo que el usuario lleva
           escrito, con la misma tolerancia a tildes y mayusculas del motor.
@@ -876,6 +1134,122 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
 
+  /chat/tickets/desde-conversacion:
+    post:
+      tags: [soporte]
+      operationId: abrirTicketDesdeLaConversacionDelChatbot
+      summary: Abre un ticket con la pregunta que el chatbot no resolvio (1.8.0)
+      description: |
+        La «solicitud en un clic» de la ventana despues de un escalamiento o
+        de un «no me sirvio». El servidor arma el ticket con la conversacion
+        de QUIEN LLAMA (el `uid` del token; ningun identificador del cuerpo
+        elige la conversacion):
+
+        * Pregunta: la ultima sin resolver, es decir, la que el chatbot no
+          entendio (escalada) o la que respondio con algo que «no le sirvio»
+          (la pregunta, no el «no me sirvio»). Si no hay ninguna, la ultima
+          pregunta de la conversacion. Ya esta redactada: se guardo asi.
+        * `categoria`: la del tema que respondio esa pregunta; si no hubo
+          tema, la de `vista`; si tampoco, FAQ_GENERAL.
+        * `asunto`: «Sin respuesta del asistente: <pregunta>», recortado a
+          150 caracteres.
+        * `mensaje`: la pregunta y que paso con ella y, si llega,
+          `comentario`; como mucho 2000 caracteres.
+        * El contexto (los ultimos mensajes, redactados), igual que
+          `POST /chat/tickets`.
+
+        Mismas reglas que `POST /chat/tickets`: solo jugadores (401
+        SESION_REQUERIDA), mismo limite de frecuencia (429), el asunto y el
+        mensaje pasan por la revision (422 INYECCION_DETECTADA) y la lista
+        negra (422 CONTENIDO_BLOQUEADO, 503 MODERACION_NO_DISPONIBLE), y una
+        sola solicitud abierta (409 TICKET_ABIERTO).
+      security:
+        - tokenDeUsuario: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AbrirTicketDesdeConversacion'
+            example:
+              vista: SUBASTAS
+      responses:
+        '201':
+          description: Ticket abierto, como lo ve el jugador.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketDeSoporte'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          description: Sin token valido (`motivo` SESION_REQUERIDA).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: |
+            Ya hay un ticket abierto (`motivo` TICKET_ABIERTO), o la
+            conversacion no tiene ninguna pregunta de la cual partir
+            (`motivo` SIN_CONVERSACION).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: |
+            El comentario, o la pregunta tomada de la conversacion, tiene un
+            termino de la lista negra (`motivo` CONTENIDO_BLOQUEADO) o un
+            intento de inyeccion de codigo (`motivo` INYECCION_DETECTADA). No
+            se guarda nada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+        '503':
+          description: La lista negra no responde (`motivo` MODERACION_NO_DISPONIBLE). No se guarda nada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /chat/ayuda:
+    get:
+      tags: [ayuda]
+      operationId: obtenerCentroDeAyudaDelChatbot
+      summary: Lo que el chatbot sabe responder, por categoria (1.8.0)
+      description: |
+        El centro de ayuda: los temas ACTIVOS de la version EN PRODUCCION de
+        la base de conocimiento, agrupados por su categoria (en el orden de
+        `Categoria`, sin las que no tienen temas), y dentro de cada una el de
+        mayor prioridad primero y despues por titulo. Sin los temas de
+        cortesia (saludo, despedida).
+
+        Solo lo que lee un jugador: titulo, respuesta en espanol y en ingles
+        y sus pasos. Nada interno (clave, variantes de pregunta, prioridad,
+        version, fechas).
+
+        Es igual para todos: no lee identidad, no tiene limite propio en el
+        borde (como toda lectura) y se puede guardar en cache cinco minutos.
+        Sin version en produccion, `categorias` viene vacia.
+      security:
+        - {}
+      responses:
+        '200':
+          description: El centro de ayuda.
+          headers:
+            Cache-Control:
+              description: '`public, max-age=300`.'
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CentroDeAyuda'
+
   # ===========================================================================
   # PANEL ADMINISTRATIVO (HU-CHA-012)
   # ===========================================================================
@@ -890,18 +1264,22 @@ paths:
         diaria con todos los dias del periodo (tambien los que no tuvieron
         actividad).
 
-        Definiciones:
+        Definiciones (1.7.0; la formula exacta de cada una esta en su campo
+        de `AnaliticaChatbot`):
 
-        * `conversaciones`: conversaciones distintas con al menos una
-          pregunta en el periodo.
-        * `tasaResolucion`: proporcion de respuestas del bot que NO se
-          escalaron.
+        * `conversaciones`: conversaciones INICIADAS en el periodo.
+        * `tasaResolucion`: respuestas resueltas sin intervencion humana
+          entre las respuestas con resultado guardado (desde V13).
+        * `escalamientos`: veces que el asistente ofrecio soporte humano.
+          Las solicitudes de soporte abiertas son `tickets.total`.
         * `satisfaccion`: proporcion de calificaciones "util".
-        * `tiempoRespuestaPromedioMs`: tiempo de procesamiento del bot.
+        * `tiempoRespuestaPromedioMs`: tiempo que tarda el servidor en
+          generar la respuesta.
 
         Las tasas son proporciones entre 0 y 1, y `null` cuando no hay datos
-        para calcularlas (no es lo mismo que 0). Solo cuentan los mensajes
-        posteriores a la migracion V4, que es cuando se empezaron a medir.
+        para calcularlas (no es lo mismo que 0). Los tiempos y los
+        escalamientos cuentan desde la migracion V4, que es cuando se
+        empezaron a medir; la tasa de resolucion, desde V13.
       security:
         - tokenDeAdministrador: []
       parameters:
@@ -927,11 +1305,19 @@ paths:
       operationId: exportarAnaliticasDelChatbot
       summary: Descarga el tablero de analiticas como CSV
       description: |
-        Mismo contenido que `GET /chatbot/admin/analiticas`, en tres bloques
-        separados por una linea en blanco: resumen, temas frecuentes y
-        tendencia diaria. Pensado para abrirse directo en Excel en espanol:
-        separador `;`, UTF-8 con BOM y lineas CRLF. Las tasas van en
-        porcentaje.
+        Mismo contenido que `GET /chatbot/admin/analiticas`, en bloques
+        separados por una linea en blanco: resumen, temas frecuentes,
+        tendencia diaria, solicitudes de soporte (1.3.7), palabras clave
+        (1.3.7, con su tendencia desde 1.7.0) y, desde 1.7.0, resultado de
+        las respuestas y preguntas frecuentes. Pensado para abrirse directo
+        en Excel en espanol: separador `;`, UTF-8 con BOM y lineas CRLF.
+        Las tasas van en porcentaje.
+
+        1.7.0 — sin formulas: una celda que empieza por `=`, `+`, `-`, `@`,
+        tabulador o retorno de carro (una pregunta o una palabra que escribio
+        un jugador) lleva delante una comilla simple `'`, para que la hoja de
+        calculo la muestre como texto y no la ejecute. Las comillas y el
+        separador se siguen escapando como siempre.
       security:
         - tokenDeAdministrador: []
       parameters:
@@ -950,6 +1336,120 @@ paths:
           $ref: '#/components/responses/NoAutenticado'
         '403':
           $ref: '#/components/responses/SinPermiso'
+
+  /chatbot/admin/brechas:
+    get:
+      tags: [admin-aprendizaje]
+      operationId: listarBrechasDeConocimientoDelChatbot
+      summary: Preguntas sin respuesta, las mas repetidas primero (1.7.0)
+      description: |
+        Las brechas de conocimiento (HU-CHA-011): preguntas que el asistente
+        no entendio (escalamiento) o cuya respuesta se califico «no util»,
+        agrupadas por su texto normalizado. Es un agregado sin vinculo con
+        la sesion de nadie, y la pregunta de ejemplo ya esta redactada
+        (1.4.0).
+
+        * **Orden**: `total` (escalamientos + «no util») de mayor a menor;
+          a igual total, la que se pregunto mas recientemente.
+        * **Periodo** (`desde`, `hasta`, dias completos en hora de
+          Colombia): las brechas con actividad en el: preguntadas por
+          ultima vez desde el inicio del periodo y por primera vez antes de
+          su fin. Los contadores son los de toda su vida, no los del
+          periodo: el servicio no guarda cada ocurrencia, solo la primera,
+          la ultima y cuantas van.
+        * **Estado**: sin `estado`, todas.
+
+        Una brecha ATENDIDA que se vuelve a preguntar vuelve sola a
+        PENDIENTE y suma una `reaperturas`. Una DESCARTADA sigue
+        DESCARTADA aunque se repita (sigue contando).
+      security:
+        - tokenDeAdministrador: []
+      parameters:
+        - $ref: '#/components/parameters/Desde'
+        - $ref: '#/components/parameters/Hasta'
+        - name: estado
+          in: query
+          required: false
+          description: Solo las de ese estado. Sin el, todas.
+          schema:
+            $ref: '#/components/schemas/EstadoDeBrecha'
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: tamano
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Una pagina de brechas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaDeBrechas'
+        '400':
+          description: Fecha mal escrita, periodo invalido (ver `PeriodoInvalido`), `estado` desconocido o pagina fuera de rango.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+
+  /chatbot/admin/brechas/{brechaId}:
+    parameters:
+      - name: brechaId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [admin-aprendizaje]
+      operationId: cambiarEstadoDeBrechaDelChatbot
+      summary: Marca una pregunta sin respuesta como atendida o descartada (1.7.0)
+      description: |
+        ATENDIDA: un tema de la base ya la cubre. DESCARTADA: es ruido (una
+        prueba, algo que no es del juego). PENDIENTE: vuelve a la lista de
+        trabajo. Se guarda quien (el claim `uid` del token del
+        administrador, o su `sub` si el token no trae `uid`; nunca un dato
+        del cuerpo) y cuando. Marcarla con el estado que ya tiene no cambia
+        nada.
+      security:
+        - tokenDeAdministrador: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambiarEstadoDeBrecha'
+            example:
+              estado: ATENDIDA
+      responses:
+        '200':
+          description: La brecha, con su estado nuevo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrechaDeConocimiento'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
 
   /chatbot/admin/base-conocimiento/versiones:
     get:
@@ -1078,7 +1578,13 @@ paths:
       tags: [admin-base-conocimiento]
       operationId: agregarTemaALaVersionCandidata
       summary: Agrega un tema a la version candidata
-      description: El tema recibe una `clave` nueva.
+      description: |
+        El tema recibe una `clave` nueva.
+
+        Desde 1.6.0: con `intencionesAdicionales` (hasta 5, sin repetir,
+        nunca la `categoria`; si no, 400); un titulo igual al de otro tema de
+        la candidata, sin contar tildes, mayusculas ni signos, es 409
+        TEMA_DUPLICADO; las variantes repetidas se guardan una vez.
       security:
         - tokenDeAdministrador: []
       requestBody:
@@ -1087,6 +1593,17 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DatosDeTema'
+            example:
+              categoria: SUBASTA_Y_COMERCIO
+              intencionesAdicionales: [CUENTA_Y_REGISTRO]
+              tipoRespuesta: PASO_A_PASO
+              titulo: Cómo conseguir créditos para pujar
+              variantesEs: [como consigo creditos, me faltan creditos para pujar]
+              variantesEn: [how do I get credits]
+              respuestaEs: 'Los créditos se ganan en las misiones y las batallas. 1) Entra a «Misiones». 2) Completa una misión.'
+              respuestaEn: null
+              prioridad: 1
+              activo: true
       responses:
         '201':
           description: Tema creado.
@@ -1095,13 +1612,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Tema'
         '400':
-          $ref: '#/components/responses/PeticionInvalida'
+          $ref: '#/components/responses/TemaInvalido'
         '401':
           $ref: '#/components/responses/NoAutenticado'
         '403':
           $ref: '#/components/responses/SinPermiso'
         '409':
-          $ref: '#/components/responses/ConflictoDeVersion'
+          $ref: '#/components/responses/ConflictoDeTema'
 
   /chatbot/admin/base-conocimiento/borrador/temas/{temaId}:
     parameters:
@@ -1116,7 +1633,13 @@ paths:
       tags: [admin-base-conocimiento]
       operationId: editarTemaDeLaVersionCandidata
       summary: Edita un tema de la version candidata
-      description: La `clave` no cambia. Un tema de otra version responde 404.
+      description: |
+        La `clave` no cambia. Un tema de otra version responde 404.
+
+        Desde 1.6.0 `intencionesAdicionales` reemplaza las que tenia (sin
+        valor = ninguna), con las mismas reglas que al agregar. Conservar el
+        propio titulo no es un duplicado; tomar el de otro tema, si (409
+        TEMA_DUPLICADO).
       security:
         - tokenDeAdministrador: []
       requestBody:
@@ -1133,7 +1656,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Tema'
         '400':
-          $ref: '#/components/responses/PeticionInvalida'
+          $ref: '#/components/responses/TemaInvalido'
         '401':
           $ref: '#/components/responses/NoAutenticado'
         '403':
@@ -1141,7 +1664,7 @@ paths:
         '404':
           $ref: '#/components/responses/NoEncontrado'
         '409':
-          $ref: '#/components/responses/ConflictoDeVersion'
+          $ref: '#/components/responses/ConflictoDeTema'
     delete:
       tags: [admin-base-conocimiento]
       operationId: eliminarTemaDeLaVersionCandidata
@@ -1170,6 +1693,21 @@ paths:
         `temas`. Un tema con `clave` la conserva (asi sigue contando como el
         mismo tema en las analiticas); sin `clave`, se trata como nuevo. Una
         `clave` repetida en el archivo responde 400.
+
+        Desde 1.6.0:
+        * cada tema conserva sus `intencionesAdicionales` (mismas reglas que
+          al agregarlo; el 400 dice que tema del archivo falla). Un archivo
+          anterior a 1.6.0, sin el campo, se importa igual;
+        * como el archivo reemplaza la candidata entera, un titulo duplicado
+          solo puede estar dentro del archivo: dos temas con el mismo
+          titulo (sin contar tildes, mayusculas ni signos) responden 409
+          TEMA_DUPLICADO;
+        * como mucho 500 temas y 8 MB: mas responde 413
+          IMPORTACION_DEMASIADO_GRANDE (el tamano se mira antes de leer el
+          cuerpo).
+
+        Todo se comprueba antes de tocar la candidata: con cualquier error no
+        se escribe nada.
       security:
         - tokenDeAdministrador: []
       requestBody:
@@ -1188,13 +1726,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/Tema'
         '400':
-          $ref: '#/components/responses/PeticionInvalida'
+          $ref: '#/components/responses/TemaInvalido'
         '401':
           $ref: '#/components/responses/NoAutenticado'
         '403':
           $ref: '#/components/responses/SinPermiso'
         '409':
-          $ref: '#/components/responses/ConflictoDeVersion'
+          $ref: '#/components/responses/ConflictoDeTema'
+        '413':
+          $ref: '#/components/responses/ImportacionDemasiadoGrande'
 
   /chatbot/admin/base-conocimiento/borrador/evaluacion:
     post:
@@ -1248,13 +1788,19 @@ paths:
           description: |
             La candidata rinde peor (cuerpo `DespliegueRechazado`), o no hay
             candidata, o no hay casos de evaluacion activos (problem details
-            simple).
+            simple). Desde 1.6.0 tambien si otro despliegue, una reversion o
+            la publicacion programada cambiaron las versiones mientras esta
+            esperaba su turno (`motivo` CAMBIO_CONCURRENTE): no se despliega
+            nada, y nunca quedan dos versiones en produccion.
           content:
             application/problem+json:
               schema:
                 oneOf:
                   - $ref: '#/components/schemas/DespliegueRechazado'
                   - $ref: '#/components/schemas/ProblemDetail'
+              examples:
+                cambioConcurrente:
+                  $ref: '#/components/examples/CambioConcurrente'
   /chatbot/admin/base-conocimiento/borrador/programacion:
     put:
       tags: [admin-reentrenamiento]
@@ -1297,11 +1843,16 @@ paths:
         '403':
           $ref: '#/components/responses/SinPermiso'
         '409':
-          description: No hay version candidata.
+          description: |
+            No hay version candidata, o (1.6.0) otra operacion la cambio
+            mientras esta esperaba su turno (`motivo` CAMBIO_CONCURRENTE).
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+              examples:
+                cambioConcurrente:
+                  $ref: '#/components/examples/CambioConcurrente'
     delete:
       tags: [admin-reentrenamiento]
       operationId: cancelarDespliegueProgramadoDelChatbot
@@ -1321,11 +1872,16 @@ paths:
         '403':
           $ref: '#/components/responses/SinPermiso'
         '409':
-          description: No hay version candidata.
+          description: |
+            No hay version candidata, o (1.6.0) otra operacion la cambio
+            mientras esta esperaba su turno (`motivo` CAMBIO_CONCURRENTE).
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+              examples:
+                cambioConcurrente:
+                  $ref: '#/components/examples/CambioConcurrente'
 
   /chatbot/admin/base-conocimiento/produccion/reversion:
     post:
@@ -1336,6 +1892,11 @@ paths:
         La version en produccion pasa a `RETIRADA` y la retirada que entro a
         produccion mas recientemente vuelve a `PRODUCCION`. Revertir dos
         veces seguidas vuelve a la version de partida.
+
+        Desde 1.6.0, si un despliegue (o la publicacion programada) cambio la
+        version en produccion mientras la reversion esperaba su turno, 409
+        CAMBIO_CONCURRENTE: no se revierte una version que el administrador
+        no estaba viendo.
       security:
         - tokenDeAdministrador: []
       responses:
@@ -1665,11 +2226,138 @@ components:
       description: |
         El estado de las versiones no lo permite: no hay candidata, ya hay
         una, no hay version anterior a la cual revertir, o no hay casos de
-        evaluacion activos.
+        evaluacion activos. Desde 1.6.0 tambien cuando otra operacion
+        (despliegue, reversion, publicacion programada o un cambio en la
+        candidata) cambio las versiones mientras esta esperaba su turno:
+        `motivo` CAMBIO_CONCURRENTE, y no se cambio nada.
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/ProblemDetail'
+          examples:
+            sinCandidata:
+              $ref: '#/components/examples/SinCandidata'
+            cambioConcurrente:
+              $ref: '#/components/examples/CambioConcurrente'
+    ConflictoDeTema:
+      description: |
+        1.6.0. No hay candidata; otro tema de la candidata ya tiene ese
+        titulo, sin contar tildes, mayusculas ni signos (`motivo`
+        TEMA_DUPLICADO; en una importacion, dos temas del mismo archivo); u
+        otra operacion cambio las versiones mientras esta esperaba su turno
+        (`motivo` CAMBIO_CONCURRENTE). No se escribe nada.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          examples:
+            temaDuplicado:
+              $ref: '#/components/examples/TemaDuplicado'
+            temaDuplicadoEnElArchivo:
+              $ref: '#/components/examples/TemaDuplicadoEnElArchivo'
+            cambioConcurrente:
+              $ref: '#/components/examples/CambioConcurrente'
+            sinCandidata:
+              $ref: '#/components/examples/SinCandidata'
+    TemaInvalido:
+      description: |
+        Cuerpo invalido. Desde 1.6.0 tambien `intencionesAdicionales` con mas
+        de 5, una repetida o la propia `categoria` del tema; `detail` dice
+        cual (y, en una importacion, que tema del archivo).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          examples:
+            intencionPrincipal:
+              summary: La categoria principal tambien como adicional
+              value:
+                type: about:blank
+                title: Bad Request
+                status: 400
+                detail: La intencion PRODUCTO ya es la categoria principal del tema; no se repite como adicional.
+                instance: /api/v1/chatbot/admin/base-conocimiento/borrador/temas
+            demasiadasIntenciones:
+              summary: Mas de cinco intenciones adicionales
+              value:
+                type: about:blank
+                title: Bad Request
+                status: 400
+                detail: Un tema atiende como maximo 5 intenciones ademas de su categoria y llegaron 6.
+                instance: /api/v1/chatbot/admin/base-conocimiento/borrador/temas
+            intencionEnLaImportacion:
+              summary: En una importacion, el tema del archivo que falla
+              value:
+                type: about:blank
+                title: Bad Request
+                status: 400
+                detail: "Tema 3 del archivo ('Como pujar'): la intencion SUBASTA_Y_COMERCIO esta repetida en las intenciones adicionales."
+                instance: /api/v1/chatbot/admin/base-conocimiento/borrador/importacion
+    ImportacionDemasiadoGrande:
+      description: |
+        1.6.0. El archivo trae mas de 500 temas o pesa mas de 8 MB (`motivo`
+        IMPORTACION_DEMASIADO_GRANDE). El tamano se mira antes de leer el
+        cuerpo. No se escribe nada.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+          examples:
+            demasiadosTemas:
+              summary: Mas de 500 temas
+              value:
+                type: about:blank
+                title: Archivo demasiado grande
+                status: 413
+                detail: El archivo trae 612 temas y se importan como maximo 500. Divide la base o quita temas antes de importarla.
+                instance: /api/v1/chatbot/admin/base-conocimiento/borrador/importacion
+                motivo: IMPORTACION_DEMASIADO_GRANDE
+            demasiadosBytes:
+              summary: Mas de 8 MB
+              value:
+                type: about:blank
+                title: Archivo demasiado grande
+                status: 413
+                detail: El archivo pesa mas de 8 MB, el maximo que se importa (500 temas). Revisa que sea una exportacion de la base de conocimiento.
+                instance: /api/v1/chatbot/admin/base-conocimiento/borrador/importacion
+                motivo: IMPORTACION_DEMASIADO_GRANDE
+
+  examples:
+    CambioConcurrente:
+      summary: Otra operacion cambio las versiones a la vez (1.6.0)
+      value:
+        type: about:blank
+        title: Cambio simultaneo
+        status: 409
+        detail: "Otro administrador cambio la base de conocimiento al mismo tiempo (otro despliegue, una reversion o un cambio en la candidata). No se cambio nada: revisa el estado actual y vuelve a intentarlo."
+        instance: /api/v1/chatbot/admin/base-conocimiento/produccion/reversion
+        motivo: CAMBIO_CONCURRENTE
+    TemaDuplicado:
+      summary: Otro tema de la candidata ya tiene ese titulo (1.6.0)
+      value:
+        type: about:blank
+        title: Tema duplicado
+        status: 409
+        detail: "El titulo '¿COMO crear una CUENTA?' es el mismo que el del tema 'Cómo crear una cuenta' de la version candidata (sin contar tildes, mayusculas ni signos). Cambialo o edita ese tema."
+        instance: /api/v1/chatbot/admin/base-conocimiento/borrador/temas
+        motivo: TEMA_DUPLICADO
+    TemaDuplicadoEnElArchivo:
+      summary: Dos temas del archivo de importacion con el mismo titulo (1.6.0)
+      value:
+        type: about:blank
+        title: Tema duplicado
+        status: 409
+        detail: "Los temas 1 y 3 del archivo tienen el mismo titulo ('Cómo pujar' y 'como PUJAR?', sin contar tildes, mayusculas ni signos). Una version no puede tener dos temas con el mismo titulo: cambia uno o quitalo del archivo."
+        instance: /api/v1/chatbot/admin/base-conocimiento/borrador/importacion
+        motivo: TEMA_DUPLICADO
+    SinCandidata:
+      summary: No hay version candidata
+      value:
+        type: about:blank
+        title: Conflict
+        status: 409
+        detail: No hay una version candidata. Crea una a partir de la version en produccion.
+        instance: /api/v1/chatbot/admin/base-conocimiento/borrador/temas
 
   schemas:
     EnviarMensaje:
@@ -1777,7 +2465,7 @@ components:
         mandar a nadie fuera del sitio. Desde 1.5.0 `texto` lleva la
         etiqueta que la vista tiene en la barra («Ir a Mi inventario»; en
         ingles «Go to Mi inventario») y `destino` es siempre una vista de
-        jugador o publica.
+        jugador o publica. Desde 1.8.0 puede traer `ancla`.
       required: [texto, destino]
       properties:
         texto:
@@ -1787,6 +2475,14 @@ components:
           type: string
           pattern: '^[a-z0-9-]{1,40}$'
           example: inventario
+        ancla:
+          type: [string, 'null']
+          pattern: '^[a-z0-9-]{1,60}$'
+          description: |
+            1.8.0. Fragmento dentro de la vista de `destino` (sin `#`), p. ej.
+            `categoria-cuenta-y-registro` en el centro de ayuda. Sin valor, o
+            ausente, el enlace va al principio de la vista.
+          example: categoria-subasta-y-comercio
 
     TarjetaInformativa:
       type: object
@@ -1864,6 +2560,88 @@ components:
           type: string
           minLength: 1
           maxLength: 2000
+
+    AbrirTicketDesdeConversacion:
+      type: object
+      description: |
+        1.8.0. Todo opcional: el ticket sale de la conversacion de quien
+        llama. Un cuerpo vacio (o ninguno) vale.
+      properties:
+        vista:
+          oneOf:
+            - $ref: '#/components/schemas/VistaDelChat'
+            - type: 'null'
+          description: |
+            Donde esta el jugador. Decide la categoria solo si la pregunta no
+            tuvo tema que la respondiera.
+        comentario:
+          type: [string, 'null']
+          maxLength: 2000
+          description: |
+            Lo que el jugador quiera agregar. Pasa por la misma revision y
+            lista negra que el resto del ticket; vacio o solo espacios es sin
+            comentario.
+
+    CentroDeAyuda:
+      type: object
+      description: 1.8.0. Lo que el chatbot sabe responder, agrupado por categoria.
+      required: [categorias]
+      properties:
+        categorias:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoriaDeAyuda'
+
+    CategoriaDeAyuda:
+      type: object
+      description: 1.8.0.
+      required: [categoria, ancla, temas]
+      properties:
+        categoria:
+          $ref: '#/components/schemas/Categoria'
+        ancla:
+          type: string
+          pattern: '^[a-z0-9-]{1,60}$'
+          description: |
+            Fragmento de esta categoria en la pagina del centro de ayuda
+            (`categoria-` y el valor en minusculas con guiones). Es el mismo
+            que trae `EnlaceInterno.ancla`.
+          example: categoria-cuenta-y-registro
+        temas:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/TemaDeAyuda'
+
+    TemaDeAyuda:
+      type: object
+      description: 1.8.0. Un tema publicado, como lo lee un jugador.
+      required: [titulo, respuestaEs, respuestaEn, pasosEs, pasosEn]
+      properties:
+        titulo:
+          type: string
+          maxLength: 150
+        respuestaEs:
+          type: string
+        respuestaEn:
+          type: [string, 'null']
+          description: null si el tema no tiene respuesta en ingles.
+        pasosEs:
+          type: array
+          maxItems: 20
+          description: |
+            Los pasos «1) … 2) …» de la respuesta en espanol, si el tema es
+            paso a paso (como en `RespuestaEnriquecida.pasos`); vacia si no.
+          items:
+            type: string
+            maxLength: 500
+        pasosEn:
+          type: array
+          maxItems: 20
+          description: Los de la respuesta en ingles; vacia si no hay o no es paso a paso.
+          items:
+            type: string
+            maxLength: 500
 
     TicketDeSoporte:
       type: object
@@ -2006,13 +2784,19 @@ components:
           type: string
           enum: [LIMITE_DE_FRECUENCIA, CONTENIDO_BLOQUEADO, MODERACION_NO_DISPONIBLE,
                  SESION_REQUERIDA, TICKET_ABIERTO, TRANSICION_NO_PERMITIDA,
-                 OTRO_TICKET_ABIERTO, INYECCION_DETECTADA]
+                 OTRO_TICKET_ABIERTO, INYECCION_DETECTADA,
+                 TEMA_DUPLICADO, IMPORTACION_DEMASIADO_GRANDE, CAMBIO_CONCURRENTE,
+                 SIN_CONVERSACION]
           description: |
             1.2.0. Solo en los errores nuevos de /chat/**. 1.3.0 agrega los de
             los tickets: SESION_REQUERIDA, TICKET_ABIERTO y
             TRANSICION_NO_PERMITIDA. 1.3.9: OTRO_TICKET_ABIERTO. 1.4.0:
             INYECCION_DETECTADA. (1.5.0 completa esta lista, que no los
-            nombraba aunque las respuestas ya los traian.)
+            nombraba aunque las respuestas ya los traian.) 1.6.0 agrega los del
+            panel de la base de conocimiento: TEMA_DUPLICADO (409),
+            IMPORTACION_DEMASIADO_GRANDE (413) y CAMBIO_CONCURRENTE (409).
+            1.8.0: SIN_CONVERSACION (409), una solicitud desde una
+            conversacion sin preguntas.
 
     SesionAnonima:
       type: object
@@ -2033,6 +2817,9 @@ components:
 
     AnaliticaChatbot:
       type: object
+      description: |
+        Tablero de un periodo. 1.7.0: cada cifra dice en su campo que cuenta
+        y desde cuando se mide.
       required: [desde, hasta, zonaHoraria, conversaciones, preguntas, respuestasMedidas, escalamientos,
                  calificaciones, calificacionesUtiles, temasFrecuentes, tendencia]
       properties:
@@ -2050,25 +2837,97 @@ components:
         conversaciones:
           type: integer
           format: int64
+          description: |
+            7.4.7 «conversaciones iniciadas por periodo». Desde 1.7.0, las
+            conversaciones cuyo inicio (`fecha_inicio`, su primer mensaje)
+            cae en [desde, hasta). Un jugador tiene una sola conversacion,
+            por su `uid`, que empieza la primera vez que escribe; un
+            visitante, una por sesion. Borrar el historial no la cambia: la
+            fila de la conversacion queda (1.4.0), asi que el pasado no se
+            mueve. Hasta 1.6.0 contaba las conversaciones con alguna pregunta
+            en el periodo, que ahora es `conversacionesConActividad`.
+        conversacionesConActividad:
+          type: integer
+          format: int64
+          description: |
+            1.7.0. Conversaciones distintas con al menos una pregunta
+            guardada en el periodo (lo que contaba `conversaciones` hasta
+            1.6.0). Baja si alguien borra despues su historial.
         preguntas:
           type: integer
           format: int64
+          description: Mensajes del usuario guardados en el periodo. Baja si alguien borra despues su historial.
         respuestasMedidas:
           type: integer
           format: int64
-          description: Respuestas del bot con datos de analitica (posteriores a V4).
+          description: Respuestas del bot del periodo con tiempo y escalamiento medidos (desde V4).
         escalamientos:
           type: integer
           format: int64
+          description: |
+            7.4.7 «consultas que requirieron escalamiento». Respuestas del
+            bot del periodo que OFRECIERON soporte humano: no entendio la
+            pregunta (ESCALADO) o el jugador dijo que la respuesta no le
+            sirvio (NO_SIRVIO). Es lo que hizo el asistente, no lo que hizo
+            el jugador: las solicitudes de soporte que de verdad se abrieron
+            son `tickets.total`. Desde V4.
+        respuestasClasificadas:
+          type: integer
+          format: int64
+          description: |
+            1.7.0. Respuestas del bot del periodo con `resultado` guardado
+            (las generadas desde la migracion V13).
+        respuestasResueltas:
+          type: integer
+          format: int64
+          description: |
+            1.7.0. De las clasificadas, las resueltas sin intervencion
+            humana: resultado TEMA, CONSULTA_EN_VIVO o NAVEGACION (ver
+            `ResultadoDeRespuesta`).
         tasaResolucion:
           type: [number, 'null']
           minimum: 0
           maximum: 1
+          description: |
+            7.4.7 «tasa de resolucion (consultas resueltas sin intervencion
+            humana)». Desde 1.7.0, `respuestasResueltas /
+            respuestasClasificadas`; null si no hay clasificadas. No
+            resuelven ESCALADO, NO_SIRVIO, NO_DISPONIBLE ni PIDE_REFORMULAR.
+            Las respuestas anteriores a V13 no tienen resultado y no
+            cuentan, ni a favor ni en contra. Hasta 1.6.0 era la proporcion
+            de respuestas no escaladas, y una consulta en vivo que decia «no
+            disponible» contaba como resuelta.
+        resultados:
+          type: array
+          description: |
+            1.7.0. Cuantas respuestas clasificadas del periodo hubo de cada
+            resultado, en el orden de `ResultadoDeRespuesta`; los que no
+            ocurrieron vienen con 0. Suman `respuestasClasificadas`.
+          items:
+            type: object
+            required: [resultado, respuestas]
+            properties:
+              resultado:
+                $ref: '#/components/schemas/ResultadoDeRespuesta'
+              respuestas:
+                type: integer
+                format: int64
         tiempoRespuestaPromedioMs:
           type: [number, 'null']
+          description: |
+            7.4.7 «tiempo promedio de respuesta». Promedio de lo que tardo
+            el servidor en generar cada respuesta medida del periodo: desde
+            que la pregunta, ya revisada (1.4.0) y aprobada por la lista
+            negra, empieza a procesarse hasta que la respuesta esta lista
+            para guardarse. Incluye el motor de reglas, las consultas en
+            vivo a otros servicios y, si no la entendio, anotar la pregunta
+            sin respuesta; no incluye la lista negra, el guardado de la
+            conversacion ni la red hasta el navegador. null sin respuestas
+            medidas.
         calificaciones:
           type: integer
           format: int64
+          description: Calificaciones hechas en el periodo.
         calificacionesUtiles:
           type: integer
           format: int64
@@ -2076,9 +2935,11 @@ components:
           type: [number, 'null']
           minimum: 0
           maximum: 1
+          description: '`calificacionesUtiles / calificaciones`; null sin calificaciones.'
         temasFrecuentes:
           type: array
           maxItems: 10
+          description: Los 10 temas de la base que mas respuestas dieron en el periodo, por su clave estable.
           items:
             type: object
             required: [clave, titulo, respuestas]
@@ -2090,8 +2951,41 @@ components:
               respuestas:
                 type: integer
                 format: int64
+        preguntasFrecuentes:
+          type: array
+          maxItems: 10
+          description: |
+            1.7.0 (7.4.7 «preguntas mas frecuentes»). Las preguntas mas
+            repetidas del periodo, de las ultimas 5000 (como las palabras
+            clave): el texto como lo lee el motor (`NormalizadorTexto`: sin
+            tildes, mayusculas ni signos) del mensaje ya redactado (1.4.0),
+            recortado a 200 caracteres. Para no mostrar el texto de una
+            persona, solo salen las que hicieron al menos 3 conversaciones
+            distintas (D-CHA-06, convencion tecnica provisional). Hasta 10,
+            la mas repetida primero; a igual numero, la de mas
+            conversaciones.
+          items:
+            type: object
+            required: [texto, preguntas, conversaciones]
+            properties:
+              texto:
+                type: string
+                maxLength: 200
+              preguntas:
+                type: integer
+                format: int64
+                description: Veces que se pregunto asi en el periodo.
+              conversaciones:
+                type: integer
+                format: int64
+                description: Conversaciones distintas que la preguntaron (3 o mas).
         tendencia:
           type: array
+          description: |
+            Un punto por cada dia del periodo, tambien los que no tuvieron
+            actividad. Desde 1.7.0 `conversaciones` son las iniciadas ese
+            dia (hasta 1.6.0, las que tuvieron preguntas ese dia);
+            `respuestas` son las medidas.
           items:
             type: object
             required: [dia, conversaciones, preguntas, respuestas, escalamientos]
@@ -2115,7 +3009,9 @@ components:
           type: object
           description: |
             1.3.7 (7.4.7). Solicitudes de soporte abiertas en el periodo.
-            Siempre viene; sin solicitudes, todo en 0.
+            Siempre viene; sin solicitudes, todo en 0. `total` es lo que de
+            verdad llego a una persona del equipo; no confundir con
+            `escalamientos`, que es cuando el asistente lo ofrecio.
           required: [total, abiertos, enProceso, resueltos, cerrados, porCategoria]
           properties:
             total:
@@ -2161,7 +3057,10 @@ components:
             periodo (de las ultimas 5000), sin tildes ni mayusculas, la mas
             usada primero. Para no exponer datos de una persona (7.4.8), solo
             salen palabras de 4 o mas letras, sin digitos, usadas en al menos
-            2 conversaciones distintas.
+            2 conversaciones distintas. Desde 1.7.0 cada una trae su
+            tendencia contra el periodo anterior de la misma duracion
+            ([desde - duracion, desde), tambien de sus ultimas 5000
+            preguntas).
           items:
             type: object
             required: [palabra, preguntas, conversaciones]
@@ -2175,6 +3074,114 @@ components:
               conversaciones:
                 type: integer
                 format: int64
+              preguntasPeriodoAnterior:
+                type: integer
+                format: int64
+                description: 1.7.0. Preguntas que la contenian en el periodo anterior de la misma duracion.
+              tendencia:
+                type: string
+                enum: [SUBE, BAJA, IGUAL, NUEVA]
+                description: |
+                  1.7.0. NUEVA si en el periodo anterior no aparecio; si no,
+                  SUBE, BAJA o IGUAL comparando `preguntas` con
+                  `preguntasPeriodoAnterior`.
+
+    ResultadoDeRespuesta:
+      type: string
+      description: |
+        1.7.0 (V13). Como termino una respuesta del bot; lo decide el motor
+        que la genero y se guarda con ella.
+
+        * TEMA: la respondio un tema de la base (tambien «mas detalle», «en
+          ingles» o «repitelo» sobre el tema anterior). Resuelve.
+        * CONSULTA_EN_VIVO: una consulta en vivo que trajo datos: sobre la
+          propia cuenta (inventario y su busqueda, subastas, notificaciones,
+          movimientos, misiones, torneos; el informe de actividad con al
+          menos una parte) o, desde 1.10.0, sobre el catalogo publico.
+          Resuelve, aunque los datos digan «no tienes ninguno».
+        * NAVEGACION: llevo al jugador a la seccion que pidio. Resuelve.
+        * NO_DISPONIBLE: la consulta en vivo no respondio (o ninguna parte
+          del informe, o el catalogo para un listado). No resuelve.
+        * ESCALADO: el motor no entendio la pregunta y ofrecio soporte
+          humano. No resuelve.
+        * NO_SIRVIO: el jugador dijo que la respuesta anterior no le sirvio
+          y se le ofrecio soporte humano. No resuelve.
+        * PIDE_REFORMULAR: el bot pidio la pregunta completa (un seguimiento
+          sin tema anterior) o un criterio de busqueda mas largo. No
+          resuelve.
+      enum: [TEMA, CONSULTA_EN_VIVO, NAVEGACION, NO_DISPONIBLE, ESCALADO, NO_SIRVIO, PIDE_REFORMULAR]
+
+    EstadoDeBrecha:
+      type: string
+      description: |
+        1.7.0 (V13). PENDIENTE = nadie la ha atendido (o volvio a
+        preguntarse despues de atenderla); ATENDIDA = un tema de la base ya
+        la cubre; DESCARTADA = ruido.
+      enum: [PENDIENTE, ATENDIDA, DESCARTADA]
+
+    BrechaDeConocimiento:
+      type: object
+      description: 1.7.0. Una pregunta sin respuesta, agregada por su texto normalizado.
+      required: [brechaId, pregunta, escalamientos, noUtiles, total, primeraVez, ultimaVez, estado, reaperturas]
+      properties:
+        brechaId:
+          type: string
+          format: uuid
+        pregunta:
+          type: string
+          description: La primera forma en que alguien la pregunto, ya redactada (sin contrasenas, tarjetas ni tokens).
+        escalamientos:
+          type: integer
+          description: Veces que el asistente no la entendio y ofrecio soporte humano.
+        noUtiles:
+          type: integer
+          description: Veces que la respuesta a esta pregunta se califico «no util».
+        total:
+          type: integer
+          description: '`escalamientos + noUtiles`: lo que ordena el listado.'
+        primeraVez:
+          type: string
+          format: date-time
+        ultimaVez:
+          type: string
+          format: date-time
+        estado:
+          $ref: '#/components/schemas/EstadoDeBrecha'
+        estadoCambiadoPor:
+          type: [string, 'null']
+          description: '`uid` del administrador que le puso el estado; null si nadie lo cambio o si volvio sola a PENDIENTE.'
+        estadoCambiadoEn:
+          type: [string, 'null']
+          format: date-time
+        reaperturas:
+          type: integer
+          description: Veces que volvio sola a PENDIENTE porque se pregunto otra vez despues de marcarla ATENDIDA.
+
+    PaginaDeBrechas:
+      type: object
+      description: 1.7.0.
+      required: [contenido, pagina, tamano, totalElementos]
+      properties:
+        contenido:
+          type: array
+          items:
+            $ref: '#/components/schemas/BrechaDeConocimiento'
+        pagina:
+          type: integer
+        tamano:
+          type: integer
+        totalElementos:
+          type: integer
+          format: int64
+
+    CambiarEstadoDeBrecha:
+      type: object
+      description: 1.7.0.
+      required: [estado]
+      properties:
+        estado:
+          $ref: '#/components/schemas/EstadoDeBrecha'
+
     VersionBaseConocimiento:
       type: object
       required: [id, numero, estado, fechaCreacion]
@@ -2246,7 +3253,9 @@ components:
       type: array
       description: |
         Frases con las que un usuario haria la pregunta. Ninguna puede
-        contener `,` (400): el motor las guarda separadas por coma.
+        contener `,` (400): el motor las guarda separadas por coma. Desde
+        1.6.0 las repetidas (sin contar tildes, mayusculas ni signos) se
+        guardan una sola vez, sin error.
       items:
         type: string
         minLength: 1
@@ -2258,12 +3267,31 @@ components:
       properties:
         categoria:
           $ref: '#/components/schemas/Categoria'
+        intencionesAdicionales:
+          type: [array, 'null']
+          maxItems: 5
+          uniqueItems: true
+          default: []
+          items:
+            $ref: '#/components/schemas/Categoria'
+          description: |
+            1.6.0 (7.4.10 «asociar respuestas con multiples intenciones»):
+            otras intenciones que atiende la misma respuesta, ademas de
+            `categoria`. Hasta 5, sin repetir y nunca la propia `categoria`
+            (400). Sin valor = ninguna. El chatbot las cuenta al desempatar
+            por la seccion del jugador, en las preguntas relacionadas y en
+            las sugerencias por categoria; las analiticas siguen contando la
+            `categoria`.
+          example: [CUENTA_Y_REGISTRO, PRODUCTO]
         tipoRespuesta:
           $ref: '#/components/schemas/TipoRespuesta'
         titulo:
           type: string
           minLength: 1
           maxLength: 150
+          description: |
+            Desde 1.6.0, unico en la version: el mismo que el de otro tema,
+            sin contar tildes, mayusculas ni signos, es 409 TEMA_DUPLICADO.
         variantesEs:
           allOf:
             - $ref: '#/components/schemas/Variantes'
@@ -2291,7 +3319,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/DatosDeTema'
         - type: object
-          required: [id, clave, prioridad, activo]
+          required: [id, clave, prioridad, activo, intencionesAdicionales]
           properties:
             id:
               type: string
@@ -2301,8 +3329,17 @@ components:
               description: Identifica al mismo tema en todas las versiones; no cambia al editarlo.
             activo:
               type: boolean
+            intencionesAdicionales:
+              type: array
+              items:
+                $ref: '#/components/schemas/Categoria'
+              description: 1.6.0. Siempre viene, en el orden del enum; vacia si el tema no tiene.
 
     TemaIntercambio:
+      description: |
+        Desde 1.6.0 la exportacion trae siempre `intencionesAdicionales`
+        (vacia si no tiene); un archivo anterior, sin el campo, se importa
+        igual (sin intenciones).
       allOf:
         - $ref: '#/components/schemas/DatosDeTema'
         - type: object
@@ -2331,11 +3368,15 @@ components:
     ImportacionBaseConocimiento:
       type: object
       required: [temas]
-      description: Mismo formato que `ExportacionBaseConocimiento`; los demas campos se ignoran.
+      description: |
+        Mismo formato que `ExportacionBaseConocimiento`; los demas campos se
+        ignoran. Desde 1.6.0, como mucho 500 temas y 8 MB en total (413
+        IMPORTACION_DEMASIADO_GRANDE).
       properties:
         temas:
           type: array
           minItems: 1
+          maxItems: 500
           items:
             $ref: '#/components/schemas/TemaIntercambio'
 

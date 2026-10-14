@@ -338,6 +338,25 @@ export function crearClienteChatbot({
     },
 
     /**
+     * ms-chatbot.yaml 1.8.0: abre la solicitud con la pregunta que el
+     * asistente no resolvió. El servidor la toma de la conversación de esta
+     * sesión: aquí no se manda ningún identificador.
+     *
+     * @param {{vista?: string|null, comentario?: string|null}} [datos]
+     * @returns {Promise<object>} la solicitud como la ve el jugador
+     */
+    abrirTicketDesdeConversacion({ vista = null, comentario = null } = {}) {
+      const cuerpo = {};
+      if (vista) {
+        cuerpo.vista = vista;
+      }
+      if (comentario && comentario.trim()) {
+        cuerpo.comentario = comentario.trim();
+      }
+      return llamar('POST', '/chat/tickets/desde-conversacion', cuerpo, { rutaFija: true });
+    },
+
+    /**
      * Preguntas rápidas, temas frecuentes o autocompletado (con `q`). Salen
      * de la versión en producción de la base de conocimiento.
      *
@@ -383,6 +402,20 @@ export function crearClienteChatbot({
     /** @returns {Promise<Array<object>>} las solicitudes del jugador, la más reciente primero */
     async misTickets() {
       return (await llamar('GET', '/chat/tickets', undefined, { rutaFija: true })) ?? [];
+    },
+
+    /**
+     * ms-chatbot.yaml 1.8.0: el centro de ayuda, lo que el asistente sabe
+     * responder agrupado por categoría. Igual para todos.
+     *
+     * @returns {Promise<{categorias: Array<{categoria: string, ancla: string,
+     *          temas: Array<{titulo: string, respuestaEs: string, respuestaEn: string|null,
+     *          pasosEs: string[], pasosEn: string[]}>}>}>}
+     */
+    async centroDeAyuda() {
+      return (
+        (await llamar('GET', '/chat/ayuda', undefined, { rutaFija: true })) ?? { categorias: [] }
+      );
     },
   };
 }

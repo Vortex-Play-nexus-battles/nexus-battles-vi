@@ -44,7 +44,8 @@ class BaseDeConocimientoEnProduccionIT {
     // Vistas a las que un jugador o un visitante pueden llegar (comun/matriz-acceso.js).
     private static final Set<String> VISTAS_DE_JUGADOR = Set.of("registro", "login", "restablecer-solicitar",
         "verificar-cuenta", "perfil", "historial-transacciones", "mis-cofres", "mis-sanciones", "inventario", "tienda",
-        "subastas", "publicar-subasta", "misiones", "torneos", "batallas", "crear-sala", "chat", "notificaciones");
+        "subastas", "publicar-subasta", "misiones", "torneos", "batallas", "crear-sala", "chat", "notificaciones",
+        "ayuda");
 
     @Autowired
     private MotorRespuestas motor;
@@ -81,7 +82,8 @@ class BaseDeConocimientoEnProduccionIT {
     @DisplayName("ninguna respuesta enlaza a una vista de administracion ni promete logros, mazos o transmisiones")
     void nadaEnlazaAdministracionNiPrometeLoQueNoHay() {
         List<TemaConocimiento> enProduccion = temas.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION);
-        assertThat(enProduccion).hasSize(59);
+        // 59 de V11 y «Reglas básicas del juego» de V15.
+        assertThat(enProduccion).hasSize(60);
         for (TemaConocimiento tema : enProduccion) {
             ResultadoMotor resultado = motor.responderTema(tema.getClave(), null, false).orElseThrow();
             List<String> destinos = resultado.enriquecido() == null ? List.of()

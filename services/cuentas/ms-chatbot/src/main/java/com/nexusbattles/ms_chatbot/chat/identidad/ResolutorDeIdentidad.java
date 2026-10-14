@@ -63,6 +63,38 @@ public class ResolutorDeIdentidad {
         return new Resultado(IdentidadDelChat.visitante(emitida.sesion()), emitida.identificador());
     }
 
+    /**
+     * 7.4.9 (contracts/websocket/chatbot.yaml 1.0.0): quien abre el canal en
+     * tiempo real, con las reglas de arriba y sin registrar nada. El nombre lo
+     * pone el servidor, nunca el cliente (es el principal de la conexion):
+     *
+     * <ul>
+     *   <li>un jugador, por el uid de su token: su nombre es el uid;</li>
+     *   <li>si no, un visitante con una sesion emitida vigente o con la que
+     *       declara el navegador (se registra con su primer mensaje, como en
+     *       {@link #resolverOEmitir}): su nombre es {@code anonimo:} + la
+     *       huella de la sesion, nunca la sesion;</li>
+     *   <li>nadie mas: vacio, y el canal rechaza la conexion. A diferencia de
+     *       {@link #resolverOEmitir} no se emite una sesion, porque en un
+     *       CONNECT no hay respuesta HTTP donde devolverla.</li>
+     * </ul>
+     */
+    public Optional<EnElCanal> enElCanal(Authentication autenticacion, String cabeceraDeSesion) {
+        Optional<IdentidadDelChat> usuario = usuarioDelToken(autenticacion);
+        if (usuario.isPresent()) {
+            return Optional.of(new EnElCanal(usuario.get().uid(), true));
+        }
+        if (SesionesAnonimas.esDeclarada(cabeceraDeSesion) || sesiones.validar(cabeceraDeSesion).isPresent()) {
+            return Optional.of(new EnElCanal(
+                IdentidadDelChat.PREFIJO_VISITANTE + SesionesAnonimas.huella(cabeceraDeSesion), false));
+        }
+        return Optional.empty();
+    }
+
+    /** 7.4.9: el nombre de quien abre el canal y si es un jugador con sesion. */
+    public record EnElCanal(String nombre, boolean jugador) {
+    }
+
     // La identidad de un usuario es SOLO el claim `uid` (ADR-002): el `sub` es
     // su apodo y nunca se interpreta como uid (1.4.0; antes se aceptaba un
     // `sub` con forma de UUID cuando faltaba el uid, via IdentidadDelToken).

@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_chatbot.chat.motor;
 
 import com.nexusbattles.ms_chatbot.chat.enriquecido.RespuestaEnriquecida;
+import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TipoRespuesta;
 
@@ -25,6 +26,12 @@ import java.util.List;
  * @param ingles                ms-chatbot.yaml 1.5.0: la respuesta está en inglés; lo que
  *                              {@code ChatService} añada (preguntas relacionadas, el aviso de
  *                              un dato tapado) va en el mismo idioma
+ * @param resultado             ms-chatbot.yaml 1.7.0: cómo terminó la respuesta (tema, consulta
+ *                              en vivo, servicio no disponible, escalamiento…), dicho por el motor
+ *                              que la generó; se guarda con el mensaje para la tasa de resolución.
+ *                              Si no se da, se deduce solo lo seguro: ESCALADO si se escaló, TEMA
+ *                              si la respondió un tema; si no, queda null y esa respuesta no
+ *                              cuenta en la tasa
  */
 public record ResultadoMotor(
     String texto,
@@ -34,8 +41,23 @@ public record ResultadoMotor(
     List<String> temasSugeridos,
     String temaClave,
     RespuestaEnriquecida enriquecido,
-    boolean ingles
+    boolean ingles,
+    ResultadoDeRespuesta resultado
 ) {
+
+    public ResultadoMotor {
+        if (resultado == null) {
+            resultado = deducido(requiereEscalamiento, temaClave);
+        }
+    }
+
+    /** Sin el resultado (antes de 1.7.0): se deduce lo seguro, ver {@link #resultado()}. */
+    public ResultadoMotor(String texto, Categoria categoria, TipoRespuesta tipoRespuesta, boolean requiereEscalamiento,
+                          List<String> temasSugeridos, String temaClave, RespuestaEnriquecida enriquecido,
+                          boolean ingles) {
+        this(texto, categoria, tipoRespuesta, requiereEscalamiento, temasSugeridos, temaClave, enriquecido, ingles,
+            null);
+    }
 
     public static ResultadoMotor deTema(String texto, Categoria categoria, TipoRespuesta tipoRespuesta) {
         return deTema(texto, categoria, tipoRespuesta, null);
@@ -53,12 +75,25 @@ public record ResultadoMotor(
     /** Copia con la respuesta enriquecida (1.3.4). */
     public ResultadoMotor conEnriquecido(RespuestaEnriquecida nuevo) {
         return new ResultadoMotor(texto, categoria, tipoRespuesta, requiereEscalamiento, temasSugeridos, temaClave,
-            nuevo, ingles);
+            nuevo, ingles, resultado);
     }
 
     /** Copia que dice en qué idioma quedó la respuesta (1.5.0). */
     public ResultadoMotor enIngles(boolean enIngles) {
         return new ResultadoMotor(texto, categoria, tipoRespuesta, requiereEscalamiento, temasSugeridos, temaClave,
-            enriquecido, enIngles);
+            enriquecido, enIngles, resultado);
+    }
+
+    /** Copia con el resultado que decidió el motor (1.7.0). */
+    public ResultadoMotor conResultado(ResultadoDeRespuesta nuevo) {
+        return new ResultadoMotor(texto, categoria, tipoRespuesta, requiereEscalamiento, temasSugeridos, temaClave,
+            enriquecido, ingles, nuevo);
+    }
+
+    private static ResultadoDeRespuesta deducido(boolean requiereEscalamiento, String temaClave) {
+        if (requiereEscalamiento) {
+            return ResultadoDeRespuesta.ESCALADO;
+        }
+        return temaClave != null ? ResultadoDeRespuesta.TEMA : null;
     }
 }

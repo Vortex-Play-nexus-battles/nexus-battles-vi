@@ -468,7 +468,7 @@ function iniciarVista(formulario) {
   // Ya hay sesión en esta pestaña: el login no tiene nada que hacer aquí.
   const actual = leerSesion();
   if (actual.autenticado) {
-    globalThis.location.replace(destinoTrasEntrar(null, volver));
+    globalThis.location.replace(destinoTrasEntrar({ rol: actual.rol }, volver));
     return;
   }
   if (actual.caducada) {
@@ -498,7 +498,7 @@ function iniciarVista(formulario) {
       .then((compartida) => adoptarSesionCompartida(compartida))
       .then((adoptada) => {
         if (adoptada) {
-          globalThis.location.replace(destinoTrasEntrar(null, volver));
+          globalThis.location.replace(destinoTrasEntrar({ rol: leerSesion().rol }, volver));
         }
       });
   }

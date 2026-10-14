@@ -43,6 +43,18 @@ public class TicketsController {
         return ResponseEntity.status(HttpStatus.CREATED).body(TicketResponse.desde(ticket));
     }
 
+    // ms-chatbot.yaml 1.8.0: la solicitud en un clic tras un escalamiento o un
+    // «no me sirvio». El cuerpo es opcional y no elige la conversacion.
+    @PostMapping("/desde-conversacion")
+    public ResponseEntity<TicketResponse> abrirDesdeConversacion(
+        @RequestBody(required = false) @Valid AbrirTicketDesdeConversacionRequest request,
+        Authentication authentication) {
+        AbrirTicketDesdeConversacionRequest datos = request == null ? AbrirTicketDesdeConversacionRequest.VACIA : request;
+        TicketSoporte ticket = servicio.abrirDesdeConversacion(jugador(authentication), datos.vista(),
+            datos.comentario());
+        return ResponseEntity.status(HttpStatus.CREATED).body(TicketResponse.desde(ticket));
+    }
+
     @GetMapping
     public ResponseEntity<List<TicketResponse>> misTickets(Authentication authentication) {
         List<TicketResponse> mios = servicio.misTickets(jugador(authentication)).stream()

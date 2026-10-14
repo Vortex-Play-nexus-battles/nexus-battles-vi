@@ -47,6 +47,11 @@ public class DisponibilidadDelCatalogoServicio {
 
         /** @param autor identificador estable del administrador, para la bitacora */
         public DisponibilidadProducto suspender(String productoId, String autor) {
+                return suspender(productoId, autor, null);
+        }
+
+        /** @param motivo por qué se suspende (SA-6); queda en el historial */
+        public DisponibilidadProducto suspender(String productoId, String autor, String motivo) {
                 Producto actual = buscar(productoId);
                 if (actual.estado() == EstadoProducto.SUSPENDIDO) {
                         return catalogo.suspender(productoId);
@@ -56,7 +61,8 @@ public class DisponibilidadDelCatalogoServicio {
                                 EstadoProducto.SUSPENDIDO,
                                 actual.estado(),
                                 autor,
-                                TipoCambioProducto.SUSPENSION);
+                                TipoCambioProducto.SUSPENSION,
+                                motivo);
                 DisponibilidadProducto suspendido;
                 try {
                         suspendido = catalogo.suspender(productoId);
@@ -70,6 +76,11 @@ public class DisponibilidadDelCatalogoServicio {
 
         /** @param autor identificador estable del administrador, para la bitacora */
         public DisponibilidadProducto reactivar(String productoId, String autor) {
+                return reactivar(productoId, autor, null);
+        }
+
+        /** @param motivo por qué se reactiva (SA-6); queda en el historial */
+        public DisponibilidadProducto reactivar(String productoId, String autor, String motivo) {
                 Producto actual = buscar(productoId);
                 if (actual.estado() != EstadoProducto.SUSPENDIDO) {
                         return catalogo.reactivar(productoId);
@@ -82,7 +93,8 @@ public class DisponibilidadDelCatalogoServicio {
                                 destino,
                                 null,
                                 autor,
-                                TipoCambioProducto.REACTIVACION);
+                                TipoCambioProducto.REACTIVACION,
+                                motivo);
                 DisponibilidadProducto reactivado;
                 try {
                         reactivado = catalogo.reactivar(productoId);
@@ -104,7 +116,8 @@ public class DisponibilidadDelCatalogoServicio {
                         EstadoProducto estado,
                         EstadoProducto estadoAnteriorSuspension,
                         String autor,
-                        TipoCambioProducto tipo) {
+                        TipoCambioProducto tipo,
+                        String motivo) {
                 Instant ahora = Instant.now();
                 Producto aplicado = new Producto(
                                 actual.id(), actual.nombre(), actual.imagen(), actual.descripcion(), actual.tipo(),
@@ -123,7 +136,8 @@ public class DisponibilidadDelCatalogoServicio {
                                 ahora,
                                 autor,
                                 tipo,
-                                null);
+                                null,
+                                RevertirProductoServicio.motivoLimpio(motivo));
                 respaldos.save(respaldo);
                 return respaldo;
         }

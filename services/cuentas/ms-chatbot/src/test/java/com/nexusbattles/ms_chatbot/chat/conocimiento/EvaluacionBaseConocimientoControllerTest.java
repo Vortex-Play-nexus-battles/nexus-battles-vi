@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -171,6 +172,30 @@ class EvaluacionBaseConocimientoControllerTest {
 
         mockMvc.perform(post(RUTA + "/produccion/reversion").with(administrador()))
             .andExpect(status().isConflict());
+    }
+
+    // 1.6.0: la operacion que pierde la carrera responde 409 con motivo, y el
+    // panel distingue «otro cambio la base» de «no hay version anterior».
+    @Test
+    void desplegar_conCambioConcurrente_devuelve409ConMotivo() throws Exception {
+        when(evaluacionService.desplegarCandidata()).thenThrow(new CambioConcurrenteException());
+
+        mockMvc.perform(post(RUTA + "/borrador/despliegue").with(administrador()))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.motivo").value("CAMBIO_CONCURRENTE"))
+            .andExpect(jsonPath("$.detail").value(CambioConcurrenteException.MENSAJE));
+    }
+
+    // Un bloqueo que la base no pudo dar (abrazo mortal, tiempo agotado)
+    // tampoco es un 500.
+    @Test
+    void revertir_conBloqueoFallidoEnLaBase_devuelve409ConMotivo() throws Exception {
+        when(evaluacionService.revertir()).thenThrow(new CannotAcquireLockException("deadlock detected"));
+
+        mockMvc.perform(post(RUTA + "/produccion/reversion").with(administrador()))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.motivo").value("CAMBIO_CONCURRENTE"))
+            .andExpect(jsonPath("$.detail").value(CambioConcurrenteException.MENSAJE));
     }
 
     // --------------------------------------------------- casos de evaluacion

@@ -55,6 +55,36 @@ class DisponibilidadDelCatalogoServicioTest {
         }
 
         @Test
+        @DisplayName("SA-6: el motivo de suspender y de reactivar queda en su entrada del historial, sin espacios de más")
+        void guardaElMotivo() {
+                CatalogoProductos catalogo = mock(CatalogoProductos.class);
+                ProductoRepository productos = mock(ProductoRepository.class);
+                RespaldoProductoRepository respaldos = mock(RespaldoProductoRepository.class);
+                Producto activo = producto(EstadoProducto.ACTIVO, null, 3);
+                Producto suspendido = producto(EstadoProducto.SUSPENDIDO, EstadoProducto.ACTIVO, 4);
+                when(respaldos.save(any(RespaldoProducto.class)))
+                                .thenAnswer(invocacion -> invocacion.getArgument(0, RespaldoProducto.class));
+                when(catalogo.suspender(activo.id()))
+                                .thenReturn(DisponibilidadProducto.desde(suspendido, EstadoProducto.ACTIVO));
+                when(catalogo.reactivar(activo.id()))
+                                .thenReturn(DisponibilidadProducto.desde(producto(EstadoProducto.ACTIVO, null, 5)));
+                DisponibilidadDelCatalogoServicio servicio = new DisponibilidadDelCatalogoServicio(
+                                catalogo, productos, respaldos);
+
+                when(productos.findById(activo.id())).thenReturn(Optional.of(activo));
+                servicio.suspender(activo.id(), "admin-uid", "  Error de balance en su daño  ");
+                when(productos.findById(activo.id())).thenReturn(Optional.of(suspendido));
+                servicio.reactivar(activo.id(), "admin-uid", "   ");
+
+                ArgumentCaptor<RespaldoProducto> captor = ArgumentCaptor.forClass(RespaldoProducto.class);
+                verify(respaldos, org.mockito.Mockito.times(2)).save(captor.capture());
+                assertEquals(TipoCambioProducto.SUSPENSION, captor.getAllValues().get(0).tipoCambio());
+                assertEquals("Error de balance en su daño", captor.getAllValues().get(0).motivo());
+                assertEquals(TipoCambioProducto.REACTIVACION, captor.getAllValues().get(1).tipoCambio());
+                assertEquals(null, captor.getAllValues().get(1).motivo());
+        }
+
+        @Test
         @DisplayName("repetir una suspensión no inventa otra entrada de auditoría")
         void suspensionIdempotenteNoDuplicaAuditoria() {
                 CatalogoProductos catalogo = mock(CatalogoProductos.class);

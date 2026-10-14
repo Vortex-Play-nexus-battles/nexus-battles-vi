@@ -53,7 +53,7 @@ class RevertirProductoServicioTest {
                 });
 
                 Producto resultado = new RevertirProductoServicio(productos, respaldos)
-                                .revertir(PRODUCTO_ID, RESPALDO_ID, "admin-revisor");
+                                .revertir(PRODUCTO_ID, RESPALDO_ID, "admin-revisor", "  Precio mal puesto ");
 
                 assertEquals("Espada solar", resultado.nombre());
                 assertEquals(3, resultado.version());
@@ -65,6 +65,7 @@ class RevertirProductoServicioTest {
                 assertEquals(RESPALDO_ID, auditoria.getValue().reversionDe());
                 assertEquals("Espada solar +1", auditoria.getValue().estadoAnterior().nombre());
                 assertEquals("Espada solar", auditoria.getValue().estadoAplicado().nombre());
+                assertEquals("Precio mal puesto", auditoria.getValue().motivo());
         }
 
         @Test

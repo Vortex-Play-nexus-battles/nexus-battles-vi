@@ -459,12 +459,131 @@
   gap: 2px;
 }
 
-/* UXC-9 — lo que el catálogo todavía no ofrece (§7.2.3, §7.2.4): una lista
-   de lectura, en el tono secundario del resto de explicaciones del panel. */
-.panel-catalogo--pendiente ul {
+/* SA-6 — la ficha: vista previa con la tarjeta de la tienda (HU-PRD-010),
+   motivos en el historial y versiones de diseño con su imagen (HU-PRD-011). */
+.hoja-producto__datos {
   display: grid;
-  gap: 8px;
+  gap: 12px;
+}
+
+.hoja-producto__datos h3,
+.hoja-producto__vista-previa h3 {
   margin: 0;
-  padding-left: 1.25rem;
+}
+
+.hoja-producto__vista-previa {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--fondo);
+}
+
+.hoja-producto__vista-previa .hoja-producto__acciones {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hoja-producto__pendientes {
+  margin: 0;
+}
+
+.hoja-producto__motivo {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.hoja-producto__versiones {
+  padding-left: 0;
+  list-style: none;
+}
+
+.version-diseno {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.version-diseno__datos {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.version-diseno__datos p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.version-diseno__descripcion {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   color: var(--texto-2);
+}
+
+@media (max-width: 520px) {
+  .version-diseno {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .version-diseno > .boton {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
+/* La miniatura del producto en la tabla del catálogo. */
+.catalogo-admin__producto {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.catalogo-admin__producto > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.catalogo-admin__producto .recurso-miniatura {
+  width: 40px;
+  height: 40px;
+  flex: none;
+}
+
+/* HU-PRD-009 — la biblioteca de recursos gráficos del panel. */
+.biblioteca-recursos__barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.biblioteca-recursos__subida,
+.biblioteca-recursos__filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.biblioteca-recursos__subida .campo__pista {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.biblioteca-recursos .campo {
+  display: grid;
+  gap: 4px;
+  margin: 0;
 }

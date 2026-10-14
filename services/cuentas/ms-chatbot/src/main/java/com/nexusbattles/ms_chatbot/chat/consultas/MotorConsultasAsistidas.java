@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_chatbot.chat.consultas;
 
+import com.nexusbattles.ms_chatbot.chat.consultas.IntencionDeConsulta.Dominio;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.AvisoDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.BandejaResponseDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.ElementoInventarioDto;
@@ -11,6 +12,7 @@ import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoDetalleDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoResumenDto;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.Enriquecedor;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.TarjetaInformativa;
+import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.ResultadoMotor;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TipoRespuesta;
 import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
@@ -32,6 +34,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 // HU-CHA-008: consultas y acciones asistidas para usuarios autenticados.
 // Este motor es INDEPENDIENTE de MotorRespuestas (HU-CHA-004): mientras ese
@@ -198,28 +201,83 @@ public class MotorConsultasAsistidas {
         if (criterio.isPresent()) {
             return Optional.of(buscarEnInventario(tokenBearer, criterio.get(), t));
         }
-        // El inventario no va por frase: IntencionDeConsulta separa "que tengo
-        // en mi inventario" (datos en vivo) de "dame consejos para organizar mi
-        // inventario" (base de conocimiento).
-        if (IntencionDeConsulta.consultaSuInventario(mensaje)) {
-            return Optional.of(consultarInventario(tokenBearer, t));
-        }
-        if (contieneAlguna(mensaje, PALABRAS_SUBASTAS)) {
-            return Optional.of(consultarSubastas(tokenBearer, t));
-        }
-        if (contieneAlguna(mensaje, PALABRAS_NOTIFICACIONES)) {
-            return Optional.of(consultarNotificaciones(tokenBearer, uid, t));
-        }
-        if (contieneAlguna(mensaje, PALABRAS_MOVIMIENTOS)) {
-            return Optional.of(consultarMovimientos(tokenBearer, uid, t));
-        }
-        if (contieneAlguna(mensaje, PALABRAS_MISIONES)) {
-            return Optional.of(consultarMisiones(tokenBearer, t));
+        Optional<Dominio> dominio = dominioPedido(mensaje);
+        if (dominio.isPresent()) {
+            return Optional.of(switch (dominio.get()) {
+                case INVENTARIO -> consultarInventario(tokenBearer, t);
+                case SUBASTAS -> consultarSubastas(tokenBearer, t);
+                case NOTIFICACIONES -> consultarNotificaciones(tokenBearer, uid, t);
+                case MOVIMIENTOS -> consultarMovimientos(tokenBearer, uid, t);
+                case MISIONES -> consultarMisiones(tokenBearer, t);
+            });
         }
         if (contieneAlguna(mensaje, PALABRAS_TORNEOS)) {
             return Optional.of(consultarTorneos(uid, t));
         }
         return Optional.empty();
+    }
+
+    /**
+     * 1.11.0 (7.4.4, 7.4.8): si el mensaje pide datos de la propia cuenta —su
+     * inventario o una búsqueda en él, sus subastas y pujas, notificaciones,
+     * movimientos de créditos, misiones en curso, un informe de actividad— o
+     * ir a una sección privada. No consulta nada: con esto ChatService le dice
+     * a un visitante que hace falta una sesión, en vez de buscarle un tema que
+     * no hay y registrar la pregunta como sin respuesta.
+     */
+    public boolean pideDatosDeSuCuenta(String mensajeUsuario) {
+        if (mensajeUsuario == null || mensajeUsuario.isBlank()) {
+            return false;
+        }
+        String mensaje = corregirPalabras(NormalizadorTexto.normalizar(mensajeUsuario), PALABRAS_INVENTARIO);
+        return esNavegacionPrivada(mensaje)
+            || contieneAlguna(mensaje, PALABRAS_INFORME_ACTIVIDAD)
+            || criterioDeBusqueda(mensaje).isPresent()
+            || dominioPedido(mensaje).isPresent();
+    }
+
+    // Que datos de su cuenta pide el mensaje, en este orden. El inventario no
+    // va por frase: IntencionDeConsulta separa "que tengo en mi inventario"
+    // (datos en vivo) de "dame consejos para organizar mi inventario" (base de
+    // conocimiento). Los demas, por sus frases de siempre o, desde 1.11.0,
+    // por la misma clasificacion ("tengo alguna mision activa", "mis ultimas
+    // transacciones"). Una pregunta de reglas sobre lo suyo ("puedo cancelar
+    // mi puja", "que pasa si abandono mi mision") no es ninguno: la responde
+    // la base.
+    static Optional<Dominio> dominioPedido(String mensaje) {
+        if (IntencionDeConsulta.pideReglas(mensaje)) {
+            return Optional.empty();
+        }
+        if (IntencionDeConsulta.consultaSuInventario(mensaje)) {
+            return Optional.of(Dominio.INVENTARIO);
+        }
+        if (contieneAlguna(mensaje, PALABRAS_SUBASTAS) || IntencionDeConsulta.consultaSus(mensaje, Dominio.SUBASTAS)) {
+            return Optional.of(Dominio.SUBASTAS);
+        }
+        if (contieneAlguna(mensaje, PALABRAS_NOTIFICACIONES)
+            || IntencionDeConsulta.consultaSus(mensaje, Dominio.NOTIFICACIONES)) {
+            return Optional.of(Dominio.NOTIFICACIONES);
+        }
+        if (contieneAlguna(mensaje, PALABRAS_MOVIMIENTOS)
+            || IntencionDeConsulta.consultaSus(mensaje, Dominio.MOVIMIENTOS)) {
+            return Optional.of(Dominio.MOVIMIENTOS);
+        }
+        if (contieneAlguna(mensaje, PALABRAS_MISIONES) || IntencionDeConsulta.consultaSus(mensaje, Dominio.MISIONES)) {
+            return Optional.of(Dominio.MISIONES);
+        }
+        return Optional.empty();
+    }
+
+    // Ir a una seccion de lo suyo. De las subastas, solo «mis subastas» /
+    // «mis pujas»: el listado de subastas es publico (NavegacionPublica).
+    private static final List<String> PALABRAS_NAVEGACION_MIS_SUBASTAS = PALABRAS_NAVEGACION_SUBASTAS.stream()
+        .filter(frase -> frase.contains("mis ") || frase.contains("my "))
+        .toList();
+
+    private static boolean esNavegacionPrivada(String mensaje) {
+        return Stream.of(PALABRAS_NAVEGACION_INVENTARIO, PALABRAS_NAVEGACION_MIS_SUBASTAS,
+                PALABRAS_NAVEGACION_NOTIFICACIONES, PALABRAS_NAVEGACION_PERFIL, PALABRAS_NAVEGACION_MISIONES)
+            .anyMatch(frases -> contieneAlguna(mensaje, frases));
     }
 
     private static boolean enIngles(String mensaje, IdiomaPreferido idioma) {
@@ -266,7 +324,8 @@ public class MotorConsultasAsistidas {
 
     private ResultadoMotor buscarEnInventario(String tokenBearer, String criterio, TextosDeConsultas t) {
         if (criterio.length() < LARGO_MINIMO_DE_BUSQUEDA) {
-            return ResultadoMotor.deTema(t.busquedaMuyCorta(), null, TipoRespuesta.DIRECTA).enIngles(t.ingles());
+            return ResultadoMotor.deTema(t.busquedaMuyCorta(), null, TipoRespuesta.DIRECTA).enIngles(t.ingles())
+                .conResultado(ResultadoDeRespuesta.PIDE_REFORMULAR);
         }
         try {
             PaginaInventarioDto pagina = inventarioClient.buscar(tokenBearer, criterio);
@@ -325,7 +384,8 @@ public class MotorConsultasAsistidas {
                 .toList();
             return ResultadoMotor.deTema(textoMisiones(misiones, t), null, TipoRespuesta.CONTEXTUAL)
                 .conEnriquecido(Enriquecedor.conTarjetas(tarjetas, "misiones", t.ingles()))
-                .enIngles(t.ingles());
+                .enIngles(t.ingles())
+                .conResultado(ResultadoDeRespuesta.CONSULTA_EN_VIVO);
         } catch (RestClientException excepcion) {
             return noDisponible(t.misionesNoDisponibles(), t);
         }
@@ -359,28 +419,39 @@ public class MotorConsultasAsistidas {
             Future<String> creditos = hilos.submit(() -> textoMovimientos(tokenBearer, uid, t));
             Future<String> misiones = hilos.submit(() -> textoMisiones(misionesClient.enCurso(tokenBearer), t));
             long limite = System.nanoTime() + PLAZO_DEL_INFORME.toNanos();
+            Optional<String> delInventario = esperar(inventario, limite);
+            Optional<String> deSubastas = esperar(subastas, limite);
+            Optional<String> deNotificaciones = esperar(notificaciones, limite);
+            Optional<String> deCreditos = esperar(creditos, limite);
+            Optional<String> deMisiones = esperar(misiones, limite);
             String texto = t.informe(
-                esperar(inventario, limite, t.inventarioNoDisponible()),
-                esperar(subastas, limite, t.subastasNoDisponibles()),
-                esperar(notificaciones, limite, t.notificacionesNoDisponibles()),
-                esperar(creditos, limite, t.movimientosNoDisponibles()),
-                esperar(misiones, limite, t.misionesNoDisponibles()));
-            return ResultadoMotor.deTema(texto, null, TipoRespuesta.CONTEXTUAL).enIngles(t.ingles());
+                delInventario.orElse(t.inventarioNoDisponible()),
+                deSubastas.orElse(t.subastasNoDisponibles()),
+                deNotificaciones.orElse(t.notificacionesNoDisponibles()),
+                deCreditos.orElse(t.movimientosNoDisponibles()),
+                deMisiones.orElse(t.misionesNoDisponibles()));
+            // 1.7.0: con una sola parte que llegue, el informe trajo datos; si
+            // no llego ninguna, el jugador no recibio nada de su cuenta.
+            boolean algunaLlego = Stream.of(delInventario, deSubastas, deNotificaciones, deCreditos, deMisiones)
+                .anyMatch(Optional::isPresent);
+            return ResultadoMotor.deTema(texto, null, TipoRespuesta.CONTEXTUAL).enIngles(t.ingles())
+                .conResultado(algunaLlego ? ResultadoDeRespuesta.CONSULTA_EN_VIVO : ResultadoDeRespuesta.NO_DISPONIBLE);
         } finally {
             hilos.shutdownNow();
         }
     }
 
-    private static String esperar(Future<String> parte, long limiteNanos, String siNoLlega) {
+    // La parte, o vacio si fallo o no llego a tiempo.
+    private static Optional<String> esperar(Future<String> parte, long limiteNanos) {
         try {
             long queda = Math.max(0, limiteNanos - System.nanoTime());
-            return parte.get(queda, TimeUnit.NANOSECONDS);
+            return Optional.ofNullable(parte.get(queda, TimeUnit.NANOSECONDS));
         } catch (InterruptedException interrumpido) {
             Thread.currentThread().interrupt();
-            return siNoLlega;
+            return Optional.empty();
         } catch (ExecutionException | TimeoutException fallo) {
             parte.cancel(true);
-            return siNoLlega;
+            return Optional.empty();
         }
     }
 
@@ -532,20 +603,25 @@ public class MotorConsultasAsistidas {
     // ---- Resultados --------------------------------------------------------------------
 
     // 1.3.4: la navegacion y las consultas llevan un enlace a su seccion.
+    // 1.7.0: cada una dice como termino (ResultadoDeRespuesta), para que la
+    // tasa de resolucion no cuente un «no disponible» como resuelto.
     private static ResultadoMotor navegar(String texto, String destino, TextosDeConsultas t) {
         return ResultadoMotor.deTema(texto, null, TipoRespuesta.DIRECTA)
             .conEnriquecido(Enriquecedor.conEnlace(destino, t.ingles()))
-            .enIngles(t.ingles());
+            .enIngles(t.ingles())
+            .conResultado(ResultadoDeRespuesta.NAVEGACION);
     }
 
     private static ResultadoMotor consultado(String texto, String destino, TextosDeConsultas t) {
         return ResultadoMotor.deTema(texto, null, TipoRespuesta.CONTEXTUAL)
             .conEnriquecido(Enriquecedor.conEnlace(destino, t.ingles()))
-            .enIngles(t.ingles());
+            .enIngles(t.ingles())
+            .conResultado(ResultadoDeRespuesta.CONSULTA_EN_VIVO);
     }
 
     private static ResultadoMotor noDisponible(String texto, TextosDeConsultas t) {
-        return ResultadoMotor.deTema(texto, null, TipoRespuesta.DIRECTA).enIngles(t.ingles());
+        return ResultadoMotor.deTema(texto, null, TipoRespuesta.DIRECTA).enIngles(t.ingles())
+            .conResultado(ResultadoDeRespuesta.NO_DISPONIBLE);
     }
 
     // ---- Frases con errores de tecleo ------------------------------------------------

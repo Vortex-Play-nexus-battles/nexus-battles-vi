@@ -18,6 +18,7 @@
 
 import { rutaDeApi } from './base-api.js';
 import { fetchWithHttpErrorInterceptor } from './interceptors/http-error.interceptor.js';
+import { esRolDeTrastienda } from './matriz-acceso.js';
 import { RUTAS, resolver, rutaSegura } from './sesion.js';
 
 /** Estados del alta, tal como los devuelve el servidor. */
@@ -114,17 +115,26 @@ export async function reintentarAlta({ fetchImpl = fetchWithHttpErrorInterceptor
  * - Si terminó, o la cuenta no tiene alta (anterior a esta versión, o de
  *   administración), directamente a donde iba: la vuelta si la había, si no
  *   su inicio.
+ * - El inicio de una cuenta de administración (Moderador, Administrador o
+ *   Super Administrador) es la consola, su página de inicio (SA-7, informe de
+ *   revisión del Super Administrador, punto 1); el de un jugador, `/inicio`.
  *
  * Solo `false` explícito manda a la preparación: una respuesta de login de
  * antes de R17 no trae el campo, y esa persona no tiene nada que preparar.
  *
- * @param {{onboardingListo?: boolean}|null} respuestaLogin
+ * @param {{onboardingListo?: boolean, rol?: string|null}|null} respuestaLogin
+ *   la respuesta del login, o `{rol}` de la sesión ya abierta
  * @param {string|null} volver ruta de vuelta ya validada (`rutaDeVuelta`)
  * @param {string} [base] para resolver las rutas (inyectable en pruebas)
  * @returns {string} URL absoluta
  */
 export function destinoTrasEntrar(respuestaLogin, volver = null, base = import.meta.url) {
-  return destinoConAlta(respuestaLogin?.onboardingListo !== false, volver, base);
+  return destinoConAlta(
+    respuestaLogin?.onboardingListo !== false,
+    volver,
+    base,
+    respuestaLogin?.rol ?? null,
+  );
 }
 
 /**
@@ -153,10 +163,12 @@ export function destinoDeCuentaNueva(base = import.meta.url) {
  * @param {boolean} lista si el alta terminó (o no aplica)
  * @param {string|null} volver ruta de vuelta ya validada
  * @param {string} base
+ * @param {string|null} [rol]
  * @returns {string} URL absoluta
  */
-function destinoConAlta(lista, volver, base) {
-  const final = volver ? new URL(volver, base).href : resolver(RUTAS.inicio, base);
+function destinoConAlta(lista, volver, base, rol = null) {
+  const inicio = esRolDeTrastienda(rol) ? RUTAS.consola : RUTAS.inicio;
+  const final = volver ? new URL(volver, base).href : resolver(inicio, base);
   if (lista) {
     return final;
   }

@@ -654,9 +654,12 @@ function seccionPartidas(consultarApi) {
     // modalidad, y una columna que nunca tendría dato no se pinta.
     pintar: (datos) => {
       const filas = filasDe(datos);
+      // SA-7 — el total de la página (`totalElementos`), no las filas de la
+      // primera: con más de 16 salas el resumen se quedaba en 16.
+      const total = totalDe(datos) ?? filas.length;
       return tablaDeDatos({
         titulo: 'Salas y partidas',
-        resumen: `${numero(filas.length)} ${filas.length === 1 ? 'sala' : 'salas'}`,
+        resumen: `${numero(total)} ${total === 1 ? 'sala' : 'salas'}`,
         columnas: [
           { clave: 'sala', titulo: 'Sala', principal: true, valor: descripcionDeSala },
           {
@@ -705,7 +708,7 @@ function seccionEconomia(consultarApi) {
     titulo: 'Catálogo de productos',
     recurso: '/productos',
     consultarApi,
-    acciones: [enlaceA('productos', 'Gestionar el catálogo')].filter(Boolean),
+    acciones: [enlaceA('panel-catalogo', 'Gestionar el catálogo')].filter(Boolean),
     pintar: (datos) => indicador({ etiqueta: 'productos publicados', valor: totalDe(datos) }),
   });
 
@@ -920,9 +923,14 @@ function panelDeBitacora(consultarApi) {
  * @returns {HTMLElement}
  */
 export function pintarBitacora(datos, titulares) {
+  const filas = filasDe(datos);
   return tablaDeDatos({
     titulo: 'Bitácora de acciones administrativas',
-    resumen: 'Las quince acciones más recientes',
+    // Lo que hay, no lo que se pidió: con tres acciones no son «las quince».
+    resumen:
+      filas.length === 1
+        ? 'La acción más reciente'
+        : `Las ${numero(filas.length)} acciones más recientes`,
     claveDeFila: (e) => e.id,
     columnas: [
       {
@@ -950,7 +958,7 @@ export function pintarBitacora(datos, titulares) {
       },
       { clave: 'motivo', titulo: 'Motivo', valor: (e) => recortado(e.motivo, 70) },
     ],
-    filas: filasDe(datos),
+    filas,
   });
 }
 

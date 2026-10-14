@@ -87,10 +87,25 @@ export const TEXTOS_SOPORTE = Object.freeze({
   muchasDetalleCon: (segundos) => `Espera ${segundos} s y vuelve a intentarlo.`,
   noDisponible: 'Soporte no está disponible en este momento.',
   noDisponibleDetalle: 'Inténtalo de nuevo en unos minutos.',
+  // 503 MODERACION_NO_DISPONIBLE: lo que falló es la revisión del texto, no soporte.
+  sinRevision: 'No pudimos revisar tu mensaje en este momento.',
+  sinRevisionDetalle:
+    'El filtro de contenido no respondió y por seguridad no enviamos nada. Inténtalo de nuevo en unos minutos.',
   invalido: 'Revisa los datos de la solicitud.',
   invalidoDetalle: 'El asunto admite hasta 150 caracteres y el mensaje hasta 2000.',
   error: 'No se pudo enviar tu solicitud.',
   errorDetalle: 'Inténtalo de nuevo.',
+  // ms-chatbot.yaml 1.8.0 — la solicitud en un clic, con la conversación.
+  desdeConversacion:
+    'Podemos enviarle a soporte esta conversación: la pregunta que el asistente no resolvió y lo que te contestó.',
+  crearDesdeConversacion: 'Crear solicitud con esta conversación',
+  creandoDesdeConversacion: 'Creando tu solicitud…',
+  creadaDesdeConversacion: 'Listo: abrimos tu solicitud con esta conversación.',
+  creadaDesdeConversacionDetalle:
+    'La ves abajo, en «Tus solicitudes». Una persona del equipo te responderá ahí.',
+  oEscribela: 'O cuéntalo con tus palabras:',
+  sinConversacion: 'Todavía no hay una pregunta que enviar.',
+  sinConversacionDetalle: 'Escribe tu solicitud en el formulario.',
 });
 
 /**
@@ -127,7 +142,10 @@ export function avisoDeError(error) {
       detalle: segundos > 0 ? t.muchasDetalleCon(segundos) : t.muchasDetalle,
     };
   }
-  if (motivo === 'MODERACION_NO_DISPONIBLE' || error?.noDisponible) {
+  if (motivo === 'MODERACION_NO_DISPONIBLE') {
+    return { tono: 'error', titulo: t.sinRevision, detalle: t.sinRevisionDetalle };
+  }
+  if (error?.noDisponible) {
     return { tono: 'error', titulo: t.noDisponible, detalle: t.noDisponibleDetalle };
   }
   if (error?.estado === 400) {
@@ -144,7 +162,8 @@ export function avisoDeError(error) {
  *          alVolver: () => void}} opciones `login` y `registro`: la URL, o una
  *          función que la da al abrir el panel (así la vuelta tras entrar es
  *          la página de ese momento)
- * @returns {{elemento: HTMLElement, abrir: () => void, enfocar: () => void}}
+ * @returns {{elemento: HTMLElement, abrir: () => void, enfocar: () => void,
+ *            actualizarTicket: (ticket: object) => void, recargarLista: () => void}}
  */
 export function crearPanelSoporte({ cliente, sesion, login, registro = null, alVolver }) {
   let enviando = false;
@@ -244,13 +263,79 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
 
   const lista = h('ul', { clase: 'chatbot-soporte__lista', atributos: { 'aria-live': 'polite' } });
 
+  // ms-chatbot.yaml 1.8.0 — después de que el asistente no entendió o de un
+  // «no me sirvió», un clic basta: el servidor arma la solicitud con la
+  // pregunta y la conversación. El formulario sigue debajo.
+  const zonaDesdeConversacion = h('div', {
+    clase: 'chatbot-soporte__desde-conversacion',
+    datos: { zona: 'desde-conversacion' },
+    atributos: { hidden: true },
+  });
+
+  function pintarDesdeConversacion() {
+    const crear = boton({
+      texto: TEXTOS_SOPORTE.crearDesdeConversacion,
+      nombre: 'crear-solicitud-desde-conversacion',
+    });
+    crear.addEventListener('click', () => crearDesdeConversacion(crear));
+    zonaDesdeConversacion.replaceChildren(
+      h('p', { clase: 'chatbot-soporte__texto', texto: TEXTOS_SOPORTE.desdeConversacion }),
+      crear,
+      h('p', { clase: 'chatbot-soporte__texto', texto: TEXTOS_SOPORTE.oEscribela }),
+    );
+    zonaDesdeConversacion.hidden = false;
+  }
+
+  function quitarDesdeConversacion() {
+    vaciar(zonaDesdeConversacion);
+    zonaDesdeConversacion.hidden = true;
+  }
+
+  async function crearDesdeConversacion(crear) {
+    if (enviando) {
+      return;
+    }
+    enviando = true;
+    limpiarAviso(zonaAviso);
+    conCarga(crear, true, TEXTOS_SOPORTE.creandoDesdeConversacion);
+    try {
+      await cliente.abrirTicketDesdeConversacion({ vista: vistaDeApertura });
+      alCrearDesdeConversacion();
+    } catch (error) {
+      pintarAviso(zonaAviso, avisoDesdeConversacion(error));
+    } finally {
+      terminarDesdeConversacion(crear);
+    }
+  }
+
+  function alCrearDesdeConversacion() {
+    quitarDesdeConversacion();
+    pintarAviso(zonaAviso, {
+      tono: 'exito',
+      titulo: TEXTOS_SOPORTE.creadaDesdeConversacion,
+      detalle: TEXTOS_SOPORTE.creadaDesdeConversacionDetalle,
+    });
+    cargarLista();
+  }
+
+  function terminarDesdeConversacion(crear) {
+    enviando = false;
+    conCarga(crear, false);
+  }
+
   function pintarJugador() {
     contenido.append(
       h('p', { clase: 'chatbot-soporte__texto', texto: TEXTOS_SOPORTE.intro }),
+      zonaDesdeConversacion,
       formulario,
       h('h4', { clase: 'chatbot-soporte__subtitulo', texto: TEXTOS_SOPORTE.tuyas }),
       lista,
     );
+    if (conConversacion) {
+      pintarDesdeConversacion();
+    } else {
+      quitarDesdeConversacion();
+    }
     cargarLista();
   }
 
@@ -363,7 +448,19 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
 
   // -------------------------------------------------------------- abrir
 
-  function abrir() {
+  // 1.8.0 — lo que dijo la ventana al abrir: si la conversación tiene una
+  // pregunta sin resolver, y en qué sección está el jugador.
+  let conConversacion = false;
+  let vistaDeApertura = null;
+
+  /**
+   * @param {{conConversacion?: boolean, vista?: string|null}} [opciones]
+   *   `conConversacion`: el asistente no entendió algo o no le sirvió, así
+   *   que se ofrece crear la solicitud con la conversación (1.8.0)
+   */
+  function abrir({ conConversacion: ofrecer = false, vista = null } = {}) {
+    conConversacion = Boolean(ofrecer);
+    vistaDeApertura = vista;
     limpiarAviso(zonaAviso);
     vaciar(contenido);
     if (sesion()?.autenticado) {
@@ -374,10 +471,69 @@ export function crearPanelSoporte({ cliente, sesion, login, registro = null, alV
     panel.hidden = false;
   }
 
+  // El primero en el orden de la página: «Crear solicitud con esta
+  // conversación» si está, luego el formulario o el botón del visitante.
   function enfocar() {
-    const destino = panel.querySelector('select, a.boton') ?? botonVolver;
+    const destino =
+      panel.querySelector('[data-accion="crear-solicitud-desde-conversacion"], select, a.boton') ??
+      botonVolver;
     destino.focus();
   }
 
-  return { elemento: panel, abrir, enfocar };
+  // ---------------------------------------------------- 7.4.9, en vivo
+
+  /** Si «Tus solicitudes» está a la vista (panel abierto, con sesión). */
+  function listaALaVista() {
+    return !panel.hidden && contenido.contains(lista);
+  }
+
+  /**
+   * Un cambio que llegó por el canal en tiempo real (`chatbot.yaml` 1.0.0,
+   * `/user/queue/soporte/tickets`): reemplaza esa solicitud en la lista. Si la
+   * lista no la tiene, se relee entera; con el panel cerrado no hace nada,
+   * porque al abrirlo se lee de nuevo.
+   *
+   * @param {{ticketId?: string}} ticket lo que el jugador ve de la solicitud
+   */
+  function actualizarTicket(ticket) {
+    if (!listaALaVista() || !ticket?.ticketId) {
+      return;
+    }
+    const actual = [...lista.querySelectorAll('[data-ticket-id]')].find(
+      (item) => item.dataset.ticketId === ticket.ticketId,
+    );
+    if (actual) {
+      actual.replaceWith(elementoDeTicket(ticket));
+    } else {
+      cargarLista();
+    }
+  }
+
+  /** Relee la lista si está a la vista (al volver el canal tras una caída). */
+  function recargarLista() {
+    if (listaALaVista()) {
+      cargarLista();
+    }
+  }
+
+  return { elemento: panel, abrir, enfocar, actualizarTicket, recargarLista };
+}
+
+/**
+ * ms-chatbot.yaml 1.8.0 — aviso para un fallo de «Crear solicitud con esta
+ * conversación»: el 409 SIN_CONVERSACION es solo suyo; lo demás, como al
+ * enviar el formulario.
+ *
+ * @param {{estado?: number, motivo?: string|null, problema?: {motivo?: string}|null}} error
+ * @returns {{tono: string, titulo: string, detalle: string}}
+ */
+export function avisoDesdeConversacion(error) {
+  if ((error?.problema?.motivo ?? error?.motivo) === 'SIN_CONVERSACION') {
+    return {
+      tono: 'advertencia',
+      titulo: TEXTOS_SOPORTE.sinConversacion,
+      detalle: TEXTOS_SOPORTE.sinConversacionDetalle,
+    };
+  }
+  return avisoDeError(error);
 }
