@@ -1574,12 +1574,18 @@ body {
 
 /* =======================================================================
    Aviso Cruzado en Vivo (Toast en esquina inferior derecha)
+   -----------------------------------------------------------------------
+   #506 — es un aviso de esta vista: va en `--capa-aviso-de-vista`, bajo el
+   asistente y bajo los modales (con 1100 tapaba entero el botón del
+   asistente y quedaba incluso sobre el modal de compra de esta misma vista).
+   Y se apoya encima del botón, como la ventana del asistente, en vez de
+   debajo: sus acciones caían justo donde está el botón.
    ======================================================================= */
 .toast-cruzado-flotante {
   position: fixed;
-  bottom: 24px;
+  bottom: calc(var(--e-6) + 56px + var(--e-3));
   right: 24px;
-  z-index: 1100;
+  z-index: var(--capa-aviso-de-vista);
   width: 380px;
   max-width: calc(100vw - 32px);
   background: var(--superficie);

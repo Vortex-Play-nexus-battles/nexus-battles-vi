@@ -199,7 +199,14 @@ info:
     un autor que ve la moderacion. El autor sale siempre del token: nadie lee
     los de otro por aqui. La usa la exportacion de datos del portal de
     privacidad. Solo anade una operacion: es menor.
-  version: 1.16.0
+
+    1.17.0 (§7.3.8 «Vista previa del comentario en contexto», SA-16): nueva
+    `GET /comentarios/moderacion/{commentId}/contexto`
+    (`contextoDelComentario`), los comentarios que rodean a uno en el hilo
+    de su producto, a cada lado y en cualquier estado, del mas antiguo al mas
+    reciente, con su autor. Misma guarda que el resto de la moderacion. Solo
+    anade una operacion y dos esquemas: es menor.
+  version: 1.17.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -866,6 +873,62 @@ paths:
                 $ref: "#/components/schemas/ProblemDetail"
         "403":
           description: El rol no modera.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+
+  /comentarios/moderacion/{commentId}/contexto:
+    get:
+      summary: El comentario en su contexto (§7.3.8)
+      operationId: contextoDelComentario
+      description: >
+        1.17.0 (SA-16) — Solo MODERADOR, ADMINISTRADOR y SUPER_ADMINISTRADOR.
+        Los comentarios del mismo producto publicados justo antes y justo
+        despues del que se mira, hasta `alrededor` a cada lado, del mas
+        antiguo al mas reciente y en cualquier estado (tambien OCULTO y
+        ELIMINADO, que se distinguen por `estado`): es la conversacion en la
+        que estaba, como la vio quien lo reporto. `totalEnElHilo` cuenta los
+        del producto en cualquier estado. Solo lectura. Un comentario que no
+        existe es 404.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: commentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: alrededor
+          in: query
+          required: false
+          description: Cuantos a cada lado; fuera de 1..10 se corrige al limite.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10
+            default: 3
+      responses:
+        "200":
+          description: El contexto del comentario (un lado puede venir vacio).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContextoDelComentario"
+        "401":
+          description: Sin token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
+          description: El rol no modera.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: No existe el comentario.
           content:
             application/problem+json:
               schema:
@@ -2014,6 +2077,61 @@ components:
         editado:
           type: boolean
           description: Si un moderador cambio el texto.
+
+    ItemDelContexto:
+      type: object
+      description: >
+        1.17.0 — un comentario del hilo alrededor del que se mira, con su
+        autor (aqui no es siempre el mismo) y su estado.
+      required:
+        - id
+        - apodoAutor
+        - texto
+        - fechaPublicacion
+        - estado
+        - editado
+      properties:
+        id:
+          type: string
+        apodoAutor:
+          type: string
+        texto:
+          type: string
+        fechaPublicacion:
+          type: string
+          format: date-time
+        estado:
+          $ref: "#/components/schemas/EstadoDeComentario"
+        editado:
+          type: boolean
+
+    ContextoDelComentario:
+      type: object
+      description: 1.17.0 — los comentarios que rodean a uno en el hilo de su producto.
+      required:
+        - comentarioId
+        - productoId
+        - anteriores
+        - posteriores
+        - totalEnElHilo
+      properties:
+        comentarioId:
+          type: string
+        productoId:
+          type: string
+        anteriores:
+          type: array
+          description: Los publicados antes, del mas antiguo al mas reciente.
+          items:
+            $ref: "#/components/schemas/ItemDelContexto"
+        posteriores:
+          type: array
+          description: Los publicados despues, del mas antiguo al mas reciente.
+          items:
+            $ref: "#/components/schemas/ItemDelContexto"
+        totalEnElHilo:
+          type: integer
+          description: Cuantos comentarios tiene el producto, en cualquier estado.
 
     DireccionDeReportes:
       type: string

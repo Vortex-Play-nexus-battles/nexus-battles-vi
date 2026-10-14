@@ -335,7 +335,8 @@ export function pintarMovimientos(datos, titulares) {
       {
         clave: 'afectado',
         titulo: 'Sobre',
-        valor: (entrada) => celdaDeSobre(sobreDe(entrada.afectado, titulares)),
+        valor: (entrada) =>
+          celdaDeSobre(sobreDe(entrada.afectado, titulares, entrada.nombreAfectado)),
       },
     ],
     filas,

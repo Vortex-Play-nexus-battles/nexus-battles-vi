@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.comentarios.publicacion;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -74,6 +75,22 @@ public interface ComentarioRepository extends JpaRepository<RegistroDeComentario
      * entidad, para no cargar las imagenes que el historial no muestra.
      */
     Page<ResumenDeComentario> findByAutorId(String autorId, Pageable pagina);
+
+    /**
+     * El hilo de un producto antes de un instante, en cualquier estado — el
+     * contexto de un comentario para moderacion (contrato 1.17.0, SA-16,
+     * §7.3.8). El orden y el limite los pone el {@link Pageable}: del mas
+     * cercano al mas lejano. Proyeccion: sin las imagenes.
+     */
+    List<ResumenDeComentario> findByProductoIdAndFechaPublicacionBefore(
+            String productoId, Instant fecha, Pageable limite);
+
+    /** Lo mismo, despues del instante (contrato 1.17.0). */
+    List<ResumenDeComentario> findByProductoIdAndFechaPublicacionAfter(
+            String productoId, Instant fecha, Pageable limite);
+
+    /** Cuantos comentarios tiene el hilo de un producto, en cualquier estado (contrato 1.17.0). */
+    long countByProductoId(String productoId);
 
     /**
      * Solo los identificadores de los comentarios de un autor, en cualquier

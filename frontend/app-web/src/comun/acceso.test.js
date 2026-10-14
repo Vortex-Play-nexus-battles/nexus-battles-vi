@@ -32,7 +32,7 @@ import {
   urlDeVista,
   vistaDeRuta,
 } from './acceso.js';
-import { CLAVES } from './sesion.js';
+import { CLAVES, CLAVE_SESION_ANONIMA } from './sesion.js';
 
 const BASE = 'http://localhost:8099/frontend/app-web/src/comun/acceso.js';
 const UID = '7a1e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55';
@@ -404,6 +404,56 @@ describe('guardas de ruta (§16)', () => {
   test('la pantalla sin permiso se anuncia a los lectores de pantalla', () => {
     pintarSinPermiso(document, { base: BASE, rolesAdmitidos: ROLES_DE_ADMINISTRACION });
     expect(document.querySelector('[data-zona="sin-permiso"]').getAttribute('role')).toBe('alert');
+  });
+
+  // #506 — privacidad: olvidar una sesión caducada olvida también el
+  // visitante del asistente.
+  test('exigirSesion con sesión caducada olvida también el visitante del asistente', () => {
+    sesionDe('JUGADOR', { caducada: true });
+    sessionStorage.setItem(CLAVE_SESION_ANONIMA, 'visitante-de-antes');
+    exigirSesion({
+      navegar: jest.fn(),
+      base: BASE,
+      ubicacion: { pathname: '/x.html', search: '' },
+    });
+    expect(sessionStorage.getItem(CLAVE_SESION_ANONIMA)).toBeNull();
+  });
+});
+
+// #506 — RF-CHA-001: el asistente está en todas las vistas, también en la de
+// «Sin acceso», que sustituye el <body> entero.
+describe('el asistente en la pantalla «Sin acceso»', () => {
+  test('pintarSinPermiso monta el botón del asistente después de sustituir el <body>', () => {
+    const asistente = jest.fn();
+    pintarSinPermiso(document, { base: BASE, rolesAdmitidos: null, asistente });
+
+    expect(asistente).toHaveBeenCalledWith(document);
+    expect(document.querySelector('[data-zona="sin-permiso"]')).not.toBeNull();
+  });
+
+  test('con el botón real: está, y fuera de la tarjeta de «Sin acceso»', () => {
+    sesionDe('JUGADOR');
+    exigirAcceso('gestion-usuarios', {
+      navegar: jest.fn(),
+      base: BASE,
+      ubicacion: { pathname: '/cuentas/gestion-usuarios.html', search: '' },
+    });
+
+    const botones = document.querySelectorAll('.chatbot-flotante');
+    expect(botones).toHaveLength(1);
+    expect(botones[0].parentElement).toBe(document.body);
+    expect(botones[0].getAttribute('aria-label')).toBe('Abrir asistente Nexus');
+    expect(document.querySelector('[data-zona="sin-permiso"] .chatbot-flotante')).toBeNull();
+  });
+
+  test('si la vista ya tenía el botón, queda uno solo', () => {
+    const previo = document.createElement('button');
+    previo.className = 'chatbot-flotante';
+    document.body.append(previo);
+
+    pintarSinPermiso(document, { base: BASE, rolesAdmitidos: ROLES_DE_ADMINISTRACION });
+
+    expect(document.querySelectorAll('.chatbot-flotante')).toHaveLength(1);
   });
 });
 

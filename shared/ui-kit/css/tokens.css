@@ -213,6 +213,18 @@
      combate (40); por debajo de los avisos flotantes, que se ven siempre. */
   --capa-modal: 50;
 
+  /* #506 — los dos escalones de abajo de la misma escala, que va de diez en
+     diez: avisos de una vista (10) · asistente (20) · menús de la cabecera
+     (30) · desenlace del combate (40) · modales (50) · avisos flotantes.
+     El asistente (botón flotante y ventana, RF-CHA-001) queda sobre el
+     contenido y los avisos de cualquier vista —el aviso cruzado de las
+     pujas lo tapaba entero— y bajo los menús, el chat grupal del combate
+     (35), el desenlace y los modales: lo que bloquea la página lo tapa
+     también a él. Antes no tenía capa, y cualquier pieza de una vista con
+     `z-index` propio (1, 10…) se le ponía encima. */
+  --capa-aviso-de-vista: 10;
+  --capa-asistente: 20;
+
   /* UX-R2.9 — estas cuatro subieron a 44 px, el objetivo tactil minimo.
      Venian de la maqueta, donde un boton pequeno eran 32 px y un campo 40.
      Sobre el papel se ven bien; en el laboratorio visual daban **327

@@ -1,0 +1,11 @@
+-- SA-18 (§7.3.5, contrato 1.4.0) — el nombre de lo afectado en el momento de
+-- la accion. La bitacora importa las operaciones del catalogo (productos,
+-- banners, recursos graficos): `afectado` guarda su identificador estable
+-- (`producto:<id>`) y esta columna el nombre que tenia entonces, para leer la
+-- entrada sin resolver identificadores y sin perder el nombre si despues
+-- cambia. Opcional: las entradas anteriores no lo tienen.
+--
+-- ADD COLUMN sin valor por omision no reescribe ni toca ninguna fila, como en
+-- V3: los disparadores de V1, V2 y V4 siguen impidiendo modificar, borrar o
+-- vaciar la bitacora.
+ALTER TABLE audit_log ADD COLUMN nombre_afectado VARCHAR(255);

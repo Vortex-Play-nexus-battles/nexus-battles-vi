@@ -3,6 +3,7 @@ package nexus.aplicacion;
 import java.time.Instant;
 import java.util.UUID;
 
+import nexus.auditoria.RegistroDeOperaciones;
 import nexus.dominio.Producto;
 import nexus.dominio.ProductoNoEncontradoException;
 import nexus.dominio.RespaldoProducto;
@@ -18,12 +19,15 @@ public class RevertirProductoServicio {
 
         private final ProductoRepository productos;
         private final RespaldoProductoRepository respaldos;
+        private final RegistroDeOperaciones operaciones;
 
         public RevertirProductoServicio(
                         ProductoRepository productos,
-                        RespaldoProductoRepository respaldos) {
+                        RespaldoProductoRepository respaldos,
+                        RegistroDeOperaciones operaciones) {
                 this.productos = productos;
                 this.respaldos = respaldos;
+                this.operaciones = operaciones;
         }
 
         public Producto revertir(String productoId, String respaldoId, String autor) {
@@ -62,12 +66,15 @@ public class RevertirProductoServicio {
                                 motivoLimpio(motivo));
 
                 respaldos.save(auditoria);
+                Producto guardado;
                 try {
-                        return productos.save(restaurado);
+                        guardado = productos.save(restaurado);
                 } catch (RuntimeException fallo) {
                         respaldos.deleteById(auditoria.id());
                         throw fallo;
                 }
+                operaciones.deProducto(auditoria);
+                return guardado;
         }
 
         static String motivoLimpio(String motivo) {

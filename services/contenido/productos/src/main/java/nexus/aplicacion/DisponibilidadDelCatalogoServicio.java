@@ -3,6 +3,7 @@ package nexus.aplicacion;
 import java.time.Instant;
 import java.util.UUID;
 
+import nexus.auditoria.RegistroDeOperaciones;
 import nexus.dominio.EstadoProducto;
 import nexus.dominio.Producto;
 import nexus.dominio.ProductoNoEncontradoException;
@@ -35,14 +36,17 @@ public class DisponibilidadDelCatalogoServicio {
         private final CatalogoProductos catalogo;
         private final ProductoRepository productos;
         private final RespaldoProductoRepository respaldos;
+        private final RegistroDeOperaciones operaciones;
 
         public DisponibilidadDelCatalogoServicio(
                         CatalogoProductos catalogo,
                         ProductoRepository productos,
-                        RespaldoProductoRepository respaldos) {
+                        RespaldoProductoRepository respaldos,
+                        RegistroDeOperaciones operaciones) {
                 this.catalogo = catalogo;
                 this.productos = productos;
                 this.respaldos = respaldos;
+                this.operaciones = operaciones;
         }
 
         /** @param autor identificador estable del administrador, para la bitacora */
@@ -71,6 +75,7 @@ public class DisponibilidadDelCatalogoServicio {
                         throw fallo;
                 }
                 BITACORA.info("Producto {} suspendido por {}", productoId, autor);
+                operaciones.deProducto(respaldo);
                 return suspendido;
         }
 
@@ -103,6 +108,7 @@ public class DisponibilidadDelCatalogoServicio {
                         throw fallo;
                 }
                 BITACORA.info("Producto {} reactivado por {} ({})", productoId, autor, reactivado.estado());
+                operaciones.deProducto(respaldo);
                 return reactivado;
         }
 

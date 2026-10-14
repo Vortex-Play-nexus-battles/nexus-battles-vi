@@ -969,7 +969,7 @@ export function pintarBitacora(datos, titulares) {
       {
         clave: 'afectado',
         titulo: 'Sobre',
-        valor: (e) => celdaDeSobre(sobreDe(e.afectado, titulares)),
+        valor: (e) => celdaDeSobre(sobreDe(e.afectado, titulares, e.nombreAfectado)),
       },
       { clave: 'motivo', titulo: 'Motivo', valor: (e) => recortado(e.motivo, 70) },
     ],
