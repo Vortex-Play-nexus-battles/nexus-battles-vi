@@ -31,6 +31,8 @@ import {
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const SUFIJO = Date.now().toString(36);
 const ERRORES = 'https://nexusbattles.upb.edu.co/errors/';
+/** El tipo del producto que se entrega: el banco siembra armas (sembrar.sh), no ítems. */
+const TIPO = 'ARMA';
 
 function sesionDe(api, apodo) {
   return sesionDelBanco(api, apodo, { clave: CLAVE_DEL_BANCO, base: BORDE });
@@ -89,11 +91,13 @@ test.describe('Modificar el inventario de una cuenta (SA-10, §7.3.4)', () => {
     jugadora = await sesionDe(api, `inv_sa10_${SUFIJO}`);
     idDeLaJugadora = await claveDe(jugadora.apodo);
 
-    // Un producto del catálogo que se pueda entregar: un ítem activo.
-    const catalogo = await api.get('/api/v1/productos?tipo=ITEM&size=50&page=0');
+    // Un producto del catálogo que se pueda entregar: un arma activa. El banco
+    // siembra «Espada de prueba» (sembrar.sh); si no estuviera, cualquier otra.
+    const catalogo = await api.get(`/api/v1/productos?tipo=${TIPO}&size=50&page=0`);
     expect(catalogo.status()).toBe(200);
-    producto = (await catalogo.json()).content.find((p) => p.estado !== 'SUSPENDIDO');
-    expect(producto, 'el banco tiene algún ítem activo').toBeTruthy();
+    const activos = (await catalogo.json()).content.filter((p) => p.estado !== 'SUSPENDIDO');
+    producto = activos.find((p) => p.id === 'p-arma-e2e') ?? activos[0];
+    expect(producto, 'el banco tiene algún arma activa').toBeTruthy();
   });
 
   test.afterAll(async () => {
@@ -211,7 +215,7 @@ test.describe('Modificar el inventario de una cuenta (SA-10, §7.3.4)', () => {
 
     const dialogo = page.locator('[role="dialog"]');
     await expect(dialogo).toContainText(`Entregar productos · ${jugadora.apodo}`);
-    await dialogo.locator('select[name="tipo"]').selectOption('ITEM');
+    await dialogo.locator('select[name="tipo"]').selectOption(TIPO);
     await expect(dialogo.locator('select[name="producto"]')).toBeEnabled({ timeout: 20_000 });
     await dialogo.locator('select[name="producto"]').selectOption(producto.id);
     await dialogo.locator('input[name="cantidad"]').fill('1');
