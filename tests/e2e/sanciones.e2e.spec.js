@@ -105,7 +105,12 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
   async function intentarCrearSala() {
     return api.post('/api/v1/salas', {
       headers: conToken(jugadora.token),
-      data: { maximoParticipantes: 2, modalidad: 'UNO_CONTRA_UNO', recompensaCreditos: 0, privada: false },
+      data: {
+        maximoParticipantes: 2,
+        modalidad: 'UNO_CONTRA_UNO',
+        recompensaCreditos: 0,
+        privada: false,
+      },
     });
   }
 
@@ -337,8 +342,9 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
     // probando aqui.
     const sala = await intentarCrearSala();
     if (sala.status() === 403) {
-      expect((await sala.json()).type, 'la sancion se revirtio: no puede ser este 403')
-        .not.toMatch(/jugador-sancionado$/);
+      expect((await sala.json()).type, 'la sancion se revirtio: no puede ser este 403').not.toMatch(
+        /jugador-sancionado$/,
+      );
     }
 
     await esperarAviso('APELACION_REVERTIDA');
@@ -360,26 +366,41 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
     await expect(laAdvertencia.locator('[data-accion="apelar"]')).toHaveCount(1);
   });
 
-  test('el panel de la moderadora carga el historial del usuario buscado', async ({ page }) => {
+  test('la consola de la moderadora: encuentra a la jugadora por su apodo, sin el baneo entre sus opciones', async ({
+    page,
+  }) => {
     await conSesion(page, moderadora);
-    await page.goto(`${BORDE}${VISTAS}/sanciones-admin.html`);
+    await page.goto(`${BORDE}${VISTAS}/sanciones-admin.html#emitir`);
+    const emitir = page.locator('[data-panel="emitir"]');
     // `toBeDisabled` no aplica a <option>: se mira el atributo.
-    await expect(page.locator('[name="tipo"] option[value="BANEO"]')).toHaveAttribute(
+    await expect(emitir.locator('[name="tipo"] option[value="BANEO"]')).toHaveAttribute(
       'disabled',
       '',
     );
-    await page.fill('[data-zona="buscar"] [name="usuarioId"]', jugadora.claims.uid);
-    await page.click('[data-zona="buscar"] button[type="submit"]');
-    await expect(
-      page.locator(`[data-zona="historial"] [data-sancion-id="${suspension.id}"]`),
-    ).toBeVisible({
+    await emitir.locator('input[name="cuenta"]').fill(jugadora.apodo);
+    await emitir.locator('[data-accion="buscar"]').click();
+    // Si otra cuenta comparte parte del apodo, se elige la suya en la tabla.
+    const elegida = emitir.locator('[data-zona="apodo-elegido"]');
+    const fila = emitir
+      .locator('[data-zona="resultados-de-cuenta"] tbody tr')
+      .filter({ has: page.locator('th', { hasText: new RegExp(`^${jugadora.apodo}$`) }) });
+    await expect(elegida.or(fila)).toBeVisible({ timeout: 20000 });
+    if (await fila.count()) {
+      await fila.locator('[data-accion="elegir-cuenta"]').click();
+    }
+    await expect(elegida).toHaveText(jugadora.apodo, { timeout: 20000 });
+    await expect(emitir.locator('[data-zona="historial"]')).toContainText(/Suspensión/);
+
+    // El listado global la filtra por su apodo y no enseña identificadores.
+    await page.locator('[data-pestana="sanciones"]').click();
+    const listado = page.locator('[data-panel="listado-de-sanciones"]');
+    await listado.locator('input[name="cuenta"]').fill(jugadora.claims.uid);
+    await listado.locator('[data-accion="buscar"]').click();
+    await expect(listado.locator(`tr[data-fila="${suspension.id}"]`)).toBeVisible({
       timeout: 20000,
     });
-    await expect(
-      page.locator(`[data-zona="historial"] [data-sancion-id="${advertencia.id}"]`),
-    ).toBeVisible();
-    await expect(page.locator('[data-zona="emitir"] [name="usuarioId"]')).toHaveValue(
-      jugadora.claims.uid,
-    );
+    await expect(listado.locator(`tr[data-fila="${advertencia.id}"]`)).toBeVisible();
+    await expect(listado.locator(`tr[data-fila="${suspension.id}"] th`)).toHaveText(jugadora.apodo);
+    await expect(listado.locator('tbody')).not.toContainText(jugadora.claims.uid);
   });
 });

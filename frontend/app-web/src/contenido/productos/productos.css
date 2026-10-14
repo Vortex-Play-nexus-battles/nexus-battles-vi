@@ -112,8 +112,14 @@ textarea:focus-visible {
 
 .productos-cabecera__acciones {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
+}
+
+/* SA-6 — a 375 px los enlaces bajan de fila en vez de partirse en tres líneas. */
+.productos-cabecera__acciones > a {
+  white-space: nowrap;
 }
 
 /* FI-R15 — el enlace medía 151x38 y el objetivo táctil mínimo son 44 px
@@ -307,11 +313,212 @@ textarea:focus-visible {
    no una copia de la paleta: componen con el alto contraste.
    ======================================================================= */
 .producto-seccion,
-.producto-estado {
+.producto-estado,
+.producto-vista-previa {
   --tinta: var(--texto);
   --tinta-2: var(--texto-2);
   --tinta-3: var(--texto-3);
   --tinta-enlace: var(--primaria);
   --tinta-enlace-hover: var(--primaria-relleno);
   color: var(--texto);
+}
+
+/* SA-6 — HU-PRD-009 y HU-PRD-010: el campo de la imagen (subir o elegir de la
+   biblioteca), las tarjetas de recursos y la vista previa del alta. Lo usan el
+   alta y la ficha de cada producto; solo tokens del kit. */
+.selector-recurso {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px 16px 16px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.selector-recurso legend {
+  padding: 0 6px;
+}
+
+.selector-recurso--error {
+  border-color: var(--error);
+}
+
+.selector-recurso__cuerpo {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.selector-recurso__miniatura .recurso-miniatura {
+  width: 112px;
+  height: 112px;
+}
+
+.selector-recurso__datos {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.selector-recurso__descripcion,
+.selector-recurso__datos .campo__pista,
+.selector-recurso__datos .campo__error {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.selector-recurso__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.selector-recurso__acciones select {
+  width: auto;
+  min-width: 9rem;
+}
+
+@media (max-width: 520px) {
+  .selector-recurso__cuerpo {
+    grid-template-columns: 1fr;
+  }
+}
+
+.recurso-miniatura {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--fondo);
+}
+
+.recurso-miniatura img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.recurso-miniatura__vacia {
+  padding: 4px;
+  color: var(--texto-3);
+  font-size: var(--t-meta-tam);
+  text-align: center;
+}
+
+.recursos-rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recurso-tarjeta {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+
+.recurso-tarjeta__datos {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.recurso-tarjeta__datos p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.recurso-tarjeta__nombre {
+  font-weight: 600;
+}
+
+.recurso-tarjeta__distintivos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.recurso-tarjeta__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dialogo.dialogo--ancho {
+  width: min(880px, calc(100vw - 24px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.biblioteca-recursos--elegir {
+  display: grid;
+  gap: 12px;
+}
+
+.biblioteca-recursos--elegir .campo {
+  display: grid;
+  gap: 4px;
+  max-width: 16rem;
+  margin: 0;
+}
+
+/* El alta: el formulario y, al lado, cómo lo verá el jugador. */
+.producto-alta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  align-items: start;
+  gap: 24px;
+}
+
+.producto-vista-previa {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+
+.producto-vista-previa h2 {
+  margin: 0;
+}
+
+@media (max-width: 960px) {
+  .producto-alta {
+    grid-template-columns: 1fr;
+  }
+
+  .producto-vista-previa {
+    position: static;
+  }
+}
+
+.vista-previa-producto {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.vista-previa-producto .product-card {
+  max-width: 300px;
+}
+
+.vista-previa-producto figcaption {
+  margin: 0;
 }

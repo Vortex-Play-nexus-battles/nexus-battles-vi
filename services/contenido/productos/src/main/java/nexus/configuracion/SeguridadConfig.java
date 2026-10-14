@@ -51,6 +51,19 @@ public class SeguridadConfig {
                                 .permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/v1/productos")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                // HU-PRD-009 (contrato 1.10.0): la biblioteca de recursos
+                                // graficos es de la administracion del catalogo; los bytes
+                                // de un recurso son publicos, porque son la imagen que ve la
+                                // tienda. Van antes de GET /{id}, que es publico y casaria
+                                // con /recursos si esta regla no mandara primero.
+                                .requestMatchers(HttpMethod.POST, "/api/v1/productos/recursos")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(HttpMethod.GET, "/api/v1/productos/recursos")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(HttpMethod.DELETE, "/api/v1/productos/recursos/{id}")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(HttpMethod.GET, "/api/v1/productos/recursos/{id}")
+                                .permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/v1/banners")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 .requestMatchers(HttpMethod.PUT, "/api/v1/banners/{id}")
@@ -64,6 +77,23 @@ public class SeguridadConfig {
                                 .requestMatchers(HttpMethod.GET, "/api/v1/productos/estadisticas")
                                 .authenticated()
                                 .requestMatchers(HttpMethod.PATCH, "/api/v1/productos/{id}")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/productos/{id}/historial")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(
+                                        HttpMethod.POST,
+                                        "/api/v1/productos/{id}/reversiones")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/v1/productos/{id}/diseno/versiones",
+                                        "/api/v1/productos/{id}/diseno/plantilla")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(
+                                        HttpMethod.POST,
+                                        "/api/v1/productos/{id}/diseno/importaciones")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 // B4 (contrato 1.4.0): suspender y reactivar son de la
                                 // administracion del catalogo (seccion 7.2.1).

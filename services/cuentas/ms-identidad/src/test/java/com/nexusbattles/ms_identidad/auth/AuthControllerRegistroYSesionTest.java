@@ -248,6 +248,36 @@ class AuthControllerRegistroYSesionTest {
     }
 
     @Test
+    @DisplayName("SA-4: la suspendida y la baneada traen el codigo para apelar sin sesion (2.4.0); sin el, igual que antes")
+    void rechazoConCodigoDeApelacion() throws Exception {
+        com.nexusbattles.ms_identidad.auth.segundofactor.DesafioEmitido codigo =
+                new com.nexusbattles.ms_identidad.auth.segundofactor.DesafioEmitido("codigo-opaco",
+                        java.time.Instant.parse("2026-09-26T15:30:00Z"),
+                        com.nexusbattles.ms_identidad.auth.segundofactor.DesafioDeAcceso.Proposito.APELAR);
+        doThrow(new CuentaSuspendidaException("Suspendida.", java.time.OffsetDateTime.parse("2026-09-27T10:00:00Z"),
+                codigo))
+                .doThrow(new CuentaBaneadaException("Baneada.", codigo))
+                .doThrow(new CuentaBaneadaException("Baneada."))
+                .when(loginService).iniciarSesion(any(), any(), any());
+        String cuerpo = "{\"email\":\"ada@upb.edu.co\",\"password\":\"x\"}";
+
+        mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(cuerpo)
+                        .accept(PROBLEMA))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.suspendidoHasta").value("2026-09-27T10:00:00Z"))
+                .andExpect(jsonPath("$.apelacion.codigo").value("codigo-opaco"))
+                .andExpect(jsonPath("$.apelacion.expiraEn").value("2026-09-26T15:30:00Z"));
+        mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(cuerpo)
+                        .accept(PROBLEMA))
+                .andExpect(jsonPath("$.type").value(TIPOS + "cuenta-baneada"))
+                .andExpect(jsonPath("$.apelacion.codigo").value("codigo-opaco"));
+        mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(cuerpo)
+                        .accept(PROBLEMA))
+                .andExpect(jsonPath("$.type").value(TIPOS + "cuenta-baneada"))
+                .andExpect(jsonPath("$.apelacion").doesNotExist());
+    }
+
+    @Test
     @DisplayName("HU-AUT-007: falta el segundo factor -> 403 con el desafio (solo en problem details), nunca un token")
     void segundoFactorRequerido() throws Exception {
         doThrow(new com.nexusbattles.ms_identidad.auth.segundofactor.SegundoFactorRequeridoException(
