@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_chatbot.chat.service;
 
 import com.nexusbattles.ms_chatbot.chat.model.BrechaConocimiento;
+import com.nexusbattles.ms_chatbot.chat.privacidad.RedactorDeDatosSensibles;
 import com.nexusbattles.ms_chatbot.chat.repository.BrechaConocimientoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -12,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -29,7 +31,8 @@ class BrechaConocimientoServiceTest {
 
     @BeforeEach
     void configurar() {
-        brechaConocimientoService = new BrechaConocimientoService(brechaConocimientoRepository);
+        brechaConocimientoService = new BrechaConocimientoService(brechaConocimientoRepository,
+            new RedactorDeDatosSensibles());
     }
 
     @Test
@@ -43,6 +46,20 @@ class BrechaConocimientoServiceTest {
         assertEquals("¿Cómo subo de nivel?", guardada.getEjemploPregunta());
         assertEquals(1, guardada.getContadorNoUtil());
         assertEquals(0, guardada.getContadorEscalamiento());
+    }
+
+    // 1.4.0 (7.4.8): la brecha sobrevive al borrado del historial; nunca guarda un secreto.
+    @Test
+    void registrarEscalamiento_conDatosSensibles_guardaElEjemploRedactado() {
+        when(brechaConocimientoRepository.findByTextoNormalizado(anyString())).thenReturn(Optional.empty());
+
+        brechaConocimientoService.registrarEscalamiento("no entro, mi contraseña es Hunter2! y mi pin: 4321");
+
+        BrechaConocimiento guardada = capturarBrechaGuardada();
+        assertFalse(guardada.getEjemploPregunta().contains("Hunter2!"));
+        assertFalse(guardada.getEjemploPregunta().contains("4321"));
+        assertFalse(guardada.getTextoNormalizado().contains("hunter2"));
+        assertFalse(guardada.getTextoNormalizado().contains("4321"));
     }
 
     @Test

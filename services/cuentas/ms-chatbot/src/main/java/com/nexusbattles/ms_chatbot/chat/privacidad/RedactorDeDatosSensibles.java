@@ -47,6 +47,19 @@ public class RedactorDeDatosSensibles implements RedaccionDeDatosSensibles {
     static final String TOKEN = "[token]";
     static final String CLAVE_PRIVADA = "[clave privada]";
 
+    private static final Pattern MARCAS = Pattern.compile(
+        Pattern.quote(TAPADO) + "|" + Pattern.quote(TARJETA) + "|" + Pattern.quote(TOKEN) + "|"
+            + Pattern.quote(CLAVE_PRIVADA));
+
+    /**
+     * 1.4.0 — el texto ya redactado sin las marcas que dejó la redacción. Sirve
+     * para saber si, quitando el secreto, queda alguna pregunta: una brecha de
+     * conocimiento que solo era una contraseña o un token no se registra.
+     */
+    public static String sinMarcas(String redactado) {
+        return redactado == null ? null : MARCAS.matcher(redactado).replaceAll(" ");
+    }
+
     private static final int SIN_MAYUSCULAS = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
     private static final String ANTES = "(?<![\\p{L}\\p{N}_])";
     private static final String DESPUES = "(?![\\p{L}\\p{N}_])";

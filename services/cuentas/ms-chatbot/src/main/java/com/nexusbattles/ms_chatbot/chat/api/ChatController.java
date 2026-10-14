@@ -86,7 +86,7 @@ public class ChatController {
         // recibe imagenes). Se sigue aceptando en el cuerpo para no romper a
         // quien lo mande, pero no llega al servicio ni se guarda.
         Mensaje respuesta = chatService.enviarMensaje(quien.identidad(), request.contenido(), null,
-            request.vista());
+            request.vista(), origenDe(peticion));
 
         ResponseEntity.BodyBuilder ok = ResponseEntity.ok();
         if (quien.sesionEmitida() != null) {

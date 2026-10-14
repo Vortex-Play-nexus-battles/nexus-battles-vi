@@ -1,11 +1,17 @@
 package com.nexusbattles.ms_chatbot.chat.service;
 
+import com.nexusbattles.ms_chatbot.chat.entrada.InyeccionDetectada;
+import com.nexusbattles.ms_chatbot.chat.entrada.RevisionDeEntrada;
 import com.nexusbattles.ms_chatbot.chat.model.Calificacion;
 import com.nexusbattles.ms_chatbot.chat.model.Conversacion;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
 import com.nexusbattles.ms_chatbot.chat.model.Remitente;
+import com.nexusbattles.ms_chatbot.chat.moderacion.ContenidoBloqueado;
+import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionDeContenido;
+import com.nexusbattles.ms_chatbot.chat.privacidad.RedactorDeDatosSensibles;
 import com.nexusbattles.ms_chatbot.chat.repository.CalificacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,13 +53,17 @@ class CalificacionServiceTest {
     @Mock
     private BrechaConocimientoService brechaConocimientoService;
 
+    @Mock
+    private ModeracionDeContenido moderacion;
+
     private CalificacionService calificacionService;
 
     private final UUID mensajeId = UUID.randomUUID();
 
     @BeforeEach
     void configurar() {
-        calificacionService = new CalificacionService(mensajeRepository, calificacionRepository, brechaConocimientoService);
+        calificacionService = new CalificacionService(mensajeRepository, calificacionRepository, brechaConocimientoService,
+            new RevisionDeEntrada(new RedactorDeDatosSensibles(), new SimpleMeterRegistry()), moderacion);
     }
 
     @Test
@@ -187,6 +197,64 @@ class CalificacionServiceTest {
         Calificacion calificacion = calificacionService.calificar(mensajeId, SESION, true, "   ");
 
         assertNull(calificacion.getComentario());
+    }
+
+    // 1.4.0 (7.4.8): el comentario se guarda redactado y pasa por la lista negra.
+    @Test
+    void calificar_comentarioConDatosSensibles_seGuardaRedactadoYModerado() {
+        Mensaje respuesta = mensajeConRemitente(Remitente.BOT);
+        when(mensajeRepository.findByIdAndConversacionIdentificadorSesion(mensajeId, SESION))
+            .thenReturn(Optional.of(respuesta));
+        when(calificacionRepository.existsByMensajeId(mensajeId)).thenReturn(false);
+        when(calificacionRepository.saveAndFlush(any(Calificacion.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Calificacion calificacion = calificacionService.calificar(mensajeId, SESION, true,
+            "no me sirvio, mi password: Sup3r$ecreta");
+
+        assertFalse(calificacion.getComentario().contains("Sup3r$ecreta"));
+        verify(moderacion).verificar(calificacion.getComentario());
+    }
+
+    @Test
+    void calificar_comentarioBloqueadoPorLaListaNegra_noGuarda() {
+        Mensaje respuesta = mensajeConRemitente(Remitente.BOT);
+        when(mensajeRepository.findByIdAndConversacionIdentificadorSesion(mensajeId, SESION))
+            .thenReturn(Optional.of(respuesta));
+        when(calificacionRepository.existsByMensajeId(mensajeId)).thenReturn(false);
+        doThrow(new ContenidoBloqueado()).when(moderacion).verificar("algo feo");
+
+        assertThrows(ContenidoBloqueado.class, () -> calificacionService.calificar(mensajeId, SESION, false, "algo feo"));
+
+        verify(calificacionRepository, never()).saveAndFlush(any());
+        verifyNoInteractions(brechaConocimientoService);
+    }
+
+    @Test
+    void calificar_comentarioConInyeccion_noGuardaNiModera() {
+        Mensaje respuesta = mensajeConRemitente(Remitente.BOT);
+        when(mensajeRepository.findByIdAndConversacionIdentificadorSesion(mensajeId, SESION))
+            .thenReturn(Optional.of(respuesta));
+        when(calificacionRepository.existsByMensajeId(mensajeId)).thenReturn(false);
+
+        assertThrows(InyeccionDetectada.class,
+            () -> calificacionService.calificar(mensajeId, SESION, true, "<script>robar()</script>"));
+
+        verify(calificacionRepository, never()).saveAndFlush(any());
+        verifyNoInteractions(moderacion);
+    }
+
+    // Un mensaje ajeno sigue siendo 404 aunque el comentario traiga inyeccion:
+    // la revision va despues de comprobar que la respuesta es suya.
+    @Test
+    void calificar_mensajeAjenoConComentarioMalicioso_sigueSiendo404() {
+        when(mensajeRepository.findByIdAndConversacionIdentificadorSesion(mensajeId, SESION))
+            .thenReturn(Optional.empty());
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+            () -> calificacionService.calificar(mensajeId, SESION, true, "' OR '1'='1"));
+
+        assertEquals(404, error.getStatusCode().value());
+        verifyNoInteractions(moderacion);
     }
 
     private Mensaje mensajeConRemitente(Remitente remitente) {

@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_chatbot.chat.api;
 
+import com.nexusbattles.ms_chatbot.chat.entrada.InyeccionDetectada;
 import com.nexusbattles.ms_chatbot.chat.limite.LimiteDeFrecuenciaExcedido;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ContenidoBloqueado;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionNoDisponible;
@@ -32,6 +33,15 @@ public class ManejadorErroresDelChat {
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT)
             .body(problema(HttpStatus.UNPROCESSABLE_CONTENT, "Mensaje no permitido", ex.getMessage(),
                 "CONTENIDO_BLOQUEADO"));
+    }
+
+    // 1.4.0 (7.4.8): un intento de inyeccion de codigo no se procesa ni se
+    // guarda. El detalle no repite lo que escribio ni dice que regla salto.
+    @ExceptionHandler(InyeccionDetectada.class)
+    public ResponseEntity<ProblemDetail> inyeccion(InyeccionDetectada ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT)
+            .body(problema(HttpStatus.UNPROCESSABLE_CONTENT, "Mensaje no permitido", ex.getMessage(),
+                "INYECCION_DETECTADA"));
     }
 
     @ExceptionHandler(ModeracionNoDisponible.class)

@@ -610,6 +610,7 @@ libre() {
 libre     GET  /api/v1/products/p-1/comments                  40
 libre     GET  "/api/v1/vitrina?page=0"                       40
 libre     POST /api/v1/salas                                  30
+libre     GET  /api/v1/chat/historial                         30
 # acceso: la primera rafaga llena el cupo; las demas rutas de la clase
 # comparten cupo (misma direccion, misma zona) y tienen que dar 429 igual.
 limitada  POST /api/v1/auth/login                             30 20 2
@@ -632,6 +633,11 @@ limitada  POST /api/v1/subastas/s-1/pujas                     25  0 1
 limitada  POST /api/v1/mensajes-directos/conversaciones/u-1/mensajes 25 0 1
 # La compra (B5) se cuenta sobre la ruta ya reescrita, /ecommerce/api/v1/...
 limitada  POST /api/v1/checkout                               25  0 1
+# El chatbot (ms-chatbot.yaml 1.4.0): mensajes, sesiones, tickets y calificaciones.
+limitada  POST /api/v1/chat/mensajes                          25  0 1
+limitada  POST /api/v1/chat/sesiones                          25  0 1
+limitada  POST /api/v1/chat/tickets                           25  0 1
+limitada  POST /api/v1/chat/mensajes/m-1/calificacion         25  0 1
 
 # Desde el anfitrion (origen privado, como el banco E2E) el login no se
 # limita: 40 seguidas, las 40 llegan a identidad.
