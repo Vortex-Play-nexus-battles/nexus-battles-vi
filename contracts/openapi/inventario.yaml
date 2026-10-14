@@ -50,7 +50,12 @@ info:
   #     ModificarElemento (400 si se pasa).
   #   Menor: un parametro opcional, una propiedad opcional y un limite que
   #   ningun nombre del catalogo (el mas largo, 29) alcanza.
-  version: 1.7.0
+  # 1.7.1 (segunda auditoria de la revision final, 13-oct): la busqueda cubre
+  #   tambien los atributos del producto con la etiqueta que ensena su ficha
+  #   («Poder de ataque 42», «Defensa 3», «Turnos de carga 2»…) y el costo de
+  #   cada accion del heroe. Solo cambia la descripcion: ninguna ruta, campo
+  #   ni respuesta. Parche.
+  version: 1.7.1
   description: >
     Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
     de elementos propios del jugador para HU-INV-003, y equipamiento de
@@ -233,8 +238,10 @@ paths:
         coincide si el criterio aparece, como fragmento y sin distinguir tildes
         ni mayusculas, en lo que guarda el inventario (nombre propio, tipo,
         parte de armadura, identificador del producto) o en la informacion de
-        su producto en el catalogo: nombre, descripcion, efectos, prototipo y,
-        en los heroes, sus acciones (Tabla 7). Desde 1.7.0 la informacion del
+        su producto en el catalogo: nombre, descripcion, efectos, prototipo,
+        atributos con la etiqueta de la ficha (1.7.1: «Poder de ataque»,
+        «Defensa», «Costo de poder», «Turnos de carga»…) y, en los heroes, sus
+        acciones con su costo y su efecto (Tabla 7). Desde 1.7.0 la informacion del
         catalogo se resuelve con un indice de cuatrigramas que el servicio
         renueva solo (la vigencia por omision es de cinco minutos); si el
         catalogo no responde, la busqueda se limita a lo que guarda el

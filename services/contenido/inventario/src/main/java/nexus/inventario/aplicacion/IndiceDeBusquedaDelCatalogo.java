@@ -7,6 +7,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +28,14 @@ import org.springframework.stereotype.Component;
  *   <li><b>Catálogo caído:</b> la búsqueda no falla. Sin índice todavía, se
  *       contesta sin coincidencias de catálogo (el caso de uso sigue buscando en el
  *       nombre propio, el tipo y la parte de cada elemento) y no se vuelve a
- *       intentar hasta pasado un respiro, para no martillear un servicio caído.</li>
+ *       intentar hasta pasado un respiro, para no martillear un servicio caído.
+ *       Lo mismo si falla una renovación: se sigue con el índice anterior y la
+ *       siguiente no se intenta hasta pasado el respiro.</li>
+ *   <li><b>Hilos virtuales:</b> la primera construcción hace lecturas HTTP. Se
+ *       serializa con un {@link ReentrantLock} y no con {@code synchronized}: en
+ *       Java 21 un hilo virtual que se bloquea dentro de {@code synchronized} fija
+ *       su hilo portador, y con tantas primeras búsquedas como núcleos el servicio
+ *       entero se quedaba esperando a la construcción (segunda auditoría, 13-oct).</li>
  * </ul>
  */
 @Component
@@ -41,6 +49,7 @@ public class IndiceDeBusquedaDelCatalogo implements BuscadorEnElCatalogo {
     private final Duration respiroTrasFallo;
     private final Executor segundoPlano;
     private final AtomicBoolean renovando = new AtomicBoolean();
+    private final ReentrantLock primeraConstruccion = new ReentrantLock();
 
     private volatile Instantanea actual;
     private volatile Instant ultimoFallo;
@@ -83,40 +92,53 @@ public class IndiceDeBusquedaDelCatalogo implements BuscadorEnElCatalogo {
         return instantanea.indice();
     }
 
-    private synchronized IndiceDeNgramas construirPorPrimeraVez() {
-        if (actual != null) {
-            return actual.indice();
-        }
-        Instant ahora = reloj.instant();
-        if (ultimoFallo != null && ultimoFallo.plus(respiroTrasFallo).isAfter(ahora)) {
-            return IndiceDeNgramas.vacio();
-        }
+    private IndiceDeNgramas construirPorPrimeraVez() {
+        primeraConstruccion.lock();
         try {
-            actual = construir();
-            ultimoFallo = null;
-            return actual.indice();
-        } catch (RuntimeException fallo) {
-            ultimoFallo = ahora;
-            BITACORA.warn("Indice del catalogo no disponible: la busqueda se limita a los datos propios"
-                    + " de cada elemento ({})", fallo.getMessage());
-            return IndiceDeNgramas.vacio();
+            if (actual != null) {
+                return actual.indice();
+            }
+            Instant ahora = reloj.instant();
+            if (enRespiro(ahora)) {
+                return IndiceDeNgramas.vacio();
+            }
+            try {
+                actual = construir();
+                ultimoFallo = null;
+                return actual.indice();
+            } catch (RuntimeException fallo) {
+                ultimoFallo = ahora;
+                BITACORA.warn("Indice del catalogo no disponible: la busqueda se limita a los datos propios"
+                        + " de cada elemento ({})", fallo.getMessage());
+                return IndiceDeNgramas.vacio();
+            }
+        } finally {
+            primeraConstruccion.unlock();
         }
     }
 
     private void renovarEnSegundoPlano() {
-        if (!renovando.compareAndSet(false, true)) {
+        if (enRespiro(reloj.instant()) || !renovando.compareAndSet(false, true)) {
             return;
         }
         segundoPlano.execute(() -> {
             try {
                 actual = construir();
+                ultimoFallo = null;
             } catch (RuntimeException fallo) {
+                ultimoFallo = reloj.instant();
                 BITACORA.warn("No se pudo renovar el indice del catalogo; se sigue usando el anterior ({})",
                         fallo.getMessage());
             } finally {
                 renovando.set(false);
             }
         });
+    }
+
+    /** Tras un fallo (primera construcción o renovación) no se reintenta hasta pasado el respiro. */
+    private boolean enRespiro(Instant ahora) {
+        Instant fallo = ultimoFallo;
+        return fallo != null && fallo.plus(respiroTrasFallo).isAfter(ahora);
     }
 
     private Instantanea construir() {
