@@ -76,7 +76,10 @@ public final class Enriquecedor {
         Map.entry("chat", "Chat"),
         Map.entry("notificaciones", "Notificaciones"),
         // 1.8.0: publica, como el resto de la ayuda.
-        Map.entry(DESTINO_AYUDA, "Centro de ayuda")
+        Map.entry(DESTINO_AYUDA, "Centro de ayuda"),
+        // 1.11.0 (navegacion publica): el inicio, el del visitante y el del jugador.
+        Map.entry("portada", "Inicio"),
+        Map.entry("home", "Inicio")
     );
 
     // 1.5.0 — la seccion de cada tema de la base, por su clave (V11).
@@ -129,7 +132,10 @@ public final class Enriquecedor {
         Map.entry("comprar-en-la-tienda", "tienda"),
         Map.entry("comentarios-y-calificaciones", "tienda"),
         Map.entry("mensajes-privados", "chat"),
-        Map.entry("notificaciones", "notificaciones")
+        Map.entry("notificaciones", "notificaciones"),
+        // V15 (1.11.0): el resumen de las reglas lleva al centro de ayuda,
+        // donde estan todas, y que tambien ve un visitante.
+        Map.entry("reglas-del-juego", DESTINO_AYUDA)
     );
 
     // Palabra del titulo (normalizado) -> destino, para los temas que crea un

@@ -237,15 +237,15 @@ class GestionDeLaBaseDeConocimientoIT {
         assertThat(contarTemasDeLaCandidata()).isEqualTo(temasAntes);
 
         // El archivo de importacion versionado (sin `intencionesAdicionales`,
-        // anterior a 1.6.0) entra igual: 59 temas, ninguno con intenciones.
+        // anterior a 1.6.0) entra igual: 60 temas (V11 y V15), ninguno con intenciones.
         String anterior = Files.readString(Path.of("contenido/base-de-conocimiento.json"));
         assertThat(anterior).doesNotContain("intencionesAdicionales");
         mvc.perform(put(RUTA + "/borrador/importacion").with(administrador())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(anterior))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(59));
-        assertThat(contarTemasDeLaCandidata()).isEqualTo(59);
+            .andExpect(jsonPath("$.length()").value(60));
+        assertThat(contarTemasDeLaCandidata()).isEqualTo(60);
         assertThat(JsonPath.<List<Object>>read(listarTemas(), "$[*].intencionesAdicionales[*]")).isEmpty();
     }
 
