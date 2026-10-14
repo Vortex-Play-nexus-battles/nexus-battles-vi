@@ -16,7 +16,11 @@
  *      no existe, sin motivo o con la vigencia en el pasado 400; el
  *      Administrador sí publica;
  *   5. la vista de notificaciones lo pinta con su categoría en palabras
- *      («Políticas de uso»), nunca con el código.
+ *      («Políticas de uso»), nunca con el código;
+ *   6. el Super Administrador lo publica desde la consola de parámetros
+ *      (/consola/parametros): ve antes el aviso tal como lo recibirá cada
+ *      jugador y lo que va a pasar, y el cambio queda en la tabla y en la
+ *      lectura pública.
  *
  * El banco pone el intervalo mínimo entre consultas a admin-parametros en
  * 1 s (NOTIFICACIONES_POLITICAS_INTERVALO_MINIMO_S, en DEV 60 s).
@@ -24,6 +28,7 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { entrarEnLaPagina } from './ayudantes/consola.js';
 import {
   CLAVE_DEL_BANCO,
   cuentaAdministrativaDeRol,
@@ -234,5 +239,45 @@ test.describe('Cambios en las políticas de uso (SA-11, §7.3.7)', () => {
     await expect(item.locator('.distintivo')).toHaveText('Políticas de uso');
     await expect(item).toContainText(cambio.descripcion);
     await expect(item).not.toContainText('CAMBIO_POLITICA');
+  });
+
+  test('6 · el Super Administrador lo publica desde la consola, viendo antes el aviso', async ({
+    page,
+  }) => {
+    const titulo = `Uso de los apodos ${SUFIJO}`;
+    const descripcion = `Los apodos que suplanten a otra persona se cambiarán sin aviso (${SUFIJO}).`;
+    await entrarEnLaPagina(page, superAdmin);
+    await page.goto(`${BORDE}/consola/parametros`);
+
+    const panel = page.locator('#politicas-de-uso');
+    await expect(panel).toBeVisible({ timeout: 20_000 });
+    await panel.locator('[data-accion="publicar-cambio-de-politica"]').click();
+
+    const formulario = page.locator('[data-zona="publicacion"]');
+    await expect(formulario).toBeVisible();
+    await formulario.locator('[name="politica"]').selectOption('TERMINOS_Y_CONDICIONES');
+    await formulario.locator('[name="titulo"]').fill(titulo);
+    await formulario.locator('[name="descripcion"]').fill(descripcion);
+    await formulario
+      .locator('[name="motivo"]')
+      .fill(`Acuerdo con el equipo de comunidad (E2E ${SUFIJO}).`);
+
+    // Antes de publicar: el aviso como lo verá cada jugador y lo que va a pasar.
+    const previa = page.locator('[data-zona="vista-previa-del-aviso"]');
+    await expect(previa).toContainText('Actualizamos los términos y condiciones del servicio');
+    await expect(previa).toContainText(titulo);
+    await expect(page.locator('[data-zona="consecuencia"]')).toContainText('no se puede retirar');
+
+    await page.locator('[data-accion="confirmar-publicacion"]').click();
+    await expect(page.getByText('Cambio publicado')).toBeVisible({ timeout: 20_000 });
+    await expect(panel).toContainText(titulo, { timeout: 20_000 });
+
+    const lectura = await api.get(POLITICAS);
+    expect(lectura.status()).toBe(200);
+    const cambios = await lectura.json();
+    const delPanel = cambios.find((c) => c.titulo === titulo);
+    expect(delPanel, 'lo publicado desde la consola está en la lectura pública').toBeTruthy();
+    expect(delPanel.politica).toBe('TERMINOS_Y_CONDICIONES');
+    expect(delPanel).not.toHaveProperty('motivo');
   });
 });
