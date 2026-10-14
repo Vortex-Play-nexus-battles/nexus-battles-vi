@@ -9,6 +9,8 @@ import {
   bloqueDeCompra,
   conmutadorDeDeseos,
   distintivoDePropiedad,
+  distintivoPremium,
+  distintivoUnico,
   MODOS,
   precioDeProducto,
   tarjetaDeProducto,
@@ -57,6 +59,24 @@ describe('tarjeta en la tienda', () => {
     expect(anadir.getAttribute('aria-label')).toMatch(/^Añadir Yelmo del Alba/);
   });
 
+  test('SA-13: un premium y una pieza única se identifican en la tarjeta (§7.2.1, §7.2.2)', () => {
+    const premium = tarjetaDeProducto(dto({ premium: true }));
+    const marca = premium.querySelector('.producto-premium');
+    expect(marca.textContent).toBe('Premium: se paga en moneda real y no se puede subastar');
+    expect(marca.querySelector('.solo-lectores')).not.toBeNull();
+    expect(marca.title).toBe('Se paga en moneda real y no se puede subastar');
+    expect(premium.querySelector('.producto-unico')).toBeNull();
+
+    const unica = tarjetaDeProducto(dto({ unico: true }));
+    expect(unica.querySelector('.producto-unico').textContent).toBe('Pieza única');
+    expect(unica.querySelector('.producto-premium')).toBeNull();
+
+    const comun = tarjetaDeProducto(dto({ premium: 'si', unico: 1 }));
+    expect(comun.querySelector('.producto-premium, .producto-unico')).toBeNull();
+    expect(distintivoPremium().classList.contains('distintivo')).toBe(true);
+    expect(distintivoUnico().classList.contains('distintivo')).toBe(true);
+  });
+
   test('lo que no viene no deja rastro: ni «null» ni huecos', () => {
     const tarjeta = tarjetaDeProducto(dto({ descripcion: '', habilidades: null }));
 
@@ -65,6 +85,16 @@ describe('tarjeta en la tienda', () => {
     expect(tarjeta.querySelector('.product-card__descripcion')).toBeNull();
     expect(tarjeta.querySelector('.habilidades')).toBeNull();
     expect(tarjeta.querySelector('.product-card__distintivos')).toBeNull();
+  });
+
+  test('un producto exclusivo de moneda real queda identificado como premium', () => {
+    const premium = tarjetaDeProducto(dto({ precioCreditos: null }));
+    const ordinario = tarjetaDeProducto(dto({ precioCreditos: 300 }));
+
+    expect(premium.dataset.idProducto).toBe(UUID);
+    // SA-13 añade al distintivo lo que significa, para lectores de pantalla.
+    expect(premium.querySelector('.producto-premium').textContent).toContain('Premium');
+    expect(ordinario.querySelector('.producto-premium')).toBeNull();
   });
 
   test('sin imagen, el símbolo del tipo; con imagen, la imagen', () => {

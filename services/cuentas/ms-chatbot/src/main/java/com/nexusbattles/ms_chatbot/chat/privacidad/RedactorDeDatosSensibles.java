@@ -109,8 +109,6 @@ public class RedactorDeDatosSensibles implements RedaccionDeDatosSensibles {
             + "|\u201c[^\u201d\\n]{1,200}\u201d|\\S+)",
         SIN_MAYUSCULAS);
 
-    // Sin "]": las marcas ([tarjeta], [token]) acaban asi y se tapan enteras.
-    private static final Pattern PUNTUACION_FINAL = Pattern.compile("[.,;:!?)\u00bb\u201d]+$");
     private static final Pattern BORDES =
         Pattern.compile("^[\u00bf\u00a1(\\[{\u00ab\u201c\"']+|[.,;:!?)\\]}\u00bb\u201d\"']+$");
 
@@ -286,16 +284,18 @@ public class RedactorDeDatosSensibles implements RedaccionDeDatosSensibles {
         return m.group("verbo") != null ? !esPalabraCorriente(valor) : pareceContrasena(valor);
     }
 
-    // Entre comillas se tapa lo de dentro; si no, el valor sin la puntuacion
-    // que lo cierra ("contrasena: abc." -> "contrasena: ***.").
+    // Entre comillas se tapa lo de dentro; si no, el valor ENTERO, tambien la
+    // puntuacion en que termina. Hasta 1.11.0 esa puntuacion se dejaba
+    // ("contrasena: abc." -> "contrasena: ***."), y la de una contrasena es
+    // parte de ella: la politica de claves exige un simbolo y suele ir al
+    // final, asi que "mi contrasena es Hunter2024!" se guardaba "***!". Se
+    // pierde, a lo sumo, el punto de la frase.
     private static String taparValor(String valor) {
         if (estaEntreComillas(valor)) {
             return valor.charAt(0) + tapar(valor.substring(1, valor.length() - 1), TAPADO)
                 + valor.charAt(valor.length() - 1);
         }
-        Matcher puntuacion = PUNTUACION_FINAL.matcher(valor);
-        int corte = puntuacion.find() && puntuacion.start() > 0 ? puntuacion.start() : valor.length();
-        return tapar(valor.substring(0, corte), TAPADO) + valor.substring(corte);
+        return tapar(valor, TAPADO);
     }
 
     private static boolean estaEntreComillas(String valor) {
