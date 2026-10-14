@@ -398,25 +398,24 @@ fi
 disponible_pobre=$(curl -sS -H "Authorization: Bearer $(token_de "$POBRE")" "$FINANZAS/creditos/$uid_pobre/saldo" | jq -r '.saldoDisponible // empty')
 [ "$(printf '%.0f' "${disponible_pobre:-1}")" -eq 0 ] || { echo "::error::el pobre sigue con saldo ($disponible_pobre)"; exit 1; }
 echo "  $POBRE: uid=$uid_pobre disponible=$disponible_pobre (bono gastado a proposito)"
-echo "== 5) Moderacion (HU-USR-004..007): una moderadora y un administrador ==="
-# ms-identidad registra a todo el mundo como JUGADOR y el unico camino para
-# crear MODERADOR/ADMINISTRADOR es el endpoint de admin, que exige... un
-# administrador. En el banco E2E se rompe el huevo-gallina en la base de
-# identidad, que es de este compose y de nadie mas: se registran por el
-# camino normal y se les cambia el rol por SQL. El token con el rol nuevo lo
-# obtienen al iniciar sesion DESPUES de este paso (el rol viaja en el JWT).
+echo "== 5) Cuentas administrativas (7.3.9): moderadora, administrador y super, con segundo factor ==="
+# Desde 7.3.9 el segundo factor es obligatorio para los roles
+# administrativos: una cuenta ascendida por SQL ya no entraria sin enrolarlo.
+# Las crea ms-identidad al arrancar (ADMINS_QA del compose,
+# CuentaAdministrativaDePruebas) con su rol, ACTIVAS y con el secreto TOTP ya
+# enrolado; los specs entran con contrasena + codigo (ayudantes/cuentas.js).
+# Aqui solo se comprueba que esten, antes de que Playwright las necesite.
 MODERADORA="${E2E_MODERADORA:-moderadora_e2e}"
 ADMIN="${E2E_ADMIN:-admin_e2e}"
-token_de "$MODERADORA" >/dev/null
-token_de "$ADMIN" >/dev/null
-$COMPOSE exec -T e2e-identidad-db psql -v ON_ERROR_STOP=1 -U identidad -d identidaddb -q <<SQL
-UPDATE usuarios SET rol_id = (SELECT id FROM roles WHERE nombre = 'MODERADOR')     WHERE apodo = '$MODERADORA';
-UPDATE usuarios SET rol_id = (SELECT id FROM roles WHERE nombre = 'ADMINISTRADOR') WHERE apodo = '$ADMIN';
-SQL
-roles=$($COMPOSE exec -T e2e-identidad-db psql -At -U identidad -d identidaddb \
-  -c "SELECT u.apodo || '=' || r.nombre FROM usuarios u JOIN roles r ON r.id = u.rol_id WHERE u.apodo IN ('$MODERADORA','$ADMIN') ORDER BY 1")
-echo "  $roles" | tr '\n' ' '; echo
-echo "$roles" | grep -q "^$ADMIN=ADMINISTRADOR$" || { echo "::error::$ADMIN no quedo como ADMINISTRADOR"; exit 1; }
-echo "$roles" | grep -q "^$MODERADORA=MODERADOR$" || { echo "::error::$MODERADORA no quedo como MODERADOR"; exit 1; }
+SUPER="${E2E_SUPER:-super_e2e}"
+cuentas=$($COMPOSE exec -T e2e-identidad-db psql -At -U identidad -d identidaddb \
+  -c "SELECT u.apodo || '=' || r.nombre || '=' || u.estado || '=' || COALESCE(sf.activo::text, 'sin-segundo-factor')
+        FROM usuarios u JOIN roles r ON r.id = u.rol_id
+        LEFT JOIN segundo_factor sf ON sf.usuario_id = u.id
+       WHERE u.apodo IN ('$MODERADORA','$ADMIN','$SUPER') ORDER BY 1")
+echo "$cuentas" | sed 's/^/  /'
+echo "$cuentas" | grep -q "^$MODERADORA=MODERADOR=ACTIVO=true$" || { echo "::error::$MODERADORA no esta como MODERADOR activa con segundo factor (ADMINS_QA)"; exit 1; }
+echo "$cuentas" | grep -q "^$ADMIN=ADMINISTRADOR=ACTIVO=true$" || { echo "::error::$ADMIN no esta como ADMINISTRADOR activo con segundo factor (ADMINS_QA)"; exit 1; }
+echo "$cuentas" | grep -q "^$SUPER=SUPER_ADMINISTRADOR=ACTIVO=true$" || { echo "::error::$SUPER no esta como SUPER_ADMINISTRADOR activo con segundo factor (ADMINS_QA)"; exit 1; }
 
 echo "Semilla lista."

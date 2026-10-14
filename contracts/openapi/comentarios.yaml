@@ -139,7 +139,26 @@ info:
     1.10.1 (HU-COM-005, #519): solo se quitan las marcas `x-implementacion` y `x-fase` de
     `resolverEnLote`, porque el servicio ya la implementa. No cambia ninguna
     ruta, campo, respuesta ni error. Es un parche.
-  version: 1.10.1
+
+    1.11.0 (revision final del modulo Jugador / Inventario, 13-oct; decision
+    del Product Owner sobre el issue 34): el texto de un comentario tiene como
+    mucho 2000 caracteres (`maxLength: 2000` en
+    `PublicacionComentarioRequest.texto`, el mismo maximo que ya tenia
+    `textoNuevo` al editar). Se cuentan caracteres, no bytes: un emoji cuenta
+    uno. Pasarse responde 400 con `type`
+    `https://nexusbattles.local/errores/texto-demasiado-largo`. Hasta aqui el
+    largo no se limitaba porque la decision estaba pendiente. Ningun campo ni
+    respuesta cambia de forma: es menor.
+
+    1.12.0 (§7.3.4, ficha administrativa del usuario — SA-3): nueva
+    `GET /comentarios/moderacion/usuarios/{usuarioId}/reportes`
+    (`reportesDelUsuario`), los reportes que hizo una cuenta (`REALIZADOS`) o
+    los que recibieron sus comentarios (`RECIBIDOS`), con el comentario de
+    cada uno y los dos totales. De un reporte recibido no se devuelve quien lo
+    hizo, igual que en el detalle de la cola. Misma guarda que el resto de la
+    moderacion (Moderador, Administrador, Super Administrador). Solo anade
+    una operacion y esquemas: es menor.
+  version: 1.12.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -273,8 +292,10 @@ paths:
                 $ref: "#/components/schemas/ComentarioResponse"
         "400":
           description: >
-            Datos de la solicitud invalidos o incompletos: sin texto, estrellas
-            fuera de 1..5, o imagenes que no se pueden adjuntar (`type`
+            Datos de la solicitud invalidos o incompletos: sin texto, un texto
+            de mas de 2000 caracteres (`type`
+            `https://nexusbattles.local/errores/texto-demasiado-largo`, 1.11.0),
+            estrellas fuera de 1..5, o imagenes que no se pueden adjuntar (`type`
             `https://nexusbattles.local/errores/imagenes-no-validas`): mas de
             tres, repetidas, un nombre de archivo en vez de un id, o el id de
             una imagen ajena, ya usada o inexistente.
@@ -680,6 +701,76 @@ paths:
                 $ref: "#/components/schemas/ProblemDetail"
         "404":
           description: No existe.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+
+  /comentarios/moderacion/usuarios/{usuarioId}/reportes:
+    get:
+      summary: Reportes hechos y recibidos por una cuenta (§7.3.4)
+      operationId: reportesDelUsuario
+      description: >
+        1.12.0 — Solo MODERADOR, ADMINISTRADOR y SUPER_ADMINISTRADOR. Una
+        pagina de los reportes que hizo la cuenta (`direccion=REALIZADOS`, por
+        omision) o de los que otros hicieron sobre sus comentarios
+        (`direccion=RECIBIDOS`), del mas reciente al mas antiguo, con el
+        comentario reportado (extracto, autor y estado) y los dos totales.
+
+
+        De un reporte recibido no se devuelve el reportante. Una cuenta sin
+        reportes es `200` con lista vacia, no un 404. Si el comentario de un
+        reporte ya no existe, `comentario` va nulo.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: usuarioId
+          in: path
+          required: true
+          description: '`uid` de la cuenta (el `autorId` de sus comentarios y el reportante de sus reportes).'
+          schema:
+            type: string
+        - name: direccion
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/DireccionDeReportes"
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: tamano
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Pagina de reportes (puede venir vacia).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportesDelUsuarioResponse"
+        "400":
+          description: '`direccion` no es REALIZADOS ni RECIBIDOS.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Sin token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
+          description: El rol no modera.
           content:
             application/problem+json:
               schema:
@@ -1148,9 +1239,11 @@ components:
             Obsoleto desde la 1.1.0: se ignora. El apodo sale del token.
         texto:
           type: string
+          maxLength: 2000
           description: >
-            Contenido escrito. El largo maximo esta pendiente de definir con el
-            Product Owner (issue 34), por eso todavia no se limita aqui.
+            Contenido escrito, obligatorio. 1.11.0 — como mucho 2000
+            caracteres (decision del Product Owner, issue 34); se cuentan
+            caracteres, no bytes. Pasarse es 400 `texto-demasiado-largo`.
         imagenes:
           type: array
           items:
@@ -1621,6 +1714,94 @@ components:
         editado:
           type: boolean
           description: Si un moderador cambio el texto.
+
+    DireccionDeReportes:
+      type: string
+      description: Los reportes que hizo la cuenta o los que recibieron sus comentarios (1.12.0).
+      enum: [REALIZADOS, RECIBIDOS]
+      default: REALIZADOS
+
+    ComentarioDelReporte:
+      type: object
+      description: El comentario de un reporte, como lo muestra la ficha administrativa (1.12.0).
+      required:
+        - id
+        - productoId
+        - autorId
+        - apodoAutor
+        - estado
+      properties:
+        id:
+          type: string
+        productoId:
+          type: string
+        autorId:
+          type: string
+        apodoAutor:
+          type: string
+        extracto:
+          type: string
+          description: Las primeras 160 letras del texto, cortadas por palabra.
+        estado:
+          $ref: "#/components/schemas/EstadoDeComentario"
+
+    ReporteDelUsuario:
+      type: object
+      description: Un reporte, sin el reportante (1.12.0).
+      required:
+        - id
+        - comentarioId
+        - categoria
+        - fecha
+      properties:
+        id:
+          type: string
+        comentarioId:
+          type: string
+        categoria:
+          $ref: "#/components/schemas/CategoriaDeReporte"
+        descripcion:
+          type: [string, "null"]
+        fecha:
+          type: string
+          format: date-time
+        comentario:
+          description: Nulo si el comentario ya no existe.
+          oneOf:
+            - $ref: "#/components/schemas/ComentarioDelReporte"
+            - type: "null"
+
+    ReportesDelUsuarioResponse:
+      type: object
+      required:
+        - usuarioId
+        - direccion
+        - reportes
+        - total
+        - pagina
+        - tamano
+        - totalRealizados
+        - totalRecibidos
+      properties:
+        usuarioId:
+          type: string
+        direccion:
+          $ref: "#/components/schemas/DireccionDeReportes"
+        reportes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReporteDelUsuario"
+        total:
+          type: integer
+          description: Cuantos reportes hay en esta direccion, no en esta pagina.
+        pagina:
+          type: integer
+        tamano:
+          type: integer
+        totalRealizados:
+          type: integer
+        totalRecibidos:
+          type: integer
 
     HistorialDelAutorResponse:
       type: object

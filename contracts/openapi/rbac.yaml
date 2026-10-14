@@ -6,6 +6,18 @@ info:
     extendida con las acciones requeridas por HU-RBAC-003 y HU-USR-003.
 
 
+    2.0.0 (7.3.1 y 7.3.9, MAYOR): se retira POST /admin/ban. Respondia «Usuario
+    X ha sido baneado» sin banear a nadie (no tocaba ninguna cuenta ni dejaba
+    sancion): era el fixture con el que se probo el interceptor, publicado en
+    produccion. El baneo real es PUT /admin/usuarios/{usuarioId}/banear de
+    ms-identidad-admin.yaml, que delega en moderacion-sanciones. Cambios
+    aditivos de la misma version: la matriz gana RESTABLECER_SEGUNDO_FACTOR
+    (solo Super Administrador); PUT /rbac/usuarios/{usuarioId}/rol admite un
+    motivo opcional que queda en la auditoria, nunca cambia el rol de quien lo
+    pide (403 jerarquia-insuficiente) ni deja el sistema sin Super
+    Administrador (409), y avisa a la cuenta.
+
+
     1.2.0 (R9.5): los tres caminos de /rbac dejan de ser publicos. Hasta esta
     version el controlador no llevaba ninguna anotacion de permiso, asi que
     /rbac/matrix repartia la tabla entera de quien puede hacer que a quien la
@@ -14,7 +26,7 @@ info:
     interfaz ya exigia por su cuenta: gestion-usuarios.js esconde la pantalla
     entera con ese mismo permiso. Cambia quien puede llamar, no la forma de
     las respuestas.
-  version: 1.2.0
+  version: 2.0.0
 servers:
   - url: http://localhost:8089/api/v1
     description: Spring Boot local (perfil dev)
@@ -93,38 +105,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
 
-  /admin/ban:
-    post:
-      summary: Banear definitivamente a un usuario
-      description: >-
-        Endpoint protegido con @RequirePermission(BANEAR_DEFINITIVAMENTE).
-        El SecurityInterceptor valida el Bearer JWT y el permiso del rol antes
-        de ejecutar la accion; ante credencial ausente, token invalido o rol sin
-        permiso responde 403 en formato Problem Details (politica fail-closed de
-        HU-RBAC-004).
-      operationId: banUser
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BanRequest'
-      responses:
-        '200':
-          description: Usuario baneado correctamente
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccionAdminResponse'
-        '403':
-          description: Acceso denegado (fail-closed)
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-
   /rbac/usuarios/{usuarioId}/rol:
     put:
       summary: Asignar un rol a un usuario existente
@@ -132,6 +112,12 @@ paths:
         Endpoint protegido con @RequirePermission(ASIGNAR_ROL), exclusivo de
         SUPER_ADMINISTRADOR segun la Tabla 24. Al cambiar el rol se incrementa la
         version del token del usuario para invalidar sus sesiones vigentes.
+        2.0.0: la auditoria (fail-closed, antes del cambio) lleva la cuenta por
+        su uid y el motivo; nadie cambia su propio rol (403
+        jerarquia-insuficiente); el ultimo Super Administrador no se degrada
+        (409 ultimo-super-administrador); la cuenta recibe un aviso. Si el rol
+        nuevo es administrativo, su siguiente inicio de sesion exige el segundo
+        factor (ms-identidad-auth.yaml).
       operationId: asignarRol
       security:
         - bearerAuth: []
@@ -163,7 +149,23 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
         '404':
-          description: El usuario indicado no existe
+          description: El usuario indicado no existe (cuenta-no-encontrada)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: >-
+            2.0.0 — quitaria el rol al unico Super Administrador que queda
+            (ultimo-super-administrador).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: >-
+            2.0.0 — ms-cumplimiento no registro el cambio (auditoria fail-closed,
+            auditoria-no-disponible); el rol no cambio.
           content:
             application/problem+json:
               schema:
@@ -195,9 +197,10 @@ components:
     RbacAction:
       type: string
       description: >-
-        Acción protegida por RBAC. La matriz extendida contiene doce acciones:
-        diez de la Tabla 24, ASIGNAR_ROL (HU-RBAC-003) y
-        GESTIONAR_CUENTAS (HU-USR-003).
+        Acción protegida por RBAC. La matriz extendida contiene trece acciones:
+        diez de la Tabla 24, ASIGNAR_ROL (HU-RBAC-003), GESTIONAR_CUENTAS
+        (HU-USR-003) y, desde 2.0.0, RESTABLECER_SEGUNDO_FACTOR (7.3.9, solo
+        Super Administrador).
       enum:
         - CREAR_CUENTA_JUGADOR
         - MODIFICAR_PERFIL_PROPIO
@@ -211,6 +214,7 @@ components:
         - GESTIONAR_PRODUCTOS
         - ASIGNAR_ROL
         - GESTIONAR_CUENTAS
+        - RESTABLECER_SEGUNDO_FACTOR
 
     AuthorizationResponse:
       type: object
@@ -264,24 +268,6 @@ components:
       type: string
       enum: [GRANTED, DENIED, TEMPORARY]
 
-    BanRequest:
-      type: object
-      required:
-        - userId
-      properties:
-        userId:
-          type: string
-          description: Identificador del usuario a banear
-
-    AccionAdminResponse:
-      type: object
-      properties:
-        status:
-          type: string
-          examples: [SUCCESS]
-        message:
-          type: string
-
     AsignarRolRequest:
       type: object
       required:
@@ -290,6 +276,12 @@ components:
         nuevoRol:
           type: string
           enum: [JUGADOR, MODERADOR, ADMINISTRADOR, SUPER_ADMINISTRADOR]
+        motivo:
+          type: string
+          maxLength: 500
+          description: >-
+            2.0.0 — por que se cambia el rol; queda en la auditoria. Opcional en
+            la API; la consola lo pide.
 
     MensajeResponse:
       type: object

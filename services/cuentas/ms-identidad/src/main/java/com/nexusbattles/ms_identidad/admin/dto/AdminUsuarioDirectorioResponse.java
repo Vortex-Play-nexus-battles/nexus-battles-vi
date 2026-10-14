@@ -30,6 +30,8 @@ import java.util.UUID;
  * @param ultimoAcceso  ultima entrada correcta; nulo = nunca ha entrado
  * @param suspendidoHasta fin de la suspension vigente, si la hay
  * @param bloqueada     bloqueo temporal por intentos fallidos, ahora mismo
+ * @param sancionesRegistradas 1.7.0: cuantas sanciones se le han emitido, segun
+ *                      el resumen que mantiene moderacion-sanciones
  */
 public record AdminUsuarioDirectorioResponse(
         Long id,
@@ -41,7 +43,8 @@ public record AdminUsuarioDirectorioResponse(
         LocalDateTime creadoEn,
         LocalDateTime ultimoAcceso,
         LocalDateTime suspendidoHasta,
-        boolean bloqueada) {
+        boolean bloqueada,
+        int sancionesRegistradas) {
 
     public static AdminUsuarioDirectorioResponse desde(Usuario usuario) {
         boolean bloqueada = usuario.getBloqueadoHasta() != null
@@ -56,6 +59,7 @@ public record AdminUsuarioDirectorioResponse(
                 usuario.getCreadoEn(),
                 usuario.getUltimoAcceso(),
                 usuario.getSuspendidoHasta(),
-                bloqueada);
+                bloqueada,
+                usuario.getSancionesRegistradas());
     }
 }

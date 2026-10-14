@@ -57,6 +57,7 @@ import { cerrarSesion, leerSesion, resolver, RUTAS } from './sesion.js';
 import { montarAsistente } from './ui/asistente.js';
 import { h } from './ui/dom.js';
 import { vigilarSesion } from './vigilante-sesion.js';
+import { vigilarInactividad } from './inactividad-administrativa.js';
 import { vigilarRed } from './ui/aviso-de-red.js';
 import { montarAvisosDeCabecera } from './avisos-de-cabecera.js';
 
@@ -896,6 +897,7 @@ export function montarArmazonAdmin(
  * @param {string|null} [opciones.vista] clave de `MATRIZ` — de dónde sale todo
  * @param {'publico'|'jugador'|'admin'} [opciones.armazon] fuerza uno
  * @param {(opciones: object) => unknown} [opciones.vigilar] inyectable en pruebas
+ * @param {(opciones: object) => unknown} [opciones.inactividad] guarda de 7.3.9; inyectable en pruebas
  * @param {(opciones: {raiz: HTMLElement}) => unknown} [opciones.avisos]
  *   el contador de la campana (`avisos-de-cabecera.js`); inyectable en pruebas
  * @returns {{elemento: HTMLElement, sesion: object|null}}
@@ -915,6 +917,7 @@ export function montarArmazon(
     },
     documento = globalThis.document,
     vigilar = vigilarSesion,
+    inactividad = vigilarInactividad,
     avisos = montarAvisosDeCabecera,
   } = {},
 ) {
@@ -939,7 +942,13 @@ export function montarArmazon(
   montarAsistente(documento);
 
   if (sesion.autenticado) {
-    vigilar({ almacen, ahora, documento });
+    const vigilante = vigilar({ almacen, ahora, documento });
+    // 7.3.9 — las sesiones de Moderador, Administrador y Super Administrador
+    // se renuevan mientras se trabaja y avisan antes de cerrarse por
+    // inactividad. Para un jugador no hace nada.
+    if (vigilante?.terminar) {
+      inactividad({ terminar: vigilante.terminar, almacen, ahora, documento });
+    }
   }
   // UXC-9 — el aviso de red transversal: en todas las vistas, una vez.
   vigilarRed({ documento });

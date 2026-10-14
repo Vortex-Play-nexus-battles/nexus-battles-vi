@@ -56,6 +56,26 @@ class AuditLogFiltrosTest {
     }
 
     @Test
+    void filtraPorLaCuentaAfectadaConSusDosIdentificadores() {
+        // 1.2.0: `afectado` guarda a veces el uid y a veces la clave numerica
+        // de la misma cuenta; la ficha administrativa pide los dos.
+        service.registrar(AuditActionType.SUSPENSION, "admin-F", "uid-de-lyra",
+            null, null, "por uid", "10.0.0.6");
+        service.registrar(AuditActionType.CAMBIO_ROL, "admin-F", "77",
+            null, null, "por clave", "10.0.0.6");
+        service.registrar(AuditActionType.CAMBIO_ROL, "admin-F", "otra-cuenta",
+            null, null, "ajeno", "10.0.0.6");
+
+        Page<AuditLog> resultado = service.consultar(
+            null, java.util.List.of("uid-de-lyra", "77"), null, null, null, SIN_PAGINAR);
+
+        assertThat(resultado.getContent())
+            .extracting(AuditLog::getMotivo)
+            .contains("por uid", "por clave")
+            .doesNotContain("ajeno");
+    }
+
+    @Test
     void filtraSoloPorTipoDeAccion() {
         service.registrar(AuditActionType.SUSPENSION, "admin-C", "usuario-3",
             null, null, "suspendido por incumplimiento", "10.0.0.3");

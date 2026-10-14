@@ -76,6 +76,39 @@ public interface ComentarioRepository extends JpaRepository<RegistroDeComentario
     Page<ResumenDeComentario> findByAutorId(String autorId, Pageable pagina);
 
     /**
+     * Solo los identificadores de los comentarios de un autor, en cualquier
+     * estado (contrato 1.11.0): los reportes que ha RECIBIDO son los de estos
+     * comentarios. Proyeccion de una columna, sin cargar la entidad.
+     */
+    List<IdDeComentario> findIdByAutorId(String autorId);
+
+    /**
+     * Lo que la ficha administrativa muestra del comentario de un reporte
+     * (contrato 1.11.0), sin cargar las imagenes de la entidad.
+     */
+    List<ComentarioReportado> findByIdIn(Collection<String> ids);
+
+    /** Proyeccion: el identificador de un comentario. */
+    interface IdDeComentario {
+        String getId();
+    }
+
+    /** Proyeccion: el comentario de un reporte, para la ficha administrativa. */
+    interface ComentarioReportado {
+        String getId();
+
+        String getProductoId();
+
+        String getAutorId();
+
+        String getApodoAutor();
+
+        String getTexto();
+
+        Comentario.Estado getEstado();
+    }
+
+    /**
      * Solo el estado de un comentario, sin cargarlo: es lo unico que hace falta
      * para decidir si una de sus imagenes es publica.
      */

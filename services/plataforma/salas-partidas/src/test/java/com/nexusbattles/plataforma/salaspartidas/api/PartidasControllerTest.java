@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.salaspartidas.api;
 
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.EstadisticasDeJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.MisPartidas;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerPartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoPartida;
@@ -57,6 +58,9 @@ class PartidasControllerTest {
 
     @MockitoBean
     private MisPartidas misPartidas;
+
+    @MockitoBean
+    private EstadisticasDeJugador estadisticasDeJugador;
 
     @MockitoBean
     private com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion ejecutarAccion;
@@ -206,6 +210,61 @@ class PartidasControllerTest {
 
         mockMvc.perform(get("/api/v1/partidas/mias"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // ---- 1.11.0 · ficha administrativa: historial y estadisticas de una cuenta ----
+
+    private static final UUID OTRA_CUENTA = UUID.fromString("77777777-7777-7777-7777-777777777777");
+
+    @Test
+    @DisplayName("1.11.0 · un administrador lee el historial de OTRA cuenta, por su uid en la ruta")
+    void historialDeOtraCuentaParaLaAdministracion() throws Exception {
+        when(misPartidas.ejecutar(eq(OTRA_CUENTA), anyInt(), anyInt()))
+                .thenReturn(new MisPartidas.Pagina(List.of(), 1, 8, 9, 2));
+
+        mockMvc.perform(get("/api/v1/partidas/jugadores/{id}", OTRA_CUENTA)
+                        .param("pagina", "1").param("tamano", "8").with(conRol("ROLE_ADMINISTRADOR")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElementos").value(9))
+                .andExpect(jsonPath("$.pagina").value(1));
+        verify(misPartidas).ejecutar(OTRA_CUENTA, 1, 8);
+    }
+
+    @Test
+    @DisplayName("1.11.0 · las estadisticas de una cuenta, con la forma del contrato")
+    void estadisticasDeUnaCuenta() throws Exception {
+        when(estadisticasDeJugador.ejecutar(OTRA_CUENTA)).thenReturn(new EstadisticasDeJugador.Estadisticas(
+                OTRA_CUENTA, 5, 3, 1, 1, 1,
+                java.util.Map.of(Modalidad.UNO_CONTRA_UNO, new EstadisticasDeJugador.PorModalidad(5, 3, 1, 1)),
+                Instant.parse("2026-10-10T10:00:00Z"), false));
+
+        mockMvc.perform(get("/api/v1/partidas/jugadores/{id}/estadisticas", OTRA_CUENTA)
+                        .with(conRol("ROLE_SUPER_ADMINISTRADOR")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.idJugador").value(OTRA_CUENTA.toString()))
+                .andExpect(jsonPath("$.jugadas").value(5))
+                .andExpect(jsonPath("$.victorias").value(3))
+                .andExpect(jsonPath("$.derrotas").value(1))
+                .andExpect(jsonPath("$.empates").value(1))
+                .andExpect(jsonPath("$.enCurso").value(1))
+                .andExpect(jsonPath("$.porModalidad.UNO_CONTRA_UNO.victorias").value(3))
+                .andExpect(jsonPath("$.ultimaPartidaEn").exists())
+                .andExpect(jsonPath("$.parcial").value(false));
+    }
+
+    @Test
+    @DisplayName("1.11.0 · un jugador o un moderador no leen el historial ni las estadisticas de otro (403)")
+    void soloLaAdministracionLeeLasDeOtro() throws Exception {
+        for (String rol : List.of("ROLE_JUGADOR", "ROLE_MODERADOR")) {
+            mockMvc.perform(get("/api/v1/partidas/jugadores/{id}", OTRA_CUENTA).with(conRol(rol)))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(get("/api/v1/partidas/jugadores/{id}/estadisticas", OTRA_CUENTA).with(conRol(rol)))
+                    .andExpect(status().isForbidden());
+        }
+        mockMvc.perform(get("/api/v1/partidas/jugadores/{id}/estadisticas", OTRA_CUENTA))
+                .andExpect(status().isUnauthorized());
+        verify(misPartidas, org.mockito.Mockito.never()).ejecutar(eq(OTRA_CUENTA), anyInt(), anyInt());
+        verify(estadisticasDeJugador, org.mockito.Mockito.never()).ejecutar(any());
     }
 
     // ---- 1.10.0 · rendirse (revision del modo jugador, punto 19) ----

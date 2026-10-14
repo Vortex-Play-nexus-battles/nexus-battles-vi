@@ -4,11 +4,13 @@ import com.nexusbattles.ms_identidad.auditoria.client.AuditoriaClient;
 import com.nexusbattles.ms_identidad.auth.model.EstadoCuenta;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
+import com.nexusbattles.ms_identidad.auth.segundofactor.SegundoFactorService;
 import com.nexusbattles.ms_identidad.auth.service.AuthAdminService;
 import com.nexusbattles.ms_identidad.auth.validation.ModeracionNoDisponibleException;
 import com.nexusbattles.ms_identidad.notificaciones.client.NotificacionClient;
 import com.nexusbattles.ms_identidad.perfiles.model.PerfilUsuario;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
+import com.nexusbattles.ms_identidad.rbac.model.RolEntity;
 import com.nexusbattles.ms_identidad.sanciones.ModeracionSancionesClient;
 import com.nexusbattles.ms_identidad.sanciones.ModeracionSancionesClient.Sancion;
 import com.nexusbattles.ms_identidad.sanciones.ModeracionSancionesClient.SancionActiva;
@@ -16,7 +18,10 @@ import com.nexusbattles.ms_identidad.sanciones.ProyeccionDeSancionService;
 import com.nexusbattles.ms_identidad.sanciones.SancionRechazadaException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -46,6 +51,7 @@ class AdminGestionUsuarioServiceTest {
 
     private static final Long USUARIO_ID = 1L;
     private static final String ADMINISTRADOR_ID = "admin";
+    private static final String ROL_ACTOR = "ADMINISTRADOR";
     private static final String IP_ORIGEN = "127.0.0.1";
     private static final String ADMIN = "Bearer token-de-quien-actua";
     private static final UUID UID = UUID.fromString("dededede-1111-4222-8333-444444444444");
@@ -60,6 +66,7 @@ class AdminGestionUsuarioServiceTest {
     private UsuarioRepository usuarios;
     private ModeracionSancionesClient moderacion;
     private ProyeccionDeSancionService proyecciones;
+    private SegundoFactorService segundoFactor;
     private AdminGestionUsuarioService service;
     private Usuario cuenta;
 
@@ -72,8 +79,10 @@ class AdminGestionUsuarioServiceTest {
         usuarios = mock(UsuarioRepository.class);
         moderacion = mock(ModeracionSancionesClient.class);
         proyecciones = mock(ProyeccionDeSancionService.class);
+        segundoFactor = mock(SegundoFactorService.class);
         service = new AdminGestionUsuarioService(authAdminService, perfilUsuarioService, auditoriaClient,
-                notificacionClient, usuarios, moderacion, proyecciones, Clock.fixed(AHORA, ZoneOffset.UTC));
+                notificacionClient, usuarios, moderacion, proyecciones, segundoFactor,
+                Clock.fixed(AHORA, ZoneOffset.UTC));
         cuenta = new Usuario();
         cuenta.setId(USUARIO_ID);
         cuenta.setPublicId(UID);
@@ -94,10 +103,10 @@ class AdminGestionUsuarioServiceTest {
             .thenReturn(perfil);
 
         PerfilUsuario resultado = service.editarPerfilDeUsuario(USUARIO_ID, "Santiago", "Sanabria", null,
-            "preferencias", "Santi", ADMINISTRADOR_ID, IP_ORIGEN);
+            "preferencias", "Santi", ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN);
 
         assertEquals(perfil, resultado);
-        verify(auditoriaClient).registrar("ACTUALIZACION", ADMINISTRADOR_ID, "1", null,
+        verify(auditoriaClient).registrar("ACTUALIZACION", ADMINISTRADOR_ID, UID.toString(), null,
             "nombres=Santiago, apellidos=Sanabria", "Edición administrativa de perfil", IP_ORIGEN);
     }
 
@@ -107,40 +116,58 @@ class AdminGestionUsuarioServiceTest {
     @DisplayName("suspender: POST /sanciones con el token de quien actua, horas hacia arriba y la proyeccion de su respuesta")
     void suspenderDelega() {
         OffsetDateTime fin = OffsetDateTime.parse("2026-09-26T13:00:00Z");
-        when(moderacion.emitir(eq(ADMIN), eq(UID), eq("SUSPENSION"), anyString(), eq(25L), isNull()))
+        when(moderacion.emitir(eq(ADMIN), eq(UID), eq("SUSPENSION"), isNull(), anyString(), isNull(), eq(25L),
+                isNull()))
                 .thenReturn(new Sancion(SANCION, "SUSPENSION", fin, true));
 
-        service.suspenderCuenta(USUARIO_ID, HOY.plusHours(24).plusMinutes(30), null, ADMIN, ADMINISTRADOR_ID, IP_ORIGEN);
+        service.suspenderCuenta(USUARIO_ID, HOY.plusHours(24).plusMinutes(30), null, ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN);
 
-        verify(moderacion).emitir(ADMIN, UID, "SUSPENSION", AdminGestionUsuarioService.MOTIVO_SUSPENSION, 25L, null);
+        verify(moderacion).emitir(ADMIN, UID, "SUSPENSION", null, AdminGestionUsuarioService.MOTIVO_SUSPENSION, null,
+                25L, null);
         verify(proyecciones).aplicar(cuenta, EstadoCuenta.SUSPENDIDO, fin, SANCION);
-        verify(auditoriaClient).registrar(eq("SUSPENSION"), eq(ADMINISTRADOR_ID), eq("1"), eq("ACTIVO"), anyString(),
-                eq("Suspensión de cuenta (moderacion-sanciones)"), eq(IP_ORIGEN));
+        verify(auditoriaClient).registrar(eq("SUSPENSION"), eq(ADMINISTRADOR_ID), eq(UID.toString()), eq("ACTIVO"),
+                anyString(), eq("Suspensión de cuenta (moderacion-sanciones)"), eq(IP_ORIGEN));
         verifyNoInteractions(notificacionClient, authAdminService);
     }
 
     @Test
     @DisplayName("suspender: el motivo del panel viaja tal cual; sin fin en la respuesta se usa el pedido")
     void suspenderConMotivo() {
-        when(moderacion.emitir(any(), any(), any(), any(), any(), any()))
+        when(moderacion.emitir(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new Sancion(SANCION, "SUSPENSION", null, true));
 
-        service.suspenderCuenta(USUARIO_ID, HOY.plusMinutes(10), "  Spam en el chat  ", ADMIN, ADMINISTRADOR_ID, IP_ORIGEN);
+        service.suspenderCuenta(USUARIO_ID, HOY.plusMinutes(10), "  Spam en el chat  ", ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN);
 
-        verify(moderacion).emitir(ADMIN, UID, "SUSPENSION", "Spam en el chat", 1L, null);
+        verify(moderacion).emitir(ADMIN, UID, "SUSPENSION", null, "Spam en el chat", null, 1L, null);
         verify(proyecciones).aplicar(cuenta, EstadoCuenta.SUSPENDIDO,
                 OffsetDateTime.parse("2026-09-25T12:10:00Z"), SANCION);
+    }
+
+    @Test
+    @DisplayName("SA-4: la causal de 7.3.2 y la politica viajan a moderacion; en blanco no se envian")
+    void conCausalYPolitica() {
+        when(moderacion.emitir(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new Sancion(SANCION, "SUSPENSION", null, true));
+
+        service.suspenderCuenta(USUARIO_ID, HOY.plusHours(2), "Insultos en la sala 12", "ACOSO",
+                "  Normas de convivencia ", ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN);
+        verify(moderacion).emitir(ADMIN, UID, "SUSPENSION", "ACOSO", "Insultos en la sala 12",
+                "Normas de convivencia", 2L, null);
+
+        service.banearCuenta(USUARIO_ID, "Duplico creditos", "FRAUDE", " ", ADMIN, ADMINISTRADOR_ID, ROL_ACTOR,
+                IP_ORIGEN);
+        verify(moderacion).emitir(ADMIN, UID, "BANEO", "FRAUDE", "Duplico creditos", null, null, Boolean.TRUE);
     }
 
     @Test
     @DisplayName("suspender: fecha pasada, 400; sin token de sesion, 403 sin llamar a nadie")
     void suspenderRechazos() {
         assertThatThrownBy(() -> service.suspenderCuenta(USUARIO_ID, HOY.minusMinutes(1), null, ADMIN,
-                ADMINISTRADOR_ID, IP_ORIGEN)).isInstanceOf(IllegalArgumentException.class);
+                ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.suspenderCuenta(USUARIO_ID, null, null, ADMIN,
-                ADMINISTRADOR_ID, IP_ORIGEN)).isInstanceOf(IllegalArgumentException.class);
+                ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.suspenderCuenta(USUARIO_ID, HOY.plusDays(1), null, null,
-                ADMINISTRADOR_ID, IP_ORIGEN))
+                ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN))
                 .isInstanceOf(SancionRechazadaException.class)
                 .extracting(e -> ((SancionRechazadaException) e).getEstado()).isEqualTo(403);
         verifyNoInteractions(moderacion, proyecciones);
@@ -149,10 +176,10 @@ class AdminGestionUsuarioServiceTest {
     @Test
     @DisplayName("moderacion caida: la excepcion sube (503) y aqui no se aplica nada")
     void moderacionCaida() {
-        when(moderacion.emitir(any(), any(), any(), any(), any(), any()))
+        when(moderacion.emitir(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenThrow(new ModeracionNoDisponibleException("sin respuesta"));
 
-        assertThatThrownBy(() -> service.banearCuenta(USUARIO_ID, null, ADMIN, ADMINISTRADOR_ID, IP_ORIGEN))
+        assertThatThrownBy(() -> service.banearCuenta(USUARIO_ID, null, ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN))
                 .isInstanceOf(ModeracionNoDisponibleException.class);
         verifyNoInteractions(proyecciones, auditoriaClient);
     }
@@ -160,12 +187,13 @@ class AdminGestionUsuarioServiceTest {
     @Test
     @DisplayName("banear: tipo BANEO con confirmacion; si la auditoria falla despues, la sancion no se deshace")
     void banearDelega() {
-        when(moderacion.emitir(ADMIN, UID, "BANEO", AdminGestionUsuarioService.MOTIVO_BANEO, null, Boolean.TRUE))
+        when(moderacion.emitir(ADMIN, UID, "BANEO", null, AdminGestionUsuarioService.MOTIVO_BANEO, null, null,
+                Boolean.TRUE))
                 .thenReturn(new Sancion(SANCION, "BANEO", null, true));
         doThrow(new IllegalStateException("auditoria caida")).when(auditoriaClient)
                 .registrar(any(), any(), any(), any(), any(), any(), any());
 
-        assertThatCode(() -> service.banearCuenta(USUARIO_ID, " ", ADMIN, ADMINISTRADOR_ID, IP_ORIGEN))
+        assertThatCode(() -> service.banearCuenta(USUARIO_ID, " ", ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN))
                 .doesNotThrowAnyException();
         verify(proyecciones).aplicar(cuenta, EstadoCuenta.BANEADO, null, SANCION);
     }
@@ -176,7 +204,7 @@ class AdminGestionUsuarioServiceTest {
         cuenta.setEstado(EstadoCuenta.SUSPENDIDO);
         when(moderacion.activa(UID)).thenReturn(new SancionActiva(true, "SUSPENSION", SANCION, null));
 
-        service.reactivarCuenta(USUARIO_ID, ADMIN, ADMINISTRADOR_ID, IP_ORIGEN);
+        service.reactivarCuenta(USUARIO_ID, ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN);
 
         verify(moderacion).levantar(ADMIN, SANCION, AdminGestionUsuarioService.MOTIVO_REACTIVACION);
         verify(proyecciones).levantar(cuenta);
@@ -188,12 +216,12 @@ class AdminGestionUsuarioServiceTest {
     void reactivarSinSancionActiva() {
         cuenta.setEstado(EstadoCuenta.SUSPENDIDO);
         when(moderacion.activa(UID)).thenReturn(new SancionActiva(false, null, null, null));
-        service.reactivarCuenta(USUARIO_ID, ADMIN, ADMINISTRADOR_ID, IP_ORIGEN);
+        service.reactivarCuenta(USUARIO_ID, ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN);
         verify(moderacion, never()).levantar(any(), any(), any());
 
         when(moderacion.activa(UID)).thenReturn(new SancionActiva(true, "SUSPENSION", SANCION, null));
         when(moderacion.levantar(any(), any(), any())).thenThrow(new SancionRechazadaException(409, "ya no vigente"));
-        service.reactivarCuenta(USUARIO_ID, ADMIN, ADMINISTRADOR_ID, IP_ORIGEN);
+        service.reactivarCuenta(USUARIO_ID, ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN);
 
         verify(proyecciones, org.mockito.Mockito.times(2)).levantar(cuenta);
     }
@@ -202,18 +230,18 @@ class AdminGestionUsuarioServiceTest {
     @DisplayName("reactivar: un baneo (aqui o en moderacion) no se levanta desde el panel; un 403 de moderacion sube")
     void reactivarRechazos() {
         cuenta.setEstado("BANEADA");
-        assertThatThrownBy(() -> service.reactivarCuenta(USUARIO_ID, ADMIN, ADMINISTRADOR_ID, IP_ORIGEN))
+        assertThatThrownBy(() -> service.reactivarCuenta(USUARIO_ID, ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(AdminGestionUsuarioService.BANEO_IRREVERSIBLE);
 
         cuenta.setEstado(EstadoCuenta.ACTIVO);
         when(moderacion.activa(UID)).thenReturn(new SancionActiva(true, "BANEO", SANCION, null));
-        assertThatThrownBy(() -> service.reactivarCuenta(USUARIO_ID, ADMIN, ADMINISTRADOR_ID, IP_ORIGEN))
+        assertThatThrownBy(() -> service.reactivarCuenta(USUARIO_ID, ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN))
                 .isInstanceOf(IllegalArgumentException.class);
 
         when(moderacion.activa(UID)).thenReturn(new SancionActiva(true, "SUSPENSION", SANCION, null));
         when(moderacion.levantar(any(), any(), any())).thenThrow(new SancionRechazadaException(403, "Rol insuficiente"));
-        assertThatThrownBy(() -> service.reactivarCuenta(USUARIO_ID, ADMIN, ADMINISTRADOR_ID, IP_ORIGEN))
+        assertThatThrownBy(() -> service.reactivarCuenta(USUARIO_ID, ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN))
                 .isInstanceOf(SancionRechazadaException.class);
         verifyNoInteractions(proyecciones);
     }
@@ -222,7 +250,7 @@ class AdminGestionUsuarioServiceTest {
     @DisplayName("una cuenta que no existe: 404 (IllegalStateException), antes de llamar a nadie")
     void noExiste() {
         when(usuarios.findById(9L)).thenReturn(Optional.empty());
-        assertThatThrownBy(() -> service.banearCuenta(9L, null, ADMIN, ADMINISTRADOR_ID, IP_ORIGEN))
+        assertThatThrownBy(() -> service.banearCuenta(9L, null, ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN))
                 .isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(moderacion);
     }
@@ -235,7 +263,7 @@ class AdminGestionUsuarioServiceTest {
         cuentaAnterior();
         LocalDateTime fecha = LocalDateTime.of(2026, 9, 30, 12, 0);
 
-        service.suspenderCuenta(USUARIO_ID, fecha, null, ADMIN, ADMINISTRADOR_ID, IP_ORIGEN);
+        service.suspenderCuenta(USUARIO_ID, fecha, null, ADMIN, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN);
 
         verify(authAdminService).actualizarEstadoCuenta(USUARIO_ID, "SUSPENDIDO", fecha);
         verify(auditoriaClient).registrar("SUSPENSION", ADMINISTRADOR_ID, "1", "ACTIVO",
@@ -248,13 +276,13 @@ class AdminGestionUsuarioServiceTest {
     @DisplayName("cuenta sin uid: baneo y reactivacion locales")
     void banearYReactivarLocal() {
         cuentaAnterior();
-        service.banearCuenta(USUARIO_ID, null, null, ADMINISTRADOR_ID, IP_ORIGEN);
+        service.banearCuenta(USUARIO_ID, null, null, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN);
         verify(authAdminService).actualizarEstadoCuenta(USUARIO_ID, "BANEADO", null);
         verify(auditoriaClient).registrar("SANCION", ADMINISTRADOR_ID, "1", "ACTIVO", "BANEADO",
             "Baneo definitivo de cuenta", IP_ORIGEN);
 
         cuenta.setEstado("SUSPENDIDA");
-        service.reactivarCuenta(USUARIO_ID, null, ADMINISTRADOR_ID, IP_ORIGEN);
+        service.reactivarCuenta(USUARIO_ID, null, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN);
         verify(authAdminService).actualizarEstadoCuenta(USUARIO_ID, "ACTIVO", null);
         verify(auditoriaClient).registrar("ACTUALIZACION", ADMINISTRADOR_ID, "1", "SUSPENDIDO", "ACTIVO",
             "Reactivación de cuenta", IP_ORIGEN);
@@ -263,10 +291,10 @@ class AdminGestionUsuarioServiceTest {
 
     @Test
     void debeRestablecerPassword() {
-        service.restablecerPassword(USUARIO_ID, ADMINISTRADOR_ID, IP_ORIGEN);
+        service.restablecerPassword(USUARIO_ID, ADMINISTRADOR_ID, ROL_ACTOR, IP_ORIGEN);
 
         verify(authAdminService).restablecerContrasena(USUARIO_ID);
-        verify(auditoriaClient).registrar("OTRO", ADMINISTRADOR_ID, "1", null, null,
+        verify(auditoriaClient).registrar("OTRO", ADMINISTRADOR_ID, UID.toString(), null, null,
             "Restablecimiento de contraseña (código de un solo uso enviado)", IP_ORIGEN);
     }
 
@@ -277,5 +305,178 @@ class AdminGestionUsuarioServiceTest {
         assertThat(service.horasHasta(HOY.plusMinutes(60))).isEqualTo(1);
         assertThat(service.horasHasta(HOY.plusMinutes(61))).isEqualTo(2);
         assertThat(service.horasHasta(HOY.plusDays(30))).isEqualTo(720);
+    }
+
+    // ------------------------------------------------------------ jerarquia
+
+    private void conRol(String rol) {
+        cuenta.setRol(new RolEntity(rol, rol));
+    }
+
+    @Nested
+    @DisplayName("Jerarquia (7.3.1): nadie sanciona ni gestiona un rol igual o superior")
+    class Jerarquia {
+
+        @ParameterizedTest(name = "{0} no puede suspender a {1}")
+        @CsvSource({
+            "MODERADOR, MODERADOR", "MODERADOR, ADMINISTRADOR", "MODERADOR, SUPER_ADMINISTRADOR",
+            "ADMINISTRADOR, ADMINISTRADOR", "ADMINISTRADOR, SUPER_ADMINISTRADOR",
+            "SUPER_ADMINISTRADOR, SUPER_ADMINISTRADOR", "JUGADOR, JUGADOR"
+        })
+        void suspenderSobreIgualOSuperiorSeRechaza(String actor, String objetivo) {
+            conRol(objetivo);
+
+            assertThatThrownBy(() -> service.suspenderCuenta(USUARIO_ID, HOY.plusDays(1), "Spam reiterado", ADMIN,
+                    ADMINISTRADOR_ID, actor, IP_ORIGEN))
+                .isInstanceOf(JerarquiaInsuficienteException.class);
+            verifyNoInteractions(moderacion, proyecciones, auditoriaClient, authAdminService);
+        }
+
+        @ParameterizedTest(name = "{0} no puede banear a {1}")
+        @CsvSource({"ADMINISTRADOR, ADMINISTRADOR", "ADMINISTRADOR, SUPER_ADMINISTRADOR",
+            "SUPER_ADMINISTRADOR, SUPER_ADMINISTRADOR"})
+        void banearSobreIgualOSuperiorSeRechaza(String actor, String objetivo) {
+            conRol(objetivo);
+
+            assertThatThrownBy(() -> service.banearCuenta(USUARIO_ID, "Fraude", ADMIN, ADMINISTRADOR_ID, actor,
+                    IP_ORIGEN))
+                .isInstanceOf(JerarquiaInsuficienteException.class);
+            verifyNoInteractions(moderacion, proyecciones, auditoriaClient);
+        }
+
+        @Test
+        @DisplayName("el administrador si suspende a un moderador; el super administrador a un administrador")
+        void sobreUnRolInferiorSiSePuede() {
+            when(moderacion.emitir(any(), any(), any(), any(), any(), any(), any(), any()))
+                    .thenReturn(new Sancion(SANCION, "SUSPENSION", null, true));
+
+            conRol("MODERADOR");
+            service.suspenderCuenta(USUARIO_ID, HOY.plusDays(1), "Abuso de herramientas", ADMIN, ADMINISTRADOR_ID,
+                    "ADMINISTRADOR", IP_ORIGEN);
+            conRol("ADMINISTRADOR");
+            service.suspenderCuenta(USUARIO_ID, HOY.plusDays(1), "Abuso de herramientas", ADMIN, ADMINISTRADOR_ID,
+                    "SUPER_ADMINISTRADOR", IP_ORIGEN);
+
+            verify(moderacion, org.mockito.Mockito.times(2))
+                    .emitir(eq(ADMIN), eq(UID), eq("SUSPENSION"), isNull(), eq("Abuso de herramientas"), isNull(),
+                            any(), isNull());
+        }
+
+        @Test
+        @DisplayName("el moderador no levanta suspensiones: la Tabla 24 le deja solo la temporal")
+        void moderadorNoReactiva() {
+            conRol("JUGADOR");
+            cuenta.setEstado(EstadoCuenta.SUSPENDIDO);
+
+            assertThatThrownBy(() -> service.reactivarCuenta(USUARIO_ID, ADMIN, ADMINISTRADOR_ID, "MODERADOR",
+                    IP_ORIGEN))
+                .isInstanceOf(JerarquiaInsuficienteException.class);
+            verifyNoInteractions(moderacion, proyecciones);
+        }
+
+        @Test
+        @DisplayName("un super administrador si edita el perfil de otro super administrador")
+        void superGestionaASuper() {
+            conRol("SUPER_ADMINISTRADOR");
+
+            service.editarPerfilDeUsuario(USUARIO_ID, "Ana", "Rueda", null, null, null, ADMINISTRADOR_ID,
+                    "SUPER_ADMINISTRADOR", IP_ORIGEN);
+
+            verify(perfilUsuarioService).actualizarPerfilPropio(USUARIO_ID, "Ana", "Rueda", null, null, null);
+        }
+
+        @Test
+        @DisplayName("un administrador no restablece la contraseña de otro administrador")
+        void adminNoGestionaAdmin() {
+            conRol("ADMINISTRADOR");
+
+            assertThatThrownBy(() -> service.restablecerPassword(USUARIO_ID, ADMINISTRADOR_ID, "ADMINISTRADOR",
+                    IP_ORIGEN))
+                .isInstanceOf(JerarquiaInsuficienteException.class);
+            verifyNoInteractions(authAdminService, auditoriaClient, notificacionClient);
+        }
+
+        @Test
+        @DisplayName("la cuenta que no existe responde como tal, no como un fallo interno")
+        void cuentaInexistente() {
+            when(usuarios.findById(99L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> service.restablecerPassword(99L, ADMINISTRADOR_ID, "SUPER_ADMINISTRADOR",
+                    IP_ORIGEN))
+                .isInstanceOf(UsuarioNoEncontradoException.class);
+        }
+    }
+
+    // ------------------------------------------- restablecer segundo factor
+
+    @Nested
+    @DisplayName("Restablecer el segundo factor de otra cuenta (7.3.9)")
+    class RestablecerSegundoFactor {
+
+        private static final String UID_ACTOR = "abababab-1111-4222-8333-444444444444";
+
+        @Test
+        @DisplayName("el super administrador lo restablece: cierra sesiones, audita con motivo y avisa")
+        void restablece() {
+            conRol("ADMINISTRADOR");
+            cuenta.setVersionToken(4);
+            when(segundoFactor.restablecerPorAdministracion(cuenta, IP_ORIGEN)).thenReturn(true);
+
+            service.restablecerSegundoFactor(USUARIO_ID, "  Perdió el teléfono y los códigos  ", "simon",
+                    UID_ACTOR, "SUPER_ADMINISTRADOR", IP_ORIGEN);
+
+            verify(segundoFactor).restablecerPorAdministracion(cuenta, IP_ORIGEN);
+            assertEquals(5, cuenta.getVersionToken(), "las sesiones abiertas dejan de valer");
+            verify(usuarios).save(cuenta);
+            verify(auditoriaClient).registrar("ACTUALIZACION", "simon", UID.toString(), "segundo-factor=ACTIVO",
+                    "segundo-factor=RESTABLECIDO", "Perdió el teléfono y los códigos", IP_ORIGEN);
+            verify(notificacionClient).emitir(eq(UID.toString()), eq("CUENTA"), anyString(), anyString());
+        }
+
+        @ParameterizedTest(name = "{0} no puede")
+        @CsvSource({"MODERADOR", "ADMINISTRADOR", "JUGADOR"})
+        void soloElSuperAdministrador(String rol) {
+            conRol("JUGADOR");
+
+            assertThatThrownBy(() -> service.restablecerSegundoFactor(USUARIO_ID, "Perdió el teléfono", "x",
+                    UID_ACTOR, rol, IP_ORIGEN))
+                .isInstanceOf(JerarquiaInsuficienteException.class);
+            verifyNoInteractions(segundoFactor, auditoriaClient);
+        }
+
+        @Test
+        @DisplayName("nunca sobre la propia cuenta: esa se gestiona con los códigos de recuperación")
+        void nuncaElPropio() {
+            conRol("SUPER_ADMINISTRADOR");
+
+            assertThatThrownBy(() -> service.restablecerSegundoFactor(USUARIO_ID, "Perdí el teléfono", "simon",
+                    UID.toString(), "SUPER_ADMINISTRADOR", IP_ORIGEN))
+                .isInstanceOf(JerarquiaInsuficienteException.class);
+            verifyNoInteractions(segundoFactor);
+        }
+
+        @Test
+        @DisplayName("sin motivo no se restablece")
+        void exigeMotivo() {
+            conRol("MODERADOR");
+
+            assertThatThrownBy(() -> service.restablecerSegundoFactor(USUARIO_ID, "   ", "simon", UID_ACTOR,
+                    "SUPER_ADMINISTRADOR", IP_ORIGEN))
+                .isInstanceOf(IllegalArgumentException.class);
+            verifyNoInteractions(segundoFactor, auditoriaClient);
+        }
+
+        @Test
+        @DisplayName("si la auditoria no responde, el error sube y la transaccion se deshace")
+        void auditoriaFailClosed() {
+            conRol("MODERADOR");
+            doThrow(new com.nexusbattles.ms_identidad.auditoria.client.AuditoriaNoDisponibleException("caida"))
+                    .when(auditoriaClient).registrar(any(), any(), any(), any(), any(), any(), any());
+
+            assertThatThrownBy(() -> service.restablecerSegundoFactor(USUARIO_ID, "Perdió el teléfono", "simon",
+                    UID_ACTOR, "SUPER_ADMINISTRADOR", IP_ORIGEN))
+                .isInstanceOf(com.nexusbattles.ms_identidad.auditoria.client.AuditoriaNoDisponibleException.class);
+            verifyNoInteractions(notificacionClient);
+        }
     }
 }

@@ -123,12 +123,18 @@ export async function pedirLogin(credenciales, fetchImpl = globalThis.fetch) {
  * (`destinoDeCuentaNueva`): es la pantalla que le dice qué le dio el juego.
  *
  * @param {{token: string, apodo?: string, rol?: string, uid?: string, usuarioId?: unknown, onboardingListo?: boolean}} body
- * @param {{volver?: string|null, cuentaNueva?: boolean, almacen?: Storage, base?: string}} [opciones]
+ * @param {{volver?: string|null, cuentaNueva?: boolean, almacen?: Storage, base?: string, ahora?: () => number}} [opciones]
  * @returns {string} URL de destino
  */
 export function entrarCon(
   body,
-  { volver = null, cuentaNueva = false, almacen = globalThis.sessionStorage, base } = {},
+  {
+    volver = null,
+    cuentaNueva = false,
+    almacen = globalThis.sessionStorage,
+    base,
+    ahora = () => Date.now(),
+  } = {},
 ) {
   guardarSesion(
     {
@@ -136,6 +142,8 @@ export function entrarCon(
       apodo: body.apodo,
       rol: body.rol,
       uid: body.uid ?? identificadorDeSesion(body.token, body.usuarioId),
+      // 7.3.9 — el token acaba de llegar: se mide el desfase del reloj.
+      recibidoEn: ahora(),
     },
     almacen,
   );

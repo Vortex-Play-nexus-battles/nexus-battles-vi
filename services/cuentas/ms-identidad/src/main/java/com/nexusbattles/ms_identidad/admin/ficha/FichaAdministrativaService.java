@@ -118,7 +118,10 @@ public class FichaAdministrativaService {
     private boolean auditar(Usuario cuenta, String administrador, String ipOrigen) {
         String quien = administrador == null || administrador.isBlank() ? DESCONOCIDO : administrador;
         String desde = ipOrigen == null || ipOrigen.isBlank() ? DESCONOCIDA : ipOrigen;
-        String afectado = String.valueOf(cuenta.getId());
+        // El uid, como el resto de acciones del panel: es la clave con que se
+        // reune el historial administrativo de la cuenta.
+        String afectado = cuenta.getPublicId() != null ? cuenta.getPublicId().toString()
+                : String.valueOf(cuenta.getId());
         try {
             auditoria.registrar(TIPO, quien, afectado, null, null, MOTIVO, desde);
             return true;

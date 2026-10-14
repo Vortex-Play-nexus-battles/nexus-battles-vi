@@ -37,7 +37,15 @@
 import { rutaDeApi } from './base-api.js';
 import { escucharCanal } from './canal-sesion.js';
 import { cuerpoDelToken } from './identidad.js';
-import { MOTIVOS, leerSesion, olvidarSesion, rutaSegura, urlDeLogin } from './sesion.js';
+import {
+  MOTIVOS,
+  ahoraEnElServidor,
+  desfaseDelReloj,
+  leerSesion,
+  olvidarSesion,
+  rutaSegura,
+  urlDeLogin,
+} from './sesion.js';
 
 /** Evento que emite el interceptor HTTP cuando un servicio rechaza el token. */
 export const EVENTO_RECHAZO = 'nexus:credencial-rechazada';
@@ -163,14 +171,22 @@ export function crearVigilante({
     navegar(destinoFinal);
   }
 
-  /** Programa el aviso de caducidad para el instante que dice el token. */
+  /**
+   * Programa el aviso de caducidad para el instante que dice el token, en la
+   * hora del servidor (7.3.9: un reloj local descuadrado no adelanta ni
+   * retrasa el cierre).
+   */
   function programarCaducidad() {
     reloj.clearTimeout(temporizador);
-    const expira = caducidadDe(leerSesion(almacen, ahora));
+    const sesion = leerSesion(almacen, ahora);
+    const expira = caducidadDe(sesion);
     if (expira === null) {
       return;
     }
-    const restante = Math.min(Math.max(expira - ahora(), 0), MAXIMO_TEMPORIZADOR_MS);
+    const restante = Math.min(
+      Math.max(expira - ahoraEnElServidor(almacen, ahora, sesion.token), 0),
+      MAXIMO_TEMPORIZADOR_MS,
+    );
     temporizador = reloj.setTimeout(revisar, restante);
   }
 
@@ -266,7 +282,15 @@ export function crearVigilante({
         if (!sesion.autenticado) {
           return null;
         }
-        return { token: sesion.token, apodo: sesion.apodo, rol: sesion.rol, uid: sesion.uid };
+        // El desfase va con la sesión: la otra pestaña es el mismo equipo y
+        // el mismo reloj (7.3.9).
+        return {
+          token: sesion.token,
+          apodo: sesion.apodo,
+          rol: sesion.rol,
+          uid: sesion.uid,
+          desfase: desfaseDelReloj(almacen, sesion.token),
+        };
       },
     }),
   );

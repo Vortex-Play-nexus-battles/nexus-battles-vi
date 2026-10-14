@@ -31,8 +31,16 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Bitacora de auditoria (ms-cumplimiento)
-  version: 1.1.1
+  version: 1.2.0
   description: |
+    **1.2.0 (§7.3.4, ficha administrativa del usuario — SA-3), aditivo:**
+    `GET /api/v1/admin/auditoria` y `GET /api/v1/admin/auditoria/exportar`
+    admiten `afectado` (repetible), la cuenta o el comentario sobre el que se
+    actuo, con coincidencia exacta. Se puede repetir porque `afectado` guarda
+    a veces el `uid` y a veces la clave numerica de la misma cuenta: la ficha
+    pide los dos. Los valores en blanco se ignoran. Mismo acceso que antes
+    (solo SUPER_ADMINISTRADOR con segundo factor).
+
     **1.1.1 (B0, solo forma):** `GET /api/v1/admin/auditoria/exportar`
     (HU-AUD-004, #715) estaba escrito con catorce espacios de mas, anidado
     dentro del esquema del 503 de `POST /eventos`: el YAML era valido pero la
@@ -150,6 +158,19 @@ paths:
             blanco se trata como ausente.
           schema:
             type: string
+        - name: afectado
+          in: query
+          required: false
+          description: |
+            1.2.0 — la cuenta o el comentario afectado, con coincidencia
+            exacta. Repetible (`?afectado=<uid>&afectado=<clave>`): se devuelve
+            lo que coincide con cualquiera. Los valores en blanco se ignoran.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
         - name: tipoAccion
           in: query
           required: false
@@ -374,6 +395,19 @@ paths:
             blanco se trata como ausente.
           schema:
             type: string
+        - name: afectado
+          in: query
+          required: false
+          description: |
+            1.2.0 — la cuenta o el comentario afectado, con coincidencia
+            exacta. Repetible (`?afectado=<uid>&afectado=<clave>`): se devuelve
+            lo que coincide con cualquiera. Los valores en blanco se ignoran.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
         - name: tipoAccion
           in: query
           required: false

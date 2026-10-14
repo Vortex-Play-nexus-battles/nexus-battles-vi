@@ -19,7 +19,12 @@ import java.util.UUID;
  * tres llamadas a otros servicios.
  *
  * <ul>
- *   <li>El texto es obligatorio (RN-CMT-001).</li>
+ *   <li>El texto es obligatorio (RN-CMT-001) y tiene como mucho
+ *       {@link #MAXIMO_DE_CARACTERES} caracteres (contrato 1.11.0, decision del
+ *       Product Owner sobre el issue 34). Se cuentan caracteres —puntos de
+ *       codigo—, no unidades UTF-16: un emoji cuenta uno, como lo ve quien
+ *       escribe, y nada que el navegador deje escribir con su {@code maxlength}
+ *       de 2000 se rechaza aqui.</li>
  *   <li>Las estrellas, si vienen, van de 1 a 5.</li>
  *   <li>Las imagenes son los {@code id} que devolvio {@code POST
  *       /comentarios/imagenes} (contrato 1.4.0), como mucho
@@ -47,15 +52,38 @@ public record SolicitudDePublicacion(
         Integer estrellas,
         Instant fecha) {
 
+    /** Largo maximo del texto de un comentario, en caracteres (contrato 1.11.0). */
+    public static final int MAXIMO_DE_CARACTERES = 2000;
+
     public SolicitudDePublicacion {
         if (texto == null || texto.isBlank()) {
             throw new IllegalArgumentException("el texto del comentario es obligatorio");
+        }
+        int caracteres = texto.codePointCount(0, texto.length());
+        if (caracteres > MAXIMO_DE_CARACTERES) {
+            throw new TextoDemasiadoLargo(caracteres);
         }
         if (estrellas != null) {
             Calificacion.exigirEstrellas(estrellas);
         }
         imagenes = imagenes == null ? List.of() : List.copyOf(imagenes);
         exigirIdentificadoresDeImagen(imagenes);
+    }
+
+    /**
+     * El texto pasa de {@link #MAXIMO_DE_CARACTERES}: 400
+     * {@code texto-demasiado-largo}. Es un {@link IllegalArgumentException} como
+     * el resto de rechazos de forma, con su propio {@code type} para que la
+     * interfaz lo explique sin leer el detalle.
+     */
+    public static final class TextoDemasiadoLargo extends IllegalArgumentException {
+
+        private static final long serialVersionUID = 1L;
+
+        public TextoDemasiadoLargo(int caracteres) {
+            super("un comentario tiene como mucho " + MAXIMO_DE_CARACTERES
+                    + " caracteres y este tiene " + caracteres);
+        }
     }
 
     private static void exigirIdentificadoresDeImagen(List<String> imagenes) {

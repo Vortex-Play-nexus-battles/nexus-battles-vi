@@ -36,8 +36,59 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Autenticacion e identidad (ms-identidad)
-  version: 2.2.0
+  version: 2.4.0
   description: |
+    ### Cambios en 2.4.0 (§7.3.2 — apelacion sin sesion, SA-4; implementado, aditivo)
+
+    - **El sancionado puede apelar aunque no pueda entrar.** §7.3.2 da a todo
+      sancionado el derecho a apelar, y una cuenta suspendida o baneada no
+      puede iniciar sesion (RF-USR-007 deja sin decir si el baneado conserva
+      el portal: no lo conserva). Con la contrasena correcta, el 403
+      `cuenta-suspendida` o `cuenta-baneada` del login (y del segundo paso)
+      trae `apelacion: {codigo, expiraEn}` (`CodigoDeApelacion`): un valor
+      opaco de 256 bits, guardado solo resumido, que vive 30 minutos y caduca
+      si la cuenta cambia de contrasena o de rol. Solo viaja con
+      `Accept: application/problem+json`.
+    - Con ese codigo, dos rutas publicas y nada mas:
+      `POST /api/v1/auth/apelacion/consulta` (la sancion que impide entrar,
+      hasta cuando se apela y como va la ultima apelacion, con su plazo de
+      decision de 15 dias habiles) y `POST /api/v1/auth/apelacion` (presenta
+      la apelacion; un exito gasta el codigo). ms-identidad pregunta y apela
+      en moderacion-sanciones EN NOMBRE de la cuenta, con su credencial de
+      servicio (`moderacion-sanciones-consulta.yaml` 1.5.0). El codigo no es
+      un JWT ni sirve ante ningun otro servicio, y no abre sesion.
+    - Las dos rutas cuentan en el limite de frecuencia de acceso del borde,
+      como el login.
+
+    ### Cambios en 2.3.0 (7.3.9 — sesiones administrativas; implementado)
+
+    - **Segundo factor obligatorio por omision para Moderador, Administrador y
+      Super Administrador** (RF-AUT-007, CA-04): la lista
+      `IDENTIDAD_2FA_OBLIGATORIO_ROLES` trae esos tres roles cuando no se
+      configura otra. Una cuenta administrativa sin segundo factor recibe en
+      su login el 403 `segundo-factor-enrolamiento-requerido` de 2.2.0 y se
+      enrola antes de entrar; una que ya lo tiene, el 403
+      `segundo-factor-requerido`. La forma de las respuestas no cambia.
+    - `POST /auth/segundo-factor/desactivacion` responde **409**
+      `.../errors/segundo-factor-obligatorio` a una cuenta cuyo rol lo exige:
+      quitarselo a uno mismo dejaria la cuenta entrando solo con la contrasena.
+      Si se perdio la aplicacion y los codigos, lo restablece un Super
+      Administrador (`ms-identidad-admin.yaml` 1.6.0).
+    - **Timeout por inactividad**: el token de un rol administrativo caduca a
+      los **15 minutos** (`IDENTIDAD_MINUTOS_SESION_ADMINISTRATIVA`) y la
+      consola lo renueva mientras se usa con la nueva
+      `POST /auth/sesion/renovacion`. Sin actividad, el servidor deja de
+      aceptarlo: el cierre no depende de que la pestana siga abierta. Ninguna
+      sesion administrativa pasa de **12 horas** desde que se autentico
+      (`IDENTIDAD_HORAS_MAXIMAS_SESION_ADMINISTRATIVA`) sin volver a escribir
+      contrasena y segundo factor. Los jugadores siguen con 24 h.
+    - Claim nuevo **`auth_time`** (OIDC Core §2): segundos desde la epoca en
+      que la persona se autentico. Una renovacion lo conserva, igual que `amr`.
+    - El bloqueo temporal por intentos fallidos (RF-AUT-009) queda en la
+      auditoria de ms-cumplimiento (`BLOQUEADA_TEMPORALMENTE`, motivo
+      `BLOQUEO_POR_INTENTOS_FALLIDOS`, con la IP), una vez por bloqueo. El
+      umbral sale de `IDENTIDAD_INTENTOS_FALLIDOS` (3 por omision).
+
     ### Cambios en 2.2.0 (RFINAL-05, HU-AUT-007 #502 — segundo factor TOTP), todos aditivos
 
     RF-AUT-007 pide segundo factor obligatorio para Moderador, Administrador y
@@ -232,8 +283,12 @@ info:
       tambien `mfa` y `hwk`). Los tokens emitidos antes de 2.2.0 no lo traen:
       ausente equivale a «sin segundo factor».
     - `iss` — emisor, `ms-identidad` por omision (`app.jwt.emisor`).
-    - `iat` / `exp` — emision y expiracion; **24 horas** por omision
-      (`app.jwt.horas-expiracion`).
+    - `iat` / `exp` — emision y expiracion; **24 horas** por omision para un
+      jugador (`app.jwt.horas-expiracion`) y, desde 2.3.0, **15 minutos**
+      renovables para Moderador, Administrador y Super Administrador.
+    - `auth_time` — 2.3.0, cuando se autentico la sesion (segundos desde la
+      epoca). Lo conserva la renovacion; ausente en tokens anteriores (se toma
+      `iat`).
 
     ### Los errores de este servicio NO son uniformes
 
@@ -275,6 +330,8 @@ tags:
     description: Claves publicas y credenciales de servicio (ADR-002, ADR-005)
   - name: segundo-factor
     description: Segundo factor TOTP de la propia cuenta y segundo paso del login (2.2.0, HU-AUT-007)
+  - name: apelacion
+    description: Apelacion sin sesion de una cuenta suspendida o baneada (2.4.0, §7.3.2)
 
 paths:
   /api/v1/auth/registro:
@@ -501,6 +558,13 @@ paths:
             en texto plano llega el `detail` («escribe el codigo de tu
             aplicacion de autenticacion»), que es lo que un cliente anterior
             puede enseñar. Ninguno de los dos casos trae `token`.
+
+            **2.4.0:** `cuenta-suspendida` y `cuenta-baneada` traen ademas
+            `apelacion` (`CodigoDeApelacion`): el codigo con el que la cuenta
+            ve la sancion que le impide entrar y la apela sin sesion en
+            `POST /api/v1/auth/apelacion/consulta` y `POST /api/v1/auth/apelacion`.
+            Falta si la cuenta no tiene `uid` o si no se pudo emitir: el 403
+            sale igual.
           content:
             text/plain:
               schema:
@@ -510,6 +574,7 @@ paths:
                 anyOf:
                   - $ref: '#/components/schemas/ProblemDetail'
                   - $ref: '#/components/schemas/DesafioDeSegundoFactor'
+                  - $ref: '#/components/schemas/RechazoConApelacion'
               example:
                 type: https://nexusbattles.upb.edu.co/errors/segundo-factor-requerido
                 title: Falta el segundo factor
@@ -619,11 +684,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
         '403':
-          description: Los mismos estados de cuenta que el 403 de `POST /api/v1/auth/login` (baneada, suspendida, inactiva, sin verificar).
+          description: >-
+            Los mismos estados de cuenta que el 403 de `POST /api/v1/auth/login`
+            (baneada, suspendida, inactiva, sin verificar). 2.4.0: la suspendida
+            y la baneada traen tambien `apelacion`.
           content:
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/ProblemDetail'
+                anyOf:
+                  - $ref: '#/components/schemas/ProblemDetail'
+                  - $ref: '#/components/schemas/RechazoConApelacion'
         '423':
           description: '`.../errors/cuenta-bloqueada` — RF-AUT-009: no se compara ningun codigo mientras dure el bloqueo.'
           content:
@@ -760,6 +830,114 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
 
+  /api/v1/auth/apelacion/consulta:
+    post:
+      tags: [apelacion]
+      operationId: consultarApelacionSinSesion
+      summary: La sancion que impide entrar y como va su apelacion (2.4.0)
+      description: |
+        **Ruta publica**: quien la llama no tiene sesion; lo que la autoriza es
+        el `codigo` del 403 `cuenta-suspendida` o `cuenta-baneada` del login.
+        Consultar no gasta el codigo. La respuesta sale de moderacion-sanciones
+        (`EstadoDeApelacionSinSesion` de `moderacion-sanciones-consulta.yaml`
+        1.5.0), sin quien emitio la sancion ni quien resolvio la apelacion.
+        No se guarda en cache.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [codigo]
+              properties:
+                codigo: { type: string, maxLength: 128 }
+      responses:
+        '200':
+          description: El estado de la apelacion de la cuenta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoDeApelacionSinSesion'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          description: >-
+            `.../errors/codigo-de-apelacion-invalido` — el codigo no existe,
+            caduco, ya se uso o la cuenta cambio de contrasena o de rol: hay
+            que volver a iniciar sesion con la contrasena.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '429':
+          description: El limite de frecuencia de acceso del borde (`demasiadas-peticiones`).
+        '503':
+          description: '`.../errors/moderacion-no-disponible` — moderacion-sanciones no responde.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/auth/apelacion:
+    post:
+      tags: [apelacion]
+      operationId: presentarApelacionSinSesion
+      summary: Presenta la apelacion de una cuenta que no puede entrar (2.4.0)
+      description: |
+        **Ruta publica**, autorizada por el `codigo` del login. Lleva la
+        `sancionId` que la persona vio en la consulta y su `argumento`; las
+        reglas son las de toda apelacion (§7.3.2: dentro de los 30 dias, una
+        abierta por sancion) y solo se apela la sancion que impide entrar. Un
+        exito gasta el codigo; un rechazo, no (sirve para consultar por que).
+        La persona recibe el aviso de que su apelacion llego y la fecha
+        limite de la decision (15 dias habiles).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [codigo, sancionId, argumento]
+              properties:
+                codigo: { type: string, maxLength: 128 }
+                sancionId: { type: string, format: uuid }
+                argumento: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '201':
+          description: Apelacion abierta y asignada al panel.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApelacionDeLaCuenta'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          description: '`.../errors/codigo-de-apelacion-invalido`, como en la consulta.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: >-
+            `.../errors/apelacion-no-procede` — fuera de plazo, ya hay una
+            abierta, o la sancion ya no es la que impide entrar.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '429':
+          description: El limite de frecuencia de acceso del borde (`demasiadas-peticiones`).
+        '503':
+          description: >-
+            `.../errors/moderacion-no-disponible` — moderacion-sanciones no
+            responde: la apelacion no se registro.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
   /api/v1/auth/logout:
     post:
       tags: [cuenta]
@@ -779,6 +957,48 @@ paths:
           description: Cierre registrado.
         '403':
           description: Sin token, o con un token invalido, caducado o revocado (interceptor fail-closed).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/auth/sesion/renovacion:
+    post:
+      tags: [cuenta]
+      operationId: renovarSesion
+      summary: Renueva la sesion en uso con la misma autenticacion (2.3.0, 7.3.9)
+      description: |
+        La consola la llama mientras la persona trabaja para que su token de
+        15 minutos no caduque. Devuelve un token nuevo con la misma `sub`,
+        `rol`, `ver`, `uid`, `amr` y **`auth_time`**: renovar no es volver a
+        autenticarse.
+
+        No renueva (401 `sesion-no-renovable`) un token caducado o mal
+        firmado, uno cuya version ya no vale (cambio de rol, sancion,
+        contrasena o segundo factor restablecido), el de una cuenta que ya no
+        esta `ACTIVO`, ni una sesion que ya cumplio su duracion maxima desde
+        `auth_time` (12 h para los roles administrativos, 24 h para un
+        jugador, que no gana tiempo renovando). La respuesta no se guarda en
+        ninguna cache (`Cache-Control: no-store`).
+      security:
+        - tokenDeUsuario: []
+      responses:
+        '200':
+          description: Sesion renovada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, expiraEn]
+                properties:
+                  token:
+                    type: string
+                    description: El JWT nuevo; sustituye al anterior.
+                  expiraEn:
+                    type: string
+                    format: date-time
+        '401':
+          description: '`.../errors/sesion-no-renovable`: hay que volver a iniciar sesion.'
           content:
             application/problem+json:
               schema:
@@ -1881,6 +2101,82 @@ components:
               type: string
               format: date-time
               description: Instante ISO-8601 en UTC.
+
+    CodigoDeApelacion:
+      type: object
+      description: |
+        2.4.0 — el codigo para apelar sin sesion. Valor opaco y aleatorio (256
+        bits, base64url) que el servidor solo guarda resumido (SHA-256): no es
+        un JWT ni sirve ante ningun otro servicio, y no abre sesion. Vive 30
+        minutos, se gasta al presentar la apelacion y caduca si la cuenta
+        cambia de contrasena o de rol. El cliente lo guarda en memoria, nunca
+        en la URL ni en un almacenamiento persistente.
+      required: [codigo, expiraEn]
+      properties:
+        codigo: { type: string, minLength: 32, maxLength: 128 }
+        expiraEn: { type: string, format: date-time, description: Instante ISO-8601 en UTC. }
+
+    RechazoConApelacion:
+      description: 2.4.0 — el 403 `cuenta-suspendida` o `cuenta-baneada` con su codigo de apelacion.
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetail'
+        - type: object
+          properties:
+            suspendidoHasta: { type: string, format: date-time }
+            apelacion:
+              $ref: '#/components/schemas/CodigoDeApelacion'
+
+    SancionQueImpideEntrar:
+      type: object
+      description: 2.4.0 — la sancion tal como la ve quien la tiene, sin quien la emitio.
+      required: [id, tipo, motivo, emitidaEn]
+      properties:
+        id: { type: string, format: uuid }
+        tipo: { type: string, enum: [SUSPENSION, BANEO] }
+        causal:
+          type: [string, 'null']
+          description: Una de las ocho causales de §7.3.2 (`Causal` de moderacion-sanciones-admin.yaml 1.4.0).
+        motivo: { type: string }
+        politica: { type: [string, 'null'] }
+        emitidaEn: { type: string, format: date-time }
+        vigenteHasta: { type: [string, 'null'], format: date-time, description: Solo SUSPENSION. }
+
+    ApelacionDeLaCuenta:
+      type: object
+      description: 2.4.0 — una apelacion, sin quien la resolvio.
+      required: [id, sancionId, estado, creadaEn, decisionAntesDe, vencida]
+      properties:
+        id: { type: string, format: uuid }
+        sancionId: { type: string, format: uuid }
+        estado: { type: string, enum: [PENDIENTE, MANTENIDA, REDUCIDA, REVERTIDA] }
+        argumento: { type: string }
+        creadaEn: { type: string, format: date-time }
+        decisionAntesDe:
+          type: string
+          format: date-time
+          description: Final del decimoquinto dia habil desde `creadaEn` (§7.3.2), hora de Colombia.
+        vencida: { type: boolean }
+        decisionMotivo: { type: [string, 'null'] }
+        resueltaEn: { type: [string, 'null'], format: date-time }
+        nuevaVigencia: { type: [string, 'null'], format: date-time }
+
+    EstadoDeApelacionSinSesion:
+      type: object
+      required: [puedeApelar]
+      properties:
+        sancion:
+          oneOf:
+            - $ref: '#/components/schemas/SancionQueImpideEntrar'
+            - type: 'null'
+        apelableHasta: { type: [string, 'null'], format: date-time }
+        puedeApelar: { type: boolean }
+        motivoNoApelable:
+          type: [string, 'null']
+          enum: [SIN_SANCION, FUERA_DE_PLAZO, APELACION_ABIERTA, null]
+        apelacion:
+          oneOf:
+            - $ref: '#/components/schemas/ApelacionDeLaCuenta'
+            - type: 'null'
 
     CanjeDeDesafioRequest:
       type: object

@@ -31,6 +31,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 import static com.nexusbattles.ms_cumplimiento.auditoria.repository.AuditLogSpecifications.*;
@@ -89,7 +90,23 @@ public class AuditLogService {
                                     Instant desde,
                                     Instant hasta,
                                     Pageable pageable) {
-        Specification<AuditLog> spec = construirEspecificacion(administradorId, tipoAccion, desde, hasta);
+        return consultar(administradorId, List.of(), tipoAccion, desde, hasta, pageable);
+    }
+
+    /**
+     * Con {@code afectados} (contrato 1.2.0): solo los registros sobre esa
+     * cuenta o ese comentario, para el historial de actividad de la ficha
+     * administrativa (§7.3.4). Vacio no filtra.
+     */
+    @Transactional(readOnly = true, propagation = Propagation.SUPPORTS)
+    public Page<AuditLog> consultar(String administradorId,
+                                    Collection<String> afectados,
+                                    AuditActionType tipoAccion,
+                                    Instant desde,
+                                    Instant hasta,
+                                    Pageable pageable) {
+        Specification<AuditLog> spec =
+            construirEspecificacion(administradorId, afectados, tipoAccion, desde, hasta);
         return repository.findAll(spec, pageable);
     }
 
@@ -100,7 +117,20 @@ public class AuditLogService {
                               Instant hasta,
                               String administradorQueExporta,
                               String ipOrigenDeLaExportacion) {
-        Specification<AuditLog> spec = construirEspecificacion(administradorId, tipoAccion, desde, hasta);
+        return exportarPdf(administradorId, List.of(), tipoAccion, desde, hasta,
+            administradorQueExporta, ipOrigenDeLaExportacion);
+    }
+
+    @Transactional(readOnly = true, propagation = Propagation.SUPPORTS)
+    public byte[] exportarPdf(String administradorId,
+                              Collection<String> afectados,
+                              AuditActionType tipoAccion,
+                              Instant desde,
+                              Instant hasta,
+                              String administradorQueExporta,
+                              String ipOrigenDeLaExportacion) {
+        Specification<AuditLog> spec =
+            construirEspecificacion(administradorId, afectados, tipoAccion, desde, hasta);
 
         long total = repository.count(spec);
         if (total > maximoRegistrosPorExportacion) {
@@ -211,6 +241,7 @@ public class AuditLogService {
     }
 
     private Specification<AuditLog> construirEspecificacion(String administradorId,
+                                                            Collection<String> afectados,
                                                             AuditActionType tipoAccion,
                                                             Instant desde,
                                                             Instant hasta) {
@@ -218,6 +249,11 @@ public class AuditLogService {
 
         if (administradorId != null && !administradorId.isBlank()) {
             spec = spec.and(conAdministrador(administradorId));
+        }
+
+        Specification<AuditLog> sobreAfectados = conAfectado(afectados);
+        if (sobreAfectados != null) {
+            spec = spec.and(sobreAfectados);
         }
 
         if (tipoAccion != null) {

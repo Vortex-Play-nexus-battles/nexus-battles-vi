@@ -84,7 +84,7 @@ class AdminDirectorioControllerTest {
     /** El listado sin los filtros de 1.3.0 (rol, estado, fechas): la llamada de siempre. */
     private static PaginaAdminResponse<AdminUsuarioDirectorioResponse> listar(
             AdminDirectorioController controlador, String buscar, boolean ocultarPruebas, int page, int size) {
-        return controlador.listar(buscar, ocultarPruebas, null, null, null, null, page, size);
+        return controlador.listar(buscar, ocultarPruebas, null, null, null, null, null, page, size);
     }
 
     private static Usuario usuario(String apodo, String email, String rol) {
@@ -281,7 +281,7 @@ class AdminDirectorioControllerTest {
                         PageRequest.of(1, 20), 21));
 
         PaginaAdminResponse<AdminUsuarioDirectorioResponse> respuesta = controlador()
-                .listar(null, false, "MODERADOR", "ACTIVO", "2026-09-01", "2026-09-30", 1, 20);
+                .listar(null, false, "MODERADOR", "ACTIVO", "2026-09-01", "2026-09-30", null, 1, 20);
 
         ArgumentCaptor<Pageable> pedido = ArgumentCaptor.forClass(Pageable.class);
         verify(directorio).findAll(any(Specification.class), pedido.capture());
@@ -296,7 +296,7 @@ class AdminDirectorioControllerTest {
         AdminDirectorioController controlador = controlador();
 
         assertThrows(ConsultaInvalidaException.class,
-                () -> controlador.listar(null, false, "PIRATA", null, null, null, 0, 20));
+                () -> controlador.listar(null, false, "PIRATA", null, null, null, null, 0, 20));
 
         verifyNoInteractions(usuarioRepository, directorio);
     }

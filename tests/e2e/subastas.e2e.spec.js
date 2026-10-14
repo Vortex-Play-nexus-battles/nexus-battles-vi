@@ -395,14 +395,27 @@ test.describe('Transferencia de propiedad al ganar una subasta (HU-SUB-004)', ()
       },
       [compradora.token, COMPRADORA],
     );
+    // Revisión final del inventario (13-oct, inventario.yaml 1.7.0): cada
+    // pestaña pide su página (`categoria=HEROES|OBJETOS`) y la primera es la de
+    // héroes. El objeto comprado llega en la de OBJETOS.
     const vitrina = page.waitForResponse(
-      (r) => r.url().includes('/api/v1/inventario/elementos') && r.request().method() === 'GET',
+      (r) =>
+        r.url().includes('/api/v1/inventario/elementos') &&
+        r.url().includes('categoria=OBJETOS') &&
+        r.request().method() === 'GET',
     );
-    await page.goto(`${BORDE}/frontend/app-web/src/contenido/inventario/inventario.html`);
+    await page.goto(`${BORDE}/frontend/app-web/src/contenido/inventario/inventario.html#objetos`);
     const respuesta = await vitrina;
     expect(respuesta.status()).toBe(200);
     const cuerpo = await respuesta.json();
     expect(cuerpo.elementos.some((elemento) => elemento.id === elementoId)).toBe(true);
+    // Y se ve: su tarjeta está en la vitrina de «Objetos».
+    const comprado = buscar(cuerpo.elementos, elementoId);
+    await expect(
+      page.locator('.inventario__panel--objetos .vitrina__nombre', {
+        hasText: comprado.nombrePropio,
+      }),
+    ).toBeVisible({ timeout: 20_000 });
   });
 });
 

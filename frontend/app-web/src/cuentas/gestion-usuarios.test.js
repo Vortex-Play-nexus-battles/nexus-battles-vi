@@ -3,7 +3,9 @@ import { setCurrentRole, setPermissionMatrix } from './directives/has-permission
 import {
   abrirFichaDesdeLaDireccion,
   cargarMatrizYVerificarAcceso,
+  clasificarBusqueda,
   configurarEventos,
+  RESULTADOS_POR_BUSQUEDA,
   usuarioDeLaDireccion,
 } from './gestion-usuarios.js';
 
@@ -187,10 +189,12 @@ describe('FI-R3 - la busqueda de usuario consulta al servicio', () => {
   function domDeBusqueda() {
     document.body.innerHTML = `
       <form id="form-buscar-usuario">
-        <input id="usuario-id" type="number" />
+        <input id="usuario-id" type="search" />
         <button type="submit" id="btn-buscar">Buscar</button>
       </form>
       <div id="mensaje-busqueda" hidden></div>
+      <div id="resultados-busqueda" hidden></div>
+      <a id="enlace-ficha-usuario" hidden></a>
       <div id="panel-usuario" hidden>
         <dd id="usuario-id-mostrado">-</dd>
         <dd id="usuario-apodo-mostrado">-</dd>
@@ -252,8 +256,12 @@ describe('FI-R3 - la busqueda de usuario consulta al servicio', () => {
     expect(panelVisible()).toBe(true);
     expect(document.getElementById('usuario-apodo-mostrado').textContent).toBe('nyx_valiente');
     expect(document.getElementById('usuario-email-mostrado').textContent).toBe('nyx@example.com');
-    expect(document.getElementById('usuario-rol-mostrado').textContent).toBe('MODERADOR');
-    expect(document.getElementById('usuario-estado-mostrado').textContent).toBe('ACTIVO');
+    // SA-3 — el rol y el estado como los dice una persona, el estado con su
+    // distintivo: nunca la constante del servidor.
+    expect(document.getElementById('usuario-rol-mostrado').textContent).toBe('Moderador');
+    const estado = document.getElementById('usuario-estado-mostrado');
+    expect(estado.textContent.trim()).toBe('Activa');
+    expect(estado.querySelector('.estado-admin[data-estado="ACTIVO"]')).not.toBeNull();
     expect(document.getElementById('nombres').value).toBe('Nyx');
     expect(document.getElementById('apellidos').value).toBe('Valiente');
   });
@@ -337,11 +345,13 @@ describe('FI-R3 - la busqueda de usuario consulta al servicio', () => {
   });
 
   test('un ID no valido no llega a molestar al servicio', async () => {
-    await buscar(0);
+    for (const malo of [0, -3]) {
+      await buscar(malo);
 
-    expect(globalThis.fetch).not.toHaveBeenCalled();
-    expect(mensaje()).toMatch(/v[aá]lido/i);
-    expect(panelVisible()).toBe(false);
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect(mensaje()).toMatch(/v[aá]lido/i);
+      expect(panelVisible()).toBe(false);
+    }
   });
 
   test('RFINAL-06 — el ID que se muestra es el de la cuenta buscada', async () => {
@@ -398,6 +408,228 @@ describe('FI-R3 - la busqueda de usuario consulta al servicio', () => {
 
     expect(document.body.textContent).not.toMatch(/quedar[aá] conectada/i);
     expect(document.body.textContent).not.toMatch(/cuando el backend exponga/i);
+  });
+});
+
+describe('SA-3 — buscar por apodo, correo, nombre o ID y luego elegir (§7.3.4, punto 16)', () => {
+  const ENTRADAS = {
+    contenido: [
+      {
+        id: 15,
+        uid: '11111111-2222-3333-4444-555555555555',
+        apodo: 'nyx_valiente',
+        email: 'nyx@example.com',
+        estado: 'ACTIVO',
+        rol: 'MODERADOR',
+        bloqueada: false,
+        sancionesRegistradas: 0,
+      },
+      {
+        id: 22,
+        uid: '22222222-2222-3333-4444-555555555555',
+        apodo: 'nyxie',
+        email: 'otra@example.com',
+        estado: 'SUSPENDIDO',
+        rol: 'JUGADOR',
+        bloqueada: false,
+        sancionesRegistradas: 2,
+      },
+    ],
+    pagina: 0,
+    tamano: 10,
+    total: 2,
+    totalPaginas: 1,
+  };
+  const USUARIO = {
+    id: 15,
+    apodo: 'nyx_valiente',
+    email: 'nyx@example.com',
+    estado: 'ACTIVO',
+    rolNombre: 'MODERADOR',
+  };
+
+  function dom() {
+    document.body.innerHTML = `
+      <form id="form-buscar-usuario">
+        <input id="usuario-id" type="search" />
+        <button type="submit" id="btn-buscar">Buscar</button>
+      </form>
+      <div id="mensaje-busqueda" hidden></div>
+      <div id="resultados-busqueda" hidden></div>
+      <a id="enlace-ficha-usuario" hidden></a>
+      <div id="panel-usuario" hidden>
+        <dd id="usuario-id-mostrado">-</dd>
+        <dd id="usuario-apodo-mostrado">-</dd>
+        <dd id="usuario-email-mostrado">-</dd>
+        <dd id="usuario-rol-mostrado">-</dd>
+        <dd id="usuario-estado-mostrado">-</dd>
+      </div>
+    `;
+  }
+
+  async function asentar() {
+    for (let i = 0; i < 8; i++) {
+      await Promise.resolve();
+    }
+  }
+
+  async function buscar(texto) {
+    document.getElementById('usuario-id').value = texto;
+    document
+      .getElementById('form-buscar-usuario')
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await asentar();
+  }
+
+  const resultados = () => document.getElementById('resultados-busqueda');
+  const mensaje = () => document.getElementById('mensaje-busqueda').textContent;
+  const panelVisible = () => document.getElementById('panel-usuario').hidden === false;
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    dom();
+    configurarEventos();
+    globalThis.fetch = jest.fn();
+  });
+
+  test('qué se escribió decide cómo se busca', () => {
+    expect(clasificarBusqueda('15')).toEqual({ tipo: 'id', valor: '15' });
+    expect(clasificarBusqueda('  15 ')).toEqual({ tipo: 'id', valor: '15' });
+    expect(clasificarBusqueda('0').tipo).toBe('invalido');
+    expect(clasificarBusqueda('-4').tipo).toBe('invalido');
+    expect(clasificarBusqueda('').tipo).toBe('vacio');
+    expect(clasificarBusqueda('n').tipo).toBe('corto');
+    expect(clasificarBusqueda('nyx@example.com')).toEqual({
+      tipo: 'texto',
+      valor: 'nyx@example.com',
+    });
+    expect(clasificarBusqueda('Ana Rueda').tipo).toBe('texto');
+    expect(clasificarBusqueda('11111111-2222-3333-4444-555555555555').tipo).toBe('texto');
+  });
+
+  test('un apodo busca en el directorio y enseña las cuentas sin abrir ninguna', async () => {
+    globalThis.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ENTRADAS });
+
+    await buscar('nyx');
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch.mock.calls[0][0]).toBe(
+      `/api/v1/admin/jugadores?buscar=nyx&page=0&size=${RESULTADOS_POR_BUSQUEDA}`,
+    );
+    expect(resultados().hidden).toBe(false);
+    expect(panelVisible()).toBe(false);
+    const filas = [...resultados().querySelectorAll('tbody tr')].map((tr) => tr.textContent);
+    expect(filas).toHaveLength(2);
+    expect(filas[0]).toContain('nyx_valiente');
+    expect(filas[0]).toContain('nyx@example.com');
+    expect(filas[0]).toContain('Moderador');
+    expect(filas[0]).toContain('Activa');
+    expect(filas[1]).toContain('Suspendida');
+    expect(resultados().textContent).not.toMatch(/MODERADOR|SUSPENDIDO|[0-9a-f]{8}-[0-9a-f]{4}/);
+    expect(resultados().querySelector('.tabla-admin__resumen').textContent).toBe(
+      '2 cuentas coinciden',
+    );
+  });
+
+  test('el correo o el nombre se mandan codificados', async () => {
+    globalThis.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => ENTRADAS });
+
+    await buscar('Ana Pérez');
+
+    expect(globalThis.fetch.mock.calls[0][0]).toBe(
+      `/api/v1/admin/jugadores?buscar=Ana%20P%C3%A9rez&page=0&size=${RESULTADOS_POR_BUSQUEDA}`,
+    );
+  });
+
+  test('elegir una cuenta la abre por su clave, y su ficha completa queda a un clic', async () => {
+    globalThis.fetch
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ENTRADAS })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => USUARIO });
+
+    await buscar('nyx');
+    const elegir = resultados().querySelector('button[data-accion="seleccionar-cuenta"]');
+    expect(elegir.getAttribute('aria-label')).toBe('Gestionar la cuenta de nyx_valiente');
+    elegir.click();
+    await asentar();
+
+    expect(globalThis.fetch.mock.calls[1][0]).toBe('/api/v1/admin/usuarios/15');
+    expect(panelVisible()).toBe(true);
+    expect(document.getElementById('usuario-apodo-mostrado').textContent).toBe('nyx_valiente');
+    const ficha = document.getElementById('enlace-ficha-usuario');
+    expect(ficha.hidden).toBe(false);
+    expect(new URL(ficha.href).pathname).toMatch(/moderacion-sanciones\/ficha-usuario\.html$/);
+    expect(new URL(ficha.href).searchParams.get('usuario')).toBe('15');
+    const enlace = resultados().querySelector('a[data-accion="ver-ficha"]');
+    expect(new URL(enlace.href).searchParams.get('usuario')).toBe('15');
+  });
+
+  test('sin coincidencias lo dice y no abre nada', async () => {
+    globalThis.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ contenido: [], pagina: 0, tamano: 10, total: 0, totalPaginas: 0 }),
+    });
+
+    await buscar('nadie_asi');
+
+    expect(mensaje()).toBe('Ninguna cuenta coincide con «nadie_asi».');
+    expect(resultados().hidden).toBe(true);
+    expect(panelVisible()).toBe(false);
+  });
+
+  test('si hay más de las que se enseñan, pide afinar', async () => {
+    globalThis.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ...ENTRADAS, total: 37, totalPaginas: 4 }),
+    });
+
+    await buscar('ny');
+
+    expect(resultados().querySelector('.tabla-admin__resumen').textContent).toContain(
+      'Las 2 primeras de 37 cuentas',
+    );
+  });
+
+  test('un 403 del directorio habla de permisos, no de que no haya nadie', async () => {
+    globalThis.fetch.mockResolvedValue({
+      ok: false,
+      status: 403,
+      clone: () => ({ json: async () => ({ detail: 'Acceso denegado' }) }),
+    });
+
+    await buscar('nyx');
+
+    expect(mensaje()).toMatch(/permiso/i);
+    expect(mensaje()).not.toMatch(/no existe|ninguna cuenta/i);
+  });
+
+  test('el directorio caído no se disfraza de búsqueda sin resultados', async () => {
+    globalThis.fetch.mockRejectedValue(new Error('sin red'));
+
+    await buscar('nyx');
+
+    expect(mensaje()).toMatch(/no responde/i);
+    expect(mensaje()).not.toMatch(/ninguna cuenta/i);
+  });
+
+  test('una letra sola no molesta al servicio', async () => {
+    await buscar('n');
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(mensaje()).toContain('al menos dos letras');
+  });
+
+  test('una búsqueda nueva cierra la cuenta abierta antes', async () => {
+    globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => USUARIO });
+    await buscar('15');
+    expect(panelVisible()).toBe(true);
+
+    globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ENTRADAS });
+    await buscar('nyx');
+
+    expect(panelVisible()).toBe(false);
+    expect(document.getElementById('enlace-ficha-usuario').hidden).toBe(true);
   });
 });
 
@@ -483,21 +715,49 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     await elegirUsuario();
   });
 
-  test('suspender pregunta en un diálogo con el apodo y la fecha, y manda la fecha fin', async () => {
+  /** Escribe en un campo del diálogo como lo haría una persona. */
+  function escribir(campo, valor) {
+    campo.value = valor;
+    campo.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  /** SA-4 (§7.3.2) — la causal del diálogo, una de las ocho del reglamento. */
+  function elegirCausal(caja, causal) {
+    const desplegable = caja.querySelector('select');
+    desplegable.value = causal;
+    desplegable.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  test('suspender pide la causal y el motivo en el diálogo, con el apodo y la fecha, y los manda con la fecha fin', async () => {
     document.getElementById('suspendido-hasta').value = '2026-10-01T10:00';
     document.getElementById('btn-suspender').click();
     await esperar();
 
     expect(dialogo().querySelector('h2').textContent).toBe('¿Suspender a nyx_valiente?');
     expect(dialogo().textContent).toMatch(/No podrá entrar al juego hasta el 1 de octubre/);
+    const confirmarBoton = dialogo().querySelector('[data-accion="confirmar"]');
+    // 7.3.9 — sin motivo no se puede confirmar.
+    expect(confirmarBoton.disabled).toBe(true);
+    escribir(dialogo().querySelector('textarea'), 'Lenguaje ofensivo reiterado');
+    // SA-4 — ni sin causal: las ocho de §7.3.2, en su orden.
+    expect(confirmarBoton.disabled).toBe(true);
+    expect(
+      [...dialogo().querySelectorAll('select option')].map((o) => o.value).filter(Boolean),
+    ).toHaveLength(8);
+    elegirCausal(dialogo(), 'LENGUAJE_OFENSIVO');
+    expect(confirmarBoton.disabled).toBe(false);
     globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
-    dialogo().querySelector('[data-accion="confirmar"]').click();
+    confirmarBoton.click();
     await esperar();
 
     const [ruta, opciones] = globalThis.fetch.mock.calls.at(-1);
     expect(ruta).toBe('/api/v1/admin/usuarios/15/suspender');
     expect(opciones.method).toBe('PUT');
-    expect(JSON.parse(opciones.body)).toEqual({ suspendidoHasta: '2026-10-01T10:00' });
+    expect(JSON.parse(opciones.body)).toEqual({
+      suspendidoHasta: '2026-10-01T10:00',
+      motivo: 'Lenguaje ofensivo reiterado',
+      causal: 'LENGUAJE_OFENSIVO',
+    });
     expect(window.confirm).not.toHaveBeenCalled();
   });
 
@@ -507,46 +767,60 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     await esperar();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     await esperar();
+    document.getElementById('suspendido-hasta').value = '2026-10-01T10:00';
+    document.getElementById('btn-suspender').click();
+    await esperar();
+    dialogo().querySelector('[data-accion="cancelar"]').click();
+    await esperar();
     expect(globalThis.fetch.mock.calls.length).toBe(llamadas);
   });
 
-  test('banear es crítico: no se confirma hasta escribir el apodo de la cuenta', async () => {
+  test('banear es crítico: causal y motivo obligatorios y, además, escribir el apodo de la cuenta', async () => {
     document.getElementById('btn-banear').click();
     await esperar();
 
     const caja = dialogo();
     expect(caja.querySelector('h2').textContent).toBe('Banear definitivamente a nyx_valiente');
     expect(caja.querySelector('.confirmacion-critica__consecuencias').textContent).toContain(
-      'No podrá volver a entrar con esta cuenta.',
+      'No podrá volver a entrar con esta cuenta y su inventario queda congelado.',
     );
-    const campo = caja.querySelector('input');
+    const motivo = caja.querySelector('textarea');
+    const palabra = caja.querySelector('input');
     const boton = caja.querySelector('[data-accion="confirmar"]');
-    expect(document.activeElement).toBe(campo);
+    // La causal va primero: el foco empieza en ella.
+    expect(document.activeElement).toBe(caja.querySelector('select'));
     expect(boton.disabled).toBe(true);
+    elegirCausal(caja, 'FRAUDE');
 
-    campo.value = 'nyx';
-    campo.dispatchEvent(new Event('input'));
+    escribir(palabra, 'nyx_valiente');
     expect(boton.disabled).toBe(true);
-
-    campo.value = 'nyx_valiente';
-    campo.dispatchEvent(new Event('input'));
+    escribir(motivo, 'corto');
+    expect(boton.disabled).toBe(true);
+    escribir(motivo, 'Fraude comprobado en subastas');
+    escribir(palabra, 'nyx');
+    expect(boton.disabled).toBe(true);
+    escribir(palabra, 'nyx_valiente');
     expect(boton.disabled).toBe(false);
     globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
     boton.click();
     await esperar();
 
-    expect(globalThis.fetch.mock.calls.at(-1)[0]).toBe('/api/v1/admin/usuarios/15/banear');
-    // Sin causal escrita el cuerpo no viaja (es opcional en el contrato).
-    expect(globalThis.fetch.mock.calls.at(-1)[1].body).toBeUndefined();
+    const [ruta, opciones] = globalThis.fetch.mock.calls.at(-1);
+    expect(ruta).toBe('/api/v1/admin/usuarios/15/banear');
+    expect(JSON.parse(opciones.body)).toEqual({
+      motivo: 'Fraude comprobado en subastas',
+      causal: 'FRAUDE',
+    });
   });
 
-  test('UXC-9 — la causal escrita viaja con la suspensión y se lee en el diálogo', async () => {
+  test('UXC-9 — la causal escrita en el formulario llega escrita al diálogo y viaja sin espacios', async () => {
     document.getElementById('suspendido-hasta').value = '2026-10-01T10:00';
     document.getElementById('motivo-sancion').value = '  Lenguaje ofensivo en el chat  ';
     document.getElementById('btn-suspender').click();
     await esperar();
 
-    expect(dialogo().textContent).toContain('Motivo: «Lenguaje ofensivo en el chat».');
+    expect(dialogo().querySelector('textarea').value).toContain('Lenguaje ofensivo en el chat');
+    elegirCausal(dialogo(), 'LENGUAJE_OFENSIVO');
     globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
     dialogo().querySelector('[data-accion="confirmar"]').click();
     await esperar();
@@ -554,6 +828,7 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     expect(JSON.parse(globalThis.fetch.mock.calls.at(-1)[1].body)).toEqual({
       suspendidoHasta: '2026-10-01T10:00',
       motivo: 'Lenguaje ofensivo en el chat',
+      causal: 'LENGUAJE_OFENSIVO',
     });
   });
 
@@ -578,8 +853,10 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     await esperar();
 
     document.getElementById('suspendido-hasta').value = '2026-10-01T10:00';
+    document.getElementById('motivo-sancion').value = 'Spam reiterado en el chat';
     document.getElementById('btn-suspender').click();
     await esperar();
+    elegirCausal(dialogo(), 'LENGUAJE_OFENSIVO');
     globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
     dialogo().querySelector('[data-accion="confirmar"]').click();
     await esperar();
@@ -587,24 +864,37 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     expect(globalThis.fetch.mock.calls.at(-1)[0]).toBe('/api/v1/admin/usuarios/15/suspender');
   });
 
-  test('UXC-9 — la causal viaja con el baneo y queda en sus consecuencias', async () => {
-    document.getElementById('motivo-sancion').value = 'Fraude en subastas';
-    document.getElementById('btn-banear').click();
-    await esperar();
+  test('7.3.9 — restablecer el segundo factor pide motivo y lo manda; sin permiso ni pregunta', async () => {
+    const boton = document.createElement('button');
+    boton.id = 'btn-restablecer-segundo-factor';
+    document.getElementById('panel-usuario').append(boton);
+    setPermissionMatrix({
+      SUPER_ADMINISTRADOR: {
+        GESTIONAR_CUENTAS: 'GRANTED',
+        RESTABLECER_SEGUNDO_FACTOR: 'GRANTED',
+      },
+    });
+    configurarEventos();
 
+    boton.click();
+    await esperar();
     const caja = dialogo();
-    expect(caja.querySelector('.confirmacion-critica__consecuencias').textContent).toContain(
-      'Motivo que queda registrado: «Fraude en subastas».',
-    );
-    const campo = caja.querySelector('input');
-    campo.value = 'nyx_valiente';
-    campo.dispatchEvent(new Event('input'));
+    expect(caja.querySelector('h2').textContent).toContain('verificación en dos pasos');
+    escribir(caja.querySelector('textarea'), 'Perdió el teléfono y los códigos');
     globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
     caja.querySelector('[data-accion="confirmar"]').click();
     await esperar();
 
     const [ruta, opciones] = globalThis.fetch.mock.calls.at(-1);
-    expect(ruta).toBe('/api/v1/admin/usuarios/15/banear');
-    expect(JSON.parse(opciones.body)).toEqual({ motivo: 'Fraude en subastas' });
+    expect(ruta).toBe('/api/v1/admin/usuarios/15/segundo-factor/restablecimiento');
+    expect(opciones.method).toBe('POST');
+    expect(JSON.parse(opciones.body)).toEqual({ motivo: 'Perdió el teléfono y los códigos' });
+
+    setCurrentRole('ADMINISTRADOR');
+    const llamadas = globalThis.fetch.mock.calls.length;
+    boton.click();
+    await esperar();
+    expect(dialogo()).toBeNull();
+    expect(globalThis.fetch.mock.calls.length).toBe(llamadas);
   });
 });

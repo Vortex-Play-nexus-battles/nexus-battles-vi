@@ -53,8 +53,10 @@ openapi: 3.1.0
 # client_credentials; el `azp` dice que servicio habla). El jugador afectado
 # viaja SIEMPRE en la peticion (`jugadorUid`, `vendedorUid`), nunca se deduce
 # del token. Un jugador con su propio token recibe 403 aunque el uid sea el
-# suyo. Excepcion unica: `GET /creditos/{uid}/saldo` lo puede consultar el
-# propio usuario (uid de la ruta = claim `uid` de su token).
+# suyo. Excepciones, solo de lectura: `GET /creditos/{uid}/saldo` y
+# `GET /creditos/{uid}/movimientos` los puede consultar el propio usuario (uid
+# de la ruta = claim `uid` de su token) y, desde 1.5.0, Administrador y Super
+# Administrador sobre cualquier uid (ficha administrativa, §7.3.4).
 #
 # Hasta 1.0.0 estas rutas estaban abiertas (`permitAll`) y el contrato lo
 # decia; cerrarlas cambia quien puede llamar, no la forma de la llamada, y
@@ -64,7 +66,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Libro de creditos
-  version: 1.4.1
+  version: 1.5.0
   description: |
     Saldo, reservas y movimientos de creditos de los jugadores.
 
@@ -93,6 +95,13 @@ info:
     movimiento a nombre del beneficiario (el ganador de una apuesta ya ve su
     ingreso) y el cofre de `/partidas/resultado` cuenta solo los creditos de
     las partidas ganadas (`cofres.yaml` 1.1.0).
+
+    **1.5.0 (§7.3.4, ficha administrativa del usuario — SA-3), sin cambio de
+    forma.** `consultarSaldo` y `listarMovimientos` los pueden leer tambien
+    Administrador y Super Administrador, sobre cualquier `uid`: la ficha
+    administrativa muestra el saldo y el «historial de transacciones» de la
+    cuenta. Solo lectura: mover saldo sigue siendo de servicios. Un moderador
+    o un jugador ajeno siguen recibiendo 403.
 
     **Brecha conocida, fuera de este contrato:** `GET /api/v1/cofres/mios` de
     ms-finanzas (HU-JUE-013) no esta en ningun contrato publicado. Queda
@@ -128,9 +137,10 @@ paths:
         Un jugador sin cuenta todavia responde 200 con todo a cero: la cuenta
         se crea con su primera operacion.
 
-        Lo consulta un servicio (cualquier `uid`) o el propio usuario (el
+        Lo consulta un servicio (cualquier `uid`), el propio usuario (el
         `uid` de la ruta tiene que ser el claim `uid` de su token; otro uid
-        responde 403).
+        responde 403) o, desde 1.5.0, Administrador y Super Administrador
+        (cualquier `uid`, para la ficha administrativa).
       security:
         - credencialDeServicio: []
         - tokenDeUsuario: []
@@ -175,8 +185,9 @@ paths:
         liberada, no movio nada). Asi la vista no la reimplementa.
 
         Mismo acceso que el saldo: un servicio consulta el de cualquiera; una
-        persona, solo el suyo (403 con otro `uid`). Es lectura, pero dice
-        cuanto aposto y cuanto gano alguien.
+        persona, solo el suyo (403 con otro `uid`); desde 1.5.0, Administrador
+        y Super Administrador el de cualquiera (ficha administrativa, §7.3.4).
+        Es lectura, pero dice cuanto aposto y cuanto gano alguien.
       security:
         - credencialDeServicio: []
         - tokenDeUsuario: []

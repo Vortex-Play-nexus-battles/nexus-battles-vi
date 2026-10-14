@@ -133,4 +133,23 @@ class FiltroDelDirectorioTest {
                 .isInstanceOf(ConsultaInvalidaException.class)
                 .hasMessageContaining("«hasta»");
     }
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("1.7.0: historial de sanciones CON o SIN, sin distinguir mayusculas; otro valor es 400")
+    void historialDeSanciones() {
+        FiltroDelDirectorio con = FiltroDelDirectorio.de(null, false, null, null, null, null, " con ");
+        FiltroDelDirectorio sin = FiltroDelDirectorio.de(null, false, null, null, null, null, "SIN");
+
+        org.assertj.core.api.Assertions.assertThat(con.historialSanciones()).isEqualTo("CON");
+        org.assertj.core.api.Assertions.assertThat(con.sinFiltros()).isFalse();
+        org.assertj.core.api.Assertions.assertThat(sin.historialSanciones()).isEqualTo("SIN");
+        org.assertj.core.api.Assertions.assertThat(
+                FiltroDelDirectorio.de(null, false, null, null, null, null, " ").historialSanciones()).isNull();
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> FiltroDelDirectorio.de(null, false, null, null, null, null, "ALGUNAS"))
+                .isInstanceOf(ConsultaInvalidaException.class)
+                .hasMessageContaining("CON o SIN");
+        org.assertj.core.api.Assertions.assertThat(FiltroDelDirectorio.conHistorialDeSanciones(true)).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(FiltroDelDirectorio.conHistorialDeSanciones(false)).isNotNull();
+    }
 }

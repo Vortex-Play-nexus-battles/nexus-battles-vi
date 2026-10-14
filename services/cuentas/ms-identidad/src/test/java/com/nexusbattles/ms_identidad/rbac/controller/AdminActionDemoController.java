@@ -11,7 +11,15 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 
 /**
- * R9.5 — aqui habia un {@code @CrossOrigin(origins = "*")}. Se fue por la
+ * SOLO PARA PRUEBAS. Una ruta protegida minima sobre la que {@code
+ * SecurityBypassTest} ejercita el interceptor (JWT, version, rol, cabecera de
+ * desarrollo). Hasta la auditoria Super Admin del 13-oct vivia en el codigo de
+ * produccion como {@code POST /api/v1/admin/ban}: respondia «Usuario X ha sido
+ * baneado definitivamente» y no baneaba a nadie. El baneo real es
+ * {@code PUT /api/v1/admin/usuarios/{id}/banear}, que delega en
+ * moderacion-sanciones.
+ *
+ * <p>R9.5 — aqui habia un {@code @CrossOrigin(origins = "*")}. Se fue por la
  * misma razon que el de {@code RbacController}: la politica de origenes la
  * fija {@code WebSecurityConfig} para todo el servicio, por variable de
  * entorno, y una anotacion suelta con comodin la contradecia en el camino mas
