@@ -479,14 +479,18 @@ describe('enviar', () => {
     expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('hola');
   });
 
-  test('no pide capturas, pero el historial sigue enlazando las que ya había', async () => {
+  // ms-chatbot.yaml 1.14.0 (§7.4.6): las capturas van en la solicitud de
+  // soporte, no en el mensaje (`adjuntoUrl` sigue obsoleto). El clip de la
+  // caja de texto es un botón que lleva a «Soporte», no un archivo del mensaje.
+  test('el mensaje no lleva capturas, pero el historial sigue enlazando las que ya había', async () => {
     const conCaptura = { ...USUARIO, adjuntoUrl: 'https://img.example/captura.png' };
     const vista = await montar({
       cliente: clienteFalso({ obtenerHistorial: jest.fn(async () => [conCaptura, BOT]) }),
     });
 
     expect(vista.el.querySelector('input[name="adjuntoUrl"]')).toBeNull();
-    expect(vista.el.querySelector('[data-accion="adjuntar-captura"]')).toBeNull();
+    expect(vista.formulario.querySelector('input[type="file"]')).toBeNull();
+    expect(vista.el.querySelector('[data-accion="adjuntar-captura"]').type).toBe('button');
     expect(vista.el.querySelector('.chatbot-ventana__adjunto').getAttribute('href')).toBe(
       'https://img.example/captura.png',
     );
@@ -1033,6 +1037,44 @@ describe('soporte', () => {
     expect(vista.formulario.hidden).toBe(false);
     expect(boton.getAttribute('aria-expanded')).toBe('false');
     expect(document.activeElement).toBe(vista.entrada);
+  });
+
+  // ms-chatbot.yaml 1.14.0 (§7.4.6, RF-CHA-002): el clip de la caja de texto
+  // lleva a donde se adjunta la captura, que es la solicitud de soporte.
+  test('el clip abre «Soporte» con el foco donde se adjunta: la solicitud abierta o el formulario', async () => {
+    const abierta = {
+      ticketId: 't-9',
+      categoria: 'SOPORTE_TECNICO',
+      asunto: 'No carga',
+      mensaje: 'x',
+      estado: 'ABIERTO',
+      creadoEn: '2026-10-14T15:00:00Z',
+      actualizadoEn: '2026-10-14T15:00:00Z',
+    };
+    const vista = await montar({
+      cliente: clienteFalso({ misTickets: jest.fn(async () => [abierta]) }),
+    });
+    const clip = vista.el.querySelector('[data-accion="adjuntar-captura"]');
+    expect(clip.getAttribute('aria-label')).toBe(TEXTOS.adjuntarCaptura);
+    expect(clip.closest('form')).toBe(vista.formulario);
+
+    clip.click();
+    await esperar();
+    await esperar();
+
+    const panel = vista.el.querySelector('[data-chatbot-soporte]');
+    expect(panel.hidden).toBe(false);
+    expect(document.activeElement).toBe(
+      panel.querySelector('[data-ticket-id="t-9"] [data-accion="elegir-captura"]'),
+    );
+
+    // Sin una abierta, al de la captura opcional del formulario.
+    vista.el.querySelector('[data-accion="volver-al-chat"]').click();
+    vista.cliente.misTickets.mockResolvedValue([]);
+    clip.click();
+    await esperar();
+    await esperar();
+    expect(document.activeElement).toBe(panel.querySelector('form [data-accion="elegir-captura"]'));
   });
 
   test('el mismo botón cierra el panel si ya estaba abierto', async () => {

@@ -4,6 +4,8 @@ import com.nexusbattles.ms_chatbot.chat.api.TicketResponse;
 import com.nexusbattles.ms_chatbot.chat.identidad.SesionAnonima;
 import com.nexusbattles.ms_chatbot.chat.identidad.SesionAnonimaRepository;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
+import com.nexusbattles.ms_chatbot.chat.soporte.CapturaDeSoporte;
+import com.nexusbattles.ms_chatbot.chat.soporte.CapturasDeSoporteService;
 import com.nexusbattles.ms_chatbot.chat.soporte.EstadoTicket;
 import com.nexusbattles.ms_chatbot.chat.soporte.TicketActualizado;
 import com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporte;
@@ -49,6 +51,34 @@ class PiezasDelCanalTest {
 
     // ---------------------------------------------------------- AvisosDeSoporte
 
+    private static CapturasDeSoporteService sinCapturas() {
+        CapturasDeSoporteService capturas = mock(CapturasDeSoporteService.class);
+        when(capturas.deLasSolicitudes(any())).thenReturn(Map.of());
+        return capturas;
+    }
+
+    @Test
+    @DisplayName("1.14.0: el aviso lleva las capturas de la solicitud, como GET /chat/tickets")
+    void elAvisoLlevaLasCapturasDeLaSolicitud() {
+        SimpMessagingTemplate mensajeria = mock(SimpMessagingTemplate.class);
+        TicketSoporte ticket = TicketSoporte.abrir("11111111-2222-4333-8444-555555555555", Categoria.SOPORTE_TECNICO,
+            "No carga", "Se queda cargando", List.of(), Instant.parse("2026-10-14T10:00:00Z"));
+        // Guardada: ya tiene id (lo pone la base).
+        org.springframework.test.util.ReflectionTestUtils.setField(ticket, "id",
+            UUID.fromString("0b9c1d2e-3f4a-4b5c-8d6e-7f8091a2b3c4"));
+        CapturaDeSoporte.Resumen resumen = mock(CapturaDeSoporte.Resumen.class);
+        when(resumen.getId()).thenReturn(UUID.fromString("6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f"));
+        when(resumen.getTipo()).thenReturn("image/png");
+        CapturasDeSoporteService capturas = mock(CapturasDeSoporteService.class);
+        when(capturas.deLasSolicitudes(List.of(ticket.getId()))).thenReturn(Map.of(ticket.getId(), List.of(resumen)));
+
+        new AvisosDeSoporte(mensajeria, mock(SesionAnonimaRepository.class), capturas)
+            .alActualizarTicket(new TicketActualizado(ticket));
+
+        verify(mensajeria).convertAndSendToUser("11111111-2222-4333-8444-555555555555", "/queue/soporte/tickets",
+            TicketResponse.desde(ticket, List.of(resumen)));
+    }
+
     @Test
     @DisplayName("el cambio de una solicitud va solo al uid de su dueno, con lo que ve en GET /chat/tickets")
     void elAvisoDeSoporteVaAlUidDelDueno() {
@@ -57,7 +87,7 @@ class PiezasDelCanalTest {
             "No carga", "Se queda cargando", List.of(), Instant.parse("2026-10-14T10:00:00Z"));
         ticket.atender(EstadoTicket.RESUELTO, "Ya quedo", "admin-1", false, Instant.parse("2026-10-14T11:00:00Z"));
 
-        new AvisosDeSoporte(mensajeria, mock(SesionAnonimaRepository.class)).alActualizarTicket(new TicketActualizado(ticket));
+        new AvisosDeSoporte(mensajeria, mock(SesionAnonimaRepository.class), sinCapturas()).alActualizarTicket(new TicketActualizado(ticket));
 
         verify(mensajeria).convertAndSendToUser("11111111-2222-4333-8444-555555555555", "/queue/soporte/tickets",
             TicketResponse.desde(ticket));
@@ -72,7 +102,7 @@ class PiezasDelCanalTest {
         TicketSoporte ticket = TicketSoporte.abrir("uid-1", Categoria.SOPORTE_TECNICO, "A", "B", List.of(),
             Instant.parse("2026-10-14T10:00:00Z"));
 
-        assertThatCode(() -> new AvisosDeSoporte(mensajeria, mock(SesionAnonimaRepository.class)).alActualizarTicket(new TicketActualizado(ticket)))
+        assertThatCode(() -> new AvisosDeSoporte(mensajeria, mock(SesionAnonimaRepository.class), sinCapturas()).alActualizarTicket(new TicketActualizado(ticket)))
             .doesNotThrowAnyException();
     }
 
@@ -87,7 +117,7 @@ class PiezasDelCanalTest {
         TicketSoporte ticket = TicketSoporte.abrir(sesion.claveDeConversacion(), Categoria.SOPORTE_TECNICO,
             "No carga", "Se queda cargando", List.of(), Instant.parse("2026-10-14T10:00:00Z"));
 
-        new AvisosDeSoporte(mensajeria, sesiones).alActualizarTicket(new TicketActualizado(ticket));
+        new AvisosDeSoporte(mensajeria, sesiones, sinCapturas()).alActualizarTicket(new TicketActualizado(ticket));
 
         verify(mensajeria).convertAndSendToUser("anonimo:" + "a".repeat(64), "/queue/soporte/tickets",
             TicketResponse.desde(ticket));
@@ -99,7 +129,7 @@ class PiezasDelCanalTest {
         SimpMessagingTemplate mensajeria = mock(SimpMessagingTemplate.class);
         SesionAnonimaRepository sesiones = mock(SesionAnonimaRepository.class);
         when(sesiones.findById(any())).thenReturn(Optional.empty());
-        AvisosDeSoporte avisos = new AvisosDeSoporte(mensajeria, sesiones);
+        AvisosDeSoporte avisos = new AvisosDeSoporte(mensajeria, sesiones, sinCapturas());
 
         avisos.alActualizarTicket(new TicketActualizado(TicketSoporte.abrir("anonimo:" + UUID.randomUUID(),
             Categoria.SOPORTE_TECNICO, "A", "B", List.of(), Instant.parse("2026-10-14T10:00:00Z"))));

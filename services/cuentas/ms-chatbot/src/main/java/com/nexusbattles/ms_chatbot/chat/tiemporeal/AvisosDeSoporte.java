@@ -3,6 +3,8 @@ package com.nexusbattles.ms_chatbot.chat.tiemporeal;
 import com.nexusbattles.ms_chatbot.chat.api.TicketResponse;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.identidad.SesionAnonimaRepository;
+import com.nexusbattles.ms_chatbot.chat.soporte.CapturaDeSoporte;
+import com.nexusbattles.ms_chatbot.chat.soporte.CapturasDeSoporteService;
 import com.nexusbattles.ms_chatbot.chat.soporte.TicketActualizado;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,6 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -48,10 +51,13 @@ public class AvisosDeSoporte {
 
     private final SimpMessagingTemplate mensajeria;
     private final SesionAnonimaRepository sesiones;
+    private final CapturasDeSoporteService capturas;
 
-    public AvisosDeSoporte(SimpMessagingTemplate mensajeria, SesionAnonimaRepository sesiones) {
+    public AvisosDeSoporte(SimpMessagingTemplate mensajeria, SesionAnonimaRepository sesiones,
+                           CapturasDeSoporteService capturas) {
         this.mensajeria = mensajeria;
         this.sesiones = sesiones;
+        this.capturas = capturas;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -61,8 +67,12 @@ public class AvisosDeSoporte {
             if (destinatario.isEmpty()) {
                 return;
             }
+            // 1.14.0: igual que en GET /chat/tickets, con sus capturas.
+            UUID id = evento.ticket().getId();
+            List<CapturaDeSoporte.Resumen> adjuntas = id == null
+                ? List.of() : capturas.deLasSolicitudes(List.of(id)).getOrDefault(id, List.of());
             mensajeria.convertAndSendToUser(destinatario.get(), DestinosDelCanal.COLA_TICKETS,
-                TicketResponse.desde(evento.ticket()));
+                TicketResponse.desde(evento.ticket(), adjuntas));
         } catch (MessagingException noSePudo) {
             log.warn("No se pudo avisar por el canal en tiempo real del cambio de una solicitud de soporte.",
                 noSePudo);

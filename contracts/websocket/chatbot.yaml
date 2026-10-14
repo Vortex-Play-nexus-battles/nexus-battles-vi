@@ -17,7 +17,7 @@ asyncapi: 3.0.0
 
 info:
   title: Nexus Battles VI — Chatbot en tiempo real (ms-chatbot)
-  version: 1.1.0
+  version: 1.2.0
   description: |
     WebSocket nativo + STOMP 1.2 (sin SockJS) de ms-chatbot en
     `/api/v1/ws-chatbot` (el servicio tiene `context-path` `/api/v1`). El
@@ -100,6 +100,10 @@ info:
 
     Changelog:
 
+    - 1.2.0 (ms-chatbot.yaml 1.14.0, §7.4.6): el aviso de
+      `/user/queue/soporte/tickets` trae, igual que `GET /chat/tickets`, las
+      `capturas` de la solicitud (sin su contenido) cuando tiene alguna.
+      Ningun destino cambia y el campo es opcional.
     - 1.1.0 (ms-chatbot.yaml 1.12.0, RF-CHA-007): el visitante tambien
       tiene solicitudes de soporte y recibe sus cambios en
       `/user/queue/soporte/tickets`. Ningun destino ni forma cambia.
@@ -352,6 +356,31 @@ components:
           actualizadoEn:
             type: string
             format: date-time
+          capturas:
+            type: array
+            maxItems: 3
+            description: |
+              1.2.0. `CapturaDeSoporte` de `ms-chatbot.yaml` 1.14.0: las
+              capturas adjuntas, sin su contenido. Solo si hay alguna.
+            items:
+              type: object
+              required: [capturaId, tipo, tamano, ancho, alto, subidaEn]
+              properties:
+                capturaId:
+                  type: string
+                  format: uuid
+                tipo:
+                  type: string
+                  enum: [image/png, image/jpeg]
+                tamano:
+                  type: integer
+                ancho:
+                  type: integer
+                alto:
+                  type: integer
+                subidaEn:
+                  type: string
+                  format: date-time
 
   schemas:
     CabecerasDeRespuesta:

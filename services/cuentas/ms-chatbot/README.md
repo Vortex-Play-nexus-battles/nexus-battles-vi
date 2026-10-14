@@ -1,7 +1,7 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
-**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.13.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.1.0 (canal en tiempo real, 7.4.9)
-**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V18) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
+**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.14.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.2.0 (canal en tiempo real, 7.4.9)
+**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V19) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
 ## Qué hace
@@ -290,6 +290,56 @@ siguiente abre otra; el «no me sirvió» con la pregunta del tema; la del visit
 ve su sesión y que el administrador reconoce; y la que abre con el formulario antes de
 escribir. `CanalDelChatbotIT` añade el aviso en vivo al visitante (y a ningún otro).
 
+## Capturas de pantalla para soporte técnico (7.4.6, 1.14.0)
+
+§7.4.6 dice que la interfaz «debe incluir» la «opción de adjuntar capturas de pantalla para
+soporte técnico». No había ninguna forma de mandar un archivo: la decisión que descartaba las
+imágenes no tiene registro escrito (D-CHA-02). Las capturas van en la **solicitud de soporte**,
+no en la conversación: no las lee el asistente sino la persona que atiende la solicitud. Cifras y
+reglas en D-CHA-12.
+
+- `POST /chat/tickets/{ticketId}/capturas` (multipart, parte `archivo`): solo quien abrió la
+  solicitud, con la identidad con la que la abrió (el `uid` del token o la sesión vigente del
+  visitante; aquí nunca se registra una), y mientras siga `ABIERTO` o `EN_PROCESO`. La de otra
+  persona responde 404 igual que una que no existe (`CapturasDeSoporteService`). Pasa por el
+  límite de frecuencia de los mensajes.
+- **`ExaminadorDeCapturas`**, en este orden: de 1 byte a 2 MB; PNG o JPEG por su firma de bytes
+  (nunca por el nombre ni el `Content-Type`); el archivo completo y acabando donde su formato dice
+  (un PNG en `IEND` con cada CRC en orden, un JPEG en `FF D9`), así que un archivo cortado o un
+  políglota (una imagen con un HTML o un ZIP detrás) es 415; y las medidas, hasta 4096 por lado,
+  leídas de la cabecera **sin decodificar la imagen**. Las mismas comprobaciones que las imágenes
+  de comentarios, sin WebP.
+- **Sin metadatos**: se reescribe con solo lo que hace falta para verla (del PNG, cabecera,
+  paleta, datos, transparencia, color, fondo y densidad; del JPEG, JFIF, el perfil de color y
+  Adobe). Se van el EXIF (con la ubicación de una foto del móvil), XMP, IPTC, los textos, los
+  comentarios y la fecha. No se vuelve a codificar. El nombre del archivo no se guarda: la
+  ventana ni siquiera lo manda.
+- **Dónde**: en la base del servicio (V19, `tickets_soporte_capturas`, `BYTEA`), como el resto
+  de la solicitud: el host de DEV no tiene almacenamiento de objetos. Tres por solicitud como
+  mucho, contadas con la solicitud bloqueada (`TicketSoporteRepository.bloquear`), así que dos
+  subidas a la vez no pasan de tres; se borran con ella (`ON DELETE CASCADE`).
+- **Quién las ve**: su dueño (`GET /chat/tickets/{ticketId}/capturas/{capturaId}`) y un
+  administrador (`GET /chatbot/admin/tickets/{ticketId}/capturas/{capturaId}`), con el tipo
+  comprobado, `nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`,
+  `Cache-Control: no-store, private`, `Cross-Origin-Resource-Policy: same-origin` y un nombre
+  propio (`RespuestaDeCaptura`). `GET /chat/tickets`, el panel y el aviso del canal (`chatbot.yaml`
+  1.2.0) traen sus datos (`CapturaResponse`), nunca el contenido.
+- **Errores** con `motivo`: 400 `CAPTURA_AUSENTE`, 404 `SOLICITUD_NO_ENCONTRADA`, 409
+  `SOLICITUD_CERRADA` o `CAPTURAS_COMPLETAS`, 413 `CAPTURA_DEMASIADO_GRANDE` y 415
+  `CAPTURA_NO_ADMITIDA`. El techo de Spring (`spring.servlet.multipart.*`: 2 MB por archivo, 3 MB
+  por petición) lee el cuerpo al resolver el parámetro (`resolve-lazily`), así que también su 413
+  sale con el motivo; para eso `ManejadorErroresDelChat` va antes que el de problem details de
+  Spring Boot, que sigue resolviendo los demás errores de Spring MVC.
+- **Lo que no se puede redactar**: a una imagen no se le aplica la redacción de los textos
+  (7.4.8). La ventana avisa antes de elegirla que no se vean contraseñas, códigos ni tarjetas.
+
+`CapturasDeSoporteIT` (PostgreSQL real): la dueña adjunta un PNG y un JPEG con texto, EXIF y
+comentario y lo guardado no los lleva; «Tus solicitudes» las lista en orden; el contenido sale
+con sus cabeceras; otro jugador, otra sesión o un token ajeno reciben 404 y nada se guarda; el
+administrador las ve y las lee, y por la ruta de otra solicitud no; GIF, SVG, políglota y más de
+2 MB se rechazan; tres sí y la cuarta no; respondida ya no admite; el visitante adjunta a la
+suya; y se borran con su solicitud.
+
 ## Diálogo (1.5.0)
 
 - **Idioma:** las respuestas en vivo, la navegación, los avisos y el escalamiento van en el
@@ -498,9 +548,10 @@ Nada más: ni una URL de otro sitio (ni rastreo ni contenido mixto), ni un nombr
 igual. La ventana repite la misma regla (`imagenSegura`), pinta la imagen en un `<img>` con
 texto alternativo vacío (el nombre va al lado) y la quita si no carga; con dos o más productos
 los pasa en un carrusel que se recorre con sus botones, la rueda o el teclado. El asistente
-sigue sin **recibir** imágenes en el chat: `adjuntoUrl` sigue obsoleto.
+sigue sin **recibir** imágenes en el chat: `adjuntoUrl` sigue obsoleto; las capturas para
+soporte técnico van en la solicitud (1.14.0, más arriba).
 
-## Tiempo real (7.4.9, `contracts/websocket/chatbot.yaml` 1.1.0)
+## Tiempo real (7.4.9, `contracts/websocket/chatbot.yaml` 1.2.0)
 
 «WebSocket para comunicación en tiempo real». STOMP sobre WebSocket nativo (sin SockJS), como
 ms-subastas, en `/api/v1/ws-chatbot` (`chat.tiemporeal`). No sustituye a la API: es la misma
@@ -610,6 +661,13 @@ respuesta), esa pregunta va por HTTP y el canal se rehace (degradación controla
 en el peor caso la pregunta queda dos veces en el historial, nunca se pierde). El estado se ve
 en la píldora del kit en modo discreto, y «Tus solicitudes» se actualiza sola.
 
+1.14.0 (§7.4.6): `comun/ui/capturas-chatbot.js` pinta las capturas de una solicitud, plegadas
+(«Ver captura» las pide con el token o la sesión y las enseña con un enlace de objeto que se
+libera al repintar), y el selector para adjuntarlas, con la pista de lo que no debe verse ANTES
+de elegir. En «Hablar con soporte» (`soporte-chatbot.js`) cada solicitud abierta con sitio lo
+ofrece y el formulario admite una captura opcional, que se sube en cuanto la solicitud queda
+abierta; en el panel (`panel-chatbot-soporte.js`) el detalle de la solicitud las enseña.
+
 ## Pruebas
 
 `./gradlew :services:cuentas:ms-chatbot:check` — unitarias (`ChatServiceTest`,
@@ -626,4 +684,4 @@ de 1.8.0; `CanalDelChatbotIT` y `RespuestasFrecuentesIT`: el canal en tiempo rea
 de 7.4.9; `CatalogoEnVivoIT`: el catálogo de 1.10.0; `RedactarLaPuntuacionDeLosSecretosIT` y
 `ReglasDelJuegoIT` y `BaseDeConocimientoAlDiaIT`: V14, V15 y V16 de 1.11.0;
 `RedactarLasClavesAnunciadasIT` y `SolicitudesAutomaticasIT`: V17 y la solicitud automática de
-1.12.0). JaCoCo ≥ 80 %.
+1.12.0; `CapturasDeSoporteIT`: V19 y las capturas de 1.14.0). JaCoCo ≥ 80 %.

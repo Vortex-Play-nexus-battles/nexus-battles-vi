@@ -1,8 +1,10 @@
 package com.nexusbattles.ms_chatbot.chat.soporte;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -13,6 +15,12 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface TicketSoporteRepository extends JpaRepository<TicketSoporte, UUID> {
+
+    // 1.14.0: la solicitud bloqueada mientras se le adjunta una captura, para
+    // que dos a la vez no pasen de las tres que admite.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM TicketSoporte t WHERE t.id = :id")
+    Optional<TicketSoporte> bloquear(@Param("id") UUID id);
 
     /** "Mis tickets" (GET /chat/tickets). */
     List<TicketSoporte> findByUidOrderByCreadoEnDesc(String uid);

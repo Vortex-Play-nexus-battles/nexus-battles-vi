@@ -58,6 +58,18 @@ export const CLAVE_BASE_LOCAL = 'nexus.chatbot.base';
  */
 export const TIEMPO_DE_ESPERA_MS = 10_000;
 
+/**
+ * ms-chatbot.yaml 1.14.0 — subir una captura (hasta 2 MB) puede tardar más
+ * que una pregunta en una conexión lenta: se le da un minuto.
+ */
+export const TIEMPO_DE_SUBIDA_MS = 60_000;
+
+/** ms-chatbot.yaml 1.14.0 — los tipos con los que el servicio sirve una captura. */
+export const TIPOS_DE_CAPTURA = Object.freeze(['image/png', 'image/jpeg']);
+
+/** Lo que se pide al leer una captura: la imagen, o el problem details si falla. */
+const ACEPTA_CAPTURA = 'image/png, image/jpeg, application/problem+json';
+
 /** Título del 404 que el borde devuelve para un prefijo sin servicio. */
 const TITULO_RUTA_SIN_SERVICIO = 'Ruta sin servicio en el borde';
 
@@ -224,23 +236,38 @@ export function crearClienteChatbot({
   sesion = () => leerSesion(),
   tiempoDeEspera = TIEMPO_DE_ESPERA_MS,
 } = {}) {
-  async function llamar(metodo, recurso, cuerpo, { rutaFija = false } = {}) {
+  /**
+   * @param {string} metodo
+   * @param {string} recurso
+   * @param {object|FormData|undefined} cuerpo JSON, o un formulario multipart
+   *   (1.14.0), que se manda tal cual: su `Content-Type` con la frontera lo
+   *   pone el navegador
+   * @param {{rutaFija?: boolean, espera?: number, imagen?: boolean}} [opciones]
+   *   `imagen`: la respuesta es una captura (1.14.0) y se devuelve como `Blob`
+   */
+  async function llamar(
+    metodo,
+    recurso,
+    cuerpo,
+    { rutaFija = false, espera = tiempoDeEspera, imagen = false } = {},
+  ) {
     const cabeceras = {
-      Accept: 'application/json',
+      Accept: imagen ? ACEPTA_CAPTURA : 'application/json',
       'X-Id-Sesion-Anonima': idDeSesionAnonima(almacen),
     };
     const actual = sesion();
     if (actual?.autenticado && actual.token) {
       cabeceras.Authorization = `Bearer ${actual.token}`;
     }
-    if (cuerpo !== undefined) {
+    const formulario = typeof FormData === 'function' && cuerpo instanceof FormData;
+    if (cuerpo !== undefined && !formulario) {
       cabeceras['Content-Type'] = 'application/json';
     }
 
-    // #506 — sin respuesta en `tiempoDeEspera`, la petición se corta (también
-    // si ya llegaron las cabeceras y lo que se atasca es el cuerpo).
+    // #506 — sin respuesta en `espera`, la petición se corta (también si ya
+    // llegaron las cabeceras y lo que se atasca es el cuerpo).
     const control = typeof AbortController === 'function' ? new AbortController() : null;
-    const temporizador = control ? setTimeout(() => control.abort(), tiempoDeEspera) : null;
+    const temporizador = control ? setTimeout(() => control.abort(), espera) : null;
     const agotado = () => Boolean(control?.signal.aborted);
     try {
       let respuesta;
@@ -248,7 +275,7 @@ export function crearClienteChatbot({
         respuesta = await peticion(rutaDelChatbot(recurso, almacenLocal), {
           method: metodo,
           headers: cabeceras,
-          body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
+          body: cuerpo === undefined || formulario ? cuerpo : JSON.stringify(cuerpo),
           signal: control?.signal,
         });
       } catch {
@@ -263,6 +290,9 @@ export function crearClienteChatbot({
       }
       if (respuesta.status === 204) {
         return null;
+      }
+      if (imagen) {
+        return await leerImagen(respuesta, agotado, rutaFija);
       }
       return await leerCuerpo(respuesta, agotado, rutaFija);
     } finally {
@@ -327,8 +357,8 @@ export function crearClienteChatbot({
     },
 
     /**
-     * Abre una solicitud de soporte humano (solo con sesión; el servidor
-     * responde 401 SESION_REQUERIDA a un visitante).
+     * Abre una solicitud de soporte humano: la del jugador o, desde
+     * ms-chatbot.yaml 1.12.0, la del visitante con su sesión.
      *
      * @param {{categoria: string, asunto: string, mensaje: string}} datos
      * @returns {Promise<object>} la solicitud como la ve el jugador
@@ -405,6 +435,45 @@ export function crearClienteChatbot({
     },
 
     /**
+     * ms-chatbot.yaml 1.14.0 (§7.4.6): adjunta una captura de pantalla a una
+     * solicitud propia y abierta. Qué es la imagen lo decide el servidor por
+     * sus bytes; aquí no se manda su nombre (va como «captura»).
+     *
+     * La ruta depende de la solicitud: un 404 del servicio (con su `motivo`)
+     * es que no existe o no es de quien adjunta, no que el asistente falte.
+     *
+     * @param {string} ticketId
+     * @param {Blob} archivo
+     * @returns {Promise<{capturaId: string, tipo: string, tamano: number, ancho: number,
+     *          alto: number, subidaEn: string}>} lo que se guardó, sin el contenido
+     */
+    subirCaptura(ticketId, archivo) {
+      const formulario = new FormData();
+      formulario.append('archivo', archivo, 'captura');
+      return llamar('POST', `/chat/tickets/${encodeURIComponent(ticketId)}/capturas`, formulario, {
+        espera: TIEMPO_DE_SUBIDA_MS,
+      });
+    },
+
+    /**
+     * ms-chatbot.yaml 1.14.0: el contenido de una captura propia. Se pide con
+     * el token o la sesión del visitante (un `<img src>` no puede mandarlos)
+     * y se pinta con un enlace de objeto.
+     *
+     * @param {string} ticketId
+     * @param {string} capturaId
+     * @returns {Promise<Blob>} con tipo `image/png` o `image/jpeg`
+     */
+    leerCaptura(ticketId, capturaId) {
+      return llamar(
+        'GET',
+        `/chat/tickets/${encodeURIComponent(ticketId)}/capturas/${encodeURIComponent(capturaId)}`,
+        undefined,
+        { imagen: true },
+      );
+    },
+
+    /**
      * ms-chatbot.yaml 1.8.0: el centro de ayuda, lo que el asistente sabe
      * responder agrupado por categoría. Igual para todos.
      *
@@ -446,6 +515,42 @@ export async function leerProblema(respuesta) {
 async function leerCuerpo(respuesta, agotado, rutaFija) {
   try {
     return await respuesta.json();
+  } catch (error) {
+    if (agotado()) {
+      throw new ErrorDelChatbot(null, 0, { rutaFija, tiempoAgotado: true });
+    }
+    throw error;
+  }
+}
+
+/**
+ * ms-chatbot.yaml 1.14.0 — el contenido de una captura, solo si llega con el
+ * tipo de una (PNG o JPEG). Se devuelve con ese tipo fijado: un enlace de
+ * objeto hecho con él nunca se abre como otra cosa que una imagen, aunque
+ * alguien lo abra en una pestaña.
+ *
+ * @param {Response} respuesta correcta
+ * @returns {Promise<Blob>}
+ */
+export async function imagenDeCaptura(respuesta) {
+  const tipo = (respuesta.headers?.get?.('Content-Type') ?? '').split(';')[0].trim().toLowerCase();
+  if (!TIPOS_DE_CAPTURA.includes(tipo)) {
+    throw new ErrorDelChatbot({ title: 'La respuesta no es una captura.' }, respuesta.status);
+  }
+  return new Blob([await respuesta.blob()], { type: tipo });
+}
+
+/**
+ * Como `leerCuerpo`, para una captura: si se cortó por la espera mientras
+ * llegaba, cuenta como un fallo de red.
+ *
+ * @param {Response} respuesta
+ * @param {() => boolean} agotado
+ * @param {boolean} rutaFija
+ */
+async function leerImagen(respuesta, agotado, rutaFija) {
+  try {
+    return await imagenDeCaptura(respuesta);
   } catch (error) {
     if (agotado()) {
       throw new ErrorDelChatbot(null, 0, { rutaFija, tiempoAgotado: true });

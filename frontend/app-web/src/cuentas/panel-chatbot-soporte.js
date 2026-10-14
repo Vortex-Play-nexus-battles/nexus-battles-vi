@@ -11,11 +11,16 @@
  * (`deVisitante`): no tiene cuenta, así que en vez de un uid se dice que es
  * un visitante, que verá la respuesta mientras dure su sesión.
  *
+ * 1.14.0 (§7.4.6) — las capturas de pantalla que adjuntó, para verlas al
+ * atenderla. Se piden con el token del administrador al pulsar «Ver
+ * captura» y sus enlaces de objeto se liberan al cerrar el detalle.
+ *
  * @module cuentas/panel-chatbot-soporte
  */
 
 import { conCarga } from '../comun/ui/boton.js';
 import { campo } from '../comun/ui/campo.js';
+import { crearRegistroDeImagenes, listaDeCapturas } from '../comun/ui/capturas-chatbot.js';
 import { abrirDialogo } from '../comun/ui/dialogo.js';
 import { distintivo } from '../comun/ui/distintivo.js';
 import { h, vaciar } from '../comun/ui/dom.js';
@@ -83,10 +88,13 @@ export function textoDeFalloAlAtender(error) {
 /**
  * Diálogo con el detalle de una solicitud y el formulario para atenderla.
  *
- * @param {{cliente: object, ticketId: string}} opciones
+ * @param {{cliente: object, ticketId: string,
+ *          imagenes?: {crear: (contenido: Blob) => string, liberar: () => void}}} opciones
+ *   `imagenes`: los enlaces de objeto de las capturas (1.14.0), que se
+ *   liberan al cerrar el diálogo
  * @returns {Promise<boolean>} true si se guardó un cambio
  */
-export function atenderEnDialogo({ cliente, ticketId }) {
+export function atenderEnDialogo({ cliente, ticketId, imagenes = crearRegistroDeImagenes() }) {
   return new Promise((resolver) => {
     const cuerpo = h('div', { clase: 'pila panel-chatbot__ticket' });
     pintarEstado(cuerpo, estadoDeCarga({ filas: 3, etiqueta: 'Cargando la solicitud…' }));
@@ -108,6 +116,7 @@ export function atenderEnDialogo({ cliente, ticketId }) {
       cuerpo,
       acciones: [cerrarBoton, guardar],
       cerrableFuera: false,
+      alCerrar: () => imagenes.liberar(),
     });
     cerrarBoton.addEventListener('click', () => {
       cerrar();
@@ -119,7 +128,10 @@ export function atenderEnDialogo({ cliente, ticketId }) {
     cliente
       .obtenerTicket(ticketId)
       .then((ticket) => {
-        formulario = pintarDetalle(cuerpo, ticket);
+        formulario = pintarDetalle(cuerpo, ticket, {
+          leer: (capturaId) => cliente.leerCaptura(ticketId, capturaId),
+          registro: imagenes,
+        });
         guardar.disabled = formulario === null;
       })
       .catch((error) => {
@@ -154,9 +166,13 @@ export function atenderEnDialogo({ cliente, ticketId }) {
 /**
  * Pinta el detalle y, si la solicitud se puede cambiar, el formulario.
  *
+ * @param {HTMLElement} cuerpo
+ * @param {object} ticket `TicketDeSoporteAdmin`
+ * @param {{leer: (capturaId: string) => Promise<Blob>,
+ *          registro: {crear: (contenido: Blob) => string}}} capturas
  * @returns {{datos: () => object|null, avisar: (texto: string|null) => void}|null}
  */
-function pintarDetalle(cuerpo, ticket) {
+function pintarDetalle(cuerpo, ticket, { leer, registro }) {
   const visitante = ticket.deVisitante === true;
   const datosDelTicket = h('dl', {
     clase: 'panel-chatbot__datos',
@@ -173,6 +189,7 @@ function pintarDetalle(cuerpo, ticket) {
   });
 
   const quienPregunta = visitante ? 'Visitante' : 'Jugador';
+  const capturas = Array.isArray(ticket.capturas) ? ticket.capturas : [];
   const conversacion = (ticket.contexto ?? []).map((m) =>
     h('li', {
       clase: `panel-chatbot__contexto panel-chatbot__contexto--${m.remitente === 'BOT' ? 'bot' : 'jugador'}`,
@@ -195,6 +212,13 @@ function pintarDetalle(cuerpo, ticket) {
     conversacion.length > 0
       ? h('ol', { clase: 'panel-chatbot__conversacion', hijos: conversacion })
       : h('p', { clase: 't-meta', texto: 'No había conversación al abrir la solicitud.' }),
+    h('p', { clase: 't-etiqueta', texto: 'Capturas de pantalla' }),
+    capturas.length > 0
+      ? listaDeCapturas({ capturas, asunto: ticket.asunto, leer, registro })
+      : h('p', {
+          clase: 't-meta',
+          texto: `El ${quienPregunta.toLowerCase()} no adjuntó capturas.`,
+        }),
   );
 
   const siguientes = SIGUIENTES[ticket.estado] ?? [];

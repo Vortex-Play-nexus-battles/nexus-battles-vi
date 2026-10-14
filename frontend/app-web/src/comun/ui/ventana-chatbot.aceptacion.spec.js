@@ -11,6 +11,7 @@
  * (`shared/ui-kit/`), que queda fuera de la raíz del servidor de pruebas, se
  * sirve desde el disco (ver `contenido/inventario/entorno-de-prueba.js`).
  */
+import { Buffer } from 'node:buffer';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -80,7 +81,10 @@ function json(ruta, cuerpo, status = 200, cabeceras = {}) {
  * @param {import('@playwright/test').Page} page
  * @param {{historial?: object[], alEnviar?: (ruta: import('@playwright/test').Route) => Promise<void>}} [opciones]
  */
-async function simularApi(page, { historial = [], alEnviar = null, alListarTickets = null } = {}) {
+async function simularApi(
+  page,
+  { historial = [], alEnviar = null, alListarTickets = null, alCaptura = null } = {},
+) {
   await page.route('**/api/v1/**', async (ruta) => {
     const peticion = ruta.request();
     const { pathname } = new URL(peticion.url());
@@ -88,6 +92,10 @@ async function simularApi(page, { historial = [], alEnviar = null, alListarTicke
 
     if (pathname.endsWith('/chat/historial') && metodo === 'GET') {
       return json(ruta, historial);
+    }
+    // ms-chatbot.yaml 1.14.0: subir y leer capturas de una solicitud.
+    if (alCaptura && /\/chat\/tickets\/[^/]+\/capturas/.test(pathname)) {
+      return alCaptura(ruta);
     }
     if (pathname.endsWith('/chat/tickets') && metodo === 'GET') {
       return alListarTickets ? alListarTickets(ruta) : json(ruta, []);
@@ -442,6 +450,98 @@ test.describe('Ventana del asistente (#506)', () => {
     expect(new URL(await crear.getAttribute('href')).pathname).toBe('/cuentas/registro.html');
 
     // La nota del visitante y la lista, sin nada grave ni crítico para axe.
+    const { violations } = await new AxeBuilder({ page }).include('.chatbot-ventana').analyze();
+    expect(
+      violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`),
+    ).toEqual([]);
+  });
+
+  // ms-chatbot.yaml 1.14.0 (§7.4.6, RF-CHA-002): el clip lleva a la
+  // solicitud abierta, con el aviso de privacidad antes de elegir; la captura
+  // se sube sin su nombre y se ve con «Ver captura».
+  test('el clip adjunta una captura a la solicitud abierta y se puede ver', async ({ page }) => {
+    const PNG = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const ID = '6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f';
+    const CAPTURA = {
+      capturaId: '9e8d7c6b-5a49-4382-9716-05f4e3d2c1b0',
+      tipo: 'image/png',
+      tamano: PNG.length,
+      ancho: 1,
+      alto: 1,
+      subidaEn: '2026-10-14T15:05:00Z',
+    };
+    let subida = null;
+    const { ventana } = await abrirAsistente(page, {
+      alListarTickets: (ruta) =>
+        json(ruta, [
+          {
+            ticketId: ID,
+            categoria: 'SOPORTE_TECNICO',
+            asunto: 'La tienda no carga',
+            mensaje: 'Se queda en blanco.',
+            estado: 'ABIERTO',
+            respuesta: null,
+            creadoEn: '2026-10-14T15:00:00Z',
+            actualizadoEn: '2026-10-14T15:00:00Z',
+          },
+        ]),
+      alCaptura: async (ruta) => {
+        const peticion = ruta.request();
+        if (peticion.method() === 'POST') {
+          subida = {
+            tipo: peticion.headers()['content-type'] ?? '',
+            cuerpo: peticion.postDataBuffer()?.toString('latin1') ?? '',
+            sesion: peticion.headers()['x-id-sesion-anonima'] ?? null,
+          };
+          return json(ruta, CAPTURA, 201);
+        }
+        return ruta.fulfill({ status: 200, contentType: 'image/png', body: PNG });
+      },
+    });
+
+    // Con el teclado: el foco llega a la entrada de archivo y su etiqueta lo enseña.
+    const clip = ventana.getByRole('button', {
+      name: 'Adjuntar una captura de pantalla para soporte',
+    });
+    await clip.focus();
+    await page.keyboard.press('Enter');
+
+    const panel = ventana.locator('[data-chatbot-soporte]');
+    const solicitud = panel.locator(`[data-ticket-id="${ID}"]`);
+    const entrada = solicitud.locator('input[type="file"]');
+    await expect(entrada).toBeFocused();
+    const etiqueta = solicitud.locator('label.capturas-chatbot__adjuntar');
+    await expect(etiqueta).toBeVisible();
+    expect(await etiqueta.evaluate((e) => getComputedStyle(e).outlineStyle)).toBe('solid');
+    // El aviso de privacidad está antes de elegir, y la entrada lo anuncia.
+    const pista = solicitud.locator(`#${await entrada.getAttribute('aria-describedby')}`);
+    await expect(pista).toContainText('no se vean contraseñas, códigos ni datos de tarjetas');
+
+    await entrada.setInputFiles({ name: 'mi pantallazo.png', mimeType: 'image/png', buffer: PNG });
+
+    const ver = panel.getByRole('button', { name: 'Ver captura 1' });
+    await expect(ver).toBeFocused();
+    await expect(panel).toContainText('Adjuntamos tu captura.');
+    expect(subida.tipo).toMatch(/^multipart\/form-data; boundary=/);
+    expect(subida.cuerpo).toContain('name="archivo"; filename="captura"');
+    expect(subida.cuerpo).not.toContain('mi pantallazo');
+    expect(subida.sesion).toMatch(/^visitante-[A-Za-z0-9-]{10,64}$/);
+
+    await ver.click();
+    const imagen = panel.getByRole('img', {
+      name: 'Captura 1 de la solicitud «La tienda no carga»',
+    });
+    await expect(imagen).toBeVisible();
+    expect(await imagen.evaluate((img) => img.naturalWidth)).toBe(1);
+    // El mismo botón, ahora para ocultarla.
+    const ocultar = panel.getByRole('button', { name: 'Ocultar captura 1' });
+    await expect(ocultar).toHaveAttribute('aria-expanded', 'true');
+
     const { violations } = await new AxeBuilder({ page }).include('.chatbot-ventana').analyze();
     expect(
       violations
