@@ -1,0 +1,4 @@
+# Los modelos de la IA de combate (ia/modelos/<version>/modelo.onnx) son binarios:
+# Git no los normaliza ni los muestra como diff de texto. Este archivo es de
+# misiones; el .gitattributes de la raiz es de plataforma y no se toca.
+*.onnx binary
