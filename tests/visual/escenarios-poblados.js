@@ -4410,6 +4410,8 @@ function cuentaDelDirectorio(n, cambios = {}) {
     ultimoAcceso: n % 3 === 0 ? null : `2026-10-${String(1 + n).padStart(2, '0')}T18:30:00`,
     suspendidoHasta: null,
     bloqueada: false,
+    // SA-3 — ms-identidad-admin 1.7.0: cuántas sanciones se le han emitido.
+    sancionesRegistradas: [0, 0, 1, 0, 3, 0][n % 6],
     ...cambios,
   };
 }
@@ -4637,3 +4639,431 @@ export const ESCENARIOS_SA2 = [
 ];
 
 ESCENARIOS.push(...ESCENARIOS_SA2);
+
+/* =========================================================================
+   SA-3 — la ficha administrativa completa (§7.3.4) y la gestión de usuarios
+   que busca primero. Cada sección de la ficha responde con la forma de su
+   contrato: salas-partidas 1.11.0, creditos 1.5.0, comentarios 1.12.0,
+   inventario 1.8.0, ms-cumplimiento-auditoria 1.2.0 y rbac 2.0.0.
+   ========================================================================= */
+
+const UID_DE_LA_FICHA = '5a000000-0000-4000-8000-000000000015';
+
+const FICHA_COMPLETA = {
+  id: 15,
+  uid: UID_DE_LA_FICHA,
+  apodo: 'nyx_valiente',
+  email: 'nyx@nexus.test',
+  nombres: 'Nyx',
+  apellidos: 'Valiente Ríos',
+  avatar: null,
+  rol: 'JUGADOR',
+  estado: 'ACTIVO',
+  suspendidoHasta: null,
+  bloqueada: false,
+  creadoEn: '2026-08-20T10:30:00',
+  ultimoAcceso: '2026-10-13T21:15:00',
+  accesoAuditado: true,
+};
+
+const MATRIZ_DE_PERMISOS = {
+  version: '2.0.0',
+  matrix: {
+    JUGADOR: {
+      CREAR_CUENTA_JUGADOR: 'GRANTED',
+      MODIFICAR_PERFIL_PROPIO: 'GRANTED',
+      PUBLICAR_COMENTARIOS: 'GRANTED',
+      ELIMINAR_COMENTARIO_PROPIO: 'GRANTED',
+    },
+    SUPER_ADMINISTRADOR: {
+      GESTIONAR_CUENTAS: 'GRANTED',
+      SUSPENDER_USUARIOS: 'GRANTED',
+      BANEAR_DEFINITIVAMENTE: 'GRANTED',
+      ASIGNAR_ROL: 'GRANTED',
+      CREAR_ADMIN_MODERADOR: 'GRANTED',
+      RESTABLECER_SEGUNDO_FACTOR: 'GRANTED',
+    },
+  },
+};
+
+function partidaDeLaFicha(n, cambios = {}) {
+  const inicio = new Date(Date.UTC(2026, 9, 13 - n, 20, 0, 0));
+  return {
+    id: `6b000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
+    idSala: `6c000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
+    modalidad: ['UNO_CONTRA_UNO', 'HASTA_SEIS', 'CONTRA_IA'][n % 3],
+    estado: 'FINALIZADA',
+    resultado: ['VICTORIA', 'DERROTA', 'VICTORIA', 'EMPATE'][n % 4],
+    heroe: ['Aquiles', 'Brisa', 'Kael'][n % 3],
+    participantes: n % 3 === 1 ? 4 : 2,
+    iniciadaEn: inicio.toISOString(),
+    finalizadaEn: new Date(inicio.getTime() + 11 * 60_000).toISOString(),
+    ...cambios,
+  };
+}
+
+const RUTAS_DE_LA_FICHA = [
+  ['**/api/v1/admin/usuarios/15/ficha', json(FICHA_COMPLETA)],
+  ['**/api/v1/rbac/matrix', json(MATRIZ_DE_PERMISOS)],
+  [
+    '**/api/v1/partidas/jugadores/**',
+    json({
+      contenido: [
+        partidaDeLaFicha(0, { estado: 'EN_CURSO', resultado: null, finalizadaEn: null }),
+        ...[1, 2, 3, 4, 5].map((n) => partidaDeLaFicha(n)),
+      ],
+      pagina: 0,
+      tamano: 10,
+      totalElementos: 48,
+      totalPaginas: 5,
+    }),
+  ],
+  [
+    '**/api/v1/partidas/jugadores/*/estadisticas',
+    json({
+      idJugador: UID_DE_LA_FICHA,
+      jugadas: 47,
+      victorias: 26,
+      derrotas: 17,
+      empates: 4,
+      enCurso: 1,
+      porModalidad: {
+        UNO_CONTRA_UNO: { jugadas: 30, victorias: 18, derrotas: 10, empates: 2 },
+        CONTRA_IA: { jugadas: 9, victorias: 6, derrotas: 3, empates: 0 },
+        HASTA_SEIS: { jugadas: 8, victorias: 2, derrotas: 4, empates: 2 },
+      },
+      ultimaPartidaEn: '2026-10-13T20:00:00Z',
+      parcial: false,
+    }),
+  ],
+  [
+    '**/api/v1/creditos/*/saldo',
+    json({
+      jugadorUid: UID_DE_LA_FICHA,
+      saldoBruto: 2640,
+      saldoReservado: 320,
+      saldoDisponible: 2320,
+    }),
+  ],
+  [
+    '**/api/v1/creditos/*/movimientos*',
+    json({
+      content: [
+        ['recompensa-victoria', 'CREDITO', 'CONSUMIDA', 'SUMA', 40],
+        ['apuesta-sala', 'RESERVA', 'ACTIVA', 'APARTA', 320],
+        ['inscripcion-torneo', 'DEBITO', 'CONSUMIDA', 'RESTA', 150],
+        ['apuesta-sala', 'RESERVA', 'LIBERADA', 'NEUTRO', 100],
+        ['bono-registro', 'CREDITO', 'CONSUMIDA', 'SUMA', 1000],
+      ].map(([concepto, tipo, estado, signo, monto], n) => ({
+        id: `6d000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
+        monto,
+        concepto,
+        referenciaId: `ref-${n}`,
+        tipo,
+        estado,
+        signo,
+        creado: new Date(Date.UTC(2026, 9, 13 - n * 2, 19, 0, 0)).toISOString(),
+      })),
+      totalElements: 23,
+      totalPages: 3,
+      number: 0,
+      size: 10,
+    }),
+  ],
+  ['**/api/v1/sanciones/usuarios/*', json(historialDeSanciones())],
+  [
+    '**/api/v1/comentarios/moderacion/autores/**',
+    json({
+      autorId: UID_DE_LA_FICHA,
+      apodoAutor: 'nyx_valiente',
+      comentarios: [
+        {
+          id: 'c-2',
+          productoId: 'p-7',
+          texto: 'El yelmo llegó con la defensa que promete; lo recomiendo para tanques.',
+          fechaPublicacion: '2026-10-11T18:00:00Z',
+          estado: 'PUBLICADO',
+          editado: false,
+        },
+        {
+          id: 'c-1',
+          productoId: 'p-3',
+          texto: 'Precio abusivo para lo que da. No lo compren.',
+          fechaPublicacion: '2026-10-02T08:00:00Z',
+          estado: 'OCULTO',
+          editado: true,
+        },
+      ],
+      total: 2,
+      pagina: 0,
+      tamano: 20,
+    }),
+  ],
+  [
+    '**/api/v1/comentarios/moderacion/usuarios/**',
+    (ruta) => {
+      const recibidos = new URL(ruta.request().url()).searchParams.get('direccion') === 'RECIBIDOS';
+      const base = {
+        usuarioId: UID_DE_LA_FICHA,
+        pagina: 0,
+        tamano: 10,
+        totalRealizados: 1,
+        totalRecibidos: 2,
+      };
+      return json(
+        recibidos
+          ? {
+              ...base,
+              direccion: 'RECIBIDOS',
+              total: 2,
+              reportes: [
+                {
+                  id: 'r-3',
+                  comentarioId: 'c-1',
+                  categoria: 'CONTENIDO_OFENSIVO',
+                  descripcion: 'Desprecia a quien compra en la tienda.',
+                  fecha: '2026-10-03T09:30:00Z',
+                  comentario: {
+                    id: 'c-1',
+                    productoId: 'p-3',
+                    autorId: UID_DE_LA_FICHA,
+                    apodoAutor: 'nyx_valiente',
+                    extracto: 'Precio abusivo para lo que da. No lo compren.',
+                    estado: 'OCULTO',
+                  },
+                },
+                {
+                  id: 'r-2',
+                  comentarioId: 'c-borrado',
+                  categoria: 'SPAM',
+                  descripcion: null,
+                  fecha: '2026-09-28T11:00:00Z',
+                  comentario: null,
+                },
+              ],
+            }
+          : {
+              ...base,
+              direccion: 'REALIZADOS',
+              total: 1,
+              reportes: [
+                {
+                  id: 'r-1',
+                  comentarioId: 'c-9',
+                  categoria: 'ACOSO',
+                  descripcion: 'Insulta a otro jugador por su apodo.',
+                  fecha: '2026-10-08T15:00:00Z',
+                  comentario: {
+                    id: 'c-9',
+                    productoId: 'p-1',
+                    autorId: '5a000000-0000-4000-8000-000000000099',
+                    apodoAutor: 'thar_vex',
+                    extracto: 'Con ese apodo no deberías ni jugar.',
+                    estado: 'EN_REVISION',
+                  },
+                },
+              ],
+            },
+      );
+    },
+  ],
+  [
+    '**/api/v1/inventario/usuarios/**',
+    json({
+      elementos: [
+        {
+          id: 'i-1',
+          productoId: 'p-h1',
+          tipo: 'HEROE',
+          nombrePropio: 'Aquiles',
+          disponible: true,
+          subastaId: null,
+          nivel: 4,
+        },
+        {
+          id: 'i-2',
+          productoId: 'p-h2',
+          tipo: 'HEROE',
+          nombrePropio: 'Brisa',
+          disponible: false,
+          subastaId: null,
+          nivel: 2,
+          ejecucionMisionId: '6e000000-0000-4000-8000-000000000001',
+        },
+        {
+          id: 'i-3',
+          productoId: 'p-a1',
+          tipo: 'ARMA',
+          nombrePropio: 'Espada corta',
+          disponible: true,
+          subastaId: null,
+          equipadoEn: { heroeId: 'i-1', nombreHeroe: 'Aquiles' },
+        },
+        {
+          id: 'i-4',
+          productoId: 'p-a2',
+          tipo: 'ARMADURA',
+          nombrePropio: 'Yelmo de bronce',
+          disponible: false,
+          subastaId: '6f000000-0000-4000-8000-000000000001',
+        },
+        {
+          id: 'i-5',
+          productoId: 'p-i1',
+          tipo: 'ITEM',
+          nombrePropio: 'Poción de vigor',
+          disponible: true,
+          subastaId: null,
+        },
+      ],
+      numero: 0,
+      tamanio: 16,
+      totalElementos: 5,
+      totalPaginas: 1,
+      ultima: true,
+    }),
+  ],
+  [
+    '**/api/v1/admin/auditoria*',
+    json({
+      content: [
+        registroDeAuditoria(0, {
+          tipoAccion: 'OTRO',
+          afectado: UID_DE_LA_FICHA,
+          valorAnterior: null,
+          valorNuevo: null,
+          motivo: 'Consulta de la ficha administrativa (datos personales)',
+        }),
+        registroDeAuditoria(30, {
+          tipoAccion: 'ACTUALIZACION',
+          afectado: UID_DE_LA_FICHA,
+          valorAnterior: 'apodo=nyx',
+          valorNuevo: 'apodo=nyx_valiente',
+          motivo: 'Corrección pedida por la jugadora.',
+        }),
+      ],
+      totalElements: 2,
+      totalPages: 1,
+      number: 0,
+      size: 20,
+    }),
+  ],
+];
+
+export const ESCENARIOS_SA3 = [
+  {
+    id: 'ficha-usuario-completa',
+    titulo: 'ficha del usuario: resumen con rol y permisos (SA-3, §7.3.4)',
+    ruta: 'plataforma/moderacion-sanciones/ficha-usuario.html?usuario=15',
+    sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+    rutas: RUTAS_DE_LA_FICHA,
+    exige: [
+      '[role="tab"][aria-selected="true"]',
+      '[data-panel="cuenta"] .ficha-usuario__datos',
+      '[data-panel="permisos"] .ficha-usuario__permisos li',
+      '[data-panel="acciones"] a[data-accion="gestionar"]',
+    ],
+  },
+  {
+    id: 'ficha-usuario-juego',
+    titulo: 'ficha del usuario: estadísticas de juego y últimas partidas (SA-3)',
+    ruta: 'plataforma/moderacion-sanciones/ficha-usuario.html?usuario=15',
+    sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+    rutas: RUTAS_DE_LA_FICHA,
+    interaccion: async (pagina) => {
+      await pagina.locator('#pestana-juego').click();
+    },
+    exige: [
+      '[data-panel="estadisticas"] .indicador-admin',
+      '[data-panel="estadisticas"] .tabla-admin__tabla',
+      '[data-panel="partidas"] .tabla-admin__tabla tbody tr',
+    ],
+  },
+  {
+    id: 'ficha-usuario-creditos',
+    titulo: 'ficha del usuario: saldo y movimientos de créditos (SA-3)',
+    ruta: 'plataforma/moderacion-sanciones/ficha-usuario.html?usuario=15',
+    sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+    rutas: RUTAS_DE_LA_FICHA,
+    interaccion: async (pagina) => {
+      await pagina.locator('#pestana-creditos').click();
+    },
+    exige: [
+      '[data-panel="saldo"] .indicador-admin',
+      '[data-panel="movimientos"] .movimiento__importe',
+    ],
+  },
+  {
+    id: 'ficha-usuario-comunidad',
+    titulo: 'ficha del usuario: comentarios y reportes realizados y recibidos (SA-3)',
+    ruta: 'plataforma/moderacion-sanciones/ficha-usuario.html?usuario=15',
+    sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+    rutas: RUTAS_DE_LA_FICHA,
+    interaccion: async (pagina) => {
+      await pagina.locator('#pestana-comunidad').click();
+    },
+    exige: [
+      '[data-panel="comentarios"] tbody tr',
+      '[data-panel="reportes-realizados"] tbody tr',
+      '[data-panel="reportes-recibidos"] tbody tr',
+    ],
+  },
+  {
+    id: 'ficha-usuario-inventario',
+    titulo: 'ficha del usuario: inventario con la situación de cada producto (SA-3)',
+    ruta: 'plataforma/moderacion-sanciones/ficha-usuario.html?usuario=15',
+    sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+    rutas: RUTAS_DE_LA_FICHA,
+    interaccion: async (pagina) => {
+      await pagina.locator('#pestana-inventario').click();
+    },
+    exige: ['[data-panel="inventario-de-la-cuenta"] tbody tr .estado-admin'],
+  },
+  {
+    id: 'ficha-usuario-actividad',
+    titulo: 'ficha del usuario: historial completo y acciones administrativas (SA-3)',
+    ruta: 'plataforma/moderacion-sanciones/ficha-usuario.html?usuario=15',
+    sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+    rutas: RUTAS_DE_LA_FICHA,
+    interaccion: async (pagina) => {
+      await pagina.locator('#pestana-actividad').click();
+    },
+    exige: [
+      '[data-panel="linea-de-tiempo"] .linea-tiempo__hecho',
+      '[data-panel="auditoria"] tbody tr',
+    ],
+  },
+  {
+    id: 'gestion-usuarios-busqueda',
+    titulo: 'gestión de usuarios: buscar por apodo y elegir la cuenta (SA-3, punto 16)',
+    ruta: 'cuentas/gestion-usuarios.html',
+    sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+    rutas: [
+      ['**/api/v1/rbac/matrix', json(MATRIZ_DE_PERMISOS)],
+      [
+        '**/api/v1/admin/jugadores**',
+        json({
+          contenido: [
+            cuentaDelDirectorio(0, { id: 15, sancionesRegistradas: 0 }),
+            cuentaDelDirectorio(6, { id: 22, apodo: 'nyx_sombra', estado: 'SUSPENDIDO' }),
+          ],
+          pagina: 0,
+          tamano: 10,
+          total: 2,
+          totalPaginas: 1,
+        }),
+      ],
+    ],
+    interaccion: async (pagina) => {
+      await pagina.locator('#usuario-id').fill('nyx');
+      await pagina.locator('#btn-buscar').click();
+      await pagina.locator('#resultados-busqueda:not([hidden])').waitFor({ timeout: 10_000 });
+    },
+    exige: [
+      '#resultados-busqueda tbody tr button[data-accion="seleccionar-cuenta"]',
+      '[data-accion="crear-cuenta-admin"]',
+    ],
+  },
+];
+
+ESCENARIOS.push(...ESCENARIOS_SA3);

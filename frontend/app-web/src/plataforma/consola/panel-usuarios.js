@@ -59,6 +59,12 @@ export const ESTADOS_DE_CUENTA = Object.freeze([
   { estado: 'BANEADO', etiqueta: 'Baneadas', nombre: 'Baneadas', tono: 'error' },
 ]);
 
+/** El filtro «Sanciones» del directorio: el valor del contrato y cómo se lee. */
+export const HISTORIAL_DE_SANCIONES = Object.freeze([
+  ['CON', 'Con sanciones'],
+  ['SIN', 'Sin sanciones'],
+]);
+
 /* -------------------------------------------------------------------------
    Consultas
    ------------------------------------------------------------------------- */
@@ -67,8 +73,12 @@ export const ESTADOS_DE_CUENTA = Object.freeze([
  * Los filtros del directorio, en el orden de la consulta. Solo los que tienen
  * valor: sin filtros, la consulta es la de siempre.
  *
+ * `historialSanciones` (ms-identidad-admin 1.7.0, §7.3.4 «filtros por
+ * historial de sanciones»): `CON` las cuentas a las que se les ha emitido
+ * alguna sanción, también revertida; `SIN` las que nunca.
+ *
  * @param {{buscar?: string, rol?: string, estadoCuenta?: string, desde?: string,
- *          hasta?: string, ocultarPruebas?: boolean}} filtros
+ *          hasta?: string, historialSanciones?: string, ocultarPruebas?: boolean}} filtros
  * @returns {string[]} pares `clave=valor` ya codificados
  */
 function paresDeFiltros(filtros) {
@@ -83,6 +93,7 @@ function paresDeFiltros(filtros) {
   poner('estado', filtros?.estadoCuenta);
   poner('registradoDesde', filtros?.desde);
   poner('registradoHasta', filtros?.hasta);
+  poner('historialSanciones', filtros?.historialSanciones);
   if (filtros?.ocultarPruebas) {
     pares.push('ocultarPruebas=true');
   }

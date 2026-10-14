@@ -6,13 +6,24 @@ import {
 } from './directives/has-permission.directive.js';
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+import { urlDeVista } from '../comun/acceso.js';
 import { montarCabecera } from '../comun/cabecera-app.js';
+import { ESTADOS_DE_CUENTA_ADMIN, estadoSegun } from '../comun/ui/admin/estado.js';
+import { tablaDeDatos } from '../comun/ui/admin/tabla-de-datos.js';
 import { confirmar, confirmarConMotivo } from '../comun/ui/dialogo.js';
+import { h, vaciar } from '../comun/ui/dom.js';
 import { cambiarRol, ROLES_DISPONIBLES } from './cambio-rol.js';
 import { respaldoPorEstado, textoDeError, textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
 const BASE_API = '/api/v1/admin/usuarios';
+const DIRECTORIO_API = '/api/v1/admin/jugadores';
 const MATRIZ_RBAC_API = '/api/v1/rbac/matrix';
+
+/** Cuántas cuentas enseña una búsqueda: si hay más, se pide afinarla. */
+export const RESULTADOS_POR_BUSQUEDA = 10;
+
+/** La clave interna de una cuenta: un entero positivo (`UsuarioId`). */
+const CLAVE_DE_CUENTA = /^[1-9]\d{0,17}$/;
 
 const CLAVE_ROL = 'nexus.rolActual';
 const CLAVE_USUARIO_ID = 'nexus.usuarioId';
@@ -288,6 +299,81 @@ function pintarMotivoDeBloqueo(seccion, matrizDisponible) {
 }
 
 /**
+ * Qué se escribió en el buscador — SA-3 (§7.3.4 «búsqueda por nombre,
+ * apodo, email, ID de usuario»; informe, punto 16: «solo se busca por ID»).
+ *
+ * - Solo cifras: el ID de la cuenta. Si no es un entero positivo, no nombra
+ *   a nadie y no se consulta.
+ * - Cualquier otra cosa (apodo, correo, nombre, el `uid`): se busca en el
+ *   directorio, que ya encuentra por todo eso (ms-identidad-admin 1.5.0), y
+ *   la persona elige la cuenta en los resultados.
+ *
+ * @param {string} termino lo escrito
+ * @returns {{tipo: 'vacio'|'invalido'|'corto'|'id'|'texto', valor: string}}
+ */
+export function clasificarBusqueda(termino) {
+  const valor = String(termino ?? '').trim();
+  if (!valor) {
+    return { tipo: 'vacio', valor };
+  }
+  if (/^[-+]?\d+$/.test(valor)) {
+    return CLAVE_DE_CUENTA.test(valor) ? { tipo: 'id', valor } : { tipo: 'invalido', valor };
+  }
+  if (valor.length < 2) {
+    return { tipo: 'corto', valor };
+  }
+  return { tipo: 'texto', valor };
+}
+
+/**
+ * El buscador: primero se busca, luego se elige — SA-3.
+ *
+ * Un ID abre la cuenta directamente (es inequívoco); un apodo, un correo o un
+ * nombre enseñan las cuentas que coinciden y la gestión no se abre hasta que
+ * se elige una. Así nadie gestiona una cuenta sin haber visto antes de quién
+ * es.
+ *
+ * @param {Event} evento
+ */
+async function buscarUsuario(evento) {
+  evento.preventDefault();
+
+  limpiarMensajeBusqueda();
+
+  const input = document.getElementById('usuario-id');
+
+  if (!input) {
+    return;
+  }
+
+  const busqueda = clasificarBusqueda(input.value);
+
+  if (busqueda.tipo === 'vacio') {
+    mostrarMensajeBusqueda('Escribe el apodo, el correo, el nombre o el ID de la cuenta.');
+    return;
+  }
+  if (busqueda.tipo === 'invalido') {
+    ocultarPanelUsuario();
+    limpiarResultados();
+    mostrarMensajeBusqueda(
+      'Ese no es un ID válido: el ID de una cuenta es un número mayor que cero. También puedes ' +
+        'buscar por apodo, correo o nombre.',
+    );
+    return;
+  }
+  if (busqueda.tipo === 'corto') {
+    mostrarMensajeBusqueda('Escribe al menos dos letras para buscar por apodo, correo o nombre.');
+    return;
+  }
+  if (busqueda.tipo === 'id') {
+    limpiarResultados();
+    await abrirCuenta(Number(busqueda.valor));
+    return;
+  }
+  await buscarEnDirectorio(busqueda.valor);
+}
+
+/**
  * Busca de verdad — FI-R3.
  *
  * Lo que habia aqui: el boton guardaba el ID en `sessionStorage`, abria el
@@ -309,32 +395,16 @@ function pintarMotivoDeBloqueo(seccion, matrizDisponible) {
  * distinto: no existe, no tienes permiso, tu sesion caduco, o el servicio no
  * responde. Los cuatro se confundian en uno.
  *
- * @param {Event} evento
+ * @param {number} usuarioId la clave de la cuenta
  */
-async function buscarUsuario(evento) {
-  evento.preventDefault();
-
+async function abrirCuenta(usuarioId) {
   limpiarMensajeBusqueda();
-
-  const input = document.getElementById('usuario-id');
-
-  if (!input) {
-    return;
-  }
-
-  const usuarioId = input.value.trim();
-
-  if (!usuarioId || !Number.isInteger(Number(usuarioId)) || Number(usuarioId) <= 0) {
-    mostrarMensajeBusqueda('Debes ingresar un ID de usuario válido.');
-
-    return;
-  }
 
   const boton = document.getElementById('btn-buscar');
   cambiarEstadoBoton(boton, true, 'Buscando...');
 
   try {
-    const respuesta = await fetchWithHttpErrorInterceptor(`${BASE_API}/${Number(usuarioId)}`);
+    const respuesta = await fetchWithHttpErrorInterceptor(`${BASE_API}/${usuarioId}`);
 
     if (!respuesta.ok) {
       ocultarPanelUsuario();
@@ -350,7 +420,7 @@ async function buscarUsuario(evento) {
       // se suspendía, baneaba, reactivaba, restablecía y cambiaba el rol. La
       // clave de la cuenta es la que se acaba de consultar: el servidor la
       // resolvió como cuenta al devolver esta ficha.
-      id: Number(usuarioId),
+      id: usuarioId,
       apodo: typeof datos.apodo === 'string' && datos.apodo.trim() ? datos.apodo.trim() : null,
       rolNombre: typeof datos.rolNombre === 'string' ? datos.rolNombre : null,
     };
@@ -373,6 +443,136 @@ async function buscarUsuario(evento) {
 }
 
 /**
+ * Busca por apodo, correo, nombre o `uid` en el directorio y enseña las
+ * cuentas que coinciden, sin abrir ninguna.
+ *
+ * @param {string} texto lo escrito, ya recortado
+ */
+async function buscarEnDirectorio(texto) {
+  ocultarPanelUsuario();
+  limpiarResultados();
+
+  const boton = document.getElementById('btn-buscar');
+  cambiarEstadoBoton(boton, true, 'Buscando...');
+
+  try {
+    const respuesta = await fetchWithHttpErrorInterceptor(
+      `${DIRECTORIO_API}?buscar=${encodeURIComponent(texto)}&page=0&size=${RESULTADOS_POR_BUSQUEDA}`,
+    );
+
+    if (!respuesta.ok) {
+      mostrarMensajeBusqueda(await motivoDeBusquedaFallida(respuesta, null));
+      return;
+    }
+
+    const datos = await respuesta.json();
+    const cuentas = Array.isArray(datos?.contenido) ? datos.contenido : [];
+    if (cuentas.length === 0) {
+      mostrarMensajeBusqueda(`Ninguna cuenta coincide con «${texto}».`);
+      return;
+    }
+    pintarResultados(cuentas, Number.isFinite(datos?.total) ? datos.total : cuentas.length);
+  } catch (error) {
+    console.error('Error buscando cuentas:', error);
+    mostrarMensajeBusqueda(
+      'No se pudo buscar: el servicio de identidad no responde. Vuelve a intentarlo.',
+    );
+  } finally {
+    cambiarEstadoBoton(boton, false, 'Buscar');
+  }
+}
+
+/**
+ * Las cuentas que coinciden, con lo que hace falta para reconocer a la
+ * persona antes de abrirla: apodo, correo, rol y estado.
+ *
+ * @param {object[]} cuentas `EntradaDeDirectorio` (ms-identidad-admin 1.7.0)
+ * @param {number} total cuántas coinciden en el servidor
+ */
+function pintarResultados(cuentas, total) {
+  const zona = document.getElementById('resultados-busqueda');
+  if (!zona) {
+    return;
+  }
+  const resumen =
+    total > cuentas.length
+      ? `Las ${cuentas.length} primeras de ${total} cuentas: afina la búsqueda si no está la que buscas.`
+      : `${total} ${total === 1 ? 'cuenta coincide' : 'cuentas coinciden'}`;
+  vaciar(zona).append(
+    tablaDeDatos({
+      titulo: 'Cuentas que coinciden con la búsqueda',
+      resumen,
+      columnas: [
+        { clave: 'apodo', titulo: 'Apodo', principal: true },
+        { clave: 'email', titulo: 'Correo' },
+        { clave: 'rol', titulo: 'Rol', valor: (c) => nombreDeRol(c.rol) },
+        {
+          clave: 'estado',
+          titulo: 'Estado',
+          tipo: 'estado',
+          valor: (c) => estadoSegun(c.bloqueada ? 'BLOQUEADA' : c.estado, ESTADOS_DE_CUENTA_ADMIN),
+        },
+        {
+          clave: 'acciones',
+          titulo: 'Acciones',
+          tipo: 'accion',
+          valor: (c) => accionesDelResultado(c),
+        },
+      ],
+      filas: cuentas,
+      claveDeFila: (c) => String(c.id ?? c.uid ?? c.apodo ?? ''),
+    }),
+  );
+  zona.hidden = false;
+}
+
+/** «Gestionar» abre la cuenta aquí; «Ficha», su ficha completa. */
+function accionesDelResultado(cuenta) {
+  const clave = Number(cuenta?.id);
+  if (!Number.isInteger(clave) || clave <= 0) {
+    return [];
+  }
+  const nombre = cuenta.apodo ?? 'esta cuenta';
+  const gestionar = h('button', {
+    clase: 'boton boton--primario boton--pequeno',
+    texto: 'Gestionar',
+    atributos: { type: 'button', 'aria-label': `Gestionar la cuenta de ${nombre}` },
+    datos: { accion: 'seleccionar-cuenta', cuenta: String(clave) },
+  });
+  gestionar.addEventListener('click', async () => {
+    await abrirCuenta(clave);
+    document.getElementById('panel-usuario')?.scrollIntoView?.({ block: 'start' });
+  });
+  return [
+    gestionar,
+    h('a', {
+      clase: 'boton boton--secundario boton--pequeno',
+      texto: 'Ficha',
+      atributos: {
+        href: urlDeFicha(clave),
+        'aria-label': `Ver la ficha de ${nombre}`,
+      },
+      datos: { accion: 'ver-ficha' },
+    }),
+  ];
+}
+
+/** La ficha administrativa de la cuenta (HU-USR-010), por su clave. */
+function urlDeFicha(clave) {
+  const destino = new URL(urlDeVista('ficha-usuario'));
+  destino.searchParams.set('usuario', String(clave));
+  return destino.href;
+}
+
+function limpiarResultados() {
+  const zona = document.getElementById('resultados-busqueda');
+  if (zona) {
+    vaciar(zona);
+    zona.hidden = true;
+  }
+}
+
+/**
  * Por que fallo la busqueda, dicho de forma que sirva para actuar.
  *
  * Un 404 y un 403 llevan a cosas distintas: el primero es «ese usuario no
@@ -380,11 +580,11 @@ async function buscarUsuario(evento) {
  * buscar» manda al administrador a revisar lo que no es.
  *
  * @param {Response} respuesta
- * @param {string} usuarioId
+ * @param {number|string|null} usuarioId la clave buscada; null si se buscó en el directorio
  * @returns {Promise<string>}
  */
 async function motivoDeBusquedaFallida(respuesta, usuarioId) {
-  if (respuesta.status === 404) {
+  if (respuesta.status === 404 && usuarioId !== null) {
     return `No existe ningún usuario con el ID ${usuarioId}.`;
   }
   if (respuesta.status === 403) {
@@ -412,8 +612,15 @@ function pintarUsuario(datos, clave) {
   establecerTexto('usuario-id-mostrado', clave ?? '-');
   establecerTexto('usuario-apodo-mostrado', datos.apodo ?? '-');
   establecerTexto('usuario-email-mostrado', datos.email ?? '-');
-  establecerTexto('usuario-rol-mostrado', datos.rolNombre ?? '-');
-  establecerTexto('usuario-estado-mostrado', datos.estado ?? '-');
+  // SA-3 — el rol y el estado se leen como los diría una persona, y el
+  // estado con su distintivo (§7.3.8: «indicadores visuales de estado»).
+  establecerTexto('usuario-rol-mostrado', datos.rolNombre ? nombreDeRol(datos.rolNombre) : '-');
+  pintarEstadoDeLaCuenta(datos.estado);
+  const ficha = document.getElementById('enlace-ficha-usuario');
+  if (ficha) {
+    ficha.href = urlDeFicha(clave);
+    ficha.hidden = false;
+  }
 
   establecerValor('nombres', datos.nombres ?? '');
   establecerValor('apellidos', datos.apellidos ?? '');
@@ -439,6 +646,10 @@ function ocultarPanelUsuario() {
   const panel = document.getElementById('panel-usuario');
   if (panel) {
     panel.hidden = true;
+  }
+  const ficha = document.getElementById('enlace-ficha-usuario');
+  if (ficha) {
+    ficha.hidden = true;
   }
 }
 
@@ -504,7 +715,7 @@ async function cambiarRolUsuarioSeleccionado() {
     await cambiarRol(cuenta.id, nuevoRol, { motivo });
     recordarRol(cuenta.id, nuevoRol);
 
-    establecerTexto('usuario-rol-mostrado', nuevoRol);
+    establecerTexto('usuario-rol-mostrado', nombreDeRol(nuevoRol));
 
     mostrarMensajeCambioRol(`Rol actualizado a ${nombreDeRol(nuevoRol)}.`);
   } catch (error) {
@@ -735,7 +946,7 @@ async function ejecutarAccionEstado(ruta, estado, mensajeExito, cuerpo = null) {
 
     establecerValor('estado', estado);
 
-    establecerTexto('usuario-estado-mostrado', estado);
+    pintarEstadoDeLaCuenta(estado);
 
     mostrarMensajePerfil(mensajeExito);
   } catch (error) {
@@ -926,6 +1137,24 @@ function establecerTexto(id, texto) {
   if (elemento) {
     elemento.textContent = String(texto ?? '-');
   }
+}
+
+/**
+ * El estado de la cuenta abierta con el distintivo de la consola: «Activa»,
+ * «Suspendida», «Baneada»… y no la constante del servidor.
+ *
+ * @param {string|null|undefined} estado `EstadoCuenta`
+ */
+function pintarEstadoDeLaCuenta(estado) {
+  const elemento = document.getElementById('usuario-estado-mostrado');
+  if (!elemento) {
+    return;
+  }
+  if (!estado) {
+    elemento.textContent = '-';
+    return;
+  }
+  elemento.replaceChildren(estadoSegun(estado, ESTADOS_DE_CUENTA_ADMIN));
 }
 
 function cambiarEstadoBoton(boton, deshabilitado, texto) {
