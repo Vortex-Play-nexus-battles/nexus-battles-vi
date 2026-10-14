@@ -1,6 +1,6 @@
 /** Formato de cifras y fechas (PR-UX-1). */
 
-import { creditos, cuantoFalta, fecha, numero, porcentaje } from './formato.js';
+import { creditos, cuantoFalta, dinero, fecha, numero, porcentaje } from './formato.js';
 
 describe('créditos', () => {
   test('separador de miles y sin decimales', () => {
@@ -52,5 +52,21 @@ describe('numero y porcentaje', () => {
     expect(porcentaje(0.914)).toBe('91 %');
     expect(porcentaje(0)).toBe('0 %');
     expect(porcentaje(null)).toBe('—');
+  });
+});
+
+describe('dinero (SA-15)', () => {
+  test('la cifra con separadores y el código de la moneda, céntimos solo si los hay', () => {
+    expect(dinero(25000, 'COP')).toBe('25.000 COP');
+    expect(dinero('25000.00', 'cop')).toBe('25.000 COP');
+    expect(dinero(10.5, 'USD')).toBe('10,50 USD');
+    expect(dinero(7, null)).toBe('7');
+  });
+
+  test('sin cifra, un guion; nunca un cero inventado', () => {
+    expect(dinero(null, 'COP')).toBe('—');
+    expect(dinero(undefined, 'COP')).toBe('—');
+    expect(dinero('', 'COP')).toBe('—');
+    expect(dinero('mucho', 'COP')).toBe('—');
   });
 });

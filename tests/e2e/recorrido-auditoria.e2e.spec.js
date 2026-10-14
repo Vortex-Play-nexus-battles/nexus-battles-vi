@@ -189,7 +189,16 @@ test.describe('El recorrido de la auditoría del 30-sep, con un jugador limpio',
     });
     expect(alertas.status(), await alertas.text()).toBe(200);
 
-    // Punto de partida limpio: lo que traiga el alta se da por leído.
+    // Punto de partida limpio: lo que traiga el alta se da por leído. Los
+    // avisos que se incorporan al dar de alta una sesión (cambios del
+    // catálogo y, desde SA-11, de las políticas de uso de los últimos 30
+    // días) llegarían justo al abrir la vista: se traen aquí con una entrega
+    // de pendientes, igual que en foto-y-campana, y se leen con el resto.
+    const traidos = await api.post(
+      `/api/v1/users/${jugador.claims.uid}/sessions/limpieza-campana/pending`,
+      { headers: conToken(jugador.token) },
+    );
+    expect(traidos.status(), await traidos.text()).toBe(200);
     const bandeja = `/api/v1/users/${jugador.claims.uid}/notifications`;
     const previa = await api.get(bandeja, { headers: conToken(jugador.token) });
     expect(previa.status(), await previa.text()).toBe(200);
