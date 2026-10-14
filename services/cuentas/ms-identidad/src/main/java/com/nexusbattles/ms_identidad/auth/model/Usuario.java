@@ -139,4 +139,17 @@ public class Usuario {
 
     @Column
     private LocalDateTime ultimoAcceso;
+
+    /**
+     * SA-3 (§7.3.4, filtro por historial de sanciones): el resumen que fija
+     * moderacion-sanciones, dueño de las sanciones, por la ruta interna. Cuantas
+     * se le han emitido a la cuenta (las revertidas tambien: es historial) y
+     * cuando fue la ultima. El directorio filtra y pagina con esto sin llamar
+     * a otro servicio por cada fila.
+     */
+    @Column(name = "sanciones_registradas", nullable = false)
+    private int sancionesRegistradas = 0;
+
+    @Column(name = "ultima_sancion_en")
+    private LocalDateTime ultimaSancionEn;
 }

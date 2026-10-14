@@ -60,6 +60,20 @@ class ClientesDeIdentidadYCorreoTest {
         }
 
         @Test
+        @DisplayName("SA-3: fija el historial de sanciones con PUT en su ruta interna y la forma HistorialDeSanciones")
+        void historial() {
+            servidor.expect(requestTo("http://srv-ms-identidad:8089/api/v1/internal/usuarios/" + UID
+                            + "/historial-sanciones"))
+                    .andExpect(method(HttpMethod.PUT))
+                    .andExpect(jsonPath("$.total").value(2))
+                    .andExpect(jsonPath("$.ultimaEn").value("2026-09-27T10:00:00Z"))
+                    .andRespond(withSuccess("{\"uid\":\"" + UID + "\",\"total\":2}", MediaType.APPLICATION_JSON));
+
+            cliente.historial(UID, new ClienteIdentidad.HistorialDeSanciones(2, HASTA));
+            servidor.verify();
+        }
+
+        @Test
         @DisplayName("lee el contacto e ignora lo que no usa")
         void contacto() {
             servidor.expect(requestTo("http://srv-ms-identidad:8089/api/v1/internal/usuarios/" + UID + "/contacto"))

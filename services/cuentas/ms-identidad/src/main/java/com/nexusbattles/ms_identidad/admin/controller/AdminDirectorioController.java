@@ -113,6 +113,7 @@ public class AdminDirectorioController {
      * @param estado          1.3.0: solo ese estado
      * @param registradoDesde 1.3.0: registradas ese dia o despues
      * @param registradoHasta 1.3.0: registradas ese dia o antes
+     * @param historialSanciones 1.7.0 (§7.3.4): CON o SIN sanciones emitidas
      * @param page            pagina, desde 0
      * @param size            filas por pagina, tope {@value #TAMANO_MAXIMO}
      */
@@ -125,11 +126,12 @@ public class AdminDirectorioController {
             @RequestParam(name = "estado", required = false) String estado,
             @RequestParam(name = "registradoDesde", required = false) String registradoDesde,
             @RequestParam(name = "registradoHasta", required = false) String registradoHasta,
+            @RequestParam(name = "historialSanciones", required = false) String historialSanciones,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
 
-        FiltroDelDirectorio filtro =
-                FiltroDelDirectorio.de(buscar, ocultarPruebas, rol, estado, registradoDesde, registradoHasta);
+        FiltroDelDirectorio filtro = FiltroDelDirectorio.de(
+                buscar, ocultarPruebas, rol, estado, registradoDesde, registradoHasta, historialSanciones);
         int pagina = Math.max(page, 0);
         int tamano = Math.min(Math.max(size, 1), TAMANO_MAXIMO);
         PageRequest pedido = PageRequest.of(pagina, tamano, Sort.by(Sort.Direction.DESC, "id"));
@@ -165,10 +167,11 @@ public class AdminDirectorioController {
             @RequestParam(name = "estado", required = false) String estado,
             @RequestParam(name = "registradoDesde", required = false) String registradoDesde,
             @RequestParam(name = "registradoHasta", required = false) String registradoHasta,
+            @RequestParam(name = "historialSanciones", required = false) String historialSanciones,
             HttpServletRequest peticion) {
 
-        FiltroDelDirectorio filtro =
-                FiltroDelDirectorio.de(buscar, ocultarPruebas, rol, estado, registradoDesde, registradoHasta);
+        FiltroDelDirectorio filtro = FiltroDelDirectorio.de(
+                buscar, ocultarPruebas, rol, estado, registradoDesde, registradoHasta, historialSanciones);
         ExportacionDelDirectorio.Exportacion archivo = exportacion.exportar(filtro);
         auditoriaDeExportaciones.registrar(filtro, archivo.filas(),
                 (String) peticion.getAttribute("usuarioActual"), uidDe(peticion),

@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -24,6 +26,16 @@ public interface ReporteRepository extends JpaRepository<RegistroDeReporte, Stri
     List<RegistroDeReporte> findByComentarioIdInOrderByFechaAsc(Collection<String> comentarioIds);
 
     long countByComentarioId(String comentarioId);
+
+    /** Los reportes que ha hecho una cuenta (contrato 1.11.0, ficha administrativa). */
+    Page<RegistroDeReporte> findByReportanteId(String reportanteId, Pageable pagina);
+
+    long countByReportanteId(String reportanteId);
+
+    /** Los reportes de esos comentarios: los que ha recibido su autor (1.11.0). */
+    Page<RegistroDeReporte> findByComentarioIdIn(Collection<String> comentarioIds, Pageable pagina);
+
+    long countByComentarioIdIn(Collection<String> comentarioIds);
 
     /**
      * Cuantos reportes lleva ese usuario desde un instante.

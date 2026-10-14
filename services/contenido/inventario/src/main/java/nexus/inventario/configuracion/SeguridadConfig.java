@@ -113,6 +113,12 @@ public class SeguridadConfig {
                 // puede caer en el comodin de "cualquier servicio autenticado".
                 .requestMatchers(HttpMethod.POST, "/api/v1/inventario/elementos/*/transferencias")
                 .access(soloSubastas)
+                // 1.8.0 (§7.3.4): el inventario de OTRA cuenta, para su ficha
+                // administrativa. Solo Administrador y Super Administrador; va
+                // antes del comodin de abajo, que lo abriria a cualquier jugador.
+                .requestMatchers(HttpMethod.GET, "/api/v1/inventario/usuarios/*/elementos")
+                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                .requestMatchers("/api/v1/inventario/usuarios/**").denyAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/inventario/elementos/busqueda")
                 .hasAnyRole(ROLES_DEL_INVENTARIO)
                 .requestMatchers(HttpMethod.GET, "/api/v1/inventario/elementos/*")

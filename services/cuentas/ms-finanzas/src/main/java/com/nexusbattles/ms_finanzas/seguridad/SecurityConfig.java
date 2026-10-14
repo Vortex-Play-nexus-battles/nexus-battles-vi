@@ -84,12 +84,17 @@ public class SecurityConfig {
         http.authorizeHttpRequests(auth -> auth
                 // Regla 3: actuator queda abierto para la sonda de salud.
                 .requestMatchers("/actuator/**").permitAll()
-                // El saldo: un servicio ve el de cualquiera; un usuario, solo el suyo.
-                .requestMatchers(HttpMethod.GET, "/creditos/{uid}/saldo").access(servicioODuenoDelSaldo())
+                // El saldo: un servicio ve el de cualquiera; un usuario, solo el
+                // suyo. creditos.yaml 1.5.0 (§7.3.4): Administrador y Super
+                // Administrador lo leen tambien, para la ficha administrativa
+                // de la cuenta. Solo lectura.
+                .requestMatchers(HttpMethod.GET, "/creditos/{uid}/saldo").access(servicioDuenoOAdministracion())
                 // El historial de movimientos (#569): misma regla que el saldo.
                 // Es lectura, pero dice cuanto aposto y cuanto gano alguien, asi
-                // que no puede verlo un tercero.
-                .requestMatchers(HttpMethod.GET, "/creditos/{uid}/movimientos").access(servicioODuenoDelSaldo())
+                // que no puede verlo un tercero que no sea la administracion
+                // (§7.3.4, «historial de transacciones» de la ficha).
+                .requestMatchers(HttpMethod.GET, "/creditos/{uid}/movimientos")
+                .access(servicioDuenoOAdministracion())
                 // Todo lo que aparta, mueve o crea saldo: solo servicios autorizados.
                 .requestMatchers("/creditos/**").hasRole(ROL_SERVICIO)
                 // HU-JUE-012: el resultado de una partida lo informa salas-partidas,
@@ -132,6 +137,25 @@ public class SecurityConfig {
             String uidDeLaRuta = contexto.getVariables().get("uid");
             boolean esElDueno = autenticado && uidDeLaRuta != null && uidDeLaRuta.equals(actual.getName());
             return new AuthorizationDecision(esElDueno);
+        };
+    }
+
+    /**
+     * Lo de {@link #servicioODuenoDelSaldo()} y, ademas, Administrador o Super
+     * Administrador (creditos.yaml 1.5.0): la ficha administrativa del usuario
+     * lee su saldo y sus movimientos. Un moderador o un jugador ajeno, no.
+     */
+    static AuthorizationManager<RequestAuthorizationContext> servicioDuenoOAdministracion() {
+        AuthorizationManager<RequestAuthorizationContext> servicioODueno = servicioODuenoDelSaldo();
+        AuthorizationManager<RequestAuthorizationContext> administracion =
+                AuthorityAuthorizationManager.hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR");
+        return (Supplier<? extends Authentication> autenticacion, RequestAuthorizationContext contexto) -> {
+            AuthorizationResult propio = servicioODueno.authorize(autenticacion, contexto);
+            if (propio != null && propio.isGranted()) {
+                return propio;
+            }
+            AuthorizationResult admin = administracion.authorize(autenticacion, contexto);
+            return new AuthorizationDecision(admin != null && admin.isGranted());
         };
     }
 

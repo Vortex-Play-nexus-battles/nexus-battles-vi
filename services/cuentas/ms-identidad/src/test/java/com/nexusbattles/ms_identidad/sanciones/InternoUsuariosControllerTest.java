@@ -48,6 +48,7 @@ class InternoUsuariosControllerTest {
     private JwtService jwt;
     private EmisorDeTokensDeServicio emisor;
     private ProyeccionDeSancionService proyecciones;
+    private HistorialDeSancionesService historiales;
     private UsuarioRepository usuarios;
     private AuditoriaEventClient auditoria;
     private MockMvc mvc;
@@ -60,9 +61,10 @@ class InternoUsuariosControllerTest {
         ReflectionTestUtils.setField(jwt, "emisor", "ms-identidad");
         emisor = new EmisorDeTokensDeServicio(claves, "ms-identidad", 15);
         proyecciones = mock(ProyeccionDeSancionService.class);
+        historiales = mock(HistorialDeSancionesService.class);
         usuarios = mock(UsuarioRepository.class);
         auditoria = mock(AuditoriaEventClient.class);
-        mvc = MockMvcBuilders.standaloneSetup(new InternoUsuariosController(proyecciones, usuarios))
+        mvc = MockMvcBuilders.standaloneSetup(new InternoUsuariosController(proyecciones, historiales, usuarios))
                 .addMappedInterceptors(new String[] {"/api/v1/internal/**"},
                         new InterceptorDeServicio(jwt, auditoria, "ms-identidad"))
                 .build();
@@ -206,5 +208,40 @@ class InternoUsuariosControllerTest {
     void preflight() throws Exception {
         mvc.perform(options("/api/v1/internal/usuarios/" + UID + "/contacto")).andExpect(status().isOk());
         verifyNoInteractions(auditoria);
+    }
+
+    @Test
+    @DisplayName("1.7.0: moderacion-sanciones fija el resumen del historial de sanciones; otro servicio no")
+    void historialDeSanciones() throws Exception {
+        when(historiales.fijar(eq(UID), any())).thenReturn(new HistorialDeSancionesService.HistorialDeSancionesResponse(
+                UID, 3, OffsetDateTime.parse("2026-10-10T10:00:00Z")));
+        String cuerpo = "{\"total\":3,\"ultimaEn\":\"2026-10-10T10:00:00Z\"}";
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/v1/internal/usuarios/" + UID + "/historial-sanciones")
+                        .header("Authorization", servicio("moderacion-sanciones"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .jsonPath("$.total").value(3));
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/v1/internal/usuarios/" + UID + "/historial-sanciones")
+                        .header("Authorization", servicio("ms-subastas"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isForbidden());
+        org.mockito.Mockito.verify(historiales, org.mockito.Mockito.times(1)).fijar(eq(UID), any());
+    }
+
+    @Test
+    @DisplayName("1.7.0: un historial invalido es 400 datos-invalidos")
+    void historialInvalido() throws Exception {
+        when(historiales.fijar(eq(UID), any())).thenThrow(new ProyeccionInvalidaException("negativo"));
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/v1/internal/usuarios/" + UID + "/historial-sanciones")
+                        .header("Authorization", servicio("moderacion-sanciones"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"total\":-1}"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isBadRequest());
     }
 }

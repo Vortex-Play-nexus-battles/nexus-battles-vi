@@ -115,7 +115,7 @@ class SancionesServiceTest {
             assertThat(aviso.tipo()).isEqualTo("SANCION_ADVERTENCIA");
             assertThat(aviso.cuerpo()).contains("Lenguaje ofensivo").contains("apelar");
             assertThat(salidas()).extracting(SalidaPendiente::canal)
-                    .containsExactly(CanalDeSalida.AVISO, CanalDeSalida.CORREO);
+                    .containsExactly(CanalDeSalida.AVISO, CanalDeSalida.CORREO, CanalDeSalida.HISTORIAL);
             assertThat(servicio.activaDe(JUGADOR)).isEmpty();
         }
 
@@ -203,7 +203,8 @@ class SancionesServiceTest {
                     .extracting(SalidaPendiente::canal, SalidaPendiente::sancionId)
                     .containsExactly(org.assertj.core.api.Assertions.tuple(CanalDeSalida.AVISO, s.id()),
                             org.assertj.core.api.Assertions.tuple(CanalDeSalida.PROYECCION, s.id()),
-                            org.assertj.core.api.Assertions.tuple(CanalDeSalida.CORREO, s.id()));
+                            org.assertj.core.api.Assertions.tuple(CanalDeSalida.CORREO, s.id()),
+                            org.assertj.core.api.Assertions.tuple(CanalDeSalida.HISTORIAL, s.id()));
         }
 
         @Test

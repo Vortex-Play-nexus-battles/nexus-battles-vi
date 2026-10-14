@@ -55,7 +55,13 @@ info:
   #   («Poder de ataque 42», «Defensa 3», «Turnos de carga 2»…) y el costo de
   #   cada accion del heroe. Solo cambia la descripcion: ninguna ruta, campo
   #   ni respuesta. Parche.
-  version: 1.7.1
+  # 1.8.0 (§7.3.4, ficha administrativa del usuario — SA-3): nueva
+  #   GET /usuarios/{uid}/elementos, el inventario de una cuenta con la misma
+  #   pagina de dieciseis y las mismas categorias que la vitrina. Es la unica
+  #   lectura donde el dueno sale de la ruta y no del token: solo Administrador
+  #   y Super Administrador (403 para cualquier otro rol). Modificarlo sigue
+  #   siendo POST /entregas con origen ADMINISTRACION. Menor: una operacion.
+  version: 1.8.0
   description: >
     Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
     de elementos propios del jugador para HU-INV-003, y equipamiento de
@@ -229,6 +235,53 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
+  /api/v1/inventario/usuarios/{uid}/elementos:
+    get:
+      summary: Inventario de una cuenta, para su ficha administrativa (1.8.0)
+      description: >
+        §7.3.4 «ver y modificar inventario del usuario». El inventario de la
+        cuenta `uid`, en paginas de dieciseis y con el mismo filtro de
+        categoria que la vitrina del jugador. Solo ADMINISTRADOR y
+        SUPER_ADMINISTRADOR: es la unica lectura donde el dueno sale de la ruta.
+        Una cuenta sin productos recibe una pagina vacia. Para darle productos,
+        `POST /api/v1/inventario/entregas` con origen ADMINISTRACION.
+      operationId: consultarInventarioDeUsuario
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          description: '`uid` de la cuenta (UUID). Otro valor es 400.'
+          schema:
+            type: string
+            format: uuid
+        - name: pagina
+          in: query
+          required: false
+          description: Numero de pagina, desde cero.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: categoria
+          in: query
+          required: false
+          description: HEROES u OBJETOS; sin ella, el inventario entero.
+          schema:
+            type: string
+            enum: [HEROES, OBJETOS]
+      responses:
+        "200":
+          description: Pagina del inventario de la cuenta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginaInventario"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          $ref: "#/components/responses/AccesoDenegado"
   /api/v1/inventario/elementos/busqueda:
     get:
       summary: Busca productos en el inventario del jugador autenticado
