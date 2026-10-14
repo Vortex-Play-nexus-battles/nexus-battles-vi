@@ -12,6 +12,7 @@ si encuentran algo, y todos se pueden correr en local desde la raíz del reposit
 | `pactos-verificados.py` | Un pacto de `contracts/pactos/` sin prueba de proveedor que monte cada uno de sus estados. |
 | `transferencia-de-subasta.py` | Que se desconecte cualquiera de las cinco piezas de la transferencia de propiedad por subasta (#660/#669). |
 | `catalogo-oficial.py` (B4) | Que el catálogo que siembra el código se aparte del documento: la semilla de productos, `PrototiposIniciales` y `EpicasIniciales` se comparan con `contracts/esquemas/catalogo-oficial.yaml` (Tablas 5 a 20) y falla si algo sobra, falta, se llama distinto o tiene otra estadística. `--autoprueba` rompe copias del catálogo a propósito y exige que lo vea. |
+| `estadisticas-sin-datos-personales.py` (ADR-010) | Que una estadística de la plataforma (indicadores de cuentas, tablero de moderación, métricas de sanciones, frecuencia de reportes, calificaciones, analíticas del asistente, estado del catálogo, tablero técnico) publique un dato que identifique a una persona: `uid`, correo, apodo, nombres, IP o el id de un jugador, de un autor o de un moderador. Falla también si una de la lista desaparece sin actualizarla. `--autoprueba` mete uno a propósito y exige verlo. |
 | `sin-secretos-en-bitacora.py` | Una línea de bitácora que imprima contraseñas, tokens, códigos o secretos. |
 | `compose-sin-claves-duplicadas.py`, `compose-credencial-de-servicio-completa.py` | Compose con claves repetidas o con credencial de servicio a medias. |
 

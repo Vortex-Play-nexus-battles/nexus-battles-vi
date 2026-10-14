@@ -1094,6 +1094,85 @@ class FlujoDeModeracionTest {
     }
 
     /**
+     * El comentario en su contexto — SA-16, contrato 1.17.0, §7.3.8 «Vista
+     * previa del comentario en contexto».
+     */
+    @Nested
+    @DisplayName("El comentario en su contexto (SA-16, contrato 1.17.0)")
+    class ContextoDelComentario {
+
+        private void escribir(String id, String producto, Comentario.Estado estado, long segundosAtras) {
+            comentarios.save(RegistroDeComentario.desde(new Comentario(id, producto, "autor-" + id,
+                    "apodo-" + id, "texto de " + id, List.of(), AHORA.minusSeconds(segundosAtras), estado)));
+        }
+
+        @BeforeEach
+        void hilo() {
+            escribir("c-1", PRODUCTO, Comentario.Estado.PUBLICADO, 600);
+            escribir("c-2", PRODUCTO, Comentario.Estado.OCULTO, 500);
+            escribir("c-3", PRODUCTO, Comentario.Estado.EN_REVISION, 400);
+            escribir("c-4", PRODUCTO, Comentario.Estado.ELIMINADO, 300);
+            escribir("c-5", PRODUCTO, Comentario.Estado.PUBLICADO, 200);
+            escribir("c-6", PRODUCTO, Comentario.Estado.PUBLICADO, 100);
+            escribir("x-1", "prod-2", Comentario.Estado.PUBLICADO, 450);
+        }
+
+        @Test
+        @DisplayName("los que lo rodean en su hilo, del mas antiguo al mas reciente, en cualquier estado y solo de su producto")
+        void losQueLoRodean() {
+            ServicioDeModeracion.Contexto contexto = servicio.contexto("c-3", 2);
+
+            assertEquals("c-3", contexto.comentarioId());
+            assertEquals(PRODUCTO, contexto.productoId());
+            assertEquals(List.of("c-1", "c-2"),
+                    contexto.anteriores().stream().map(ResumenDeComentario::id).toList());
+            assertEquals(List.of("c-4", "c-5"),
+                    contexto.posteriores().stream().map(ResumenDeComentario::id).toList());
+            assertEquals(Comentario.Estado.OCULTO, contexto.anteriores().get(1).estado());
+            assertEquals(Comentario.Estado.ELIMINADO, contexto.posteriores().get(0).estado());
+            assertEquals("apodo-c-1", contexto.anteriores().get(0).apodoAutor());
+            assertEquals(6, contexto.totalEnElHilo(), "el otro producto no cuenta");
+        }
+
+        @Test
+        @DisplayName("al principio o al final del hilo, un lado viene vacio")
+        void enLosExtremos() {
+            assertEquals(List.of(), servicio.contexto("c-1", 3).anteriores());
+            assertEquals(List.of(), servicio.contexto("c-6", 3).posteriores());
+            assertEquals(List.of("c-3", "c-4", "c-5"),
+                    servicio.contexto("c-6", 3).anteriores().stream().map(ResumenDeComentario::id).toList());
+        }
+
+        @Test
+        @DisplayName("cuantos a cada lado se corrige a 1..10 y la base recibe el orden de cercania")
+        void alrededorSeCorrige() {
+            servicio.contexto("c-3", 0);
+            servicio.contexto("c-3", 50);
+
+            ArgumentCaptor<Pageable> antes = ArgumentCaptor.forClass(Pageable.class);
+            verify(comentarios, times(2)).findByProductoIdAndFechaPublicacionBefore(anyString(), any(Instant.class),
+                    antes.capture());
+            assertEquals(1, antes.getAllValues().get(0).getPageSize());
+            assertEquals(10, antes.getAllValues().get(1).getPageSize());
+            assertEquals(Sort.by(Sort.Order.desc("fechaPublicacion"), Sort.Order.desc("id")),
+                    antes.getValue().getSort());
+
+            ArgumentCaptor<Pageable> despues = ArgumentCaptor.forClass(Pageable.class);
+            verify(comentarios, times(2)).findByProductoIdAndFechaPublicacionAfter(anyString(), any(Instant.class),
+                    despues.capture());
+            assertEquals(Sort.by(Sort.Order.asc("fechaPublicacion"), Sort.Order.asc("id")),
+                    despues.getValue().getSort());
+        }
+
+        @Test
+        @DisplayName("un comentario que no existe no tiene contexto: ComentarioNoEncontrado (404)")
+        void inexistente() {
+            assertThrows(ServicioDeModeracion.ComentarioNoEncontrado.class,
+                    () -> servicio.contexto("no-existe", 3));
+        }
+    }
+
+    /**
      * La decision en lote — HU-COM-005 (#519), contrato 1.10.0: atomica (todo o
      * nada), un asiento por comentario, avisos fail-open por comentario.
      *
@@ -1729,6 +1808,24 @@ class FlujoDeModeracionTest {
     }
 
     @SuppressWarnings("unchecked")
+    /** Los del producto antes (o despues) de la fecha, del mas cercano al mas lejano, hasta el limite. */
+    private static List<ResumenDeComentario> alrededorDe(Map<String, RegistroDeComentario> datos, String producto,
+            Instant fecha, Pageable limite, boolean antes) {
+        Comparator<Comentario> cercania = antes
+                ? Comparator.comparing(Comentario::fechaPublicacion).reversed()
+                        .thenComparing(Comentario::id, Comparator.reverseOrder())
+                : Comparator.comparing(Comentario::fechaPublicacion).thenComparing(Comentario::id);
+        return datos.values().stream()
+                .map(RegistroDeComentario::aDominio)
+                .filter(c -> c.productoId().equals(producto))
+                .filter(c -> antes ? c.fechaPublicacion().isBefore(fecha) : c.fechaPublicacion().isAfter(fecha))
+                .sorted(cercania)
+                .limit(limite.getPageSize())
+                .map(c -> new ResumenDeComentario(c.id(), c.productoId(), c.apodoAutor(), c.texto(),
+                        c.fechaPublicacion(), c.estado(), c.editado()))
+                .toList();
+    }
+
     private static ComentarioRepository comentariosEnMemoria(Map<String, RegistroDeComentario> datos) {
         ComentarioRepository repo = mock(ComentarioRepository.class);
 
@@ -1779,6 +1876,18 @@ class FlujoDeModeracionTest {
             int hasta = Math.min(desde + pagina.getPageSize(), todos.size());
             return new PageImpl<>(todos.subList(desde, hasta), pagina, todos.size());
         });
+        // SA-16 (contrato 1.17.0): el hilo del producto a cada lado de una
+        // fecha. Como con el historial, la base ordena y corta; el doble lo
+        // imita y el Pageable pedido se afirma aparte.
+        when(repo.findByProductoIdAndFechaPublicacionBefore(anyString(), any(Instant.class), any(Pageable.class)))
+                .thenAnswer(inv -> alrededorDe(datos, inv.getArgument(0), inv.getArgument(1),
+                        inv.getArgument(2), true));
+        when(repo.findByProductoIdAndFechaPublicacionAfter(anyString(), any(Instant.class), any(Pageable.class)))
+                .thenAnswer(inv -> alrededorDe(datos, inv.getArgument(0), inv.getArgument(1),
+                        inv.getArgument(2), false));
+        when(repo.countByProductoId(anyString())).thenAnswer(inv -> datos.values().stream()
+                .filter(r -> r.getProductoId().equals(inv.getArgument(0)))
+                .count());
         when(repo.findByEstadoOrderByFechaPublicacionAsc(any())).thenAnswer(inv -> {
             Comentario.Estado estado = inv.getArgument(0);
             return filtrados(datos, c -> c.estado() == estado);

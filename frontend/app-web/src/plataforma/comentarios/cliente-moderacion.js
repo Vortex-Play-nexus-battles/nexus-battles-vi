@@ -320,6 +320,48 @@ export async function consultarDetalle(
 }
 
 /**
+ * El comentario en su contexto — comentarios.yaml 1.17.0 (SA-16, §7.3.8
+ * «Vista previa del comentario en contexto»): los que lo rodean en el hilo de
+ * su producto, a cada lado y en cualquier estado.
+ *
+ * @param {string} comentarioId
+ * @param {{alrededor?: number}} [consulta]
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<object>} `ContextoDelComentario`
+ */
+export async function contextoDelComentario(
+  comentarioId,
+  { alrededor = 3 } = {},
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const parametros = new URLSearchParams({ alrededor: String(alrededor) });
+  return pedir(
+    `${rutaDeModeracion()}/${encodeURIComponent(comentarioId)}/contexto?${parametros}`,
+    { method: 'GET', headers: { Accept: 'application/json' } },
+    fetchImpl,
+  );
+}
+
+/**
+ * El producto de un comentario en el catálogo (productos.yaml, lectura
+ * pública): su nombre para que la moderación lo reconozca, nunca su id.
+ *
+ * @param {string} productoId
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<object>} `Producto`
+ */
+export async function productoDelCatalogo(
+  productoId,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  return pedir(
+    `${baseDeApi()}/api/v1/productos/${encodeURIComponent(productoId)}`,
+    { method: 'GET', headers: { Accept: 'application/json' } },
+    fetchImpl,
+  );
+}
+
+/**
  * Los comentarios de un autor, del mas reciente al mas antiguo y en cualquier
  * estado (HU-COM-005, comentarios.yaml 1.7.0). Solo roles de moderacion.
  *

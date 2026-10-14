@@ -328,7 +328,8 @@ test.describe('§7.3.5 · la bitácora central recibe toda acción administrativ
     expect(csv.headers()['content-disposition']).toMatch(/auditoria-.*\.csv/);
     const texto = await csv.text();
     expect(texto.replace(/^﻿/, '').split('\r\n')[0]).toBe(
-      'id,fecha_hora,ocurrido_en,administrador,tipo_accion,afectado,valor_anterior,valor_nuevo,motivo,ip_origen',
+      // 1.4.0 (SA-18): nombre_afectado, al final.
+      'id,fecha_hora,ocurrido_en,administrador,tipo_accion,afectado,valor_anterior,valor_nuevo,motivo,ip_origen,nombre_afectado',
     );
     expect(texto).toContain(`Insultos en el chat general ${SUFIJO}`);
 

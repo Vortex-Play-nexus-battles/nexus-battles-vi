@@ -69,6 +69,9 @@ public class IntentosFallidosService {
         boolean bloqueaAhora = false;
         if (intentos >= umbralIntentosFallidos && usuario.getBloqueadoHasta() == null) {
             usuario.setBloqueadoHasta(ahora.plusMinutes(minutosBloqueo));
+            // SA-20 (D-45, señal 1): la marca que la consola lee para avisar de
+            // cuentas bloqueadas en un periodo; no se borra al volver a entrar.
+            usuario.setUltimoBloqueoEn(ahora);
             bloqueaAhora = true;
         }
 

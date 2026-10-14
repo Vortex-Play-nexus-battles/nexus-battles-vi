@@ -43,8 +43,10 @@ import java.util.stream.Collectors;
  * tamano de la serie y de la consulta. El dia es el del reloj del servicio.
  *
  * <p>Las «alertas de comportamiento sospechoso» de la ficha NO estan aqui:
- * ningun documento fija su umbral (observacion de la ficha, D-25) y este
- * servicio no inventa uno.
+ * identifican cuentas y estas son cifras agregadas. Son las dos señales que
+ * decidio el PO (D-45): las cuentas bloqueadas por intentos fallidos
+ * ({@link CuentasBloqueadasPorIntentos}, SA-20) y las que acumulan sanciones
+ * sin revertir (moderacion-sanciones, {@code GET /sanciones/reincidentes}).
  */
 @Service
 public class IndicadoresDeCuentas {
