@@ -15,6 +15,11 @@
  * automático sigue su experiencia (§7.4.5); elegido «Breve», la respuesta
  * recortada trae «Más detalle», que la da entera.
  *
+ * ms-chatbot.yaml 1.18.0 (observación de RF-CHA-008, «quedar auditado»): lo
+ * que el asistente leyó de su cuenta queda en la bitácora central, que el
+ * superadministrador consulta, sin la pregunta ni lo que respondió cada
+ * servicio.
+ *
  * La jugadora es nueva en cada corrida: el alta (R17) le deja 500 créditos,
  * el héroe y el arma del banco. Antes de preguntar, una misión técnica de
  * dos segundos le deja un aviso en la bandeja y 5 créditos más en el libro;
@@ -31,7 +36,7 @@ import {
   destinosDe,
   preguntar,
 } from './ayudantes/asistente.js';
-import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+import { cuentaAdministrativaDeRol, sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const CLAVE = 'Contrasena-E2E-2026';
@@ -334,5 +339,60 @@ test.describe('Asistente · jugador (§7.4.4)', () => {
     });
     expect([200, 400]).toContain(conUid.status());
     expect(JSON.stringify(await conUid.json())).not.toContain('¿Qué tengo en mi inventario?');
+  });
+
+  test('lo que el asistente leyó de su cuenta queda en la bitácora central, sin el contenido', async () => {
+    const superAdmin = await sesionDelBanco(
+      api,
+      cuentaAdministrativaDeRol('SUPER_ADMINISTRADOR').apodo,
+      {
+        clave: CLAVE,
+        base: BORDE,
+      },
+    );
+    let asientos = [];
+    await expect
+      .poll(
+        async () => {
+          const consulta = new URLSearchParams({
+            afectado: jugadora.claims.uid,
+            size: '100',
+            sort: 'fechaHora,desc',
+          });
+          const r = await api.get(`/api/v1/admin/auditoria?${consulta}`, {
+            headers: conToken(superAdmin.token),
+          });
+          expect(r.status(), await r.text()).toBe(200);
+          asientos = ((await r.json()).content ?? []).filter(
+            (a) => a.motivo === 'CONSULTA_DEL_ASISTENTE',
+          );
+          return asientos.map((a) => a.valorNuevo);
+        },
+        { timeout: 30_000, message: 'los asientos del asistente no llegaron a la bitácora' },
+      )
+      .toEqual(
+        expect.arrayContaining([
+          'dato=inventario;resultado=consultado',
+          'dato=misiones;resultado=consultado',
+          'dato=subastas;resultado=consultado',
+          'dato=notificaciones;resultado=consultado',
+          'dato=movimientos-de-creditos;resultado=consultado',
+        ]),
+      );
+    for (const asiento of asientos) {
+      // Ella lo pidió y los datos son suyos; nada de lo que se respondió.
+      expect(asiento.tipoAccion).toBe('OTRO');
+      expect(asiento.administrador).toBe(jugadora.claims.uid);
+      expect(asiento.afectado).toBe(jugadora.claims.uid);
+      expect(asiento.referencia).toMatch(/^ms-chatbot:consulta-/);
+      expect(JSON.stringify(asiento)).not.toContain(heroe.nombrePropio);
+      expect(JSON.stringify(asiento)).not.toContain(TEMPLO.nombre);
+    }
+
+    // La jugadora no lee la bitácora.
+    const propia = await api.get(`/api/v1/admin/auditoria?afectado=${jugadora.claims.uid}`, {
+      headers: conToken(jugadora.token),
+    });
+    expect(propia.status()).toBe(403);
   });
 });
