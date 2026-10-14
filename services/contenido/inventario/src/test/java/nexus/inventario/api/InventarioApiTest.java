@@ -581,4 +581,75 @@ class InventarioApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.productoId").value("producto-1"));
     }
+
+    @Test
+    @DisplayName("1.7.0: GET con categoria pagina solo heroes u objetos")
+    void consultarPorCategoria() throws Exception {
+        gestion.crear("jugador-A", "producto-2", TipoElementoInventario.HEROE, "Ignis");
+        gestion.crear("jugador-A", "producto-1", TipoElementoInventario.ITEM, "Amuleto");
+        gestion.crear("jugador-A", "producto-solar", TipoElementoInventario.ARMA, "Espada Solar");
+
+        mvc.perform(get("/api/v1/inventario/elementos")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
+                        .param("categoria", "HEROES"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElementos").value(1))
+                .andExpect(jsonPath("$.elementos[0].tipo").value("HEROE"));
+
+        mvc.perform(get("/api/v1/inventario/elementos")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
+                        .param("categoria", "OBJETOS"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElementos").value(2))
+                .andExpect(jsonPath("$.tamanio").value(16));
+    }
+
+    @Test
+    @DisplayName("1.7.0: una categoria desconocida es una solicitud invalida, no un 500")
+    void categoriaDesconocida() throws Exception {
+        mvc.perform(get("/api/v1/inventario/elementos")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
+                        .param("categoria", "TODO"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Solicitud invalida"));
+    }
+
+    @Test
+    @DisplayName("1.7.0: cada objeto puesto dice que heroe lo lleva (equipadoEn)")
+    void paginaConEquipadoEn() throws Exception {
+        ElementoInventario heroe = gestion.crear(
+                "jugador-A", "producto-2", TipoElementoInventario.HEROE, "Ignis");
+        ElementoInventario espada = gestion.crear(
+                "jugador-A", "producto-solar", TipoElementoInventario.ARMA, "Espada Solar");
+        gestion.crear("jugador-A", "producto-1", TipoElementoInventario.ITEM, "Amuleto");
+        repositorio.guardar(repositorio.buscarPorPropietario("jugador-A").orElseThrow()
+                .equipar(heroe.id(), espada.id()));
+
+        mvc.perform(get("/api/v1/inventario/elementos")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
+                        .param("categoria", "OBJETOS"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.elementos[0].equipadoEn.heroeId").value(heroe.id()))
+                .andExpect(jsonPath("$.elementos[0].equipadoEn.nombreHeroe").value("Ignis"))
+                .andExpect(jsonPath("$.elementos[1].equipadoEn").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("1.7.0: un nombre propio de mas de sesenta caracteres se rechaza")
+    void nombrePropioDemasiadoLargo() throws Exception {
+        ElementoInventario creado = gestion.crear(
+                "jugador-A", "producto-1", TipoElementoInventario.ITEM, "Amuleto");
+
+        mvc.perform(patch("/api/v1/inventario/elementos/{elementoId}", creado.id())
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nombrePropio\":\"" + "x".repeat(61) + "\"}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(patch("/api/v1/inventario/elementos/{elementoId}", creado.id())
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nombrePropio\":\"" + "x".repeat(60) + "\"}"))
+                .andExpect(status().isOk());
+    }
 }

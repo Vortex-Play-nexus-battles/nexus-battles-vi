@@ -30,17 +30,33 @@ El inventario conserva referencias al catalogo y no copia imagenes,
 estadisticas, habilidades, efectos ni precios. Asi, las modificaciones globales
 de productos pueden propagarse a todas las instancias, como exige `RF-ADM-10`.
 
-`SCRUM-322` crea un indice de texto MongoDB sobre la informacion que si pertenece
-al inventario: referencia del producto, tipo, nombre propio y parte de armadura.
-Este indice prepara la busqueda sin duplicar datos administrados por el servicio
-de productos.
+`SCRUM-322` creo un indice de texto MongoDB sobre la informacion que si pertenece
+al inventario (referencia del producto, tipo, nombre propio y parte de armadura).
+Desde 1.7.0 la busqueda ya no lo usa: `$text` solo reconoce palabras completas y
+§7.1 pide encontrar «cualquier informacion presente en el producto» desde cuatro
+caracteres.
 
-`SCRUM-323` expone la consulta indexada del inventario propio. Exige un criterio
-de al menos cuatro caracteres, busca por referencia de producto, tipo, nombre
-propio o parte de armadura y conserva la paginacion de dieciseis elementos. La
-consulta usa primero el indice de texto y, para fragmentos que MongoDB no trata
-como una palabra completa, recupera por el indice unico del propietario antes
-de aplicar la coincidencia por subcadena dentro de su unico inventario.
+**Busqueda (1.7.0, `HU-INV-002`).** `BuscarElementosInventario` lee el inventario
+del propietario por su indice unico y se queda con los elementos en los que el
+criterio aparece, como fragmento y sin tildes ni mayusculas:
+
+- en lo que guarda el inventario: nombre propio, tipo, parte de armadura e
+  identificador del producto (tambien con su nombre legible: «arma», «casco»);
+- en la informacion de su producto en el catalogo —nombre, descripcion, efectos,
+  prototipo y, en los heroes, sus acciones—, resuelta con
+  `IndiceDeBusquedaDelCatalogo`: un **indice invertido de cuatrigramas**
+  (`IndiceDeNgramas`) construido con `GET /api/v1/productos` y las fichas de
+  `GET /api/v1/heroes/{nombre}`, renovado en segundo plano cada
+  `inventario.busqueda.vigencia-del-catalogo` (5 minutos por omision). Si el
+  catalogo no responde, la busqueda se queda en lo que guarda el inventario y no
+  falla.
+
+El inventario sigue sin copiar el catalogo: guarda la referencia y el indice se
+reconstruye desde el servicio de productos, que es el dueno del dato.
+
+**Vitrina por pestana (1.7.0).** `GET /elementos?categoria=HEROES|OBJETOS` pagina
+solo los heroes o solo los objetos, de dieciseis en dieciseis, y cada elemento
+de la pagina trae `equipadoEn` (el heroe que lo lleva) cuando esta puesto.
 
 El agregado es inmutable y se guarda como un documento por propietario. Esta
 decision permite que los cambios de una instancia se persistan atomicamente y
@@ -54,6 +70,7 @@ La API deriva el propietario de `X-User-Name`, la convencion temporal de
 token sin cambiar las reglas de propiedad de la aplicacion.
 
 ```text
+GET   /api/v1/inventario/elementos?pagina={numero}&categoria={HEROES|OBJETOS}
 GET   /api/v1/inventario/elementos/busqueda?criterio={texto}&pagina={numero}
 POST  /api/v1/inventario/elementos
 PATCH /api/v1/inventario/elementos/{elementoId}

@@ -11,6 +11,7 @@ import nexus.inventario.dominio.TipoElementoInventario;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.PersistenceCreator;
 import org.springframework.data.annotation.Version;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.index.TextIndexed;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -28,6 +29,9 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * aplicadas (ver {@link Inventario}).
  */
 @Document(collection = "inventarios")
+// 1.7.0: cada operacion sobre un elemento (equipar, bloquear, transferir) busca
+// su inventario por `elementos.id`; sin indice era un recorrido de la coleccion.
+@CompoundIndex(name = "elementos_id", def = "{'elementos.id': 1}")
 record InventarioDocumento(
         @Id String id,
         @Indexed(unique = true) String propietarioId,

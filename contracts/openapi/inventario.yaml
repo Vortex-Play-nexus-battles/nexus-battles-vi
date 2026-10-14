@@ -36,7 +36,21 @@ info:
   # omision (1 y 0); la mision solo los hace avanzar. Equipar o desequipar un
   # heroe en mision responde 409. Aditivo: operaciones nuevas, propiedades
   # opcionales y una respuesta 409 mas; menor.
-  version: 1.6.0
+  # 1.7.0 (revision final del modulo Inventario, §7.1): la vitrina pagina en el
+  # servidor por pestana y la busqueda cubre la informacion del producto.
+  #   - GET /elementos acepta `categoria` (HEROES u OBJETOS, opcional): cada
+  #     pestana de «Mi inventario» pide al servidor solo la pagina de dieciseis
+  #     que ensena, en vez de reunir el inventario entero en el navegador.
+  #   - ElementoInventario gana `equipadoEn` (opcional): el heroe que lleva
+  #     puesto el elemento, en la vitrina y en la busqueda.
+  #   - GET /elementos/busqueda busca tambien en la informacion del producto en
+  #     el catalogo (nombre, descripcion, efectos, prototipo y acciones del
+  #     heroe) con un indice de cuatrigramas, y siempre por fragmento.
+  #   - nombrePropio admite como maximo 60 caracteres en CrearElemento y
+  #     ModificarElemento (400 si se pasa).
+  #   Menor: un parametro opcional, una propiedad opcional y un limite que
+  #   ningun nombre del catalogo (el mas largo, 29) alcanza.
+  version: 1.7.0
   description: >
     Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
     de elementos propios del jugador para HU-INV-003, y equipamiento de
@@ -130,6 +144,17 @@ paths:
             type: integer
             minimum: 0
             default: 0
+        - name: categoria
+          in: query
+          required: false
+          description: >
+            1.7.0. HEROES pagina solo los elementos de tipo HEROE; OBJETOS, todo
+            lo demas (armas, armaduras, items, habilidades y epicas). Sin ella se
+            pagina el inventario entero. Los totales de la pagina son los de la
+            categoria pedida. Un valor desconocido es 400.
+          schema:
+            type: string
+            enum: [HEROES, OBJETOS]
       responses:
         "200":
           description: >
@@ -203,16 +228,28 @@ paths:
     get:
       summary: Busca productos en el inventario del jugador autenticado
       description: >
-        HU-INV-002. Usa el indice de texto de la informacion registrada en los
-        elementos y solo consulta el inventario derivado de X-User-Name. El
-        criterio debe contener al menos cuatro caracteres y los resultados
-        conservan la paginacion fija de dieciseis elementos.
+        HU-INV-002 (§7.1: «busqueda para cualquier informacion presente en el
+        producto»). Solo consulta el inventario de quien llama. Un elemento
+        coincide si el criterio aparece, como fragmento y sin distinguir tildes
+        ni mayusculas, en lo que guarda el inventario (nombre propio, tipo,
+        parte de armadura, identificador del producto) o en la informacion de
+        su producto en el catalogo: nombre, descripcion, efectos, prototipo y,
+        en los heroes, sus acciones (Tabla 7). Desde 1.7.0 la informacion del
+        catalogo se resuelve con un indice de cuatrigramas que el servicio
+        renueva solo (la vigencia por omision es de cinco minutos); si el
+        catalogo no responde, la busqueda se limita a lo que guarda el
+        inventario y no falla. El criterio debe contener al menos cuatro
+        caracteres y los resultados conservan la paginacion fija de dieciseis
+        elementos.
       operationId: buscarElementosInventario
       parameters:
         - name: criterio
           in: query
           required: true
-          description: Texto que se busca en productoId, tipo, nombre propio y parte de armadura.
+          description: >
+            Texto que se busca en el nombre propio, el tipo, la parte de armadura
+            y el identificador del elemento, y en el nombre, la descripcion, los
+            efectos, el prototipo y las acciones de su producto.
           schema:
             type: string
             minLength: 4
@@ -923,6 +960,8 @@ components:
         nombrePropio:
           type: string
           minLength: 1
+          maxLength: 60
+          description: 1.7.0, como maximo 60 caracteres.
         parteArmadura:
           $ref: "#/components/schemas/ParteArmadura"
     ModificarElemento:
@@ -933,6 +972,8 @@ components:
         nombrePropio:
           type: string
           minLength: 1
+          maxLength: 60
+          description: 1.7.0, como maximo 60 caracteres.
     BloquearEnSubasta:
       type: object
       additionalProperties: false
@@ -1047,6 +1088,21 @@ components:
           description: >
             1.6.0 (B9): la ejecucion de mision en la que esta el heroe; presente
             = «En mision» (seccion 7.8.10). Ausente o nula si no esta en ninguna.
+        equipadoEn:
+          $ref: "#/components/schemas/EquipadoEn"
+    EquipadoEn:
+      type: object
+      additionalProperties: false
+      description: >
+        1.7.0: el heroe del mismo jugador que lleva puesto el elemento. Sale en
+        las paginas de la vitrina y de la busqueda; ausente si no esta puesto.
+      required: [heroeId]
+      properties:
+        heroeId:
+          type: string
+        nombreHeroe:
+          type: string
+          description: El nombre propio que el jugador le puso a ese heroe.
     DetalleElementoInventario:
       type: object
       additionalProperties: false

@@ -2,6 +2,7 @@ package nexus.inventario.persistencia;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.ArrayList;
@@ -141,24 +142,20 @@ class RepositorioInventariosMongoIT {
     }
 
     @Test
-    @DisplayName("busca fragmentos de cuatro caracteres sin exponer inventarios ajenos")
-    void buscaElementosIndexadosDelPropietario() {
-        repositorio.guardar(Inventario.vacio("jugador-A")
+    @DisplayName("1.7.0: crea en MongoDB el indice de elementos.id que usan las operaciones por elemento")
+    void creaIndiceDeElementos() {
+        repositorio.guardar(Inventario.vacio("jugador-indexado")
                 .agregar(new ElementoInventario(
-                        "elemento-1", "producto-bruma", TipoElementoInventario.ITEM,
-                        "Amuleto de Bruma"))
-                .agregar(new ElementoInventario(
-                        "elemento-2", "producto-solar", TipoElementoInventario.ARMA,
-                        "Espada Solar")));
-        repositorio.guardar(Inventario.vacio("jugador-B")
-                .agregar(new ElementoInventario(
-                        "elemento-3", "producto-ajeno", TipoElementoInventario.ITEM,
-                        "Bruma ajena")));
+                        "elemento-1", "producto-1", TipoElementoInventario.ITEM, "Amuleto")));
 
-        List<ElementoInventario> encontrados =
-                repositorio.buscarElementos("jugador-A", "brum");
+        List<Document> indices = mongoTemplate.getCollection("inventarios")
+                .listIndexes()
+                .into(new ArrayList<>());
 
-        assertEquals(List.of("elemento-1"), encontrados.stream()
-                .map(ElementoInventario::id).toList());
+        // Spring Data guarda el `id` de cada elemento anidado como `_id`, y
+        // traduce la definicion del indice igual que traduce `findByElementosId`.
+        assertTrue(indices.stream().anyMatch(indice ->
+                        new Document("elementos._id", 1).equals(indice.get("key", Document.class))),
+                () -> "indices: " + indices);
     }
 }
