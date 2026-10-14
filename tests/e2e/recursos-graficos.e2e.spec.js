@@ -186,7 +186,11 @@ test.describe('Recursos gráficos y acciones críticas del catálogo (SA-6)', ()
     const bytes = await api.get(recursoPng.url);
     expect(bytes.status()).toBe(200);
     expect(bytes.headers()['content-type']).toBe('image/png');
-    expect(bytes.headers()['x-content-type-options']).toBe('nosniff');
+    // El servicio pone `nosniff` (defensa propia: son bytes que subió otra
+    // persona) y el borde también, en todo lo que sale (R17): llega
+    // «nosniff, nosniff». Todos sus valores tienen que decir nosniff.
+    const sinOlfatear = bytes.headers()['x-content-type-options'].split(',');
+    expect(new Set(sinOlfatear.map((valor) => valor.trim()))).toEqual(new Set(['nosniff']));
     expect(bytes.headers()['content-security-policy']).toContain("default-src 'none'");
     expect(bytes.headers()['cache-control']).toContain('immutable');
     expect(Buffer.compare(await bytes.body(), PNG)).toBe(0);
