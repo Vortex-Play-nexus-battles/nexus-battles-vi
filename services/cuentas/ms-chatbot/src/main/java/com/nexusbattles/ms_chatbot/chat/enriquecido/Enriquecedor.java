@@ -19,8 +19,10 @@ import java.util.regex.Pattern;
 // que ya sabe la base de conocimiento, sin columnas nuevas en los temas:
 //
 //   * pasos: los "1) ... 2) ..." de un tema PASO_A_PASO;
-//   * enlaces: la seccion del sitio de la que habla el tema (por su titulo) o
-//     la que abre una consulta asistida;
+//   * enlaces: la seccion del sitio de la que habla el tema (desde 1.5.0 por
+//     su clave, y si no la tiene en el mapa, por las palabras de su titulo) o
+//     la que abre una consulta asistida. Nunca una vista de administracion:
+//     el tema de un jugador no puede mandarlo a una pantalla de «sin acceso»;
 //   * respuestas rapidas: otros temas de la misma categoria, o, al escalar,
 //     los temas relacionados y los de la vista donde esta el jugador;
 //   * soporte humano: se ofrece siempre que la consulta se escala.
@@ -31,6 +33,7 @@ public final class Enriquecedor {
     static final int MAXIMO_DE_RAPIDAS = 3;
     static final int MAXIMO_DE_PASOS = 20;
     static final int LARGO_MAXIMO_DE_PASO = 500;
+    static final int MAXIMO_DE_ENLACES_AL_ESCALAR = 2;
 
     /** Temas de cortesia: no se ofrecen como pregunta (nadie necesita un boton para decir "hola"). */
     public static final Set<String> TITULOS_DE_CORTESIA = Set.of("saludo", "despedida");
@@ -38,40 +41,109 @@ public final class Enriquecedor {
     // "1) ...", "2) ..." dentro del texto de un tema paso a paso.
     private static final Pattern MARCA_DE_PASO = Pattern.compile("\\s*\\b\\d{1,2}\\)\\s+");
 
-    // Nombre visible de cada vista a la que el chatbot puede enlazar. Los ids
-    // son los de comun/matriz-acceso.js.
-    private static final Map<String, String> NOMBRE_DE_DESTINO = Map.ofEntries(
-        Map.entry("registro", "Crear una cuenta"),
-        Map.entry("login", "Iniciar sesión"),
-        Map.entry("perfil", "Mi cuenta"),
+    // Nombre visible de cada vista a la que el chatbot puede enlazar, con la
+    // etiqueta que tiene en la barra, en el menu del apodo o en su pantalla
+    // (1.5.0). Los ids son los de comun/matriz-acceso.js. Solo vistas de
+    // jugador o publicas: ninguna de administracion.
+    static final Map<String, String> NOMBRE_DE_DESTINO = Map.ofEntries(
+        Map.entry("registro", "Crear cuenta"),
+        Map.entry("login", "Entrar"),
+        Map.entry("restablecer-solicitar", "Recuperar contraseña"),
+        Map.entry("verificar-cuenta", "Confirmar tu correo"),
+        Map.entry("perfil", "Mi Cuenta"),
+        Map.entry("historial-transacciones", "Historial de transacciones"),
+        Map.entry("mis-cofres", "Mis cofres"),
+        Map.entry("mis-sanciones", "Mis sanciones"),
         Map.entry("inventario", "Mi inventario"),
-        Map.entry("productos", "Catálogo"),
         Map.entry("tienda", "Tienda"),
-        Map.entry("subastas", "Subastas"),
+        Map.entry("subastas", "Subasta"),
+        Map.entry("publicar-subasta", "Publicar subasta"),
         Map.entry("misiones", "Misiones"),
-        Map.entry("torneos", "Torneos"),
-        Map.entry("batallas", "Batallas"),
+        Map.entry("torneos", "Torneo"),
+        Map.entry("batallas", "Jugar online"),
+        Map.entry("crear-sala", "Crear sala"),
+        Map.entry("chat", "Chat"),
         Map.entry("notificaciones", "Notificaciones")
     );
 
-    // Palabra del titulo (normalizado) -> destino. El orden importa: la primera
-    // que aparece decide ("crear una cuenta" va a registro antes que a perfil).
+    // 1.5.0 — la seccion de cada tema de la base, por su clave (V11).
+    private static final Map<String, String> DESTINO_POR_CLAVE = Map.ofEntries(
+        Map.entry("heroes-disponibles", "inventario"),
+        Map.entry("estadisticas-y-nivel", "inventario"),
+        Map.entry("armas-armaduras-items", "inventario"),
+        Map.entry("habilidades-epicas", "inventario"),
+        Map.entry("completar-mazo", "inventario"),
+        Map.entry("consejos-objetos", "inventario"),
+        Map.entry("acciones-y-poder", "inventario"),
+        Map.entry("combate-por-turnos", "batallas"),
+        Map.entry("efectos-aleatorios", "batallas"),
+        Map.entry("modo-batalla", "batallas"),
+        Map.entry("estrategias-basicas", "batallas"),
+        Map.entry("sinergias-equipo", "batallas"),
+        Map.entry("derrota-del-heroe", "batallas"),
+        Map.entry("recompensas-de-batalla", "batallas"),
+        Map.entry("unirse-a-una-sala", "batallas"),
+        Map.entry("crear-sala-de-batalla", "crear-sala"),
+        Map.entry("completar-mision", "misiones"),
+        Map.entry("tipos-de-misiones", "misiones"),
+        Map.entry("recompensas-de-misiones", "misiones"),
+        Map.entry("dificultades-de-misiones", "misiones"),
+        Map.entry("torneo", "torneos"),
+        Map.entry("inscribirse-en-torneo", "torneos"),
+        Map.entry("crear-cuenta", "registro"),
+        Map.entry("verificar-correo", "verificar-cuenta"),
+        Map.entry("recuperar-contrasena", "restablecer-solicitar"),
+        Map.entry("cuenta-bloqueada", "restablecer-solicitar"),
+        Map.entry("sesion-terminada", "login"),
+        Map.entry("mi-cuenta", "perfil"),
+        Map.entry("verificacion-en-dos-pasos", "perfil"),
+        Map.entry("preguntas-de-seguridad", "perfil"),
+        Map.entry("cambiar-contrasena", "perfil"),
+        Map.entry("cambiar-apodo", "perfil"),
+        Map.entry("privacidad-y-datos", "perfil"),
+        Map.entry("logros-titulos-insignias", "perfil"),
+        Map.entry("creditos", "historial-transacciones"),
+        Map.entry("cofres", "mis-cofres"),
+        Map.entry("sanciones", "mis-sanciones"),
+        Map.entry("apelar-sancion", "mis-sanciones"),
+        Map.entry("publicar-subasta", "publicar-subasta"),
+        Map.entry("pujar-o-comprar", "subastas"),
+        Map.entry("cancelar-subasta", "subastas"),
+        Map.entry("puja-automatica", "subastas"),
+        Map.entry("recoger-subasta-ganada", "subastas"),
+        Map.entry("limites-de-subastas", "subastas"),
+        Map.entry("precios-y-disponibilidad", "tienda"),
+        Map.entry("comprar-en-la-tienda", "tienda"),
+        Map.entry("comentarios-y-calificaciones", "tienda"),
+        Map.entry("mensajes-privados", "chat"),
+        Map.entry("notificaciones", "notificaciones")
+    );
+
+    // Palabra del titulo (normalizado) -> destino, para los temas que crea un
+    // administrador y no estan en DESTINO_POR_CLAVE. El orden importa: la
+    // primera que aparece decide ("crear una cuenta" va a registro antes que a
+    // perfil).
     private static final List<Map.Entry<String, String>> DESTINO_POR_PALABRA = List.of(
         Map.entry("crear una cuenta", "registro"),
         Map.entry("registr", "registro"),
-        Map.entry("contrasena", "login"),
+        Map.entry("contrasena", "restablecer-solicitar"),
         Map.entry("subasta", "subastas"),
         Map.entry("pujar", "subastas"),
         Map.entry("mision", "misiones"),
         Map.entry("torneo", "torneos"),
+        Map.entry("sala", "batallas"),
         Map.entry("batalla", "batallas"),
         Map.entry("combate", "batallas"),
-        Map.entry("credito", "tienda"),
+        Map.entry("tienda", "tienda"),
+        Map.entry("credito", "historial-transacciones"),
+        Map.entry("cofre", "mis-cofres"),
+        Map.entry("sancion", "mis-sanciones"),
         Map.entry("perfil", "perfil"),
         Map.entry("cuenta", "perfil"),
-        Map.entry("heroe", "productos"),
-        Map.entry("arma", "productos"),
-        Map.entry("epica", "productos")
+        Map.entry("heroe", "inventario"),
+        Map.entry("arma", "inventario"),
+        Map.entry("epica", "inventario"),
+        Map.entry("inventario", "inventario")
     );
 
     private Enriquecedor() {
@@ -84,8 +156,14 @@ public final class Enriquecedor {
 
     /** Respuesta enriquecida de un tema de la base de conocimiento. */
     public static RespuestaEnriquecida paraTema(TemaConocimiento tema, String texto, List<TemaConocimiento> temas) {
+        return paraTema(tema, texto, temas, false);
+    }
+
+    /** Como {@link #paraTema(TemaConocimiento, String, List)}, con el enlace en el idioma de la respuesta (1.5.0). */
+    public static RespuestaEnriquecida paraTema(TemaConocimiento tema, String texto, List<TemaConocimiento> temas,
+                                                boolean ingles) {
         List<String> pasos = tema.getTipoRespuesta() == TipoRespuesta.PASO_A_PASO ? pasosDe(texto) : List.of();
-        List<EnlaceInterno> enlaces = destinoDeTitulo(tema.getTitulo()).map(Enriquecedor::enlaceA).stream().toList();
+        List<EnlaceInterno> enlaces = destinoDe(tema).map(d -> enlaceA(d, ingles)).stream().toList();
         List<String> rapidas = titulosDe(temas, tema.getCategoria(), Set.of(tema.getClave()), MAXIMO_DE_RAPIDAS);
         return new RespuestaEnriquecida(pasos, enlaces, List.of(), rapidas, false);
     }
@@ -97,28 +175,81 @@ public final class Enriquecedor {
      */
     public static RespuestaEnriquecida paraEscalamiento(List<String> sugeridos, List<TemaConocimiento> temas,
                                                         VistaDelChat vista) {
+        return paraEscalamiento(sugeridos, temas, vista, false);
+    }
+
+    /**
+     * 1.5.0 (7.4.3 «proporcionar enlaces a documentación relevante»): al
+     * escalar, además de las preguntas relacionadas y la oferta de soporte,
+     * los enlaces a las secciones de las que hablan esas preguntas (o a la de
+     * la vista), donde está la información.
+     */
+    public static RespuestaEnriquecida paraEscalamiento(List<String> sugeridos, List<TemaConocimiento> temas,
+                                                        VistaDelChat vista, boolean ingles) {
         Set<String> rapidas = new LinkedHashSet<>(sugeridos == null ? List.of() : sugeridos);
         Categoria deLaVista = vista == null ? null : vista.categoria();
         if (deLaVista != null && rapidas.size() < MAXIMO_DE_RAPIDAS) {
             rapidas.addAll(titulosDe(temas, deLaVista, Set.of(), MAXIMO_DE_RAPIDAS));
         }
         List<String> limitadas = rapidas.stream().limit(MAXIMO_DE_RAPIDAS).toList();
-        return new RespuestaEnriquecida(List.of(), List.of(), List.of(), limitadas, true);
+        Set<String> destinos = new LinkedHashSet<>();
+        for (String titulo : limitadas) {
+            temaConTitulo(temas, titulo).flatMap(Enriquecedor::destinoDe).ifPresent(destinos::add);
+        }
+        List<EnlaceInterno> enlaces = destinos.stream().limit(MAXIMO_DE_ENLACES_AL_ESCALAR)
+            .map(destino -> enlaceA(destino, ingles))
+            .toList();
+        return new RespuestaEnriquecida(List.of(), enlaces, List.of(), limitadas, true);
+    }
+
+    /**
+     * 1.5.0 — «no me sirvió»: otras preguntas del mismo tema, el enlace a su
+     * sección y la oferta de soporte humano.
+     */
+    public static RespuestaEnriquecida paraNoSirvio(TemaConocimiento tema, List<TemaConocimiento> temas,
+                                                    boolean ingles) {
+        List<String> rapidas = titulosDe(temas, tema.getCategoria(), Set.of(tema.getClave()), MAXIMO_DE_RAPIDAS);
+        List<EnlaceInterno> enlaces = destinoDe(tema).map(d -> enlaceA(d, ingles)).stream().toList();
+        return new RespuestaEnriquecida(List.of(), enlaces, List.of(), rapidas, true);
+    }
+
+    /** Solo la oferta de soporte humano (1.5.0, «no me sirvió» sin tema anterior). */
+    public static RespuestaEnriquecida soloSoporte() {
+        return new RespuestaEnriquecida(List.of(), List.of(), List.of(), List.of(), true);
+    }
+
+    private static Optional<TemaConocimiento> temaConTitulo(List<TemaConocimiento> temas, String titulo) {
+        return temas == null ? Optional.empty()
+            : temas.stream().filter(t -> titulo.equals(t.getTitulo())).findFirst();
     }
 
     /** Solo un enlace a una seccion (navegacion y consultas asistidas). */
     public static RespuestaEnriquecida conEnlace(String destino) {
-        return new RespuestaEnriquecida(List.of(), List.of(enlaceA(destino)), List.of(), List.of(), false);
+        return conEnlace(destino, false);
+    }
+
+    public static RespuestaEnriquecida conEnlace(String destino, boolean ingles) {
+        return new RespuestaEnriquecida(List.of(), List.of(enlaceA(destino, ingles)), List.of(), List.of(), false);
     }
 
     /** Tarjetas con un enlace a la seccion donde se ve el detalle. */
     public static RespuestaEnriquecida conTarjetas(List<TarjetaInformativa> tarjetas, String destino) {
-        return new RespuestaEnriquecida(List.of(), List.of(enlaceA(destino)), tarjetas, List.of(), false);
+        return conTarjetas(tarjetas, destino, false);
+    }
+
+    public static RespuestaEnriquecida conTarjetas(List<TarjetaInformativa> tarjetas, String destino, boolean ingles) {
+        return new RespuestaEnriquecida(List.of(), List.of(enlaceA(destino, ingles)), tarjetas, List.of(), false);
     }
 
     public static EnlaceInterno enlaceA(String destino) {
+        return enlaceA(destino, false);
+    }
+
+    // La interfaz esta en espanol: en ingles se dice «Go to» y se deja la
+    // etiqueta tal cual la vera el jugador en la barra.
+    public static EnlaceInterno enlaceA(String destino, boolean ingles) {
         String nombre = NOMBRE_DE_DESTINO.getOrDefault(destino, destino);
-        return new EnlaceInterno("Ir a " + nombre, destino);
+        return new EnlaceInterno((ingles ? "Go to " : "Ir a ") + nombre, destino);
     }
 
     /** Los pasos "1) ... 2) ..." de un texto; vacia si no hay al menos dos. */
@@ -136,6 +267,12 @@ public final class Enriquecedor {
             .map(paso -> paso.length() > LARGO_MAXIMO_DE_PASO ? paso.substring(0, LARGO_MAXIMO_DE_PASO) : paso)
             .limit(MAXIMO_DE_PASOS)
             .toList();
+    }
+
+    /** La seccion del sitio de la que habla un tema: por su clave y, si no, por su titulo (1.5.0). */
+    static Optional<String> destinoDe(TemaConocimiento tema) {
+        String porClave = tema.getClave() == null ? null : DESTINO_POR_CLAVE.get(tema.getClave());
+        return porClave != null ? Optional.of(porClave) : destinoDeTitulo(tema.getTitulo());
     }
 
     /** La seccion del sitio de la que habla un tema, por las palabras de su titulo. */

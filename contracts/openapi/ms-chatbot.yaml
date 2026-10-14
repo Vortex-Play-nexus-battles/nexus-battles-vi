@@ -18,6 +18,10 @@ openapi: 3.1.0
 #   7.4.8 (1.4.0) revision final: nada sensible se guarda, la inyeccion de
 #               codigo se detecta y bloquea, el uid sale solo del claim
 #               `uid`, y limite tambien por direccion de origen
+#   7.4 (1.5.0) revision final: la base de conocimiento dice lo que el juego
+#               hace (V11), las respuestas en vivo y los escalamientos en
+#               ingles, busqueda en el inventario, seguimiento de la
+#               respuesta anterior e informe de actividad en paralelo
 #   7.4 (1.3.0) lo que faltaba del modulo 7.4: tickets y soporte humano
 #               (RF-CHA-007, RF-ADM-004), sugerencias y autocompletado,
 #               respuestas enriquecidas sin imagenes, vista del jugador y
@@ -95,6 +99,8 @@ openapi: 3.1.0
 # notificaciones (`notificaciones.yaml`) y sus movimientos de creditos
 # (`creditos.yaml`, `GET /creditos/{uid}/movimientos`) y sus misiones en curso
 # (`misiones.yaml` 1.0.0, `GET /api/v1/misiones/en-curso`, desde 1.3.0),
+# y buscar en su inventario (`inventario.yaml`,
+# `GET /api/v1/inventario/elementos/busqueda`, desde 1.5.0),
 # reenviando el MISMO token del jugador: esos servicios derivan el dueno del
 # claim `uid`. El
 # chatbot NUNCA usa una credencial de servicio para leer datos de un jugador.
@@ -108,7 +114,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.4.0
+  version: 1.5.0
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -118,6 +124,58 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.5.0 — 7.4.1 a 7.4.5: lo que dice el chatbot (revision final)
+
+    Todo compatible: ninguna forma cambia; cambia lo que se responde.
+
+    * **La base de conocimiento dice lo que el juego hace hoy** (#948). La
+      migracion V11 retira la version en produccion y publica una nueva,
+      copia suya, con los temas corregidos contra el juego real (sin logros,
+      mazos ni perdida de objetos que el juego no tiene; el torneo, la
+      verificacion del correo, las subastas y las misiones como son) y con
+      los temas que faltaban del 7.4.1: 59 temas, cada uno con sus variantes
+      en espanol e ingles, y 118 casos de evaluacion nuevos. La version
+      anterior queda RETIRADA y se puede revertir desde el panel. La
+      candidata en edicion, si la hay, recibe las mismas correcciones. Los
+      temas sembrados en V2 cambian su clave (antes su UUID) por una
+      legible (`crear-cuenta`, `publicar-subasta`); los casos de evaluacion
+      y las respuestas ya guardadas pasan a la clave nueva, asi que las
+      analiticas siguen contando cada tema junto.
+    * **Ingles en todo** (7.4.2): las consultas en vivo, la navegacion, los
+      avisos de servicio no disponible, el escalamiento y lo que se anade a
+      una respuesta (preguntas relacionadas, aviso de dato tapado) salen en
+      el idioma de la pregunta, o en el de `PreferenciasDelChat.idioma`.
+      Las secciones se nombran como en la barra («Mi inventario»,
+      «Subasta», «Torneo», «Mi Cuenta»); en ingles, la etiqueta espanola
+      con su traduccion al lado, porque la interfaz solo esta en espanol.
+    * **Errores de tecleo** (7.4.2): dos letras vecinas cambiadas cuentan
+      como un solo error («subatsa» es «subasta»), en la base y en las
+      frases de las consultas en vivo.
+    * **Busqueda en el inventario** (7.4.4): «busca espada en mi
+      inventario», «¿tengo alguna pocion en mi inventario?» o «search my
+      inventory for a sword» usan la busqueda real del inventario
+      (`GET /api/v1/inventario/elementos/busqueda`, con el token del
+      jugador). Un criterio de menos de 4 letras no consulta nada.
+    * **Seguimiento de la respuesta anterior** (7.4.2 contexto, 7.4.5): «mas
+      detalle», «en ingles», «en espanol», «repitelo» o «no me sirvio»
+      (solos o con «por favor» y similares) se refieren a la ultima
+      respuesta del bot en esa conversacion: se responde ese tema otra vez
+      con lo pedido. «No me sirvio» ofrece soporte humano y otras preguntas
+      del tema, cuenta como escalamiento en las analiticas y no se registra
+      como brecha. Si la respuesta anterior no salio de la base (una
+      consulta en vivo), se pide la pregunta completa. Sin respuesta
+      anterior, la frase es una pregunta mas.
+    * **Enlaces** (7.4.3): cada tema enlaza a la vista de su seccion por su
+      clave (recuperar la contrasena lleva a «Recuperar contraseña», los
+      creditos al historial de transacciones, los cofres a «Mis cofres»). Al
+      escalar, hasta dos enlaces a las secciones de las preguntas
+      relacionadas. Nunca a una vista de administracion.
+    * **Informe de actividad en paralelo** (7.4.11): sus cinco partes se
+      piden a la vez y se espera como mucho 1,7 s en total; la que no llega
+      se dice no disponible y el resto se entrega.
+    * **`ProblemDetail.motivo`** nombra por fin OTRO_TICKET_ABIERTO (1.3.9) e
+      INYECCION_DETECTADA (1.4.0), que las respuestas ya traian.
 
     ### 1.4.0 — 7.4.8: privacidad, inyeccion e identidad (revision final)
 
@@ -354,16 +412,23 @@ paths:
 
         Como se genera la respuesta:
 
+        0. Desde 1.5.0, si el mensaje es un seguimiento de la respuesta
+           anterior del bot en esta conversacion («mas detalle», «en
+           ingles», «repitelo», «no me sirvio»), se responde ese tema otra
+           vez con lo pedido.
         1. Solo con usuario autenticado: si el mensaje pide datos de la
            propia cuenta (inventario, subastas, notificaciones, movimientos
            de creditos), el estado de sus torneos, ir a una seccion del sitio
            o un informe de actividad, se responde con datos en vivo
            (HU-CHA-008). Desde 1.3.0 tambien sus misiones en curso
-           (`misiones.yaml`).
+           (`misiones.yaml`); desde 1.5.0, buscar en su inventario.
         2. Si no, se busca en la base de conocimiento (HU-CHA-004).
         3. Si la pregunta no se entiende, se escala: la respuesta ofrece
            soporte humano y temas relacionados, y la pregunta se registra
            como brecha de conocimiento (HU-CHA-011).
+
+        Desde 1.5.0 la respuesta va en el idioma de la pregunta, o en el de
+        las preferencias del chat si no son AUTOMATICO.
 
         Desde 1.3.0 la respuesta puede traer `enriquecido` (pasos, enlaces,
         tarjetas, respuestas rapidas, oferta de soporte humano), y la `vista`
@@ -727,8 +792,8 @@ paths:
       description: |
         Solo para jugadores con sesion: el ticket queda a nombre del `uid`
         del token. A un visitante se le responde 401 (`motivo`
-        SESION_REQUERIDA) y la ventana le ofrece iniciar sesion o el chat
-        general.
+        SESION_REQUERIDA) y la ventana le explica que necesita una cuenta y
+        le ofrece iniciar sesion o crear una.
 
         El servidor guarda con el ticket el contexto de la conversacion
         actual (los ultimos mensajes, ya redactados: sin contrasenas,
@@ -1709,7 +1774,10 @@ components:
         1.3.0. Enlace a una seccion del propio sitio. `destino` es el
         identificador de la vista en la matriz de acceso del frontend
         (`comun/matriz-acceso.js`), nunca una URL: asi el chatbot no puede
-        mandar a nadie fuera del sitio.
+        mandar a nadie fuera del sitio. Desde 1.5.0 `texto` lleva la
+        etiqueta que la vista tiene en la barra («Ir a Mi inventario»; en
+        ingles «Go to Mi inventario») y `destino` es siempre una vista de
+        jugador o publica.
       required: [texto, destino]
       properties:
         texto:
@@ -1937,11 +2005,14 @@ components:
         motivo:
           type: string
           enum: [LIMITE_DE_FRECUENCIA, CONTENIDO_BLOQUEADO, MODERACION_NO_DISPONIBLE,
-                 SESION_REQUERIDA, TICKET_ABIERTO, TRANSICION_NO_PERMITIDA]
+                 SESION_REQUERIDA, TICKET_ABIERTO, TRANSICION_NO_PERMITIDA,
+                 OTRO_TICKET_ABIERTO, INYECCION_DETECTADA]
           description: |
             1.2.0. Solo en los errores nuevos de /chat/**. 1.3.0 agrega los de
             los tickets: SESION_REQUERIDA, TICKET_ABIERTO y
-            TRANSICION_NO_PERMITIDA.
+            TRANSICION_NO_PERMITIDA. 1.3.9: OTRO_TICKET_ABIERTO. 1.4.0:
+            INYECCION_DETECTADA. (1.5.0 completa esta lista, que no los
+            nombraba aunque las respuestas ya los traian.)
 
     SesionAnonima:
       type: object

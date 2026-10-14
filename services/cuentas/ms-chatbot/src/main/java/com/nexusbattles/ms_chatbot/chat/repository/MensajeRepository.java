@@ -58,6 +58,12 @@ public interface MensajeRepository extends JpaRepository<Mensaje, UUID> {
     Optional<Mensaje> findFirstByConversacionIdAndRemitenteAndFechaEnvioLessThanEqualOrderByFechaEnvioDesc(
         UUID conversacionId, Remitente remitente, Instant fechaEnvio);
 
+    // 1.5.0 (seguimiento del dialogo): la ultima respuesta del bot en esta
+    // conversacion; «mas detalle» o «en ingles» se refieren a ella. Solo la
+    // conversacion de quien pregunta: la clave sale de su identidad verificada.
+    Optional<Mensaje> findFirstByConversacionIdentificadorSesionAndRemitenteOrderByFechaEnvioDesc(
+        String identificadorSesion, Remitente remitente);
+
     // HU-CHA-012 (analiticas). Todas filtran por [desde, hasta) sobre
     // fecha_envio, que tiene indice desde V4. Devuelven proyecciones livianas,
     // no entidades completas, porque solo se cuentan y se agrupan.

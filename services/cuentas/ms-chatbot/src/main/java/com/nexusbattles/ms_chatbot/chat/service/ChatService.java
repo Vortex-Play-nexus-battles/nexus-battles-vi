@@ -1,18 +1,25 @@
 package com.nexusbattles.ms_chatbot.chat.service;
 
 import com.nexusbattles.ms_chatbot.chat.consultas.MotorConsultasAsistidas;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.Enriquecedor;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
 import com.nexusbattles.ms_chatbot.chat.entrada.RevisionDeEntrada;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.limite.LimitadorDeFrecuencia;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
+import com.nexusbattles.ms_chatbot.chat.model.Remitente;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionDeContenido;
 import com.nexusbattles.ms_chatbot.chat.motor.MotorRespuestas;
 import com.nexusbattles.ms_chatbot.chat.motor.ResultadoMotor;
+import com.nexusbattles.ms_chatbot.chat.motor.model.TipoRespuesta;
+import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
+import com.nexusbattles.ms_chatbot.chat.preferencias.NivelDeDetalle;
 import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasService;
 import com.nexusbattles.ms_chatbot.chat.repository.ConversacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
+import com.nexusbattles.ms_chatbot.chat.texto.IdiomaDelTexto;
+import com.nexusbattles.ms_chatbot.chat.texto.NormalizadorTexto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -57,6 +64,26 @@ public class ChatService {
     // no se guardo. Va delante de la respuesta, que sigue siendo la de siempre.
     static final String AVISO_DATO_TAPADO = "Por tu seguridad tapé un dato sensible de tu mensaje "
         + "(una contraseña, una tarjeta o un token) y no lo guardé; nunca lo compartas por el chat. ";
+    static final String AVISO_DATO_TAPADO_EN = "For your safety I hid a sensitive detail in your message "
+        + "(a password, a card or a token) and didn't store it; never share it in the chat. ";
+
+    // 1.5.0 — lo que se anade a una consulta escalada, en el idioma de la respuesta.
+    static final String RELACIONADAS = " Preguntas relacionadas que podrían ayudarte: ";
+    static final String RELACIONADAS_EN = " Related questions that might help: ";
+
+    // 1.5.0 — «no me sirvio» (Seguimiento.NO_SIRVIO): se ofrece soporte humano.
+    static final String NO_SIRVIO = "Siento que mi respuesta no te haya servido. Puedes preguntarme de otra forma "
+        + "o hablar con una persona del equipo con «Hablar con soporte».";
+    static final String NO_SIRVIO_EN = "I'm sorry my answer didn't help. You can ask me in another way "
+        + "or talk to a person from the team with «Hablar con soporte» (Talk to support).";
+
+    // 1.5.0 — un seguimiento («mas detalle», «en ingles») cuando la respuesta
+    // anterior no salio de un tema de la base (una consulta en vivo, un
+    // escalamiento) o ese tema ya no esta en produccion.
+    static final String SIN_TEMA_ANTERIOR = "Para eso necesito la pregunta completa: escríbemela otra vez y te "
+        + "respondo como me pides.";
+    static final String SIN_TEMA_ANTERIOR_EN = "For that I need the whole question: please write it again and "
+        + "I'll answer the way you asked.";
 
     private final ConversacionRepository conversacionRepository;
     private final MensajeRepository mensajeRepository;
@@ -119,13 +146,16 @@ public class ChatService {
         Instant recibido = Instant.now();
         long inicio = System.nanoTime();
 
-        ResultadoMotor resultado = generarRespuesta(identidad, pregunta, vista);
-        if (resultado.requiereEscalamiento()) {
+        Generada generada = generarRespuesta(identidad, pregunta, vista);
+        ResultadoMotor resultado = generada.resultado();
+        // «no me sirvio» se cuenta como escalamiento (se ofrece soporte), pero
+        // no es una pregunta sin cubrir: no va a las brechas de conocimiento.
+        if (resultado.requiereEscalamiento() && !generada.deSeguimiento()) {
             registrarPreguntaNoCubierta(pregunta);
         }
         String textoRespuesta = construirTextoRespuesta(resultado);
         if (revisada.seTapoAlgo()) {
-            textoRespuesta = AVISO_DATO_TAPADO + textoRespuesta;
+            textoRespuesta = (resultado.ingles() ? AVISO_DATO_TAPADO_EN : AVISO_DATO_TAPADO) + textoRespuesta;
         }
         int tiempo = milisegundosDesde(inicio);
         try {
@@ -138,24 +168,82 @@ public class ChatService {
         }
     }
 
+    // Lo que respondio el bot y si fue un seguimiento de la respuesta anterior.
+    private record Generada(ResultadoMotor resultado, boolean deSeguimiento) {
+    }
+
     // HU-CHA-008: si el usuario esta autenticado y trae token, se intenta
     // primero el motor de consultas asistidas (datos en vivo: inventario,
     // subastas, notificaciones, movimientos de creditos, torneos). Si esa
     // intencion no aplica (Optional vacio), se sigue exactamente igual que en
     // HU-CHA-004 con MotorRespuestas. Un visitante nunca pasa por el primer
     // motor.
-    private ResultadoMotor generarRespuesta(IdentidadDelChat identidad, String contenido, VistaDelChat vista) {
-        if (identidad.autenticado() && identidad.tokenCrudo() != null) {
-            return motorConsultasAsistidas.generarRespuesta(contenido, identidad.tokenCrudo(), identidad.uid())
-                .orElseGet(() -> responderConLaBase(identidad, contenido, vista));
+    //
+    // 1.5.0: antes que nada, un seguimiento de la respuesta anterior («mas
+    // detalle», «en ingles», «no me sirvio»), para visitantes y jugadores. Las
+    // preferencias se leen una sola vez por mensaje.
+    private Generada generarRespuesta(IdentidadDelChat identidad, String contenido, VistaDelChat vista) {
+        PreferenciasDeRespuesta preferencias = preferenciasDe(identidad);
+        Optional<ResultadoMotor> seguimiento = Seguimiento.de(contenido)
+            .flatMap(tipo -> responderSeguimiento(identidad, contenido, tipo, preferencias));
+        if (seguimiento.isPresent()) {
+            return new Generada(seguimiento.get(), true);
         }
-        return responderConLaBase(identidad, contenido, vista);
+        if (identidad.autenticado() && identidad.tokenCrudo() != null) {
+            Optional<ResultadoMotor> enVivo = motorConsultasAsistidas.generarRespuesta(contenido,
+                identidad.tokenCrudo(), identidad.uid(), preferencias.idioma());
+            if (enVivo.isPresent()) {
+                return new Generada(enVivo.get(), false);
+            }
+        }
+        return new Generada(responderConLaBase(contenido, vista, preferencias), false);
+    }
+
+    // La ultima respuesta del bot en esta conversacion, otra vez, con lo que
+    // pide el seguimiento. Sin respuesta anterior (primer mensaje, o tras
+    // limpiar el historial) no hay seguimiento y la frase sigue el camino
+    // normal. Si la anterior no salio de un tema de la base, se pide la
+    // pregunta completa; si no le sirvio, se le ofrece soporte igual.
+    private Optional<ResultadoMotor> responderSeguimiento(IdentidadDelChat identidad, String contenido,
+                                                          Seguimiento tipo, PreferenciasDeRespuesta preferencias) {
+        Optional<Mensaje> anterior = mensajeRepository
+            .findFirstByConversacionIdentificadorSesionAndRemitenteOrderByFechaEnvioDesc(
+                identidad.claveDeConversacion(), Remitente.BOT);
+        if (anterior.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<String> temaAnterior = anterior.map(Mensaje::getTemaClave);
+        boolean preguntaEnIngles = IdiomaDelTexto.esIngles(NormalizadorTexto.normalizar(contenido));
+        boolean ingles = switch (tipo) {
+            case EN_INGLES -> true;
+            case EN_ESPANOL -> false;
+            default -> switch (preferencias.idioma()) {
+                case ES -> false;
+                case EN -> true;
+                case AUTOMATICO -> preguntaEnIngles;
+            };
+        };
+        if (tipo == Seguimiento.NO_SIRVIO) {
+            String texto = ingles ? NO_SIRVIO_EN : NO_SIRVIO;
+            return Optional.of(temaAnterior.flatMap(clave -> motorRespuestas.relacionadosCon(clave, texto, ingles))
+                .orElseGet(() -> new ResultadoMotor(texto, null, TipoRespuesta.DIRECTA, true, List.of(), null,
+                    Enriquecedor.soloSoporte(), ingles)));
+        }
+        PreferenciasDeRespuesta pedidas = switch (tipo) {
+            case MAS_DETALLE -> new PreferenciasDeRespuesta(preferencias.idioma(), NivelDeDetalle.DETALLADO);
+            case EN_INGLES -> new PreferenciasDeRespuesta(IdiomaPreferido.EN, preferencias.nivelDetalle());
+            case EN_ESPANOL -> new PreferenciasDeRespuesta(IdiomaPreferido.ES, preferencias.nivelDetalle());
+            default -> preferencias;
+        };
+        return Optional.of(temaAnterior.flatMap(clave -> motorRespuestas.responderTema(clave, pedidas, preguntaEnIngles))
+            .orElseGet(() -> ResultadoMotor.deTema(ingles ? SIN_TEMA_ANTERIOR_EN : SIN_TEMA_ANTERIOR, null,
+                TipoRespuesta.DIRECTA).enIngles(ingles)));
     }
 
     // 1.3.6: con preferencias propias (idioma o nivel de detalle), la base
     // responde con ellas; con las de por defecto, exactamente como antes.
-    private ResultadoMotor responderConLaBase(IdentidadDelChat identidad, String contenido, VistaDelChat vista) {
-        PreferenciasDeRespuesta preferencias = preferenciasDe(identidad);
+    private ResultadoMotor responderConLaBase(String contenido, VistaDelChat vista,
+                                              PreferenciasDeRespuesta preferencias) {
         if (!preferencias.sonPorDefecto()) {
             return motorRespuestas.generarRespuesta(contenido, vista, preferencias);
         }
@@ -195,7 +283,7 @@ public class ChatService {
             return resultado.texto();
         }
         return resultado.texto()
-            + " Preguntas relacionadas que podrían ayudarte: "
+            + (resultado.ingles() ? RELACIONADAS_EN : RELACIONADAS)
             + String.join(" | ", resultado.temasSugeridos())
             + ".";
     }

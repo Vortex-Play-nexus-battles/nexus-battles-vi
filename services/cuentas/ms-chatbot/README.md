@@ -1,7 +1,7 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
-**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.4.0 (compatible con 1.1.0)
-**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V10) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
+**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.5.0 (compatible con 1.1.0)
+**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V11) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
 ## Qué hace
@@ -10,7 +10,44 @@ Chat de soporte para visitantes y jugadores: respuestas de una base de conocimie
 versionada (motor de reglas con tolerancia a errores ortográficos, español/inglés),
 consultas en vivo sobre la propia cuenta, historial, calificación útil/no útil, brechas de
 conocimiento y panel de analíticas. **No** es un modelo de lenguaje: es un motor de reglas
-(interpretación de RF-CHA-014 documentada en `V4__panel_de_administracion.sql`).
+(interpretación de RF-CHA-014 documentada en `V4__panel_de_administracion.sql`; D-CHA-01 en
+`docs/gobierno/DECISIONES-PENDIENTES-DEL-PO.md`).
+
+## Base de conocimiento (V11, 1.5.0)
+
+La versión en producción la publica la migración **V11** (Java, `db.migration`) a partir de
+`src/main/resources/db/contenido/V11__base_de_conocimiento_fiel_al_juego.json`: corrige los
+temas que describían cosas que el juego no tiene o tiene distinto (#948: logros, mazos,
+pérdida de objetos, equipos de seis en el torneo…) y añade los que faltaban del 7.4.1. De
+dónde sale cada afirmación (contrato, código, regla o decisión), tema por tema, está en
+`contenido/evidencia-v11.md`.
+
+- Retira la versión en producción (queda RETIRADA y se puede revertir desde el panel) y
+  publica una nueva con 59 temas, todos con variantes en español e inglés.
+- La candidata en edición, si la hay, recibe las mismas correcciones.
+- Los temas sembrados en V2 cambian su clave (su UUID) por una legible (`crear-cuenta`,
+  `publicar-subasta`…); los casos de evaluación **y las respuestas ya guardadas** pasan a la
+  clave nueva, así que las analíticas de temas frecuentes siguen contando cada tema junto.
+- Añade 118 casos de evaluación (dos por tema, español e inglés).
+
+`contenido/base-de-conocimiento.json` es la misma base en el formato de importación del
+panel (59 temas y 118 casos): sirve para restaurarla en otro entorno sin tocar la base de
+datos. `BaseDeConocimientoEnProduccionIT` comprueba que cada caso activo lo responde su
+tema, que ningún tema enlaza a una vista de administración y que una pregunta en inglés se
+responde en inglés.
+
+## Diálogo (1.5.0)
+
+- **Idioma:** las respuestas en vivo, la navegación, los avisos y el escalamiento van en el
+  idioma de la pregunta (`IdiomaDelTexto`), o en el de las preferencias del chat. Las
+  secciones se nombran como en la barra; en inglés, la etiqueta española con su traducción.
+- **Errores de tecleo:** `DistanciaDeEdicion` (Damerau en su forma de alineación óptima):
+  un error por palabra de 5 letras o más, y dos letras vecinas cambiadas cuentan como uno.
+- **Seguimiento de la respuesta anterior** (`Seguimiento`): «más detalle», «en inglés», «en
+  español», «repítelo» y «no me sirvió», solos o con relleno («por favor», «can you»), se
+  resuelven con la última respuesta del bot en esa conversación. «No me sirvió» ofrece
+  soporte humano, cuenta como escalamiento y no se registra como brecha. Con una palabra de
+  tema («explícame mejor cómo publicar una subasta») ya es una pregunta nueva.
 
 ## Seguridad y privacidad (B11 y revisión final del 7.4.8, 1.4.0)
 
@@ -124,11 +161,18 @@ propio token; el chatbot no tiene credencial de servicio.
 | Consulta | Servicio | Credencial |
 |---|---|---|
 | Inventario | inventario `GET /api/v1/inventario/elementos` | token del jugador |
+| Búsqueda en el inventario (1.5.0) | inventario `GET /api/v1/inventario/elementos/busqueda` | token del jugador |
 | Subastas | ms-subastas `GET /mis-pujas/resumen` | token del jugador |
 | Notificaciones | notificaciones `GET /users/{uid}/notifications` | token del jugador |
 | Movimientos de créditos (B11) | ms-finanzas `GET /creditos/{uid}/movimientos` | token del jugador |
 | Torneos en curso y mi equipo (B11) | torneos `GET /torneos`, `GET /torneos/{id}` | ninguna (dato público) |
-| Misiones | — | «en construcción»: el servicio de misiones aún no publica contrato |
+| Misiones en curso (1.3.0) | misiones `GET /api/v1/misiones/en-curso` | token del jugador |
+
+«Busca espada en mi inventario», «¿tengo alguna poción en mi inventario?» o «search my
+inventory for a sword» usan la búsqueda real (criterio de 4 letras o más, como pide el
+contrato del inventario). El **informe de actividad** pide sus cinco partes a la vez (hilos
+virtuales) y espera como mucho 1,7 s en total: la parte que no llega se dice «no disponible»
+y el resto se entrega (7.4.11, menos de 2 s).
 
 ## Despliegue
 
@@ -159,4 +203,6 @@ adivinar; pedir la sesión con `POST /chat/sesiones` la haría de 256 bits. CORS
 `ChatControllerTest`, `SesionesAnonimasTest`, `LimitadorDeFrecuenciaTest`,
 `ListaNegraClientHttpTest`, `MotorConsultasAsistidasTest`…) e integración con PostgreSQL real
 (`SeguridadDelHistorialIT`: el ataque de la auditoría, límite de frecuencia, mensaje
-bloqueado, restricción de espacios de claves). JaCoCo ≥ 80 %.
+bloqueado, restricción de espacios de claves; `BaseDeConocimientoFielAlJuegoIT`: V10 → V11
+con producción, candidata y respuestas guardadas; `BaseDeConocimientoEnProduccionIT`: los
+139 casos de evaluación contra la base publicada). JaCoCo ≥ 80 %.
