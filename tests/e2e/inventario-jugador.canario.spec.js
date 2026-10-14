@@ -128,14 +128,20 @@ async function entrar(page, cuenta) {
   }
 }
 
-/** Va a «Mi inventario» desde la barra del juego, como una persona (§7.1.1). */
+/**
+ * Va a «Mi inventario» desde la barra del juego, como una persona (§7.1.1).
+ * El canario corre en escritorio: la barra está desplegada. Se espera a que la
+ * vista esté montada (sus pestañas) y no solo a que no haya «Cargando»: justo
+ * después de navegar todavía no hay nada que cargue.
+ */
 async function irAlInventario(page) {
   const enlace = page.locator('header[data-cabecera-app] a[data-seccion="inventario"]');
-  if (!(await enlace.isVisible())) {
-    await page.locator('[data-zona="alternar-nav"]').click();
-  }
+  await expect(enlace).toBeVisible({ timeout: 30_000 });
   await enlace.click();
   await expect(page).toHaveURL(/\/inventario(?:[?#]|$)/);
+  await expect(page.getByRole('tablist', { name: 'Secciones de Mi inventario' })).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(page.locator('.estado-carga')).toHaveCount(0, { timeout: 30_000 });
 }
 
@@ -268,9 +274,8 @@ test.describe('Mi inventario en AWS DEV (revisión final §7.1)', () => {
     const visitadas = [];
     for (const seccion of BARRA_DEL_JUGADOR) {
       const enlace = page.locator(`header[data-cabecera-app] a[data-seccion="${seccion.id}"]`);
-      if (!(await enlace.isVisible())) {
-        await page.locator('[data-zona="alternar-nav"]').click();
-      }
+      // Se espera a la barra de la vista recién abierta (no se mira un instante).
+      await expect(enlace).toBeVisible({ timeout: 30_000 });
       await expect(enlace).toContainText(seccion.etiqueta);
       await enlace.click();
       await expect(page).toHaveURL(seccion.ruta, { timeout: 30_000 });
