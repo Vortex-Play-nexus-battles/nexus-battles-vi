@@ -85,7 +85,7 @@ test.describe('Recorrido del Super Administrador (SA-9)', () => {
   }) => {
     await entrarEnLaPagina(page, superAdmin);
     await page.goto(
-      `/frontend/app-web/src/cuentas/ficha-usuario.html?usuario=${superAdmin.claims.uid}`,
+      `/frontend/app-web/src/plataforma/moderacion-sanciones/ficha-usuario.html?usuario=${superAdmin.claims.uid}`,
     );
     await expect(page).toHaveURL(
       new RegExp(`/consola/usuarios/ficha\\?usuario=${superAdmin.claims.uid}$`),
