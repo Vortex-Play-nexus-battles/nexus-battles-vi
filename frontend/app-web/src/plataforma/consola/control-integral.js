@@ -37,6 +37,7 @@ import {
   ESTADOS_DE_CUENTA,
   exportarDirectorio,
   guardarArchivo,
+  HISTORIAL_DE_SANCIONES,
   panelDeUsuarios,
   recursoDelDirectorio,
 } from './panel-usuarios.js';
@@ -378,6 +379,7 @@ function seccionJugadores(
     estadoCuenta: '',
     desde: '',
     hasta: '',
+    historialSanciones: '',
   };
 
   const exportar = h('button', {
@@ -398,7 +400,8 @@ function seccionJugadores(
     busqueda: {
       nombre: 'buscar',
       etiqueta: 'Buscar',
-      placeholder: 'Apodo, correo o nombre',
+      // ms-identidad-admin 1.5.0: también por el ID de la cuenta o su uid.
+      placeholder: 'Apodo, correo, nombre o ID',
     },
     filtros: [
       { nombre: 'rol', etiqueta: 'Rol', opciones: Object.entries(NOMBRE_DE_ROL) },
@@ -409,6 +412,13 @@ function seccionJugadores(
       },
       { nombre: 'desde', etiqueta: 'Registrada desde', tipo: 'fecha' },
       { nombre: 'hasta', etiqueta: 'Registrada hasta', tipo: 'fecha' },
+      // SA-3 — §7.3.4 «filtros por historial de sanciones».
+      {
+        nombre: 'historialSanciones',
+        etiqueta: 'Sanciones',
+        todos: 'Todas las cuentas',
+        opciones: HISTORIAL_DE_SANCIONES,
+      },
       {
         nombre: 'cuentas',
         etiqueta: 'Cuentas de prueba',
@@ -428,6 +438,7 @@ function seccionJugadores(
         estadoCuenta: valores.estadoCuenta,
         desde: valores.desde,
         hasta: valores.hasta,
+        historialSanciones: valores.historialSanciones,
         ocultarPruebas: valores.cuentas === SIN_CUENTAS_DE_PRUEBA,
         pagina: 0,
       });
@@ -510,6 +521,14 @@ export function pintarDirectorio(datos, estado, recargar) {
         titulo: 'Última entrada',
         tipo: 'fecha',
         valor: (j) => (j.ultimoAcceso ? formatearFecha(j.ultimoAcceso) : 'Nunca ha entrado'),
+      },
+      // SA-3 — cuántas sanciones se le han emitido (ms-identidad-admin 1.7.0);
+      // un servicio anterior que no la publica deja «Sin dato», no un cero.
+      {
+        clave: 'sancionesRegistradas',
+        titulo: 'Sanciones',
+        tipo: 'numero',
+        valor: (j) => (Number.isInteger(j.sancionesRegistradas) ? j.sancionesRegistradas : null),
       },
       {
         clave: 'acciones',
@@ -1085,7 +1104,30 @@ function fechaOVacio(valor) {
   return valor ? formatearFecha(valor) : null;
 }
 
-/** Fecha corta y local. Nulo se pinta como guion, no como «hoy». */
+const DIA_COMPACTO = new Intl.DateTimeFormat('es-CO', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+});
+
+const HORA_COMPACTA = new Intl.DateTimeFormat('es-CO', { hour: 'numeric', minute: '2-digit' });
+
+/**
+ * El día de una fecha, compacto: «05 oct 2026». `es-CO` lo escribe «05 de oct
+ * de 2026»; en una tabla de la consola esos «de» son un tercio del ancho de la
+ * columna, y a 1366 px (la resolución mínima, RNF-USA-001) el directorio no
+ * cabía entero (SA-3, al ganar la columna «Sanciones»).
+ *
+ * @param {Date} fecha válida
+ */
+function diaCompacto(fecha) {
+  return DIA_COMPACTO.formatToParts(fecha)
+    .filter((parte) => parte.type !== 'literal')
+    .map((parte) => (parte.type === 'month' ? parte.value.replace('.', '') : parte.value))
+    .join(' ');
+}
+
+/** Fecha y hora de un instante, compactas: «05 oct 2026, 6:30 p. m.». Nulo es un guion. */
 export function formatearFecha(valor) {
   if (!valor) {
     return '—';
@@ -1094,13 +1136,7 @@ export function formatearFecha(valor) {
   if (Number.isNaN(fecha.getTime())) {
     return String(valor);
   }
-  return fecha.toLocaleString('es-CO', {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return `${diaCompacto(fecha)}, ${HORA_COMPACTA.format(fecha)}`;
 }
 
 /** El día de un instante, sin la hora: «05 oct 2026». Nulo se pinta como guion. */
@@ -1112,7 +1148,7 @@ export function formatearDia(valor) {
   if (Number.isNaN(fecha.getTime())) {
     return String(valor);
   }
-  return fecha.toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: '2-digit' });
+  return diaCompacto(fecha);
 }
 
 /** Hora de un instante, sin fecha. */

@@ -11749,6 +11749,18 @@ body:has(.chatbot-flotante) main:not(.combate) {
   }
 }
 
+/* SA-3 — tres cifras (el saldo de la ficha): las tres en una fila y, en un
+   teléfono, una debajo de otra; nunca dos y una suelta. */
+.rejilla-indicadores-admin[data-cantidad='3'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 480px) {
+  .rejilla-indicadores-admin[data-cantidad='3'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* --- Estado (estado.js) -------------------------------------------------- */
 
 .estado-admin {

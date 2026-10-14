@@ -57,6 +57,7 @@ const JUGADORES = {
       ultimoAcceso: '2026-09-20T18:30:00',
       suspendidoHasta: null,
       bloqueada: false,
+      sancionesRegistradas: 2,
     },
     {
       id: 16,
@@ -451,7 +452,7 @@ describe('directorio de jugadores', () => {
     const formulario = directorio.querySelector('form.filtros-admin');
     expect(formulario.firstElementChild.querySelector('input[name="buscar"]')).not.toBeNull();
     expect(directorio.querySelector('input[name="buscar"]').getAttribute('placeholder')).toBe(
-      'Apodo, correo o nombre',
+      'Apodo, correo, nombre o ID',
     );
     directorio.querySelector('input[name="buscar"]').value = '  Ana  ';
     formulario.dispatchEvent(new window.Event('submit', { cancelable: true }));
@@ -491,6 +492,7 @@ describe('directorio de jugadores', () => {
       'Estado',
       'Registro',
       'Última entrada',
+      'Sanciones',
       'Acciones',
     ]);
     const estados = [...directorio.querySelectorAll('tbody .estado-admin')].map((e) =>
@@ -501,6 +503,43 @@ describe('directorio de jugadores', () => {
     // La página la dice la paginación; el resumen, cuántas cuentas hay.
     expect(directorio.querySelector('.tabla-admin__resumen').textContent).toBe('42 cuentas');
     expect(directorio.querySelector('.paginacion').textContent).toContain('Página 1 de 3');
+  });
+
+  test('SA-3: la columna «Sanciones» dice cuántas se le han emitido; sin el dato, no un cero', async () => {
+    const { raiz } = await montar();
+
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
+    const indice = encabezados(directorio).indexOf('Sanciones');
+    const columna = [...directorio.querySelectorAll('tbody tr')].map(
+      (tr) => tr.children[indice].textContent,
+    );
+    expect(columna[0]).toContain('2');
+    // Beto no trae `sancionesRegistradas` (un servicio anterior a 1.7.0).
+    expect(columna[1]).toContain('Sin dato');
+    expect(columna[1]).not.toMatch(/^\s*0\s*$/);
+  });
+
+  test('SA-3: el filtro «Sanciones» pide las cuentas con historial, desde la primera página', async () => {
+    const { raiz, consultarApi } = await montar();
+
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
+    const filtro = directorio.querySelector('select[name="historialSanciones"]');
+    expect([...filtro.options].map((o) => o.textContent)).toEqual([
+      'Todas las cuentas',
+      'Con sanciones',
+      'Sin sanciones',
+    ]);
+    filtro.value = 'CON';
+    filtro.dispatchEvent(new window.Event('change'));
+    await asentar();
+
+    expect(pedidasAlDirectorio(consultarApi).at(-1)).toBe(
+      '/admin/jugadores?page=0&size=16&historialSanciones=CON&ocultarPruebas=true',
+    );
+    const fichas = [...directorio.querySelectorAll('.filtros-admin__ficha')].map((f) =>
+      f.textContent.replace('×', '').trim(),
+    );
+    expect(fichas).toContain('Sanciones: Con sanciones');
   });
 
   test('una cuenta que nunca entró lo dice, no finge una fecha', async () => {

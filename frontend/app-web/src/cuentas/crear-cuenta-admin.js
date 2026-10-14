@@ -14,6 +14,7 @@ import { formularioListo, sinCredencialesEnLaDireccion } from '../comun/ui/formu
 import { confirmar } from '../comun/ui/dialogo.js';
 import { respaldoPorEstado, textoDeError, textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 import { RUTAS, resolver } from '../comun/sesion.js';
+import { NOMBRE_DEL_PERMISO, permisosDelRol } from '../comun/ui/admin/permisos.js';
 
 const BASE_API = '/api/v1/admin/cuentas';
 const MATRIZ_RBAC_API = '/api/v1/rbac/matrix';
@@ -32,53 +33,16 @@ const NOMBRE_DE_ROL = Object.freeze({
 });
 
 /**
- * Cómo se lee cada acción de la matriz (rbac.yaml). Los permisos que se
- * muestran salen de la matriz que publica el servidor, no de una lista
- * escrita aquí: hasta 7.3.9 esta vista decía que un Moderador «gestiona
- * cuentas», cosa que la Tabla 24 no le da.
+ * Cómo se lee cada acción de la matriz (rbac.yaml) y qué da cada rol. Los
+ * permisos que se muestran salen de la matriz que publica el servidor, no de
+ * una lista escrita aquí: hasta 7.3.9 esta vista decía que un Moderador
+ * «gestiona cuentas», cosa que la Tabla 24 no le da. Desde SA-3 los usa
+ * también la ficha administrativa del usuario y viven en el kit de la consola.
  */
-export const NOMBRE_DE_ACCION = Object.freeze({
-  CREAR_CUENTA_JUGADOR: 'Crear una cuenta de jugador',
-  MODIFICAR_PERFIL_PROPIO: 'Editar su propio perfil',
-  PUBLICAR_COMENTARIOS: 'Publicar comentarios',
-  ELIMINAR_COMENTARIO_PROPIO: 'Eliminar sus comentarios',
-  MODERAR_COMENTARIOS: 'Moderar comentarios',
-  EMITIR_ADVERTENCIAS: 'Emitir advertencias',
-  SUSPENDER_USUARIOS: 'Suspender cuentas',
-  BANEAR_DEFINITIVAMENTE: 'Banear definitivamente',
-  CREAR_ADMIN_MODERADOR: 'Crear cuentas administrativas',
-  GESTIONAR_PRODUCTOS: 'Gestionar los productos de la tienda',
-  ASIGNAR_ROL: 'Cambiar roles',
-  GESTIONAR_CUENTAS: 'Gestionar cuentas de otros usuarios',
-  RESTABLECER_SEGUNDO_FACTOR: 'Restablecer la verificación en dos pasos',
-});
+export { NOMBRE_DEL_PERMISO as NOMBRE_DE_ACCION, permisosDelRol };
 
 /** La matriz que publicó el servidor, para decir qué puede hacer cada rol. */
 let matrizPublicada = {};
-
-/**
- * Las acciones que la matriz da a un rol, en palabras. Una permitida solo de
- * forma temporal (el Moderador suspende, pero no para siempre) lo dice.
- *
- * @param {Record<string, Record<string, string>>} matriz
- * @param {string} rol
- * @returns {string[]}
- */
-export function permisosDelRol(matriz, rol) {
-  const fila = matriz?.[rol];
-  if (!fila || typeof fila !== 'object') {
-    return [];
-  }
-  const permisos = [];
-  for (const [accion, nombre] of Object.entries(NOMBRE_DE_ACCION)) {
-    if (fila[accion] === 'GRANTED') {
-      permisos.push(nombre);
-    } else if (fila[accion] === 'TEMPORARY') {
-      permisos.push(`${nombre} (solo de forma temporal)`);
-    }
-  }
-  return permisos;
-}
 
 document.addEventListener('DOMContentLoaded', iniciar);
 
