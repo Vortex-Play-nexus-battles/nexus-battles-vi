@@ -113,6 +113,8 @@ comprobar POST /api/v1/auth/apelacion      "identidad POST /api/v1/auth/apelacio
 comprobar GET  /api/v1/perfiles/yo         "identidad GET /api/v1/perfiles/yo"
 comprobar GET  /api/v1/rbac/roles          "identidad GET /api/v1/rbac/roles"
 comprobar GET  /api/v1/admin/usuarios      "identidad GET /api/v1/admin/usuarios"
+# SA-4 (ms-identidad-admin 1.9.0): titulares para la consola de moderacion.
+comprobar GET  /api/v1/admin/titulares     "identidad GET /api/v1/admin/titulares"
 # Auditoria de DEV del 30-sep: la foto de perfil la sirve ms-identidad fuera
 # de /api (devuelve `/avatares-subidos/<archivo>`) y por el borde solo se lee.
 comprobar GET  /avatares-subidos/a.png     "identidad GET /avatares-subidos/a.png"

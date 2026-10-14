@@ -476,7 +476,23 @@ export function pedirTexto({
  *   textoConfirmar?: string, textoCancelar?: string, peligro?: boolean}} opciones
  * @returns {Promise<string|null>} el motivo (sin espacios de los bordes) o null si se canceló
  */
-export function confirmarConMotivo({
+export function confirmarConMotivo(opciones) {
+  return confirmarConMotivoYSeleccion({ ...opciones, seleccion: null }).then((resultado) =>
+    resultado === null ? null : resultado.motivo,
+  );
+}
+
+/**
+ * Como {@link confirmarConMotivo}, con una elección obligatoria antes del
+ * motivo — SA-4: la causal de una sanción (§7.3.2). El botón no se activa
+ * hasta que hay una opción elegida y el motivo cumple su mínimo.
+ *
+ * @param {Parameters<typeof confirmarConMotivo>[0] & {seleccion: {etiqueta: string,
+ *   opciones: Array<[string, string]>, vacio?: string, pista?: string|null,
+ *   inicial?: string|null}|null}} opciones
+ * @returns {Promise<{seleccion: string|null, motivo: string}|null>} null si se canceló
+ */
+export function confirmarConMotivoYSeleccion({
   titulo,
   mensaje = '',
   consecuencias = [],
@@ -489,11 +505,34 @@ export function confirmarConMotivo({
   textoConfirmar = 'Confirmar',
   textoCancelar = 'Cancelar',
   peligro = true,
+  seleccion = null,
 }) {
   contador += 1;
   const idMotivo = `motivo-${contador}`;
   const idPalabra = `palabra-${contador}`;
+  const idSeleccion = `seleccion-${contador}`;
   const esperada = palabra === null ? null : String(palabra).trim();
+
+  const desplegable =
+    seleccion === null
+      ? null
+      : h('select', {
+          clase: 'desplegable__control',
+          atributos: {
+            id: idSeleccion,
+            required: true,
+            'aria-describedby': seleccion.pista ? `${idSeleccion}-pista` : null,
+          },
+          hijos: [
+            h('option', { texto: seleccion.vacio ?? 'Elige una opción', atributos: { value: '' } }),
+            ...seleccion.opciones.map(([valor, texto]) =>
+              h('option', { texto, atributos: { value: valor } }),
+            ),
+          ],
+        });
+  if (desplegable && seleccion.inicial) {
+    desplegable.value = seleccion.inicial;
+  }
 
   const motivo = h('textarea', {
     clase: 'campo__control',
@@ -532,6 +571,26 @@ export function confirmarConMotivo({
         ? h('ul', {
             clase: 'confirmacion-critica__consecuencias',
             hijos: consecuencias.map((texto) => h('li', { texto })),
+          })
+        : null,
+      desplegable
+        ? h('div', {
+            clase: 'desplegable',
+            hijos: [
+              h('label', {
+                clase: 'campo__etiqueta',
+                texto: seleccion.etiqueta,
+                atributos: { for: idSeleccion },
+              }),
+              desplegable,
+              seleccion.pista
+                ? h('p', {
+                    clase: 'campo__pista',
+                    texto: seleccion.pista,
+                    atributos: { id: `${idSeleccion}-pista` },
+                  })
+                : null,
+            ],
           })
         : null,
       h('div', {
@@ -583,6 +642,7 @@ export function confirmarConMotivo({
       datos: { accion: 'confirmar' },
     });
     const listo = () =>
+      (desplegable === null || desplegable.value !== '') &&
       motivo.value.trim().length >= minimo &&
       (esperada === null || (campoPalabra.value.trim() === esperada && esperada !== ''));
     const actualizar = () => {
@@ -590,6 +650,7 @@ export function confirmarConMotivo({
     };
     motivo.addEventListener('input', actualizar);
     campoPalabra?.addEventListener('input', actualizar);
+    desplegable?.addEventListener('change', actualizar);
     actualizar();
 
     const { cerrar } = abrirDialogo({
@@ -599,7 +660,7 @@ export function confirmarConMotivo({
       peligro,
       alCerrar: () => resolver(null),
     });
-    motivo.focus();
+    (desplegable ?? motivo).focus();
 
     cancelar.addEventListener('click', () => {
       resolver(null);
@@ -609,7 +670,7 @@ export function confirmarConMotivo({
       if (!listo()) {
         return;
       }
-      resolver(motivo.value.trim());
+      resolver({ seleccion: desplegable ? desplegable.value : null, motivo: motivo.value.trim() });
       cerrar();
     });
   });

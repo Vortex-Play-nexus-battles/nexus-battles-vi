@@ -721,7 +721,14 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     campo.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
-  test('suspender pide el motivo en el diálogo, con el apodo y la fecha, y lo manda con la fecha fin', async () => {
+  /** SA-4 (§7.3.2) — la causal del diálogo, una de las ocho del reglamento. */
+  function elegirCausal(caja, causal) {
+    const desplegable = caja.querySelector('select');
+    desplegable.value = causal;
+    desplegable.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  test('suspender pide la causal y el motivo en el diálogo, con el apodo y la fecha, y los manda con la fecha fin', async () => {
     document.getElementById('suspendido-hasta').value = '2026-10-01T10:00';
     document.getElementById('btn-suspender').click();
     await esperar();
@@ -732,6 +739,12 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     // 7.3.9 — sin motivo no se puede confirmar.
     expect(confirmarBoton.disabled).toBe(true);
     escribir(dialogo().querySelector('textarea'), 'Lenguaje ofensivo reiterado');
+    // SA-4 — ni sin causal: las ocho de §7.3.2, en su orden.
+    expect(confirmarBoton.disabled).toBe(true);
+    expect(
+      [...dialogo().querySelectorAll('select option')].map((o) => o.value).filter(Boolean),
+    ).toHaveLength(8);
+    elegirCausal(dialogo(), 'LENGUAJE_OFENSIVO');
     expect(confirmarBoton.disabled).toBe(false);
     globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
     confirmarBoton.click();
@@ -743,6 +756,7 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     expect(JSON.parse(opciones.body)).toEqual({
       suspendidoHasta: '2026-10-01T10:00',
       motivo: 'Lenguaje ofensivo reiterado',
+      causal: 'LENGUAJE_OFENSIVO',
     });
     expect(window.confirm).not.toHaveBeenCalled();
   });
@@ -761,20 +775,22 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     expect(globalThis.fetch.mock.calls.length).toBe(llamadas);
   });
 
-  test('banear es crítico: motivo obligatorio y, además, escribir el apodo de la cuenta', async () => {
+  test('banear es crítico: causal y motivo obligatorios y, además, escribir el apodo de la cuenta', async () => {
     document.getElementById('btn-banear').click();
     await esperar();
 
     const caja = dialogo();
     expect(caja.querySelector('h2').textContent).toBe('Banear definitivamente a nyx_valiente');
     expect(caja.querySelector('.confirmacion-critica__consecuencias').textContent).toContain(
-      'No podrá volver a entrar con esta cuenta.',
+      'No podrá volver a entrar con esta cuenta y su inventario queda congelado.',
     );
     const motivo = caja.querySelector('textarea');
     const palabra = caja.querySelector('input');
     const boton = caja.querySelector('[data-accion="confirmar"]');
-    expect(document.activeElement).toBe(motivo);
+    // La causal va primero: el foco empieza en ella.
+    expect(document.activeElement).toBe(caja.querySelector('select'));
     expect(boton.disabled).toBe(true);
+    elegirCausal(caja, 'FRAUDE');
 
     escribir(palabra, 'nyx_valiente');
     expect(boton.disabled).toBe(true);
@@ -791,7 +807,10 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
 
     const [ruta, opciones] = globalThis.fetch.mock.calls.at(-1);
     expect(ruta).toBe('/api/v1/admin/usuarios/15/banear');
-    expect(JSON.parse(opciones.body)).toEqual({ motivo: 'Fraude comprobado en subastas' });
+    expect(JSON.parse(opciones.body)).toEqual({
+      motivo: 'Fraude comprobado en subastas',
+      causal: 'FRAUDE',
+    });
   });
 
   test('UXC-9 — la causal escrita en el formulario llega escrita al diálogo y viaja sin espacios', async () => {
@@ -801,6 +820,7 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     await esperar();
 
     expect(dialogo().querySelector('textarea').value).toContain('Lenguaje ofensivo en el chat');
+    elegirCausal(dialogo(), 'LENGUAJE_OFENSIVO');
     globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
     dialogo().querySelector('[data-accion="confirmar"]').click();
     await esperar();
@@ -808,6 +828,7 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     expect(JSON.parse(globalThis.fetch.mock.calls.at(-1)[1].body)).toEqual({
       suspendidoHasta: '2026-10-01T10:00',
       motivo: 'Lenguaje ofensivo en el chat',
+      causal: 'LENGUAJE_OFENSIVO',
     });
   });
 
@@ -835,6 +856,7 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     document.getElementById('motivo-sancion').value = 'Spam reiterado en el chat';
     document.getElementById('btn-suspender').click();
     await esperar();
+    elegirCausal(dialogo(), 'LENGUAJE_OFENSIVO');
     globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
     dialogo().querySelector('[data-accion="confirmar"]').click();
     await esperar();

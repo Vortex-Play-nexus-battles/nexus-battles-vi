@@ -10,10 +10,8 @@ import {
   descripcionDe,
   frasePlazoDeApelacion,
   montarMisSanciones,
-  montarPanelDeModeracion,
   sePuedeApelar,
-  solicitudDesde,
-  textoDeRangoDeSuspension,
+  tarjetaDeApelacion,
   tiempoRestante,
 } from './sanciones.js';
 
@@ -127,302 +125,6 @@ describe('presentacion', () => {
     expect(frasePlazoDeApelacion(undefined)).toBe('dentro del plazo de apelación vigente');
     expect(frasePlazoDeApelacion(0)).toBe('dentro del plazo de apelación vigente');
     expect(frasePlazoDeApelacion(Number.NaN)).toBe('dentro del plazo de apelación vigente');
-  });
-
-  test('textoDeRangoDeSuspension: el rango real, con singular y plural; sin dato, sin rango', () => {
-    expect(textoDeRangoDeSuspension(LIMITES)).toBe('Duración en horas (1 hora a 30 días)');
-    expect(textoDeRangoDeSuspension({ suspensionMinimaHoras: 2, suspensionMaximaDias: 1 })).toBe(
-      'Duración en horas (2 horas a 1 día)',
-    );
-    expect(textoDeRangoDeSuspension(null)).toBe('Duración en horas');
-    expect(textoDeRangoDeSuspension({})).toBe('Duración en horas');
-  });
-
-  test('solicitudDesde solo manda los campos del contrato según el tipo', () => {
-    expect(
-      solicitudDesde({
-        usuarioId: ` ${UID} `,
-        tipo: 'ADVERTENCIA',
-        motivo: ' x ',
-        politica: '',
-        duracionHoras: '5',
-      }),
-    ).toEqual({
-      usuarioId: UID,
-      tipo: 'ADVERTENCIA',
-      motivo: 'x',
-    });
-    expect(
-      solicitudDesde({ usuarioId: UID, tipo: 'SUSPENSION', motivo: 'x', duracionHoras: '48.7' }),
-    ).toEqual({
-      usuarioId: UID,
-      tipo: 'SUSPENSION',
-      motivo: 'x',
-      duracionHoras: 48,
-    });
-    expect(
-      solicitudDesde({
-        usuarioId: UID,
-        tipo: 'BANEO',
-        motivo: 'grave',
-        confirmacion: 'on',
-        politica: 'P',
-      }),
-    ).toEqual({
-      usuarioId: UID,
-      tipo: 'BANEO',
-      motivo: 'grave',
-      politica: 'P',
-      confirmacion: true,
-    });
-  });
-});
-
-const PANEL = `
-  <div data-zona="aviso" hidden></div>
-  <form data-zona="buscar"><input name="usuarioId" /><button type="submit">Ver</button></form>
-  <form data-zona="emitir">
-    <input name="usuarioId" />
-    <select name="tipo"><option value="ADVERTENCIA" selected>A</option><option value="SUSPENSION">S</option><option value="BANEO">B</option></select>
-    <label data-solo="SUSPENSION"><span data-campo="rango-suspension">Duración en horas</span><input type="number" name="duracionHoras" min="1" value="24" /></label>
-    <textarea name="motivo"></textarea>
-    <input name="politica" /><input name="comentarioId" />
-    <label data-solo="BANEO"><input type="checkbox" name="confirmacion" /></label>
-    <button type="submit">Emitir</button>
-  </form>
-  <div data-zona="historial"></div>
-  <div data-zona="apelaciones"></div>`;
-
-describe('panel de moderacion', () => {
-  beforeEach(() => {
-    document.body.innerHTML = PANEL;
-  });
-
-  test('sin rol de moderación, se dice y el formulario queda cerrado', () => {
-    montarPanelDeModeracion(document, { rol: 'JUGADOR', fetchImpl: servicio({}) });
-    expect(document.querySelector('.aviso--advertencia').textContent).toMatch(/moderación/);
-    expect(document.querySelector('[data-zona="emitir"] button').disabled).toBe(true);
-  });
-
-  test('un moderador no ve el baneo como opción; un administrador si', () => {
-    montarPanelDeModeracion(document, {
-      rol: 'MODERADOR',
-      fetchImpl: servicio({
-        'GET /api/v1/apelaciones': { cuerpo: [] },
-        'GET /api/v1/sanciones/limites': { cuerpo: LIMITES },
-      }),
-    });
-    expect(document.querySelector('option[value="BANEO"]').disabled).toBe(true);
-    document.body.innerHTML = PANEL;
-    montarPanelDeModeracion(document, {
-      rol: 'ADMINISTRADOR',
-      fetchImpl: servicio({
-        'GET /api/v1/apelaciones': { cuerpo: [] },
-        'GET /api/v1/sanciones/limites': { cuerpo: LIMITES },
-      }),
-    });
-    expect(document.querySelector('option[value="BANEO"]').disabled).toBe(false);
-  });
-
-  test('emitir una advertencia manda el cuerpo del contrato, avisa y recarga el historial', async () => {
-    const fetchImpl = servicio({
-      'GET /api/v1/apelaciones': { cuerpo: [] },
-      'GET /api/v1/sanciones/limites': { cuerpo: LIMITES },
-      'POST /api/v1/sanciones': (opciones) => {
-        const cuerpo = JSON.parse(opciones.body);
-        return {
-          estado: 201,
-          cuerpo: sancion({ tipo: cuerpo.tipo, vigenteHasta: null, motivo: cuerpo.motivo }),
-        };
-      },
-      [`GET /api/v1/sanciones/usuarios/${UID}`]: {
-        cuerpo: [sancion({ tipo: 'ADVERTENCIA', vigenteHasta: null })],
-      },
-    });
-    montarPanelDeModeracion(document, { rol: 'MODERADOR', fetchImpl, ahora: () => AHORA });
-    const form = document.querySelector('[data-zona="emitir"]');
-    form.querySelector('[name="usuarioId"]').value = UID;
-    form.querySelector('[name="motivo"]').value = 'Lenguaje ofensivo';
-    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-    await asentar();
-    await asentar();
-
-    const llamada = fetchImpl.mock.calls.find((c) => c[1]?.method === 'POST');
-    expect(JSON.parse(llamada[1].body)).toEqual({
-      usuarioId: UID,
-      tipo: 'ADVERTENCIA',
-      motivo: 'Lenguaje ofensivo',
-    });
-    expect(document.querySelector('.aviso--exito').textContent).toMatch(/Sanción emitida/);
-    // UXC-7 — AdminTimeline: el estado de la cuenta y la línea de tiempo.
-    const historial = document.querySelector('[data-zona="historial"]');
-    expect(historial.querySelector('[data-estado-cuenta="en-regla"]').textContent).toContain(
-      'Tiene una advertencia: no le impide jugar.',
-    );
-    const hechos = historial.querySelectorAll('.linea-tiempo__hecho');
-    expect(hechos).toHaveLength(1);
-    expect(hechos[0].textContent).toContain('Advertencia emitida');
-    expect(hechos[0].textContent).toContain('Por moderación');
-  });
-
-  test('UXC-9 — llegar con ?usuario= (desde el directorio) abre su historial', async () => {
-    const fetchImpl = servicio({
-      'GET /api/v1/apelaciones': { cuerpo: [] },
-      'GET /api/v1/sanciones/limites': { cuerpo: LIMITES },
-      [`GET /api/v1/sanciones/usuarios/${UID}`]: {
-        cuerpo: [sancion({ tipo: 'ADVERTENCIA', vigenteHasta: null })],
-      },
-    });
-    montarPanelDeModeracion(document, {
-      rol: 'MODERADOR',
-      fetchImpl,
-      ahora: () => AHORA,
-      usuarioInicial: UID,
-    });
-    await asentar();
-    await asentar();
-
-    expect(document.querySelector('[data-zona="buscar"] [name="usuarioId"]').value).toBe(UID);
-    expect(document.querySelector('[data-zona="emitir"] [name="usuarioId"]').value).toBe(UID);
-    expect(
-      fetchImpl.mock.calls.some(([url]) => String(url).endsWith(`/sanciones/usuarios/${UID}`)),
-    ).toBe(true);
-    expect(document.querySelectorAll('[data-zona="historial"] .linea-tiempo__hecho')).toHaveLength(
-      1,
-    );
-  });
-
-  test('el baneo sin confirmación no sale de la vista; el 403 del servicio se muestra tal cual', async () => {
-    const fetchImpl = servicio({
-      'GET /api/v1/apelaciones': { cuerpo: [] },
-      'GET /api/v1/sanciones/limites': { cuerpo: LIMITES },
-      'POST /api/v1/sanciones': {
-        estado: 403,
-        cuerpo: {
-          title: 'No tienes permiso para esto',
-          detail: 'el baneo es de administrador',
-          motivo: 'PERMISO_INSUFICIENTE',
-        },
-      },
-    });
-    montarPanelDeModeracion(document, { rol: 'ADMINISTRADOR', fetchImpl });
-    const form = document.querySelector('[data-zona="emitir"]');
-    form.querySelector('[name="usuarioId"]').value = UID;
-    form.querySelector('[name="tipo"]').value = 'BANEO';
-    form.querySelector('[name="motivo"]').value = 'Fraude';
-    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-    await asentar();
-    expect(document.querySelector('.aviso--advertencia').textContent).toMatch(/definitivo/);
-    expect(fetchImpl.mock.calls.some((c) => c[1]?.method === 'POST')).toBe(false);
-
-    form.querySelector('[name="confirmacion"]').checked = true;
-    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-    await asentar();
-    await asentar();
-    expect(document.querySelector('.aviso--advertencia .aviso__titulo').textContent).toBe(
-      'No tienes permiso para esto',
-    );
-  });
-
-  test('las apelaciones pendientes se listan y resolver manda decision y motivo', async () => {
-    const pendiente = {
-      id: 'a-1',
-      sancionId: 's-1',
-      usuarioId: UID,
-      argumento: 'No fui yo',
-      creadaEn: '2026-09-21T09:30:00Z',
-      estado: 'PENDIENTE',
-    };
-    const fetchImpl = servicio({
-      'GET /api/v1/apelaciones': { cuerpo: [pendiente] },
-      'GET /api/v1/sanciones/limites': { cuerpo: LIMITES },
-      'POST /api/v1/apelaciones/a-1/resolucion': (opciones) => ({
-        cuerpo: {
-          ...pendiente,
-          ...JSON.parse(opciones.body),
-          estado: JSON.parse(opciones.body).decision,
-        },
-      }),
-    });
-    montarPanelDeModeracion(document, { rol: 'ADMINISTRADOR', fetchImpl });
-    await asentar();
-    const form = document.querySelector('[data-zona="apelaciones"] [data-zona="resolucion"]');
-    expect(form).not.toBeNull();
-    form.querySelector('[name="decision"]').value = 'REVERTIDA';
-    form.querySelector('[name="motivo"]').value = 'Tiene razon';
-    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-    await asentar();
-    await asentar();
-    const llamada = fetchImpl.mock.calls.find((c) => String(c[0]).includes('/resolucion'));
-    expect(JSON.parse(llamada[1].body)).toEqual({
-      decision: 'REVERTIDA',
-      motivo: 'Tiene razon',
-      nuevaVigencia: null,
-    });
-    expect(document.querySelector('.aviso--exito').textContent).toMatch(/revertida/);
-  });
-
-  // El defecto: `max="720"` en el HTML eran los 30 dias del catalogo pasados a
-  // horas a mano. Con el parametro en 2 dias, el formulario aceptaba 720 y el
-  // servicio devolvia 400.
-  test('el rango de la suspensión sale del servicio, no del HTML', async () => {
-    const fetchImpl = servicio({
-      'GET /api/v1/apelaciones': { cuerpo: [] },
-      'GET /api/v1/sanciones/limites': {
-        cuerpo: {
-          suspensionMinimaHoras: 2,
-          suspensionMaximaHoras: 48,
-          suspensionMaximaDias: 2,
-          apelacionPlazoDias: 7,
-        },
-      },
-    });
-    montarPanelDeModeracion(document, { rol: 'ADMINISTRADOR', fetchImpl });
-    await asentar();
-    await asentar();
-
-    const duracion = document.querySelector('[name="duracionHoras"]');
-    expect(duracion.getAttribute('max')).toBe('48');
-    expect(duracion.getAttribute('min')).toBe('2');
-    // 24 seguía dentro del rango, así que el valor por omisión no se toca.
-    expect(duracion.value).toBe('24');
-    expect(document.querySelector('[data-campo="rango-suspension"]').textContent).toBe(
-      'Duración en horas (2 horas a 2 días)',
-    );
-  });
-
-  test('el valor por omisión se ajusta si queda fuera del rango vigente', async () => {
-    const fetchImpl = servicio({
-      'GET /api/v1/apelaciones': { cuerpo: [] },
-      'GET /api/v1/sanciones/limites': {
-        cuerpo: {
-          suspensionMinimaHoras: 1,
-          suspensionMaximaHoras: 6,
-          suspensionMaximaDias: 1,
-          apelacionPlazoDias: 7,
-        },
-      },
-    });
-    montarPanelDeModeracion(document, { rol: 'ADMINISTRADOR', fetchImpl });
-    await asentar();
-    await asentar();
-
-    expect(document.querySelector('[name="duracionHoras"]').value).toBe('6');
-  });
-
-  test('sin límites no se inventa un tope: el campo queda sin max y la etiqueta sin rango', async () => {
-    const fetchImpl = servicio({
-      'GET /api/v1/apelaciones': { cuerpo: [] },
-      'GET /api/v1/sanciones/limites': { estado: 503, cuerpo: { title: 'Caido', detail: 'x' } },
-    });
-    montarPanelDeModeracion(document, { rol: 'ADMINISTRADOR', fetchImpl });
-    await asentar();
-    await asentar();
-
-    expect(document.querySelector('[name="duracionHoras"]').getAttribute('max')).toBeNull();
-    expect(document.querySelector('[data-campo="rango-suspension"]').textContent).toBe(
-      'Duración en horas',
-    );
   });
 });
 
@@ -602,5 +304,38 @@ describe('mis sanciones', () => {
     expect(e.titulo).toBe('T');
     expect(e.detalle).toBe('D');
     expect(e.motivo).toBe('SOLICITUD_INVALIDA');
+  });
+});
+
+describe('tarjeta de una apelación en «Mis sanciones»', () => {
+  test('pendiente: en revisión y la fecha en que decide el panel; sin formulario de resolución', () => {
+    const tarjeta = tarjetaDeApelacion({
+      id: 'a-1',
+      sancionId: 's-1',
+      argumento: 'No fui yo',
+      creadaEn: '2026-10-13T16:00:00Z',
+      estado: 'PENDIENTE',
+      decisionAntesDe: '2026-11-03T04:59:59.999Z',
+      vencida: false,
+    });
+    expect(tarjeta.textContent).toContain('Apelación · en revisión');
+    expect(tarjeta.textContent).toMatch(/El panel decide a más tardar el \d+ de noviembre de 2026/);
+    expect(tarjeta.querySelector('form')).toBeNull();
+  });
+
+  test('resuelta: la decisión con su motivo', () => {
+    const tarjeta = tarjetaDeApelacion({
+      id: 'a-2',
+      sancionId: 's-1',
+      argumento: 'Fue un error',
+      creadaEn: '2026-10-13T16:00:00Z',
+      estado: 'REVERTIDA',
+      decisionMotivo: 'Las pruebas no eran concluyentes',
+      decisionAntesDe: '2026-11-03T04:59:59.999Z',
+      vencida: false,
+    });
+    expect(tarjeta.textContent).toContain('Apelación · revertida');
+    expect(tarjeta.textContent).toContain('Decisión: Las pruebas no eran concluyentes');
+    expect(tarjeta.textContent).not.toContain('El panel decide');
   });
 });

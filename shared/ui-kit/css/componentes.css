@@ -11761,6 +11761,90 @@ body:has(.chatbot-flotante) main:not(.combate) {
   }
 }
 
+/* --- Consola de sanciones (SA-4) ------------------------------------------
+   Tres pestañas (sanciones, apelaciones, emitir) sobre los paneles de la
+   consola. Lo propio: la barra de filtros dentro del panel, el estado con su
+   fecha fin, la cita del argumento de una apelación y el grupo de la
+   duración (cantidad + unidad) del formulario de emisión. */
+
+.consola-sanciones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+}
+
+.panel-admin__filtros {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+}
+
+.estado-con-fecha {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1) var(--e-2);
+}
+
+.cita-admin {
+  margin: 0;
+  padding: var(--e-2) var(--e-3);
+  border-inline-start: 3px solid var(--borde-int);
+  border-radius: var(--radio-chico);
+  background: var(--superficie-2);
+  color: var(--texto);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.formulario-sancion {
+  max-width: 44rem;
+  margin-block-start: var(--e-4);
+  padding-block-start: var(--e-4);
+  border-block-start: 1px solid var(--borde-tenue);
+}
+
+.formulario-sancion__titulo {
+  margin: 0;
+}
+
+/* Dos líneas en una celda: el dato y, debajo, su detalle en pequeño. */
+.celda-doble {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 10rem;
+}
+
+.campo--grupo {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.campo--grupo .fila {
+  flex-wrap: wrap;
+}
+
+.campo--grupo .fila > .campo__control {
+  flex: 0 1 8rem;
+}
+
+.campo--grupo .fila > .desplegable__control {
+  flex: 0 1 10rem;
+}
+
+.fila--entre {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.fila--entre > * {
+  flex: 0 1 auto;
+}
+
 /* --- Estado (estado.js) -------------------------------------------------- */
 
 .estado-admin {
