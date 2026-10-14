@@ -104,7 +104,8 @@ class RespuestasEnCacheTest {
         MotorRespuestas motor = new MotorRespuestas(() -> new BaseEnProduccion(PRODUCCION, temas), cache);
         chatService = new ChatService(conversacionRepository, mensajeRepository, motor, motorConsultasAsistidas,
             brechaConocimientoService, limitador, moderacion, registro, preferenciasService,
-            new RevisionDeEntrada(new RedactorDeDatosSensibles(), metricas), consultaDeCatalogo);
+            new RevisionDeEntrada(new RedactorDeDatosSensibles(), metricas), consultaDeCatalogo,
+            new com.nexusbattles.ms_chatbot.chat.consultas.NavegacionPublica());
         lenient().when(preferenciasService.de(any())).thenReturn(PreferenciasDeRespuesta.POR_DEFECTO);
         lenient().when(registro.guardarIntercambio(any(), anyString(), any(), any(), anyString(), any(), anyInt()))
             .thenAnswer(inv -> {
