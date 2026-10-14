@@ -91,6 +91,15 @@ describe('Apertura y cierre de la ficha', () => {
     expect(document.querySelector('.ficha-capa')).toBeNull();
   });
 
+  test('el botón de cerrar está DENTRO del diálogo modal (lo encuentra un lector de pantalla)', async () => {
+    await abrirFicha('p-1', { consultarProducto: async () => PRODUCTO, origen });
+
+    const dialogo = document.querySelector('[role="dialog"]');
+    expect(dialogo.getAttribute('aria-modal')).toBe('true');
+    expect(dialogo.querySelector('.ficha__cerrar')).not.toBeNull();
+    expect(document.querySelectorAll('.ficha__cerrar')).toHaveLength(1);
+  });
+
   test('al cerrarse, el foco vuelve a donde estaba', async () => {
     await abrirFicha('p-1', { consultarProducto: async () => PRODUCTO, origen });
 
@@ -229,5 +238,46 @@ describe('Complementos de la ficha', () => {
     const aviso = document.querySelector('.ficha__no-disponible');
     expect(aviso.textContent).toBe('Este producto no está a la venta ahora mismo.');
     expect(aviso.textContent).not.toMatch(/inventario/);
+  });
+});
+
+describe('«En tu inventario» (§7.1: la vista de detalle con la información del inventario)', () => {
+  test('dice cómo lo llamó el jugador y el sello de su estado', async () => {
+    const sello = document.createElement('span');
+    sello.className = 'sello-estado';
+    sello.textContent = 'Equipado en Ayla';
+
+    await abrirFicha('p-1', {
+      consultarProducto: async () => PRODUCTO,
+      origen,
+      enTuInventario: { nombrePropio: 'Mi hacha de la niebla', sello },
+    });
+
+    const bloque = document.querySelector('[data-zona="en-tu-inventario"]');
+    expect(bloque.querySelector('h3').textContent).toBe('En tu inventario');
+    expect(bloque.textContent).toContain('Lo llamas «Mi hacha de la niebla»');
+    expect(bloque.textContent).toContain('Equipado en Ayla');
+  });
+
+  test('si el nombre propio es el del catálogo no lo repite', async () => {
+    await abrirFicha('p-1', {
+      consultarProducto: async () => PRODUCTO,
+      origen,
+      enTuInventario: { nombrePropio: 'Hacha de Vorn', sello: null },
+    });
+
+    const bloque = document.querySelector('[data-zona="en-tu-inventario"]');
+    expect(bloque).not.toBeNull();
+    expect(bloque.textContent).not.toContain('Lo llamas');
+  });
+
+  test('desde la tienda (sin elemento propio) no aparece', async () => {
+    await abrirFicha('p-1', {
+      consultarProducto: async () => PRODUCTO,
+      origen,
+      contexto: 'tienda',
+    });
+
+    expect(document.querySelector('[data-zona="en-tu-inventario"]')).toBeNull();
   });
 });

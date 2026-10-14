@@ -102,41 +102,52 @@ export async function pintarHeroes(
     prototipos.set(heroe.id, prototipo);
     const estado = estadoDeHeroe({ elemento: heroe, equipamiento: equipo });
     const motivoSinEquipar = MOTIVO_SIN_EQUIPAR[estado.estado] ?? null;
+    const textoEquipo = estado.estado === ESTADOS.NO_ELEGIBLE ? 'Equiparlo' : 'Equipamiento';
 
-    rejilla.append(
-      h('li', {
-        clase: 'hero-grid__celda',
-        hijos: [
-          cartaDeHeroePropio(
-            {
-              nombre: heroe.nombrePropio,
-              prototipo,
-              imagen: producto?.imagen ?? null,
-              estadisticas,
-              estado,
-              ranurasOcupadas: equipo ? ranurasOcupadas(equipo) : null,
-              progreso: progresoDe(heroe, tablaDeNiveles),
-            },
-            [
-              {
-                texto: 'Ver ficha',
-                etiqueta: `Ver la ficha de ${heroe.nombrePropio}`,
-                datos: { accion: 'ver-ficha', idHeroe: heroe.id },
-                alPulsar: () => alVerFicha(heroe, { prototipo }),
-              },
-              {
-                texto: estado.estado === ESTADOS.NO_ELEGIBLE ? 'Equiparlo' : 'Equipamiento',
-                etiqueta: `Gestionar el equipamiento de ${heroe.nombrePropio}`,
-                principal: estado.estado === ESTADOS.NO_ELEGIBLE,
-                datos: { accion: 'equipar', idHeroe: heroe.id },
-                deshabilitada: motivoSinEquipar,
-                alPulsar: () => alEquipar(heroe),
-              },
-            ],
-          ),
-        ],
-      }),
+    const carta = cartaDeHeroePropio(
+      {
+        nombre: heroe.nombrePropio,
+        prototipo,
+        imagen: producto?.imagen ?? null,
+        estadisticas,
+        estado,
+        ranurasOcupadas: equipo ? ranurasOcupadas(equipo) : null,
+        progreso: progresoDe(heroe, tablaDeNiveles),
+      },
+      [
+        {
+          texto: 'Ver ficha',
+          // WCAG 2.5.3: el nombre accesible empieza por lo que se ve escrito.
+          etiqueta: `Ver ficha de ${heroe.nombrePropio}`,
+          datos: { accion: 'ver-ficha', idHeroe: heroe.id },
+          alPulsar: () => alVerFicha(heroe, { prototipo, origen: botonFicha() }),
+        },
+        {
+          texto: textoEquipo,
+          etiqueta:
+            textoEquipo === 'Equiparlo'
+              ? `Equiparlo: ${heroe.nombrePropio}`
+              : `Equipamiento de ${heroe.nombrePropio}`,
+          principal: estado.estado === ESTADOS.NO_ELEGIBLE,
+          datos: { accion: 'equipar', idHeroe: heroe.id },
+          deshabilitada: motivoSinEquipar,
+          alPulsar: () => alEquipar(heroe),
+        },
+      ],
     );
+    const botonFicha = () => carta.querySelector('[data-accion="ver-ficha"]');
+    // §7.1: «si el jugador hace clic sobre un producto se debe dirigir a una
+    // vista de detalle»; un héroe es un producto del inventario. Con el ratón
+    // vale toda la carta; sus botones siguen siendo suyos y «Ver ficha» es el
+    // camino del teclado (el foco vuelve a él al cerrar).
+    carta.classList.add('hero-card--pulsable');
+    carta.addEventListener('click', (evento) => {
+      if (evento.target instanceof Element && evento.target.closest('button, a')) {
+        return;
+      }
+      alVerFicha(heroe, { prototipo, origen: botonFicha() });
+    });
+    rejilla.append(h('li', { clase: 'hero-grid__celda', hijos: [carta] }));
   }
 
   vaciar(contenedor);

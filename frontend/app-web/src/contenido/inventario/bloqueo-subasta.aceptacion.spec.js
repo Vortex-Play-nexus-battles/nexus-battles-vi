@@ -55,7 +55,7 @@ test('el producto bloqueado se muestra no disponible y no permite operarlo', asy
   // boton «No disponible», sino una ranura que abre el selector, y alli el
   // objeto bloqueado aparece deshabilitado y **diciendo por que**.
   await page.locator('#pestana-heroes').click();
-  await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();
+  await page.getByRole('button', { name: /^(Equipamiento de|Equiparlo:) Ayla$/ }).click();
   await page.getByRole('button', { name: /Arma 1/ }).click();
 
   const opcion = page.getByRole('button', { name: /Espada de Bruma . en subasta/ });

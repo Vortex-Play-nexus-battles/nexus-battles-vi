@@ -67,28 +67,39 @@ async function detalleDelProblema(respuesta) {
   }
 }
 
+/** Las dos vitrinas de «Mi inventario» que el servicio pagina por separado (1.7.0). */
+export const CATEGORIAS = Object.freeze({ HEROES: 'HEROES', OBJETOS: 'OBJETOS' });
+
 /**
  * Consulta una pagina del inventario propio.
  *
  * @param {string} identidad jugador autenticado, que viaja en la cabecera.
  * @param {number} numeroPagina pagina pedida, desde cero.
- * @param {{fetchImpl?: Function}} opciones inyeccion para las pruebas.
+ * @param {{fetchImpl?: Function, categoria?: 'HEROES'|'OBJETOS'}} opciones
+ *   `categoria` (inventario.yaml 1.7.0) pide solo los heroes o solo los
+ *   objetos, en paginas de dieciseis; sin ella, el inventario entero.
+ *   `fetchImpl`, inyeccion para las pruebas.
  * @returns {Promise<object>} la pagina tal como la entrega el servicio.
  */
 export async function consultarPagina(
   identidad,
   numeroPagina = 0,
-  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+  { fetchImpl = fetchWithHttpErrorInterceptor, categoria } = {},
 ) {
   const propietario = identidadNormalizada(identidad);
   const pagina = numeroPagina ?? 0;
   if (!Number.isInteger(pagina) || pagina < 0) {
     throw new RangeError('El número de página no puede ser negativo');
   }
+  if (categoria !== undefined && !Object.values(CATEGORIAS).includes(categoria)) {
+    throw new RangeError(`Categoría de inventario desconocida: ${categoria}`);
+  }
 
   // La identidad viaja en la cabecera y nunca en la ruta: asi un jugador no
   // puede pedir el inventario de otro cambiando la URL.
-  const url = `${RUTA}?pagina=${pagina}`;
+  const url = categoria
+    ? `${RUTA}?pagina=${pagina}&categoria=${categoria}`
+    : `${RUTA}?pagina=${pagina}`;
   const respuesta = await fetchImpl(url, {
     headers: { 'X-User-Name': propietario },
   });

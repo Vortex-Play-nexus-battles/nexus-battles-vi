@@ -35,6 +35,25 @@ describe('Cliente de la consulta paginada', () => {
     expect(llamadas[0].url).toBe('/api/v1/inventario/elementos?pagina=2');
   });
 
+  test('1.7.0: pide solo los héroes o solo los objetos con la categoría', async () => {
+    const { llamadas, fetchFalso } = espia();
+
+    await consultarPagina('jugador-A', 1, { fetchImpl: fetchFalso, categoria: 'HEROES' });
+    await consultarPagina('jugador-A', 0, { fetchImpl: fetchFalso, categoria: 'OBJETOS' });
+
+    expect(llamadas[0].url).toBe('/api/v1/inventario/elementos?pagina=1&categoria=HEROES');
+    expect(llamadas[1].url).toBe('/api/v1/inventario/elementos?pagina=0&categoria=OBJETOS');
+  });
+
+  test('una categoría desconocida no sale del navegador', async () => {
+    const { llamadas, fetchFalso } = espia();
+
+    await expect(
+      consultarPagina('jugador-A', 0, { fetchImpl: fetchFalso, categoria: 'TODO' }),
+    ).rejects.toThrow(RangeError);
+    expect(llamadas).toHaveLength(0);
+  });
+
   test('identifica al jugador por cabecera y nunca por la ruta', async () => {
     const { llamadas, fetchFalso } = espia();
 

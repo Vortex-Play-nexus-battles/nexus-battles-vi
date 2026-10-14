@@ -444,6 +444,32 @@ describe('FI-R7 - el selector alcanza todo el inventario, no solo la pagina visi
   });
 });
 
+test('un objeto que lleva OTRO héroe se ofrece apagado y dice quién lo lleva (inventario 1.7.0)', async () => {
+  // Antes se ofrecía, el servicio respondía 409 y la vista decía «ranura
+  // ocupada», que no era el motivo.
+  const conPortador = [
+    elementos[0],
+    { id: 'heroe-2', productoId: 'p-heroe', tipo: 'HEROE', nombrePropio: 'Bruno' },
+    { ...elementos[1], equipadoEn: { heroeId: 'heroe-2', nombreHeroe: 'Bruno' } },
+    elementos[2],
+  ];
+  const equipar = jest.fn();
+  await abrirEquipo({
+    consultar: async () => ({ ...pagina(), elementos: conPortador, totalElementos: 4 }),
+    consultarEquipo: async () => vacio(),
+    equipar,
+  });
+
+  await abrirSelector(raiz, 'Arma 1');
+
+  const opcion = document.querySelector('[data-elegir="arma-1"]');
+  expect(opcion.disabled).toBe(true);
+  expect(opcion.textContent).toBe('Espada · lo lleva Bruno');
+  expect(opcion.title).toBe('Lo lleva Bruno: quítaselo primero');
+  opcion.click();
+  expect(equipar).not.toHaveBeenCalled();
+});
+
 test('un heroe en mision (§7.8.10, inventario.yaml 1.6.0) se ve «En misión» y no deja cambiar su equipo', async () => {
   // Asi lo publica el inventario mientras misiones lo tiene bloqueado.
   const enMision = [

@@ -157,3 +157,33 @@ test('limpiar restaura el inventario completo', async () => {
   expect(raiz.querySelector('[name="criterio"]').value).toBe('');
   expect(raiz.querySelector('.inventario-busqueda__limpiar').hidden).toBe(true);
 });
+
+describe('enlace directo a una búsqueda (inventario.html?busqueda=…)', () => {
+  test('con cuatro letras o más, la vista se abre con la búsqueda hecha', async () => {
+    const buscar = jest.fn(async () => pagina([elemento('Amuleto de Bruma')]));
+    await montarInventario(raiz, 'jugador-A', 0, {
+      consultar: async () => pagina(),
+      buscar,
+      busquedaInicial: '  bruma ',
+    });
+
+    await esperarHasta(() => raiz.querySelector('.vitrina__nombre'));
+    expect(buscar).toHaveBeenCalledWith('jugador-A', 'bruma', 0);
+    expect(raiz.querySelector('[name="criterio"]').value).toBe('bruma');
+    expect(raiz.querySelector('.vitrina__nombre').textContent).toBe('Amuleto de Bruma');
+    expect(raiz.querySelector('.inventario-busqueda__limpiar').hidden).toBe(false);
+  });
+
+  test('con menos de cuatro letras no busca ni avisa: abre el inventario', async () => {
+    const buscar = jest.fn(async () => pagina());
+    await montarInventario(raiz, 'jugador-A', 0, {
+      consultar: async () => pagina([elemento('Inventario completo')]),
+      buscar,
+      busquedaInicial: 'arm',
+    });
+
+    expect(buscar).not.toHaveBeenCalled();
+    expect(raiz.querySelector('[name="criterio"]').value).toBe('');
+    expect(raiz.querySelector('.inventario__mensaje').textContent).toBe('');
+  });
+});

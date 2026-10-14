@@ -32,7 +32,11 @@
       const parametros = new URLSearchParams(location.search);
       const contenedor = document.getElementById('inventario-app');
       const identidad = parametros.get('jugador') ?? sessionStorage.getItem('nexus.apodoActual');
-      const numeroPagina = Number(parametros.get('pagina') ?? 0);
+      // Revisión final (13-oct): `?pagina=abc` ya no deja un «no tienes
+      // objetos» falso; un valor que no es una página válida vale la primera.
+      const paginaPedida = Number(parametros.get('pagina') ?? 0);
+      const numeroPagina = Number.isInteger(paginaPedida) && paginaPedida >= 0 ? paginaPedida : 0;
+      const busquedaInicial = parametros.get('busqueda') ?? '';
 
       // Vista privada (HU-UX-001): sin sesion se va al login con vuelta aqui.
       if (!exigirAcceso('inventario')) {
@@ -43,7 +47,7 @@
         seccionActiva: 'inventario',
       });
 
-      montarInventario(contenedor, identidad, numeroPagina);
+      montarInventario(contenedor, identidad, numeroPagina, { busquedaInicial });
     </script>
   </body>
 </html>
