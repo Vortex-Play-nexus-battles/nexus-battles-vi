@@ -300,6 +300,21 @@ class ProductosApiTest {
         }
 
         @Test
+        @DisplayName("SA-13: el alta puede pedir nacer UNICO; SUSPENDIDO o un estado desconocido es 400")
+        void estadoInicialDelAlta() throws Exception {
+                publicarComo("ROLE_ADMINISTRADOR", agregarCampo(PRODUCTO_VALIDO, "\"estado\": \"UNICO\""))
+                        .andExpect(status().isCreated())
+                        .andExpect(jsonPath("$.estado").value("UNICO"));
+                publicarComo("ROLE_ADMINISTRADOR", PRODUCTO_VALIDO)
+                        .andExpect(status().isCreated())
+                        .andExpect(jsonPath("$.estado").value("ACTIVO"));
+                publicarComo("ROLE_ADMINISTRADOR", agregarCampo(PRODUCTO_VALIDO, "\"estado\": \"SUSPENDIDO\""))
+                        .andExpect(status().isBadRequest());
+                publicarComo("ROLE_ADMINISTRADOR", agregarCampo(PRODUCTO_VALIDO, "\"estado\": \"AGOTADO\""))
+                        .andExpect(status().isBadRequest());
+        }
+
+        @Test
         @DisplayName("rechaza un precio en creditos negativo")
         void rechazaPrecioNegativo() throws Exception {
                 String solicitud = PRODUCTO_VALIDO.replace(
