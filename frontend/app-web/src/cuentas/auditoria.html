@@ -2,141 +2,42 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Registro de auditoría · The Nexus Battles VI</title>
-    <!-- CSS de la barra compartida -->
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
-    <link rel="stylesheet" href="tema-cuentas.css" />
-    <link rel="stylesheet" href="auditoria.css" />
   </head>
   <body>
-    <!-- Barra de navegación compartida -->
-    <div id="navbar-container"></div>
+    <div data-cabecera-app></div>
 
-    <div class="pagina consola">
-      <header>
-        <h1 class="auditoria-titulo">Registro de auditoría</h1>
-        <p class="t-meta">
-          Toda acción administrativa queda aquí. El registro es inmutable: no se puede editar ni
-          borrar, solo consultar.
-        </p>
-      </header>
+    <!--
+      §7.3.5 (SA-5, ms-cumplimiento-auditoria 1.3.0) con el kit de la
+      consola: cifras, filtros, la tabla de acciones con su detalle en un
+      panel lateral y la exportación en CSV o PDF. La monta `montarAuditoria`
+      sobre las zonas `[data-zona=...]`. Solo el Super Administrador.
+    -->
+    <main class="pagina consola-integral" data-vista="auditoria">
+      <div data-zona="encabezado"></div>
+      <div data-zona="aviso" aria-live="polite" hidden></div>
+      <div data-zona="indicadores"></div>
+      <div data-zona="consola"></div>
+    </main>
 
-      <section class="tarjeta fila" aria-label="Filtros de búsqueda">
-        <label for="filtro-administrador">
-          Administrador
-          <input
-            type="text"
-            id="filtro-administrador"
-            placeholder="ID del administrador"
-            autocomplete="off"
-          />
-        </label>
-
-        <label for="filtro-tipo-accion">
-          Tipo de acción
-          <select id="filtro-tipo-accion">
-            <option value="">Todas</option>
-            <option value="CREACION">Creación</option>
-            <option value="ACTUALIZACION">Actualización</option>
-            <option value="ELIMINACION_LOGICA">Eliminación lógica</option>
-            <option value="SUSPENSION">Suspensión</option>
-            <option value="SANCION">Sanción</option>
-            <option value="CAMBIO_ROL">Cambio de rol</option>
-            <option value="APROBACION">Aprobación</option>
-            <option value="RECHAZO">Rechazo</option>
-            <option value="OTRO">Otro</option>
-          </select>
-        </label>
-
-        <label for="filtro-desde">
-          Desde
-          <input type="date" id="filtro-desde" />
-        </label>
-
-        <label for="filtro-hasta">
-          Hasta
-          <input type="date" id="filtro-hasta" />
-        </label>
-
-        <div class="acciones-filtros">
-          <button type="button" id="btn-filtrar" class="boton boton--primario">Filtrar</button>
-          <button type="button" id="btn-limpiar" class="boton boton--secundario">Limpiar</button>
-          <button type="button" id="btn-exportar" class="boton boton--secundario">Exportar</button>
-        </div>
-      </section>
-
-      <section class="tarjeta">
-        <!--
-          `tabindex="0"` y `role="region"`: a 375 px la tabla no cabe y este
-          envoltorio se desplaza en horizontal. Sin foco no hay forma de moverlo
-          con el teclado, asi que las columnas de la derecha quedan fuera de
-          alcance para quien no usa raton. axe lo marca como `serious`
-          (`scrollable-region-focusable`); se vio a 375 y no a 1440, porque a
-          1440 la tabla cabe y no hay nada que desplazar.
-        -->
-        <div
-          class="tabla-envoltorio"
-          tabindex="0"
-          role="region"
-          aria-label="Registro de auditoría, desplazable en horizontal"
-        >
-          <table class="tabla-auditoria">
-            <thead>
-              <tr>
-                <th>Fecha y hora</th>
-                <th>Administrador ID</th>
-                <th>Tipo de acción</th>
-                <th>Afectado</th>
-                <th>Valor anterior</th>
-                <th>Valor nuevo</th>
-                <th>Motivo</th>
-                <th>IP origen</th>
-              </tr>
-            </thead>
-            <tbody id="auditoria-tbody">
-              <!-- filas insertadas por auditoria.js -->
-            </tbody>
-          </table>
-        </div>
-
-        <p id="auditoria-estado" class="estado" hidden></p>
-      </section>
-
-      <nav class="paginacion" aria-label="Paginación">
-        <button type="button" id="btn-anterior" class="boton boton--secundario" disabled>
-          Anterior
-        </button>
-        <span id="auditoria-pagina-actual" class="paginacion__info">Página 1</span>
-        <button type="button" id="btn-siguiente" class="boton boton--secundario" disabled>
-          Siguiente
-        </button>
-      </nav>
-
-      <p class="aviso aviso--advertencia">
-        <strong>Este registro no se puede modificar.</strong>
-        No hay botón de editar ni de borrar, y no lo habrá: la inmutabilidad es el requisito. Solo
-        el Super Administrador puede consultarlo, y esa consulta también queda registrada.
-      </p>
-    </div>
-
-    <!-- Carga del módulo de la barra compartida -->
     <script type="module">
       import { montarCabecera } from '../comun/cabecera-app.js';
       import { exigirAcceso } from '../comun/acceso.js';
+      import { montarAuditoria } from './auditoria.js';
 
       if (!exigirAcceso('auditoria')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
-      // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.getElementById('navbar-container'), {
+      // Cabecera unica de la aplicacion (HU-UX-001).
+      montarCabecera(document.querySelector('[data-cabecera-app]'), {
         vista: 'auditoria',
         seccionActiva: 'auditoria',
       });
+      montarAuditoria(document);
     </script>
-
-    <script src="auditoria.js"></script>
   </body>
 </html>

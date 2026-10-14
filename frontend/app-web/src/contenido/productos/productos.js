@@ -1,9 +1,22 @@
-/** HU-PRD-001 - Formulario accesible de creación de productos. */
+/**
+ * HU-PRD-001 — formulario accesible de creación de productos.
+ *
+ * SA-6: la imagen se sube o se elige de la biblioteca (HU-PRD-009; antes era
+ * un campo de texto «Referencia de imagen» donde no se podía subir nada,
+ * informe de revisión punto 17), el héroe de una habilidad o de una épica se
+ * elige por su nombre (antes había que escribir su UUID) y el producto se
+ * previsualiza tal como lo verá el jugador mientras se completa (HU-PRD-010).
+ */
+import { urlDeVista } from '../../comun/acceso.js';
 import { crearProducto } from './cliente-productos.js';
+import { rellenarHeroes } from './heroes-del-catalogo.js';
+import { selectorDeRecurso } from './recursos-graficos.js';
+import { vistaPreviaDeProducto } from './vista-previa-producto.js';
 import {
   CAMPOS_DE_PROMOCION,
   LIMITES_DE_PROMOCION,
   construirSolicitudProducto,
+  ESTADOS_INICIALES,
   PARTES_ARMADURA,
   PROTOTIPOS,
   TIPOS_PRODUCTO,
@@ -11,6 +24,12 @@ import {
 
 import { h, vaciar } from '../../comun/ui/dom.js';
 import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
+
+/** SA-13: la disponibilidad con la que nace un producto (§7.2.1). */
+const ETIQUETAS_DISPONIBILIDAD = {
+  ACTIVO: 'Activo',
+  UNICO: 'Único',
+};
 
 const ETIQUETAS_TIPO = {
   HEROE: 'Héroe',
@@ -56,7 +75,14 @@ function grupoTipo(tipo, hijos, oculto = true) {
   });
 }
 
-function crearVista() {
+function selectorDeHeroe() {
+  return h('select', {
+    atributos: { name: 'heroe', required: true, disabled: true },
+    hijos: [h('option', { texto: 'Cargando héroes…', atributos: { value: '' } })],
+  });
+}
+
+function crearVista(selectorImagen) {
   const cabecera = h('header', {
     clase: 'productos-cabecera',
     hijos: [
@@ -66,9 +92,9 @@ function crearVista() {
             clase: 'productos-cabecera__marca',
             texto: 'NEXUS BATTLES VI',
           }),
-          h('h1', { texto: 'Crear producto del catálogo' }),
+          h('h1', { texto: 'Nuevo producto' }),
           h('p', {
-            texto: 'Registra un producto con los atributos definidos para su tipo.',
+            texto: 'Aparece en la tienda en cuanto lo creas.',
           }),
         ],
       }),
@@ -81,13 +107,13 @@ function crearVista() {
           }),
           h('a', {
             clase: 'productos-cabecera__enlace',
-            texto: 'Estado del catálogo',
-            atributos: { href: './panel-catalogo.html' },
+            texto: 'Catálogo',
+            atributos: { href: urlDeVista('panel-catalogo') ?? './panel-catalogo.html' },
           }),
           h('a', {
             clase: 'productos-cabecera__enlace',
-            texto: 'Banners',
-            atributos: { href: './banners.html' },
+            texto: 'Banners y anuncios',
+            atributos: { href: urlDeVista('banners') ?? './banners.html' },
           }),
         ],
       }),
@@ -119,14 +145,7 @@ function crearVista() {
               hijos: opciones(TIPOS_PRODUCTO, ETIQUETAS_TIPO),
             }),
           ),
-          campo(
-            'Referencia de imagen ',
-            control('input', 'imagen', {
-              placeholder: 'Ruta o referencia de la imagen',
-              required: true,
-            }),
-            { clase: 'producto-campo--ancho' },
-          ),
+          h('div', { clase: 'producto-campo--ancho', hijos: [selectorImagen.elemento] }),
           campo(
             'Descripción ',
             control('textarea', 'descripcion', {
@@ -147,6 +166,23 @@ function crearVista() {
               adicionales: [
                 h('small', {
                   texto: '-1 significa ilimitado; los demás valores deben ser mayores que cero.',
+                }),
+              ],
+            },
+          ),
+          // SA-13 (§7.2.1): la disponibilidad con la que nace. Suspender no
+          // es una opción del alta: tiene su acción en el catálogo.
+          campo(
+            'Disponibilidad ',
+            h('select', {
+              atributos: { name: 'estado' },
+              hijos: opciones(ESTADOS_INICIALES, ETIQUETAS_DISPONIBILIDAD),
+            }),
+            {
+              adicionales: [
+                h('small', {
+                  texto:
+                    'Único: se vende igual que uno activo y se distingue como pieza única en la tienda y en el catálogo.',
                 }),
               ],
             },
@@ -197,7 +233,7 @@ function crearVista() {
   );
 
   const tipoHabilidad = grupoTipo('HABILIDAD', [
-    campo('UUID del héroe ', control('input', 'heroe', { required: true, disabled: true })),
+    campo('Héroe ', selectorDeHeroe()),
     campo(
       'Costo de poder ',
       control('input', 'costoPoder', {
@@ -301,7 +337,7 @@ function crearVista() {
   ]);
 
   const tipoEpica = grupoTipo('EPICA', [
-    campo('UUID del héroe ', control('input', 'heroe', { required: true, disabled: true })),
+    campo('Héroe ', selectorDeHeroe()),
     campo(
       'Turnos de recarga ',
       control('input', 'turnosRecarga', {
@@ -420,7 +456,45 @@ function crearVista() {
   if (precioReal instanceof HTMLElement) {
     precioReal.hidden = true;
   }
-  return [cabecera, formulario];
+
+  // HU-PRD-010 — la tarjeta de la tienda con lo que se lleva escrito.
+  const vistaPrevia = h('aside', {
+    clase: 'producto-vista-previa',
+    atributos: { 'aria-labelledby': 'vista-previa-alta' },
+    hijos: [
+      h('h2', { texto: 'Vista previa', atributos: { id: 'vista-previa-alta' } }),
+      h('div', { datos: { zona: 'vista-previa-alta' } }),
+    ],
+  });
+  const cuerpo = h('div', { clase: 'producto-alta', hijos: [formulario, vistaPrevia] });
+  return [cabecera, cuerpo];
+}
+
+/**
+ * Lo escrito hasta ahora, sin validar: lo justo para la vista previa.
+ *
+ * @param {HTMLFormElement} formulario
+ * @returns {object}
+ */
+export function borradorDelFormulario(formulario) {
+  const leer = (nombre) => {
+    const candidatos = [...formulario.querySelectorAll(`[name="${nombre}"]`)];
+    const activo = candidatos.find((c) => !c.disabled) ?? candidatos[0];
+    if (!activo) {
+      return '';
+    }
+    return activo.type === 'checkbox' ? activo.checked : String(activo.value ?? '').trim();
+  };
+  const premium = Boolean(leer('premium'));
+  return {
+    nombre: leer('nombre') || 'Nombre del producto',
+    descripcion: leer('descripcion'),
+    tipo: leer('tipo'),
+    imagen: leer('imagen') || null,
+    premium,
+    precioCreditos: premium ? null : Number(leer('precioCreditos')) || null,
+    precioMonedaReal: premium ? Number(leer('precioMonedaReal')) || null : null,
+  };
 }
 
 function gruposPorTipo(raiz) {
@@ -468,29 +542,58 @@ function mensajeFallo(fallo) {
 }
 
 /** Monta la vista de creación y delega la autenticación al interceptor común. */
-export function montarFormularioProductos(raiz, { crear = crearProducto } = {}) {
-  vaciar(raiz).append(...crearVista());
+export function montarFormularioProductos(
+  raiz,
+  { crear = crearProducto, listarHeroes, subir, listar, fetchImpl } = {},
+) {
+  let repintarVistaPrevia = () => {};
+  const selectorImagen = selectorDeRecurso({
+    subir,
+    listar,
+    fetchImpl,
+    alCambiar: () => repintarVistaPrevia(),
+  });
+  vaciar(raiz).append(...crearVista(selectorImagen));
   const formulario = raiz.querySelector('form');
   const tipo = formulario.elements.namedItem('tipo');
   const premium = formulario.elements.namedItem('premium');
   const boton = formulario.querySelector('[type="submit"]');
+  const zonaVistaPrevia = raiz.querySelector('[data-zona="vista-previa-alta"]');
+
+  repintarVistaPrevia = () => {
+    zonaVistaPrevia?.replaceChildren(vistaPreviaDeProducto(borradorDelFormulario(formulario)));
+  };
+
+  for (const selector of formulario.querySelectorAll('select[name="heroe"]')) {
+    void rellenarHeroes(selector, { listar: listarHeroes, fetchImpl });
+  }
 
   mostrarTipo(raiz, tipo.value);
   mostrarPrecio(raiz, premium.checked);
+  repintarVistaPrevia();
 
   tipo.addEventListener('change', () => mostrarTipo(raiz, tipo.value));
   premium.addEventListener('change', () => mostrarPrecio(raiz, premium.checked));
+  formulario.addEventListener('input', () => repintarVistaPrevia());
+  formulario.addEventListener('change', () => repintarVistaPrevia());
   formulario.addEventListener('reset', () => {
     queueMicrotask(() => {
+      selectorImagen.establecer('');
       mostrarTipo(raiz, tipo.value);
       mostrarPrecio(raiz, premium.checked);
       mostrarEstado(raiz, 'Completa los campos para registrar el producto.');
+      repintarVistaPrevia();
     });
   });
 
   formulario.addEventListener('submit', async (evento) => {
     evento.preventDefault();
-    if (!formulario.checkValidity()) {
+    // El campo de la imagen es un `input` oculto: el navegador no lo valida.
+    const sinImagen = !selectorImagen.valor();
+    selectorImagen.marcarError(
+      sinImagen ? 'Sube la imagen del producto o elige una de la biblioteca.' : null,
+    );
+    if (!formulario.checkValidity() || sinImagen) {
       formulario.reportValidity();
       mostrarEstado(raiz, 'Revisa los campos obligatorios y sus valores.', 'error');
       return;
@@ -503,7 +606,7 @@ export function montarFormularioProductos(raiz, { crear = crearProducto } = {}) 
       const creado = await crear(solicitud);
       mostrarEstado(
         raiz,
-        `Producto ${creado.nombre} creado correctamente con estado ${creado.estado}.`,
+        `«${creado.nombre}» ya está en el catálogo${creado.estado === 'UNICO' ? ' como producto único' : ''}.`,
         'exito',
       );
     } catch (fallo) {
@@ -514,5 +617,9 @@ export function montarFormularioProductos(raiz, { crear = crearProducto } = {}) 
     }
   });
 
-  return { formulario, mostrarTipo: (nuevoTipo) => mostrarTipo(raiz, nuevoTipo) };
+  return {
+    formulario,
+    selectorImagen,
+    mostrarTipo: (nuevoTipo) => mostrarTipo(raiz, nuevoTipo),
+  };
 }

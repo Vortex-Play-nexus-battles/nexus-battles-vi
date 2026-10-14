@@ -16,9 +16,10 @@
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/fondos.css" />
   </head>
 
-  <body>
+  <body data-fondo="cuenta">
     <!--
       Cabecera de 64 px con los seis destinos de RF-INV-008 y el buscador de
       productos de RF-INV-004. Se repite en cada vista mientras no exista una
@@ -57,10 +58,16 @@
 
         <div class="campo campo--area">
           <label class="campo__etiqueta" for="texto">Tu comentario</label>
-          <textarea class="campo__control" id="texto" name="texto" rows="4"></textarea>
+          <textarea
+            class="campo__control"
+            id="texto"
+            name="texto"
+            rows="4"
+            maxlength="2000"
+          ></textarea>
           <p class="campo__pista">
-            Pasa por el filtro automático antes de publicarse. Si el filtro lo señala, queda en
-            revisión.
+            Hasta 2000 caracteres. Pasa por el filtro automático antes de publicarse. Si el filtro
+            lo señala, queda en revisión.
           </p>
         </div>
 

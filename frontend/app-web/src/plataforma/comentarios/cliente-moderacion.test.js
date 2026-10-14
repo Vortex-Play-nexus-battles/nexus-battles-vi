@@ -12,18 +12,24 @@ import { jest } from '@jest/globals';
 
 import {
   ACCIONES,
+  ACCIONES_EN_LOTE,
   ACCIONES_INTERNAS,
   ACCIONES_SIN_CAMBIO_DE_ESTADO,
   CATEGORIAS,
+  CONFIRMACION_DE_ELIMINAR,
   FILTROS_DE_COLA,
+  MOTIVO_MODERACION,
   accionesDesde,
   hayReportesPendientes,
   consultarCola,
   consultarDetalle,
+  contextoDelComentario,
   historialDelAutor,
   imagenParaModeracion,
+  productoDelCatalogo,
   reportarComentario,
   resolverComentario,
+  resolverEnLote,
   rutaDeModeracion,
   ErrorDeApi,
 } from './cliente-moderacion.js';
@@ -77,6 +83,65 @@ describe('las rutas', () => {
     expect(fetchImpl.mock.calls[1][0]).toContain('marcado=false');
     expect(fetchImpl.mock.calls[2][0]).not.toContain('marcado');
     expect(FILTROS_DE_COLA.map((f) => f.marcado)).toEqual([null, true, false]);
+  });
+
+  test('1.10.0: la categoría viaja solo cuando hay una elegida; «Todas» no genera parámetro', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta({ entradas: [] }));
+    await consultarCola({ categoria: 'ACOSO' }, { fetchImpl });
+    await consultarCola({ categoria: '' }, { fetchImpl });
+    await consultarCola({ categoria: null }, { fetchImpl });
+    await consultarCola({}, { fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toContain('categoria=ACOSO');
+    for (const llamada of fetchImpl.mock.calls.slice(1)) {
+      expect(llamada[0]).not.toContain('categoria');
+    }
+  });
+
+  test('1.10.0: prioridadElevada viaja solo cuando es true o false', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta({ entradas: [] }));
+    await consultarCola({ prioridadElevada: true }, { fetchImpl });
+    await consultarCola({ prioridadElevada: false }, { fetchImpl });
+    await consultarCola({ prioridadElevada: null }, { fetchImpl });
+    await consultarCola({ prioridadElevada: undefined }, { fetchImpl });
+    await consultarCola({ prioridadElevada: '' }, { fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toContain('prioridadElevada=true');
+    expect(fetchImpl.mock.calls[1][0]).toContain('prioridadElevada=false');
+    for (const llamada of fetchImpl.mock.calls.slice(2)) {
+      expect(llamada[0]).not.toContain('prioridadElevada');
+    }
+  });
+
+  test('1.10.0: los filtros nuevos se combinan con marcado y producto en la misma consulta', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta({ entradas: [] }));
+    await consultarCola(
+      { productoId: 'p-1', marcado: false, categoria: 'SPAM', prioridadElevada: true },
+      { fetchImpl },
+    );
+
+    const [url] = fetchImpl.mock.calls[0];
+    expect(url.startsWith('/api/v1/comentarios/moderacion?')).toBe(true);
+    expect(Object.fromEntries(new URLSearchParams(url.split('?')[1]))).toEqual({
+      pagina: '0',
+      tamano: '20',
+      productoId: 'p-1',
+      marcado: 'false',
+      categoria: 'SPAM',
+      prioridadElevada: 'true',
+    });
+  });
+
+  test('1.10.0: los filtros de prioridad son «Todas», solo elevada y sin elevada', async () => {
+    const { FILTROS_DE_PRIORIDAD } = await import('./cliente-moderacion.js');
+
+    expect(FILTROS_DE_PRIORIDAD.map((f) => f.valor)).toEqual(['todas', 'elevada', 'sin-elevada']);
+    expect(FILTROS_DE_PRIORIDAD.map((f) => f.etiqueta)).toEqual([
+      'Todas',
+      'Solo prioridad elevada',
+      'Sin prioridad elevada',
+    ]);
+    expect(FILTROS_DE_PRIORIDAD.map((f) => f.prioridadElevada)).toEqual([null, true, false]);
   });
 
   test('el detalle y la decision cuelgan del comentario dentro de la cola', async () => {
@@ -275,14 +340,22 @@ describe('la tabla de acciones', () => {
     expect(ACCIONES_INTERNAS).toEqual(['MARCAR', 'DESMARCAR']);
   });
 
-  test('las categorias son las seis del contrato, sin inventos', () => {
+  test('las categorias son las seis del contrato, en el orden y con el texto de §7.3.3', () => {
     expect(CATEGORIAS.map((c) => c.valor)).toEqual([
+      'SPAM',
       'CONTENIDO_OFENSIVO',
       'ACOSO',
-      'SPAM',
       'INFORMACION_FALSA',
       'CONTENIDO_INAPROPIADO',
       'VIOLACION_DE_DERECHOS',
+    ]);
+    expect(CATEGORIAS.map((c) => c.etiqueta)).toEqual([
+      'Spam o publicidad no solicitada',
+      'Contenido ofensivo o abusivo',
+      'Acoso o intimidación',
+      'Información falsa o engañosa',
+      'Contenido inapropiado o NSFW',
+      'Violación de derechos de autor',
     ]);
   });
 });
@@ -332,5 +405,222 @@ describe('HU-COM-005: el historial de comentarios del autor', () => {
       name: 'ErrorDeApi',
       estado: status,
     });
+  });
+});
+
+/**
+ * La decision en lote — HU-COM-005 (#519), comentarios.yaml 1.10.1.
+ *
+ * Lo que se afirma aqui: la ruta (la misma trampa del prefijo de metricas), que
+ * el cuerpo no nombra a quien actua, que `confirmacion` solo viaja con ELIMINAR
+ * y que los rechazos 404 y 409 conservan los `comentarioIds` que el servicio
+ * devuelve, en su orden, sin dejar pasar su texto tecnico.
+ */
+describe('resolverEnLote (1.10.1)', () => {
+  const RUTA_LOTE = '/api/v1/comentarios/moderacion/decisiones-en-lote';
+  const UUID = '3f1c2b4a-1111-4222-8333-944455566677';
+
+  const resultado = {
+    accion: 'OCULTAR',
+    total: 2,
+    resultados: [
+      { comentarioId: 'com-1', asiento: { id: 'a-1' }, autorNotificado: true },
+      { comentarioId: 'com-2', asiento: { id: 'a-2' }, autorNotificado: false },
+    ],
+  };
+
+  const decision = {
+    comentarioIds: ['com-1', 'com-2'],
+    accion: 'OCULTAR',
+    motivo: 'Spam coordinado',
+  };
+
+  /** Un rechazo del servicio, como problem detail. */
+  function rechazo(status, problema) {
+    return jest.fn().mockResolvedValue(respuesta({ status, ...problema }, { ok: false, status }));
+  }
+
+  test('C1: la ruta es POST /decisiones-en-lote bajo el prefijo de comentarios, no el de métricas', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(resultado));
+    await resolverEnLote(decision, { fetchImpl });
+
+    const [url, opciones] = fetchImpl.mock.calls[0];
+    expect(url).toBe(RUTA_LOTE);
+    expect(url.startsWith('/api/v1/moderacion')).toBe(false);
+    expect(opciones.method).toBe('POST');
+  });
+
+  test('C2: el cuerpo trae solo los ids (en su orden), la acción y el motivo; nunca quién actúa', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(resultado));
+    await resolverEnLote(
+      {
+        ...decision,
+        comentarioIds: ['com-2', 'com-1'],
+        moderadorId: 'otro-cualquiera',
+        apodoModerador: 'Suplantado',
+      },
+      { fetchImpl },
+    );
+
+    const [, opciones] = fetchImpl.mock.calls[0];
+    expect(opciones.headers['Content-Type']).toBe('application/json');
+    expect(opciones.headers.Accept).toBe('application/json');
+    expect(JSON.parse(opciones.body)).toEqual({
+      comentarioIds: ['com-2', 'com-1'],
+      accion: 'OCULTAR',
+      motivo: 'Spam coordinado',
+    });
+  });
+
+  test('C3: ELIMINAR envía confirmacion ELIMINAR; con otras acciones no viaja aunque se pase', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(resultado));
+
+    await resolverEnLote(
+      { ...decision, accion: 'ELIMINAR', confirmacion: CONFIRMACION_DE_ELIMINAR },
+      { fetchImpl },
+    );
+    await resolverEnLote({ ...decision, confirmacion: 'ELIMINAR' }, { fetchImpl });
+
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body).confirmacion).toBe('ELIMINAR');
+    expect(JSON.parse(fetchImpl.mock.calls[1][1].body)).not.toHaveProperty('confirmacion');
+  });
+
+  test('C4: devuelve la accion, el total y el asiento de cada comentario', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(resultado));
+
+    await expect(resolverEnLote(decision, { fetchImpl })).resolves.toEqual(resultado);
+  });
+
+  test('C5: 400 CONFIRMACION_REQUERIDA llega como ErrorDeApi con su estado y su motivo', async () => {
+    const fetchImpl = rechazo(400, { motivo: 'CONFIRMACION_REQUERIDA' });
+
+    const error = await resolverEnLote({ ...decision, accion: 'ELIMINAR' }, { fetchImpl }).catch(
+      (e) => e,
+    );
+
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(error.estado).toBe(400);
+    expect(error.motivo).toBe(MOTIVO_MODERACION.CONFIRMACION_REQUERIDA);
+  });
+
+  test('C6: 409 TRANSICION_INVALIDA conserva los comentarioIds del servidor, en su orden', async () => {
+    const fetchImpl = rechazo(409, {
+      motivo: 'TRANSICION_INVALIDA',
+      comentarioIds: ['com-3', 'com-1'],
+    });
+
+    const error = await resolverEnLote(decision, { fetchImpl }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(error.estado).toBe(409);
+    expect(error.motivo).toBe(MOTIVO_MODERACION.TRANSICION_INVALIDA);
+    expect(error.comentarioIds).toEqual(['com-3', 'com-1']);
+  });
+
+  test('C7: 404 conserva los comentarioIds que faltan', async () => {
+    const fetchImpl = rechazo(404, { comentarioIds: ['com-z', 'com-a'] });
+
+    const error = await resolverEnLote(decision, { fetchImpl }).catch((e) => e);
+
+    expect(error.estado).toBe(404);
+    expect(error.comentarioIds).toEqual(['com-z', 'com-a']);
+  });
+
+  test.each([
+    ['ausente', undefined],
+    ['no es una lista', 'com-1'],
+    ['una lista con algo que no es texto', ['com-1', 2, null, { id: 'com-9' }]],
+  ])('C8: comentarioIds %s: solo cuentan los textos', async (_nombre, comentarioIds) => {
+    const fetchImpl = rechazo(409, { motivo: 'TRANSICION_INVALIDA', comentarioIds });
+
+    const error = await resolverEnLote(decision, { fetchImpl }).catch((e) => e);
+
+    const esperado = Array.isArray(comentarioIds) ? ['com-1'] : [];
+    expect(error.estado).toBe(409);
+    expect(error.comentarioIds).toEqual(esperado);
+  });
+
+  test('C9: el texto técnico del servidor (ids, nombres de enum) no llega a detalle', async () => {
+    const fetchImpl = rechazo(409, {
+      motivo: 'TRANSICION_INVALIDA',
+      detail: `No se puede aplicar OCULTAR a los comentarios [${UUID}]`,
+      comentarioIds: [UUID],
+    });
+
+    const error = await resolverEnLote(decision, { fetchImpl }).catch((e) => e);
+
+    expect(error.estado).toBe(409);
+    expect(error.detalle).not.toContain(UUID);
+    expect(error.detalle).not.toContain('OCULTAR');
+  });
+
+  test('C10: un fallo de red se propaga tal cual: no es un rechazo del servicio', async () => {
+    const fetchImpl = jest.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+
+    await expect(resolverEnLote(decision, { fetchImpl })).rejects.toBeInstanceOf(TypeError);
+  });
+
+  test.each([401, 403])('C10b: %s llega con su estado y sin comentarioIds', async (status) => {
+    const fetchImpl = rechazo(status, {});
+
+    const error = await resolverEnLote(decision, { fetchImpl }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(error.estado).toBe(status);
+    expect(error.comentarioIds).toEqual([]);
+  });
+
+  test('C11: las acciones en lote son las de ACCIONES menos EDITAR, con las mismas etiquetas', () => {
+    expect(ACCIONES_EN_LOTE.map((a) => a.valor)).toEqual([
+      'APROBAR',
+      'OCULTAR',
+      'ELIMINAR',
+      'RESTAURAR',
+      'MARCAR',
+      'DESMARCAR',
+    ]);
+    for (const accion of ACCIONES_EN_LOTE) {
+      expect(accion.etiqueta).toBe(ACCIONES.find((a) => a.valor === accion.valor).etiqueta);
+    }
+    expect(Object.isFrozen(ACCIONES_EN_LOTE)).toBe(true);
+  });
+
+  test('C11b: la confirmación de ELIMINAR es la palabra exacta del contrato', () => {
+    expect(CONFIRMACION_DE_ELIMINAR).toBe('ELIMINAR');
+    expect(MOTIVO_MODERACION.CONFIRMACION_REQUERIDA).toBe('CONFIRMACION_REQUERIDA');
+  });
+});
+
+describe('SA-16: el comentario en su contexto y el nombre de su producto', () => {
+  test('el contexto cuelga del comentario en la cola de moderacion, con cuantos a cada lado', async () => {
+    const cuerpo = { comentarioId: 'c/1', anteriores: [], posteriores: [], totalEnElHilo: 1 };
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(cuerpo));
+
+    await expect(contextoDelComentario('c/1', { alrededor: 4 }, { fetchImpl })).resolves.toEqual(
+      cuerpo,
+    );
+    const [url, opciones] = fetchImpl.mock.calls[0];
+    expect(url).toBe('/api/v1/comentarios/moderacion/c%2F1/contexto?alrededor=4');
+    expect(opciones.method).toBe('GET');
+
+    await contextoDelComentario('c-2', undefined, { fetchImpl });
+    expect(fetchImpl.mock.calls[1][0]).toContain('alrededor=3');
+  });
+
+  test('el producto se lee del catalogo publico por su id', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta({ id: 'p 1', nombre: 'Espada' }));
+    await expect(productoDelCatalogo('p 1', { fetchImpl })).resolves.toEqual({
+      id: 'p 1',
+      nombre: 'Espada',
+    });
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/productos/p%201');
+  });
+
+  test.each([404, 503])('un %i sale como ErrorDeApi con su estado', async (status) => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(null, { ok: false, status }));
+    await expect(contextoDelComentario('c-1', {}, { fetchImpl })).rejects.toMatchObject({
+      estado: status,
+    });
+    await expect(productoDelCatalogo('p-1', { fetchImpl })).rejects.toBeInstanceOf(ErrorDeApi);
   });
 });

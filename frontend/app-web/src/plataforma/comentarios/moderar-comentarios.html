@@ -47,26 +47,57 @@
           B3 (comentarios.yaml 1.5.0, 7.3.3): la cola de siempre, la lista de
           seguimiento especial (los marcados, en cualquier estado salvo
           eliminado) o solo los que esperan revisión sin marca.
+
+          comentarios.yaml 1.10.0 (HU-COM-005): además se filtra por categoría de
+          reporte y por prioridad, y los tres se combinan. Las dos listas nuevas
+          traen solo «Todas»: la vista añade el resto desde cliente-moderacion.js,
+          para que las categorías salgan de una sola fuente.
         -->
-        <div class="campo">
-          <label class="campo__etiqueta" for="filtro-cola">Mostrar</label>
-          <select class="desplegable__control" id="filtro-cola" data-zona="filtro">
-            <option value="en-revision">Pendientes de revisión</option>
-            <option value="marcados">Marcados para seguimiento</option>
-            <option value="sin-marcar">Pendientes sin marcar</option>
-          </select>
+        <div class="fila fila--envuelta">
+          <div class="campo">
+            <label class="campo__etiqueta" for="filtro-cola">Mostrar</label>
+            <select class="desplegable__control" id="filtro-cola" data-zona="filtro">
+              <option value="en-revision">Pendientes de revisión</option>
+              <option value="marcados">Marcados para seguimiento</option>
+              <option value="sin-marcar">Pendientes sin marcar</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label class="campo__etiqueta" for="filtro-categoria">Categoría del reporte</label>
+            <select class="desplegable__control" id="filtro-categoria" data-zona="filtro-categoria">
+              <option value="">Todas</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label class="campo__etiqueta" for="filtro-prioridad">Prioridad</label>
+            <select class="desplegable__control" id="filtro-prioridad" data-zona="filtro-prioridad">
+              <option value="todas">Todas</option>
+            </select>
+          </div>
         </div>
+        <!--
+          Decisión en lote (comentarios.yaml 1.10.1): la vista pinta aquí la barra
+          para aplicar una misma decisión a los comentarios seleccionados. Oculta
+          hasta que hay cola.
+        -->
+        <div class="pila pila--compacta" data-zona="lote" hidden></div>
         <div class="pila pila--compacta" data-zona="cola" aria-live="polite"></div>
       </section>
 
       <section class="pila pila--compacta" data-zona="detalle-contenedor" aria-live="polite">
         <p class="t-meta">Elige un comentario de la cola para revisarlo.</p>
       </section>
+
+      <!-- SA-4 (§7.3.3, comentarios.yaml 1.14.0): el histórico de todas las
+           decisiones de moderación, con filtros. «Abrir» lleva el comentario
+           al panel de revisión de arriba. -->
+      <section class="tarjeta pila pila--compacta" data-zona="historial-moderacion"></section>
     </main>
 
     <script type="module">
       import { montarAsistente } from '../../comun/ui/asistente.js';
       import { montarModeracion } from './moderar-comentarios.js';
+      import { montarHistorialDeModeracion } from './historial-moderacion.js';
       import { montarCabecera } from '../../comun/cabecera-app.js';
       import { exigirAcceso } from '../../comun/acceso.js';
 
@@ -84,9 +115,20 @@
       // HU-USR-010 (CA-02): con el rol, cada autor lleva «Ver ficha» si este
       // rol puede abrirla (administración).
       const productoId = new URLSearchParams(location.search).get('producto');
-      montarModeracion(document.querySelector('[data-vista="moderar-comentarios"]'), {
-        productoId,
-        rol: sesion.rol,
+      const moderacion = montarModeracion(
+        document.querySelector('[data-vista="moderar-comentarios"]'),
+        {
+          productoId,
+          rol: sesion.rol,
+        },
+      );
+      montarHistorialDeModeracion(document.querySelector('[data-zona="historial-moderacion"]'), {
+        alAbrirComentario: (id) => {
+          moderacion.abrir(id);
+          document
+            .querySelector('[data-zona="detalle-contenedor"]')
+            .scrollIntoView({ block: 'start' });
+        },
       });
 
       montarAsistente(document);

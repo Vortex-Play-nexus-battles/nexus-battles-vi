@@ -74,6 +74,22 @@ class ModeracionSancionesClientTest {
     }
 
     @Test
+    @DisplayName("SA-4: la causal y la politica viajan cuando las hay; sin ellas no se envian")
+    void emitirConCausal() {
+        moderacion.responder("POST", "/api/v1/sanciones", 201, sancion("SUSPENSION", "\"2026-09-26T12:00:00Z\""));
+
+        cliente.emitir(ADMIN, UID, "SUSPENSION", "ACOSO", "Insultos en la sala 12", "Normas de convivencia", 24L,
+                null);
+        cliente.emitir(ADMIN, UID, "SUSPENSION", "Reincidencia", 24L, null);
+
+        assertThat(moderacion.recibidas("POST", "/api/v1/sanciones").get(0).cuerpo())
+                .contains("\"causal\":\"ACOSO\"").contains("\"politica\":\"Normas de convivencia\"")
+                .contains("\"motivo\":\"Insultos en la sala 12\"");
+        assertThat(moderacion.recibidas("POST", "/api/v1/sanciones").get(1).cuerpo())
+                .doesNotContain("causal").doesNotContain("politica");
+    }
+
+    @Test
     @DisplayName("activa: con la credencial de SERVICIO de ms-identidad, no con la del administrador")
     void activa() {
         moderacion.responder("GET", "/api/v1/sanciones/usuarios/" + UID + "/activa", 200,

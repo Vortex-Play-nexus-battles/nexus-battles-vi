@@ -38,7 +38,7 @@ beforeEach(() => {
 
 test('muestra el total y la distribución por tipos y estados', async () => {
   const consultar = jest.fn(async () => resumenInicial);
-  const panel = montarPanelCatalogo(raiz, { consultar });
+  const panel = montarPanelCatalogo(raiz, { consultar, conRecursos: false });
 
   await panel.cargaInicial;
 
@@ -67,7 +67,7 @@ test('actualiza las cifras al volver a consultar el catálogo', async () => {
       },
     });
 
-  const panel = montarPanelCatalogo(raiz, { consultar });
+  const panel = montarPanelCatalogo(raiz, { consultar, conRecursos: false });
   await panel.cargaInicial;
 
   raiz.querySelector('[data-actualizar-panel]').click();
@@ -81,6 +81,7 @@ test('actualiza las cifras al volver a consultar el catálogo', async () => {
 
 test('muestra cero para cantidades ausentes o inválidas', async () => {
   const panel = montarPanelCatalogo(raiz, {
+    conRecursos: false,
     consultar: async () => ({
       total: 0,
       porTipo: {},
@@ -98,6 +99,7 @@ test('muestra cero para cantidades ausentes o inválidas', async () => {
 test('informa cuando la sesión no está disponible', async () => {
   const consola = jest.spyOn(console, 'error').mockImplementation(() => {});
   const panel = montarPanelCatalogo(raiz, {
+    conRecursos: false,
     consultar: async () => {
       const fallo = new Error('401 interno');
       fallo.status = 401;
@@ -113,15 +115,34 @@ test('informa cuando la sesión no está disponible', async () => {
   consola.mockRestore();
 });
 
-test('UXC-9 — dice lo que el catálogo todavía no ofrece, sin callarlo (§7.2.3, §7.2.4)', async () => {
+test('SA-6 — sin frases de desarrollo ni el bloque de lo que «todavía no ofrece»', async () => {
   const consultar = jest.fn(async () => resumenInicial);
-  montarPanelCatalogo(raiz, { consultar, conCatalogo: false });
+  const listar = jest.fn(async () => ({
+    content: [],
+    page: 0,
+    size: 16,
+    totalElements: 0,
+    totalPages: 0,
+  }));
+  const panel = montarPanelCatalogo(raiz, {
+    consultar,
+    conCatalogo: false,
+    dependenciasDeRecursos: { listar },
+  });
+  await panel.cargaInicial;
+  await esperarHasta(() => listar.mock.calls.length === 1);
 
-  const pendiente = raiz.querySelector('[data-zona="catalogo-pendiente"]');
-  expect(pendiente.querySelector('h2').textContent).toBe('Lo que el catálogo todavía no ofrece');
-  const puntos = [...pendiente.querySelectorAll('li')].map((li) => li.textContent);
-  expect(puntos).toHaveLength(2);
-  expect(puntos[0]).toMatch(/^Diseñador visual/);
-  expect(puntos[1]).toMatch(/banner rotativo/);
-  expect(pendiente.textContent).not.toMatch(/próximamente/i);
+  const texto = raiz.textContent;
+  expect(raiz.querySelector('h1').textContent).toBe('Catálogo');
+  expect(texto).not.toMatch(
+    /se obtienen directamente|servicio de Productos|todavía no ofrece|Consulta las cantidades/i,
+  );
+  expect(raiz.querySelector('[data-zona="catalogo-pendiente"]')).toBeNull();
+  const enlaces = [...raiz.querySelectorAll('.productos-cabecera a')].map((a) => a.textContent);
+  expect(enlaces).toEqual(['Nuevo producto', 'Banners y anuncios']);
+  expect(raiz.querySelector('#panel-recursos-titulo').textContent).toBe('Recursos gráficos');
+  expect(listar).toHaveBeenCalledWith(
+    expect.objectContaining({ pagina: 0, tamano: 16, incluirRetirados: false }),
+    {},
+  );
 });

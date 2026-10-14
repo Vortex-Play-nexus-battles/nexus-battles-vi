@@ -56,6 +56,26 @@ class AuditLogFiltrosTest {
     }
 
     @Test
+    void filtraPorLaCuentaAfectadaConSusDosIdentificadores() {
+        // 1.2.0: `afectado` guarda a veces el uid y a veces la clave numerica
+        // de la misma cuenta; la ficha administrativa pide los dos.
+        service.registrar(AuditActionType.SUSPENSION, "admin-F", "uid-de-lyra",
+            null, null, "por uid", "10.0.0.6");
+        service.registrar(AuditActionType.CAMBIO_ROL, "admin-F", "77",
+            null, null, "por clave", "10.0.0.6");
+        service.registrar(AuditActionType.CAMBIO_ROL, "admin-F", "otra-cuenta",
+            null, null, "ajeno", "10.0.0.6");
+
+        Page<AuditLog> resultado = service.consultar(
+            null, java.util.List.of("uid-de-lyra", "77"), null, null, null, SIN_PAGINAR);
+
+        assertThat(resultado.getContent())
+            .extracting(AuditLog::getMotivo)
+            .contains("por uid", "por clave")
+            .doesNotContain("ajeno");
+    }
+
+    @Test
     void filtraSoloPorTipoDeAccion() {
         service.registrar(AuditActionType.SUSPENSION, "admin-C", "usuario-3",
             null, null, "suspendido por incumplimiento", "10.0.0.3");
@@ -108,5 +128,43 @@ class AuditLogFiltrosTest {
         Page<AuditLog> resultado = service.consultar(null, null, null, null, SIN_PAGINAR);
 
         assertThat(resultado.getContent().size()).isGreaterThanOrEqualTo(2);
+    }
+
+    @Test
+    void unaReferenciaRepetidaDevuelveLaEntradaQueYaHabiaConSuMomento() {
+        // 1.3.0 (V3): la columna ocurrido_en y el indice unico de referencia, contra PostgreSQL.
+        Instant hace = Instant.now().minus(10, ChronoUnit.MINUTES).truncatedTo(ChronoUnit.MILLIS);
+        String referencia = "it-sancion-" + java.util.UUID.randomUUID() + "-emision";
+        com.nexusbattles.ms_cumplimiento.auditoria.dto.RegistrarAuditoriaRequest solicitud =
+            new com.nexusbattles.ms_cumplimiento.auditoria.dto.RegistrarAuditoriaRequest("SANCION", "uid-moderadora",
+                "usuario:uid-de-kael", null, "Advertencia", "spam en el chat", "203.0.113.7", hace, referencia);
+
+        AuditLogService.ResultadoDeRegistro primera = service.registrarEvento(solicitud);
+        AuditLogService.ResultadoDeRegistro segunda = service.registrarEvento(solicitud);
+
+        assertThat(primera.nueva()).isTrue();
+        assertThat(segunda.nueva()).isFalse();
+        assertThat(segunda.entrada().getId()).isEqualTo(primera.entrada().getId());
+        assertThat(primera.entrada().getOcurridoEn()).isEqualTo(hace);
+        assertThat(service.buscar(new AuditLogService.FiltroDeAuditoria(java.util.List.of(),
+                java.util.List.of("usuario:uid-de-kael"), null, null, null), SIN_PAGINAR).getContent())
+            .filteredOn(e -> referencia.equals(e.getReferencia()))
+            .hasSize(1);
+    }
+
+    @Test
+    void filtraPorVariosAdministradoresALaVez() {
+        // 1.3.0: la misma persona con su apodo (ms-identidad) y con su uid (plataforma).
+        service.registrar(AuditActionType.SANCION, "lyra_mod", "usuario-9", null, null, "por apodo", "10.0.0.9");
+        service.registrar(AuditActionType.SANCION, "uid-de-lyra-mod", "usuario-9", null, null, "por uid", "10.0.0.9");
+        service.registrar(AuditActionType.SANCION, "otra-persona", "usuario-9", null, null, "de otra", "10.0.0.9");
+
+        Page<AuditLog> resultado = service.buscar(new AuditLogService.FiltroDeAuditoria(
+            java.util.List.of("lyra_mod", "uid-de-lyra-mod"), java.util.List.of(), null, null, null), SIN_PAGINAR);
+
+        assertThat(resultado.getContent())
+            .extracting(AuditLog::getMotivo)
+            .contains("por apodo", "por uid")
+            .doesNotContain("de otra");
     }
 }

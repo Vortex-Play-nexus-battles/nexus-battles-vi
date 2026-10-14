@@ -14,3 +14,35 @@
 .banners__lista .tarjeta {
   align-items: flex-start;
 }
+
+/* SA-18: quién publicó el banner y su historial (§7.2.5, §7.3.5). */
+.banners__autoria {
+  margin: 0;
+}
+.banners__historial {
+  width: 100%;
+  padding-top: var(--e-3);
+  border-top: 1px solid var(--borde);
+}
+.banners__cambios {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.banners__cambios li {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--fondo);
+}
+.banners__cambios p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.banners__valor {
+  color: var(--texto-2);
+}

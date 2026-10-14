@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_identidad.admin.controller;
 
 import com.nexusbattles.ms_identidad.admin.dto.BanearCuentaRequest;
+import com.nexusbattles.ms_identidad.admin.dto.RestablecerSegundoFactorRequest;
 import com.nexusbattles.ms_identidad.admin.dto.SuspenderCuentaRequest;
 import com.nexusbattles.ms_identidad.admin.service.AdminGestionUsuarioService;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
@@ -47,6 +48,7 @@ class AdminGestionUsuarioControllerTest {
         // La identidad ahora la deja SecurityInterceptor en el request
         // attribute "usuarioActual" (JWT/RBAC), ya no en el header X-User-Name.
         when(request.getAttribute("usuarioActual")).thenReturn("admin");
+        when(request.getAttribute("rolActual")).thenReturn("ADMINISTRADOR");
         when(request.getHeader("X-Forwarded-For")).thenReturn(null);
         when(request.getHeader("Authorization")).thenReturn(TOKEN);
         when(request.getRemoteAddr()).thenReturn(IP_ORIGEN);
@@ -65,7 +67,7 @@ class AdminGestionUsuarioControllerTest {
         usuario.setApodo("Santi");
         when(perfilUsuario.getUsuario()).thenReturn(usuario);
         when(adminGestionUsuarioService.editarPerfilDeUsuario(1L, "Santiago", "Sanabria", null, "preferencias",
-            "Santi", "admin", IP_ORIGEN)).thenReturn(perfilUsuario);
+            "Santi", "admin", "ADMINISTRADOR", IP_ORIGEN)).thenReturn(perfilUsuario);
 
         ResponseEntity<?> response = controller.editarPerfil(1L, datos, request);
 
@@ -75,7 +77,7 @@ class AdminGestionUsuarioControllerTest {
     @Test
     void editarPerfilDebeRetornarBadRequestYNotFound() {
         ActualizarPerfilRequest datos = new ActualizarPerfilRequest();
-        when(adminGestionUsuarioService.editarPerfilDeUsuario(anyLong(), any(), any(), any(), any(), any(), any(), any()))
+        when(adminGestionUsuarioService.editarPerfilDeUsuario(anyLong(), any(), any(), any(), any(), any(), any(), any(), any()))
             .thenThrow(new IllegalArgumentException("Datos inválidos"))
             .thenThrow(new IllegalStateException("Usuario no encontrado"));
 
@@ -97,7 +99,22 @@ class AdminGestionUsuarioControllerTest {
         ResponseEntity<?> response = controller.suspender(1L, datos, request);
 
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
-        verify(adminGestionUsuarioService).suspenderCuenta(1L, fecha, "Spam", TOKEN, "admin", IP_ORIGEN);
+        verify(adminGestionUsuarioService).suspenderCuenta(1L, fecha, "Spam", null, null, TOKEN, "admin",
+            "ADMINISTRADOR", IP_ORIGEN);
+    }
+
+    @Test
+    void suspenderPasaLaCausalYLaPolitica() {
+        SuspenderCuentaRequest datos = new SuspenderCuentaRequest();
+        LocalDateTime fecha = LocalDateTime.of(2026, 10, 10, 12, 0);
+        datos.setSuspendidoHasta(fecha);
+        datos.setMotivo("Insultos");
+        datos.setCausal("ACOSO");
+        datos.setPolitica("Normas de convivencia");
+
+        assertEquals(HttpStatus.NO_CONTENT, controller.suspender(1L, datos, request).getStatusCode());
+        verify(adminGestionUsuarioService).suspenderCuenta(1L, fecha, "Insultos", "ACOSO", "Normas de convivencia",
+            TOKEN, "admin", "ADMINISTRADOR", IP_ORIGEN);
     }
 
     @Test
@@ -106,7 +123,8 @@ class AdminGestionUsuarioControllerTest {
         doThrow(new IllegalArgumentException("Fecha inválida"))
             .doThrow(new IllegalStateException("Usuario no encontrado"))
             .doThrow(new SancionRechazadaException(409, "El usuario ya está baneado."))
-            .when(adminGestionUsuarioService).suspenderCuenta(1L, null, null, TOKEN, "admin", IP_ORIGEN);
+            .when(adminGestionUsuarioService).suspenderCuenta(1L, null, null, null, null, TOKEN, "admin",
+                "ADMINISTRADOR", IP_ORIGEN);
 
         assertEquals(HttpStatus.BAD_REQUEST, controller.suspender(1L, datos, request).getStatusCode());
         assertEquals(HttpStatus.NOT_FOUND, controller.suspender(1L, datos, request).getStatusCode());
@@ -118,10 +136,16 @@ class AdminGestionUsuarioControllerTest {
     @Test
     void debeBanearCuentaConOSinMotivo() {
         assertEquals(HttpStatus.NO_CONTENT, controller.banear(1L, null, request).getStatusCode());
-        verify(adminGestionUsuarioService).banearCuenta(1L, null, TOKEN, "admin", IP_ORIGEN);
+        verify(adminGestionUsuarioService).banearCuenta(1L, null, null, null, TOKEN, "admin", "ADMINISTRADOR",
+            IP_ORIGEN);
 
         controller.banear(1L, new BanearCuentaRequest("Fraude en subastas"), request);
-        verify(adminGestionUsuarioService).banearCuenta(1L, "Fraude en subastas", TOKEN, "admin", IP_ORIGEN);
+        verify(adminGestionUsuarioService).banearCuenta(1L, "Fraude en subastas", null, null, TOKEN, "admin",
+            "ADMINISTRADOR", IP_ORIGEN);
+
+        controller.banear(1L, new BanearCuentaRequest("Duplico creditos", "FRAUDE", "Juego limpio"), request);
+        verify(adminGestionUsuarioService).banearCuenta(1L, "Duplico creditos", "FRAUDE", "Juego limpio", TOKEN,
+            "admin", "ADMINISTRADOR", IP_ORIGEN);
     }
 
     @Test
@@ -131,7 +155,8 @@ class AdminGestionUsuarioControllerTest {
             .doThrow(new SancionRechazadaException(403, "Un moderador no puede banear."))
             .doThrow(new SancionRechazadaException(404, "No existe."))
             .doThrow(new SancionRechazadaException(422, "Otra cosa."))
-            .when(adminGestionUsuarioService).banearCuenta(1L, null, TOKEN, "admin", IP_ORIGEN);
+            .when(adminGestionUsuarioService).banearCuenta(1L, null, null, null, TOKEN, "admin", "ADMINISTRADOR",
+                IP_ORIGEN);
 
         assertEquals(HttpStatus.BAD_REQUEST, controller.banear(1L, null, request).getStatusCode());
         assertEquals(HttpStatus.NOT_FOUND, controller.banear(1L, null, request).getStatusCode());
@@ -147,7 +172,7 @@ class AdminGestionUsuarioControllerTest {
     @Test
     void debeReactivarCuenta() {
         assertEquals(HttpStatus.NO_CONTENT, controller.reactivar(1L, request).getStatusCode());
-        verify(adminGestionUsuarioService).reactivarCuenta(1L, TOKEN, "admin", IP_ORIGEN);
+        verify(adminGestionUsuarioService).reactivarCuenta(1L, TOKEN, "admin", "ADMINISTRADOR", IP_ORIGEN);
     }
 
     @Test
@@ -155,7 +180,7 @@ class AdminGestionUsuarioControllerTest {
         doThrow(new IllegalArgumentException("Cuenta baneada"))
             .doThrow(new IllegalStateException("Usuario no encontrado"))
             .doThrow(new SancionRechazadaException(401, "Token no valido para moderacion."))
-            .when(adminGestionUsuarioService).reactivarCuenta(1L, TOKEN, "admin", IP_ORIGEN);
+            .when(adminGestionUsuarioService).reactivarCuenta(1L, TOKEN, "admin", "ADMINISTRADOR", IP_ORIGEN);
 
         ResponseEntity<?> baneada = controller.reactivar(1L, request);
         assertEquals(HttpStatus.BAD_REQUEST, baneada.getStatusCode());
@@ -167,17 +192,45 @@ class AdminGestionUsuarioControllerTest {
     @Test
     void restablecerPassword() {
         assertEquals(HttpStatus.NO_CONTENT, controller.restablecerPassword(1L, request).getStatusCode());
-        verify(adminGestionUsuarioService).restablecerPassword(1L, "admin", IP_ORIGEN);
+        verify(adminGestionUsuarioService).restablecerPassword(1L, "admin", "ADMINISTRADOR", IP_ORIGEN);
 
         doThrow(new IllegalStateException("Usuario no encontrado"))
-            .when(adminGestionUsuarioService).restablecerPassword(2L, "admin", IP_ORIGEN);
+            .when(adminGestionUsuarioService).restablecerPassword(2L, "admin", "ADMINISTRADOR", IP_ORIGEN);
         assertEquals(HttpStatus.NOT_FOUND, controller.restablecerPassword(2L, request).getStatusCode());
+    }
+
+    @Test
+    void restablecerSegundoFactorConMotivoUidYRol() {
+        when(request.getAttribute("uidActual")).thenReturn("uid-del-super");
+        when(request.getAttribute("rolActual")).thenReturn("SUPER_ADMINISTRADOR");
+
+        ResponseEntity<?> respuesta = controller.restablecerSegundoFactor(7L,
+            new RestablecerSegundoFactorRequest("Perdió el teléfono con la aplicación"), request);
+
+        assertEquals(HttpStatus.NO_CONTENT, respuesta.getStatusCode());
+        verify(adminGestionUsuarioService).restablecerSegundoFactor(7L, "Perdió el teléfono con la aplicación",
+            "admin", "uid-del-super", "SUPER_ADMINISTRADOR", IP_ORIGEN);
+    }
+
+    @Test
+    void restablecerSegundoFactorTraduceLosRechazos() {
+        when(request.getAttribute("rolActual")).thenReturn(null);
+        doThrow(new IllegalArgumentException("No puedes restablecer tu propio segundo factor."))
+            .doThrow(new IllegalStateException("Usuario no encontrado"))
+            .when(adminGestionUsuarioService)
+            .restablecerSegundoFactor(eq(7L), anyString(), eq("admin"), any(), isNull(), eq(IP_ORIGEN));
+
+        RestablecerSegundoFactorRequest datos = new RestablecerSegundoFactorRequest("motivo suficiente");
+        ResponseEntity<?> propia = controller.restablecerSegundoFactor(7L, datos, request);
+        assertEquals(HttpStatus.BAD_REQUEST, propia.getStatusCode());
+        assertEquals("No puedes restablecer tu propio segundo factor.", propia.getBody());
+        assertEquals(HttpStatus.NOT_FOUND, controller.restablecerSegundoFactor(7L, datos, request).getStatusCode());
     }
 
     @Test
     void laIpRealEsElPrimerXForwardedFor() {
         when(request.getHeader("X-Forwarded-For")).thenReturn("203.0.113.5, 10.0.0.1");
         controller.reactivar(1L, request);
-        verify(adminGestionUsuarioService).reactivarCuenta(1L, TOKEN, "admin", "203.0.113.5");
+        verify(adminGestionUsuarioService).reactivarCuenta(1L, TOKEN, "admin", "ADMINISTRADOR", "203.0.113.5");
     }
 }

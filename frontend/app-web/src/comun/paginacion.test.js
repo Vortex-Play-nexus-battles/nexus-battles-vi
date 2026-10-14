@@ -4,6 +4,7 @@
  *
  * Las pruebas se escriben antes que la implementacion (TDD, ciclo rojo).
  */
+import { jest } from '@jest/globals';
 import { construirPaginacion, calcularVentana, CASILLAS_VISIBLES } from './paginacion.js';
 
 /** Botones numerados del control, en orden. */
@@ -221,5 +222,170 @@ describe('Control de paginacion', () => {
     const control = construirPaginacion({ paginaActual: 2, totalPaginas: 5 }, () => {});
 
     expect(control.querySelector('.paginacion__info').textContent).toBe('Página 3 de 5');
+  });
+
+  // --- PLAYER-07b: opciones del mercado de subastas -------------------------
+  //
+  // El mercado tenia su propia copia con «Anterior» y «Siguiente» escritos en
+  // casillas de 32 px, que se desbordaban. Pasa a este control con dos
+  // opciones; sin ellas, todo lo de arriba (RF-INV-002) sigue igual.
+
+  describe('con flechas siempre (PLAYER-07b)', () => {
+    test('aparecen las dos aunque no haya paginas ocultas', () => {
+      const control = construirPaginacion({ paginaActual: 1, totalPaginas: 3 }, () => {}, {
+        flechas: 'siempre',
+      });
+
+      expect(flecha(control, 'anterior')).not.toBeNull();
+      expect(flecha(control, 'siguiente')).not.toBeNull();
+      expect(numeros(control)).toEqual(['1', '2', '3']);
+    });
+
+    test('en la primera pagina la flecha izquierda esta apagada y no pide nada', () => {
+      const pedidas = [];
+      const control = construirPaginacion(
+        { paginaActual: 0, totalPaginas: 3 },
+        (n) => pedidas.push(n),
+        { flechas: 'siempre' },
+      );
+
+      expect(flecha(control, 'anterior').disabled).toBe(true);
+      expect(flecha(control, 'siguiente').disabled).toBe(false);
+      flecha(control, 'anterior').click();
+      flecha(control, 'siguiente').click();
+      expect(pedidas).toEqual([1]);
+    });
+
+    test('en la ultima pagina la flecha derecha esta apagada', () => {
+      const control = construirPaginacion({ paginaActual: 2, totalPaginas: 3 }, () => {}, {
+        flechas: 'siempre',
+      });
+
+      expect(flecha(control, 'anterior').disabled).toBe(false);
+      expect(flecha(control, 'siguiente').disabled).toBe(true);
+    });
+
+    test('las flechas conservan su nombre accesible, no un texto que se desborde', () => {
+      const control = construirPaginacion({ paginaActual: 0, totalPaginas: 3 }, () => {}, {
+        flechas: 'siempre',
+      });
+
+      expect(flecha(control, 'anterior').getAttribute('aria-label')).toBe('Página anterior');
+      expect(flecha(control, 'siguiente').getAttribute('aria-label')).toBe('Página siguiente');
+      expect(control.textContent).not.toMatch(/Anterior|Siguiente/);
+    });
+
+    test('con una sola pagina sigue sin pintarse', () => {
+      const control = construirPaginacion({ paginaActual: 0, totalPaginas: 1 }, () => {}, {
+        flechas: 'siempre',
+      });
+
+      expect(control.hidden).toBe(true);
+    });
+
+    test('sin la opcion, el inventario sigue sin flechas cuando no hay paginas ocultas', () => {
+      const control = construirPaginacion({ paginaActual: 0, totalPaginas: 3 }, () => {});
+
+      expect(flecha(control, 'anterior')).toBeNull();
+      expect(flecha(control, 'siguiente')).toBeNull();
+    });
+  });
+
+  describe('con menos casillas (PLAYER-07b)', () => {
+    test('pinta como mucho las casillas pedidas, centradas en la actual', () => {
+      const control = construirPaginacion({ paginaActual: 10, totalPaginas: 40 }, () => {}, {
+        casillas: 5,
+      });
+
+      expect(numeros(control)).toEqual(['9', '10', '11', '12', '13']);
+      expect(
+        casillas(control).find((c) => c.getAttribute('aria-current') === 'page').textContent,
+      ).toBe('11');
+    });
+
+    test('nunca pasa de diez ni baja de una', () => {
+      const muchas = construirPaginacion({ paginaActual: 0, totalPaginas: 40 }, () => {}, {
+        casillas: 25,
+      });
+      const ninguna = construirPaginacion({ paginaActual: 0, totalPaginas: 40 }, () => {}, {
+        casillas: 0,
+      });
+
+      expect(casillas(muchas)).toHaveLength(CASILLAS_VISIBLES);
+      expect(casillas(ninguna)).toHaveLength(1);
+    });
+  });
+});
+
+/*
+ * Revisión final del módulo Inventario (13-oct): §7.1 literal. «Si hay una
+ * página, aparece la casilla uno (1) … Si hay más páginas a la izquierda,
+ * aparece una flecha a la izquierda para mostrar las opciones ocultas y del
+ * mismo modo a la derecha.»
+ */
+describe('Paginación de §7.1 (unaPagina: visible, flechas: revelan-ocultas)', () => {
+  const S71 = { unaPagina: 'visible', flechas: 'revelan-ocultas' };
+
+  test('con una página aparece la casilla 1, marcada y sin flechas', () => {
+    const control = construirPaginacion({ paginaActual: 0, totalPaginas: 1 }, () => {}, S71);
+
+    expect(control.hidden).toBe(false);
+    expect(numeros(control)).toEqual(['1']);
+    expect(casillas(control)[0].getAttribute('aria-current')).toBe('page');
+    expect(flecha(control, 'anterior')).toBeNull();
+    expect(flecha(control, 'siguiente')).toBeNull();
+  });
+
+  test('con dos páginas, las casillas 1 y 2; con diez, de la 1 a la 10', () => {
+    expect(
+      numeros(construirPaginacion({ paginaActual: 0, totalPaginas: 2 }, () => {}, S71)),
+    ).toEqual(['1', '2']);
+    expect(
+      numeros(construirPaginacion({ paginaActual: 0, totalPaginas: 10 }, () => {}, S71)),
+    ).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']);
+  });
+
+  test('vacío sigue sin control: no hay páginas que enseñar', () => {
+    expect(construirPaginacion({ paginaActual: 0, totalPaginas: 0 }, () => {}, S71).hidden).toBe(
+      true,
+    );
+  });
+
+  test('la flecha derecha lleva a la primera página oculta y la deja a la vista', () => {
+    const pedida = jest.fn();
+    const control = construirPaginacion({ paginaActual: 0, totalPaginas: 25 }, pedida, S71);
+
+    expect(flecha(control, 'anterior')).toBeNull();
+    flecha(control, 'siguiente').click();
+    expect(pedida).toHaveBeenCalledWith(10);
+
+    const despues = construirPaginacion({ paginaActual: 10, totalPaginas: 25 }, () => {}, S71);
+    expect(numeros(despues)).toContain('11');
+    expect(numeros(despues)).toContain('15');
+  });
+
+  test('desde la última, la flecha izquierda revela las ocultas en una sola pulsación', () => {
+    const pedida = jest.fn();
+    const control = construirPaginacion({ paginaActual: 24, totalPaginas: 25 }, pedida, S71);
+
+    expect(numeros(control)).toEqual(['16', '17', '18', '19', '20', '21', '22', '23', '24', '25']);
+    expect(flecha(control, 'siguiente')).toBeNull();
+    flecha(control, 'anterior').click();
+    expect(pedida).toHaveBeenCalledWith(14);
+
+    const despues = construirPaginacion({ paginaActual: 14, totalPaginas: 25 }, () => {}, S71);
+    expect(numeros(despues)).toContain('15');
+    expect(numeros(despues)[0]).toBe('10');
+  });
+
+  test('las flechas dicen a qué página llevan', () => {
+    const control = construirPaginacion({ paginaActual: 12, totalPaginas: 25 }, () => {}, S71);
+
+    expect(flecha(control, 'anterior').getAttribute('aria-label')).toBe(
+      'Mostrar páginas anteriores (ir a la 7)',
+    );
+    expect(flecha(control, 'siguiente').getAttribute('aria-label')).toBe(
+      'Mostrar páginas siguientes (ir a la 18)',
+    );
   });
 });

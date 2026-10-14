@@ -60,7 +60,7 @@ public interface InventarioDeHeroes {
      * {@code POST /api/v1/inventario/entregas}, origen MISION, idempotente por
      * {@code claveIdempotencia}.
      *
-     * <p>Una epica no se tiene dos veces (inventario 1.7.0): si el jugador ya
+     * <p>Una epica no se tiene dos veces (inventario 1.9.0): si el jugador ya
      * la tenia, el inventario no la entrega otra vez y contesta igual que si
      * la hubiera entregado. Para el liquidador eso es una entrega hecha.
      *

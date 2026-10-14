@@ -118,6 +118,9 @@ public class AuditoriaDeExportaciones {
         if (filtro.registradoHasta() != null) {
             usados.add("registradoHasta=" + filtro.registradoHasta());
         }
+        if (filtro.historialSanciones() != null) {
+            usados.add("historialSanciones=" + filtro.historialSanciones());
+        }
         if (filtro.ocultarPruebas()) {
             usados.add("ocultarPruebas=true");
         }

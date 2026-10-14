@@ -111,7 +111,9 @@ test.describe('Combate contra la IA sin auto-daño (auditoría del 4-oct)', () =
     await page.goto(`${BORDE}${SALA}?sala=${sala.id}&partida=${partida.id}`);
 
     const deLaPartida = async () => {
-      const r = await api.get(`/api/v1/partidas/${partida.id}`, { headers: conToken(jugador.token) });
+      const r = await api.get(`/api/v1/partidas/${partida.id}`, {
+        headers: conToken(jugador.token),
+      });
       expect(r.status(), await r.text()).toBe(200);
       return r.json();
     };
@@ -133,6 +135,12 @@ test.describe('Combate contra la IA sin auto-daño (auditoría del 4-oct)', () =
       await expect(boton).toBeEnabled({ timeout: 20_000 });
       const turnoPrevio = partida.turnoActual.numeroTurno;
       await boton.click({ timeout: 5_000 });
+      // HU-UX-003 (MOTION-2) — el golpe se ve ocurrir: la cifra nace sobre un
+      // héroe del campo cuando el servidor resuelve la acción. Se afirma que
+      // aparece, no cuándo ni cuánto dura.
+      await expect(page.locator('.campo__puesto .impacto').first()).toBeVisible({
+        timeout: 10_000,
+      });
       await expect
         .poll(
           async () => {
@@ -180,5 +188,27 @@ test.describe('Combate contra la IA sin auto-daño (auditoría del 4-oct)', () =
     const registro = page.locator('[data-zona="registro"]');
     await expect(registro).toContainText('(IA)', { timeout: 10_000 });
     await expect(registro).not.toContainText(/\(tú\) golpea a [^.]*\(tú\)/);
+
+    // HU-UX-003 (MOTION-2) — el HUD termina en la verdad del servidor: la
+    // coreografía interpola el relleno, pero el valor numérico es el de la
+    // partida releída, y nada queda colgando sobre las figuras.
+    partida = await deLaPartida();
+    for (const participante of partida.participantes ?? []) {
+      const id = participante.jugador?.id ?? participante.jugador;
+      const barra = page.locator(`.combate__vidas [data-jugador="${id}"]`);
+      await expect(barra).toHaveAttribute('aria-valuenow', String(participante.heroe.vidaActual), {
+        timeout: 10_000,
+      });
+    }
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            [...document.querySelectorAll('.campo__puesto .marco-heroe')].filter(
+              (figura) => figura.getAnimations().length > 0,
+            ).length,
+        ),
+      )
+      .toBe(0);
   });
 });

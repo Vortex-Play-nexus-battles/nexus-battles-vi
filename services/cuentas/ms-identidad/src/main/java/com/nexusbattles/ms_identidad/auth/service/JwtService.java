@@ -1,11 +1,14 @@
 package com.nexusbattles.ms_identidad.auth.service;
 
+import com.nexusbattles.ms_identidad.rbac.model.JerarquiaDeRoles;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtBuilder;
 import io.jsonwebtoken.Jwts;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
@@ -23,6 +26,17 @@ import java.util.UUID;
  * cualquier usuario. Con RSA los demas solo reciben la clave publica, por el
  * JWKS. Ver {@link ClavesDeFirma} y
  * {@code docs/gobierno/ADR-002-identidad-de-usuario.md}.
+ *
+ * <p><b>Inactividad de las sesiones administrativas (7.3.9).</b> Un token de
+ * Moderador, Administrador o Super Administrador vive
+ * {@code app.jwt.minutos-sesion-administrativa} (15 min por omision) y se
+ * renueva solo mientras la persona usa la consola ({@code POST
+ * /auth/sesion/renovacion}). Sin actividad, el token caduca en el servidor: el
+ * timeout no depende de que la pestana siga abierta ni de JavaScript. Toda
+ * renovacion conserva el instante en que se autentico ({@code auth_time}, OIDC
+ * Core §2) y ninguna sesion administrativa pasa de
+ * {@code app.jwt.horas-maximas-sesion-administrativa} (12 h) sin volver a
+ * escribir la contrasena y el segundo factor. Los jugadores siguen con 24 h.
  */
 @Service
 public class JwtService {
@@ -40,6 +54,12 @@ public class JwtService {
 
     @Value("${app.jwt.horas-expiracion:24}")
     private int horasExpiracion;
+
+    @Value("${app.jwt.minutos-sesion-administrativa:15}")
+    private int minutosSesionAdministrativa = 15;
+
+    @Value("${app.jwt.horas-maximas-sesion-administrativa:12}")
+    private int horasMaximasSesionAdministrativa = 12;
 
     @Value("${app.jwt.emisor:ms-identidad}")
     private String emisor;
@@ -80,13 +100,25 @@ public class JwtService {
      */
     public String generarToken(String apodo, String rol, int versionToken, UUID identificadorPublico,
                                List<String> metodos) {
+        return generarToken(apodo, rol, versionToken, identificadorPublico, metodos, null);
+    }
+
+    /**
+     * Como el anterior, conservando el instante de la autenticacion original
+     * ({@code auth_time}): lo usa la renovacion de una sesion administrativa.
+     * Con {@code autenticadoEn} nulo es una autenticacion nueva (ahora).
+     */
+    public String generarToken(String apodo, String rol, int versionToken, UUID identificadorPublico,
+                               List<String> metodos, Instant autenticadoEn) {
         Date ahora = new Date();
-        Date expiracion = new Date(ahora.getTime() + horasExpiracion * 3600_000L);
+        Instant autenticacion = autenticadoEn == null ? ahora.toInstant() : autenticadoEn;
+        Date expiracion = Date.from(expiracionPara(rol, ahora.toInstant(), autenticacion));
 
         JwtBuilder constructor = Jwts.builder()
             .subject(apodo)
             .claim("rol", rol)
             .claim("ver", versionToken)
+            .claim("auth_time", autenticacion.getEpochSecond())
             .claim("amr", metodos == null || metodos.isEmpty() ? AMR_CONTRASENA : List.copyOf(metodos));
 
         if (identificadorPublico != null) {
@@ -100,6 +132,40 @@ public class JwtService {
             .expiration(expiracion)
             .signWith(claves.privada(), Jwts.SIG.RS256)
             .compact();
+    }
+
+    /**
+     * Caducidad de un token emitido ahora: 15 minutos (renovables) para un
+     * rol administrativo y 24 h para un jugador, sin pasar nunca del maximo de
+     * la sesion contado desde que se autentico. Para un jugador las dos cifras
+     * coinciden: renovar no le alarga la sesion.
+     */
+    public Instant expiracionPara(String rol, Instant ahora, Instant autenticadoEn) {
+        Duration vida = JerarquiaDeRoles.esAdministrativo(rol)
+            ? Duration.ofMinutes(minutosSesionAdministrativa)
+            : Duration.ofHours(horasExpiracion);
+        Instant porVida = ahora.plus(vida);
+        Instant maximo = autenticadoEn.plus(duracionMaximaDeSesion(rol));
+        return porVida.isBefore(maximo) ? porVida : maximo;
+    }
+
+    /** Lo maximo que puede durar una sesion de este rol desde que se autentico. */
+    public Duration duracionMaximaDeSesion(String rol) {
+        return JerarquiaDeRoles.esAdministrativo(rol)
+            ? Duration.ofHours(horasMaximasSesionAdministrativa)
+            : Duration.ofHours(horasExpiracion);
+    }
+
+    /**
+     * Cuando se autentico la sesion de este token: su {@code auth_time} o, en
+     * un token anterior a 7.3.9, su {@code iat}.
+     */
+    public static Instant autenticadoEn(Claims claims) {
+        Object autenticacion = claims.get("auth_time");
+        if (autenticacion instanceof Number segundos) {
+            return Instant.ofEpochSecond(segundos.longValue());
+        }
+        return claims.getIssuedAt() == null ? Instant.EPOCH : claims.getIssuedAt().toInstant();
     }
 
     /**

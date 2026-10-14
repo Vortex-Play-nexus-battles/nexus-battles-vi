@@ -188,7 +188,8 @@ test.describe('Salir y cancelar una sala (HU-SAL-006)', () => {
     await expect(dialogo).toBeHidden();
 
     await expect(cancelar).toBeEnabled();
-    expect(page.url()).toContain('sala-batalla.html');
+    // SA-7 — `/jugar/sala` detrás del borde; la ruta del fichero redirige a ella.
+    expect(page.url()).toMatch(/(?:\/jugar\/sala|sala-batalla\.html)\?sala=/);
     expect((await salaActual(api, anfitriona, sala.id)).estado).toBe('ABIERTA');
 
     await api.delete(`/api/v1/salas/${sala.id}`, { headers: conToken(anfitriona.token) });

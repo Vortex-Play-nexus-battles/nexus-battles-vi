@@ -71,7 +71,10 @@ export const ICONO_DEL_TIPO = Object.freeze({
  * @param {{alEditar?: Function, alEquipar?: Function, alAbrirDetalle?: Function}} opciones
  * @returns {HTMLUListElement} rejilla lista para insertar en el documento.
  */
-export function construirVitrina(pagina, { alEditar, alEquipar, alAbrirDetalle, estadoDe } = {}) {
+export function construirVitrina(
+  pagina,
+  { alEditar, alEquipar, alAbrirDetalle, alEliminar, estadoDe } = {},
+) {
   if (!pagina || !Array.isArray(pagina.elementos)) {
     throw new TypeError('La página de inventario debe traer una lista de elementos');
   }
@@ -85,7 +88,9 @@ export function construirVitrina(pagina, { alEditar, alEquipar, alAbrirDetalle, 
   const vitrina = document.createElement('ul');
   vitrina.className = 'vitrina';
   for (const elemento of pagina.elementos) {
-    vitrina.appendChild(construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle, estadoDe));
+    vitrina.appendChild(
+      construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle, estadoDe, alEliminar),
+    );
   }
   return vitrina;
 }
@@ -128,7 +133,7 @@ function construirRetrato(elemento) {
  * Una tarjeta de producto. El nombre propio lo escribe el jugador, asi que
  * entra por textContent y nunca por innerHTML.
  */
-function construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle, estadoDe) {
+function construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle, estadoDe, alEliminar) {
   const tarjeta = document.createElement('li');
   tarjeta.className = 'vitrina__producto';
   tarjeta.dataset.elementoId = elemento.id;
@@ -173,16 +178,30 @@ function construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle, estadoD
   acciones.className = 'vitrina__acciones';
 
   if (typeof alAbrirDetalle === 'function') {
-    // HU-INV-007: la ficha se abre desde la tarjeta. Es un boton y no la
-    // tarjeta entera para que el teclado lo alcance y para no chocar con
-    // los demas botones de la tarjeta (RNF-ACC-002).
+    // HU-INV-007: la ficha se abre desde la tarjeta. El boton es el camino del
+    // teclado (RNF-ACC-002) y su nombre accesible empieza por lo que se ve
+    // escrito (WCAG 2.5.3).
     const botonDetalle = document.createElement('button');
     botonDetalle.className = 'vitrina__detalle';
     botonDetalle.type = 'button';
     botonDetalle.textContent = 'Ver detalle';
-    botonDetalle.setAttribute('aria-label', `Ver el detalle de ${elemento.nombrePropio}`);
-    botonDetalle.addEventListener('click', () => alAbrirDetalle(elemento));
+    botonDetalle.setAttribute('aria-label', `Ver detalle de ${elemento.nombrePropio}`);
+    botonDetalle.addEventListener('click', () =>
+      alAbrirDetalle(elemento, { origen: botonDetalle }),
+    );
     acciones.appendChild(botonDetalle);
+
+    // §7.1: «si el jugador hace clic sobre un producto se debe dirigir a una
+    // vista de detalle». Con el raton vale toda la tarjeta; los botones de la
+    // tarjeta (editar, equipo, eliminar) siguen siendo suyos. El foco vuelve
+    // al boton «Ver detalle» al cerrar la ficha.
+    tarjeta.classList.add('vitrina__producto--pulsable');
+    tarjeta.addEventListener('click', (evento) => {
+      if (evento.target instanceof Element && evento.target.closest('button, a, input, select')) {
+        return;
+      }
+      alAbrirDetalle(elemento, { origen: botonDetalle });
+    });
   }
 
   if (typeof alEditar === 'function') {
@@ -204,6 +223,19 @@ function construirTarjeta(elemento, alEditar, alEquipar, alAbrirDetalle, estadoD
     botonEquipo.disabled = !disponible;
     botonEquipo.addEventListener('click', () => alEquipar(elemento));
     acciones.appendChild(botonEquipo);
+  }
+  if (typeof alEliminar === 'function') {
+    // HU-INV-008: se ofrece solo cuando el elemento esta disponible. El
+    // servicio rechazaria igual el que esta en mision, en subasta o puesto,
+    // pero ofrecer una accion y despues negarla es peor que no ofrecerla.
+    const botonEliminar = document.createElement('button');
+    botonEliminar.className = 'vitrina__eliminar';
+    botonEliminar.type = 'button';
+    botonEliminar.textContent = 'Eliminar';
+    botonEliminar.setAttribute('aria-label', `Eliminar ${elemento.nombrePropio}`);
+    botonEliminar.disabled = !disponible;
+    botonEliminar.addEventListener('click', () => alEliminar(elemento));
+    acciones.appendChild(botonEliminar);
   }
   if (acciones.childElementCount > 0) {
     tarjeta.appendChild(acciones);

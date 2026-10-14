@@ -31,6 +31,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { test, expect, request as apiRequest } from '@playwright/test';
 
 import { verificarDesdeLaVista } from './ayudantes/cuentas.js';
+import { conLaPaginaQuieta } from './ayudantes/movimiento.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const FINANZAS = process.env.E2E_FINANZAS ?? 'http://localhost:8093/api/v1';
@@ -101,8 +102,9 @@ async function heroeEquipado(api, token) {
   };
 }
 
-/** axe sobre lo que se ve ahora mismo: sin hallazgos graves. */
+/** axe sobre lo que se ve, con la página quieta: sin hallazgos graves. */
 async function sinBarrerasGraves(page, donde) {
+  await conLaPaginaQuieta(page);
   const resultado = await new AxeBuilder({ page }).withTags(NORMAS).analyze();
   const graves = resultado.violations.filter((v) => GRAVES.has(v.impact));
   expect(

@@ -40,6 +40,7 @@
 
 import { ACCESO, MATRIZ, VEREDICTO, puedeVer, rutaDeVista } from './matriz-acceso.js';
 import { MOTIVOS, leerSesion, olvidarSesion, resolver, RUTAS, urlDeLogin } from './sesion.js';
+import { montarAsistente } from './ui/asistente.js';
 import { h } from './ui/dom.js';
 
 /** Base de resolución de rutas: este módulo vive en `src/comun/`, igual que `sesion.js`. */
@@ -176,10 +177,19 @@ export function exigirAcceso(
  * seguiría cargando datos que el servidor va a negar y llenaría la consola de
  * 403 mientras la persona lee que no tiene acceso.
  *
+ * #506 — el asistente se vuelve a montar encima: RF-CHA-001 lo quiere en
+ * todas las vistas, y esta también lo es. Sin esto desaparecía con el
+ * `<body>` y el armazón ya no lo montaba (la página queda marcada).
+ *
  * @param {Document} documento
- * @param {{rolesAdmitidos: readonly string[]|null, base?: string}} opciones
+ * @param {{rolesAdmitidos: readonly string[]|null, base?: string,
+ *          asistente?: (documento: Document) => unknown}} opciones `asistente`:
+ *          quien monta el botón flotante (inyectable en pruebas)
  */
-export function pintarSinPermiso(documento, { rolesAdmitidos = null, base = BASE_RUTAS } = {}) {
+export function pintarSinPermiso(
+  documento,
+  { rolesAdmitidos = null, base = BASE_RUTAS, asistente = montarAsistente } = {},
+) {
   if (!documento?.body) {
     return;
   }
@@ -242,4 +252,5 @@ export function pintarSinPermiso(documento, { rolesAdmitidos = null, base = BASE
   tarjeta.append(salidas);
   marco.append(tarjeta);
   documento.body.replaceChildren(barra, marco);
+  asistente?.(documento);
 }

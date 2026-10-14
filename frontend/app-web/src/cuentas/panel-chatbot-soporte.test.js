@@ -8,6 +8,7 @@ import { ErrorDelChatbot } from '../comun/cliente-chatbot.js';
 import {
   POR_PAGINA,
   SIGUIENTES,
+  TEXTO_VISITANTE,
   atenderEnDialogo,
   montarSoporte,
   nombreDeCategoria,
@@ -167,6 +168,22 @@ describe('detalle de una solicitud', () => {
     expect(cuerpo.textContent).toContain('Se queda cargando');
     expect(cuerpo.textContent).toContain('mi inventario no carga');
     expect(cuerpo.textContent).toContain('Asistente');
+  });
+
+  // ms-chatbot.yaml 1.12.0 (RF-CHA-007): la abrió un visitante, sin cuenta.
+  test('si la abrió un visitante lo dice, sin enseñar la clave de su sesión', async () => {
+    const visitante = {
+      ...DETALLE,
+      uid: 'anonimo:7c9e6679-7425-40de-944b-e07fc1f90ae7',
+      deVisitante: true,
+    };
+    const { cuerpo } = await abrir(clienteFalso({ obtenerTicket: jest.fn(async () => visitante) }));
+
+    expect(cuerpo.textContent).toContain(TEXTO_VISITANTE);
+    expect(cuerpo.textContent).not.toContain('anonimo:');
+    expect(cuerpo.textContent).toContain('Mensaje del visitante');
+    expect(cuerpo.textContent).toContain('Visitante ·');
+    expect(cuerpo.textContent).toContain('Respuesta para el visitante');
   });
 
   test('responder y marcar como respondida manda solo lo que cambió', async () => {

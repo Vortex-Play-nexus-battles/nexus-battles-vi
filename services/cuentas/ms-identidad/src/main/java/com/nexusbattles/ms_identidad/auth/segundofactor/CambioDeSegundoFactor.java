@@ -15,7 +15,9 @@ public record CambioDeSegundoFactor(String afectado, Cambio cambio, Long restant
     public enum Cambio {
         ACTIVADO("SEGUNDO_FACTOR_ACTIVADO"),
         DESACTIVADO("SEGUNDO_FACTOR_DESACTIVADO"),
-        RECUPERACION_USADA("CODIGO_RECUPERACION_USADO");
+        RECUPERACION_USADA("CODIGO_RECUPERACION_USADO"),
+        /** Lo quito un Super Administrador (perdio la aplicacion y los codigos). */
+        RESTABLECIDO_POR_ADMINISTRACION("SEGUNDO_FACTOR_RESTABLECIDO_POR_ADMINISTRACION");
 
         private final String motivo;
 

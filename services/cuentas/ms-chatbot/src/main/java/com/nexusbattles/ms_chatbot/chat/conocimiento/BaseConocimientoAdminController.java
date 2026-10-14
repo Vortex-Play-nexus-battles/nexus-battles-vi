@@ -100,6 +100,8 @@ public class BaseConocimientoAdminController {
     }
 
     // Reemplaza TODO el contenido de la candidata por los temas del archivo.
+    // 1.6.0: como mucho 500 temas y 8 MB (413 IMPORTACION_DEMASIADO_GRANDE; el
+    // tamano lo corta LimiteDelArchivoDeImportacion antes de leer el cuerpo).
     @PutMapping("/borrador/importacion")
     public List<TemaConocimientoResponse> importar(@Valid @RequestBody ImportacionBaseConocimiento datos) {
         return baseConocimientoAdminService.importarEnCandidata(datos.temas()).stream()

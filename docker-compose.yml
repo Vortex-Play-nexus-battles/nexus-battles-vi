@@ -143,6 +143,13 @@ services:
       - "8087:8087"
     env_file:
       - .env
+    environment:
+      # SA-4 (§7.3.8): la frecuencia de reportes, de comentarios (servidor SIN
+      # /api/v1, con el token de quien mira el tablero), y los umbrales de alta
+      # frecuencia, del catalogo de admin-parametros. Por su nombre en la red
+      # del compose; el despliegue fusiona este mapa con el suyo.
+      COMENTARIOS_URL: ${COMENTARIOS_URL:-http://srv-comentarios:8081}
+      PARAMETROS_URL: ${PARAMETROS_URL:-http://srv-admin-parametros:8088/api/v1}
     depends_on:
       - plataforma-db
 

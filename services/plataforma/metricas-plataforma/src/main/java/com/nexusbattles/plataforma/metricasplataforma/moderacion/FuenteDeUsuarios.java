@@ -68,8 +68,21 @@ public interface FuenteDeUsuarios {
     Indicadores consultar(String desde, String hasta, String autorizacion);
 
     class NoDisponible extends RuntimeException {
+
+        private final CausaDeIndisponibilidad causa;
+
+        /** Sin causa dicha, «no responde»: es lo que significa no tener los indicadores. */
         public NoDisponible(String motivo) {
+            this(CausaDeIndisponibilidad.NO_RESPONDE, motivo);
+        }
+
+        public NoDisponible(CausaDeIndisponibilidad causa, String motivo) {
             super(motivo);
+            this.causa = causa;
+        }
+
+        public CausaDeIndisponibilidad causa() {
+            return causa;
         }
     }
 }

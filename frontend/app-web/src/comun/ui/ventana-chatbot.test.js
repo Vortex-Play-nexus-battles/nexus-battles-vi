@@ -6,11 +6,13 @@ import { jest } from '@jest/globals';
 
 import { ErrorDelChatbot } from '../cliente-chatbot.js';
 import {
+  ESPERA_POR_OMISION_S,
   PAGINA_DEL_HISTORIAL,
   TAMANO,
   TEXTOS,
   acotarTamano,
   crearVentanaChatbot,
+  rutaDeEstaPagina,
   urlPermitida,
 } from './ventana-chatbot.js';
 
@@ -56,7 +58,15 @@ function clienteFalso(sobrescribir = {}) {
   };
 }
 
-async function montar({ cliente = clienteFalso(), sesion, confirmarBorrado, vista } = {}) {
+async function montar({
+  cliente = clienteFalso(),
+  sesion,
+  confirmarBorrado,
+  vista,
+  reloj,
+  login,
+  registro,
+} = {}) {
   const lanzador = document.createElement('button');
   document.body.append(lanzador);
   const ventana = crearVentanaChatbot({
@@ -66,6 +76,9 @@ async function montar({ cliente = clienteFalso(), sesion, confirmarBorrado, vist
     confirmarBorrado: confirmarBorrado ?? (async () => true),
     esperaAutocompletar: 0,
     vista: vista ?? (() => null),
+    ...(reloj ? { reloj } : {}),
+    ...(login !== undefined ? { login } : {}),
+    ...(registro !== undefined ? { registro } : {}),
   });
   ventana.abrir(lanzador);
   await esperar();
@@ -77,8 +90,45 @@ async function montar({ cliente = clienteFalso(), sesion, confirmarBorrado, vist
     el,
     entrada: el.querySelector('textarea[name="contenido"]'),
     formulario: el.querySelector('form'),
+    botonEnviar: el.querySelector('button[type="submit"]'),
+    aviso: () => el.querySelector('.chatbot-ventana__aviso'),
     mensajes: () => [...el.querySelectorAll('.chatbot-ventana__mensaje')],
   };
+}
+
+/** El texto de un mensaje, sin el prefijo para el lector de pantalla. */
+const textoDe = (burbuja) => burbuja.querySelector('.chatbot-ventana__texto')?.textContent ?? '';
+
+/** Reloj manual para la espera tras un 429: solo avanza cuando la prueba lo dice. */
+function crearReloj() {
+  let siguiente = 1;
+  const pendientes = new Map();
+  return {
+    pendientes,
+    setTimeout: jest.fn((funcion, ms) => {
+      const id = siguiente++;
+      pendientes.set(id, { funcion, ms });
+      return id;
+    }),
+    clearTimeout: jest.fn((id) => pendientes.delete(id)),
+    cumplir() {
+      for (const [id, { funcion }] of [...pendientes]) {
+        pendientes.delete(id);
+        funcion();
+      }
+    },
+  };
+}
+
+/** Una promesa que la prueba resuelve o rechaza cuando quiere. */
+function diferida() {
+  let resolver;
+  let rechazar;
+  const promesa = new Promise((si, no) => {
+    resolver = si;
+    rechazar = no;
+  });
+  return { promesa, resolver, rechazar };
 }
 
 async function enviar(vista, texto) {
@@ -111,6 +161,62 @@ describe('abrir y cerrar', () => {
     vista.entrada.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(vista.ventana.abierta()).toBe(false);
     expect(document.activeElement).toBe(vista.lanzador);
+  });
+
+  // #506 — antes el foco caía en «×»: la caja estaba desactivada mientras
+  // cargaba la conversación.
+  test('al abrir, el foco va a la caja de texto aunque la conversación siga cargando', () => {
+    const lanzador = document.createElement('button');
+    document.body.append(lanzador);
+    lanzador.focus();
+    const ventana = crearVentanaChatbot({
+      cliente: clienteFalso({ obtenerHistorial: jest.fn(() => new Promise(() => {})) }),
+      sesion: () => ({}),
+    });
+
+    ventana.abrir(lanzador);
+
+    const entrada = ventana.elemento.querySelector('textarea[name="contenido"]');
+    expect(document.activeElement).toBe(entrada);
+    // Se puede escribir, pero no enviar ni borrar hasta que cargue.
+    expect(ventana.elemento.querySelector('button[type="submit"]').disabled).toBe(true);
+    expect(ventana.elemento.querySelector('[data-accion="borrar-conversacion"]').disabled).toBe(
+      true,
+    );
+  });
+
+  test('mientras carga, Enter no envía y lo escrito se queda en la caja', async () => {
+    const historial = diferida();
+    const cliente = clienteFalso({ obtenerHistorial: jest.fn(() => historial.promesa) });
+    const ventana = crearVentanaChatbot({ cliente, sesion: () => ({}) });
+    ventana.abrir();
+    const entrada = ventana.elemento.querySelector('textarea[name="contenido"]');
+
+    entrada.value = 'hola';
+    entrada.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await esperar();
+    expect(cliente.enviarMensaje).not.toHaveBeenCalled();
+    expect(entrada.value).toBe('hola');
+
+    historial.resolver([]);
+    await esperar();
+    expect(ventana.elemento.querySelector('button[type="submit"]').disabled).toBe(false);
+    expect(document.activeElement).toBe(entrada);
+  });
+
+  test('tras «Reintentar» con éxito, el foco vuelve a la caja de texto', async () => {
+    const obtenerHistorial = jest
+      .fn()
+      .mockRejectedValueOnce(new ErrorDelChatbot(null, 503))
+      .mockResolvedValueOnce([BOT]);
+    const vista = await montar({ cliente: clienteFalso({ obtenerHistorial }) });
+    const reintentar = vista.el.querySelector('[data-accion="reintentar"]');
+    reintentar.focus();
+
+    reintentar.click();
+    await esperar();
+
+    expect(document.activeElement).toBe(vista.entrada);
   });
 
   test('el historial se carga una sola vez aunque se abra varias veces', async () => {
@@ -150,7 +256,7 @@ describe('historial', () => {
   test('sin conversación previa muestra la bienvenida, sin calificación', async () => {
     const vista = await montar();
     const [bienvenida] = vista.mensajes();
-    expect(bienvenida.textContent).toBe(TEXTOS.bienvenida);
+    expect(textoDe(bienvenida)).toBe(TEXTOS.bienvenida);
     expect(bienvenida.querySelector('.chatbot-calificacion')).toBeNull();
   });
 
@@ -418,6 +524,263 @@ describe('enviar', () => {
     expect(vista.el.querySelector('.chatbot-ventana__aviso').textContent).toContain(
       TEXTOS.mensajeInvalido,
     );
+    expect(vista.entrada.value).toBe('hola');
+  });
+});
+
+// #506 — la pregunta se ve en cuanto se envía, no cuando llega la respuesta.
+describe('la pregunta se pinta al enviar', () => {
+  test('aparece antes de la respuesta, con «escribiendo…» debajo y la caja vacía', async () => {
+    const respuesta = diferida();
+    const vista = await montar({
+      cliente: clienteFalso({ enviarMensaje: jest.fn(() => respuesta.promesa) }),
+    });
+
+    await enviar(vista, 'como pujo');
+
+    // Todavía sin respuesta: la pregunta ya está, y debajo, «escribiendo…».
+    const [pregunta] = vista.mensajes();
+    expect(pregunta.classList).toContain('chatbot-ventana__mensaje--usuario');
+    expect(textoDe(pregunta)).toBe('como pujo');
+    expect(pregunta.nextElementSibling.classList).toContain('chatbot-ventana__escribiendo');
+    expect(vista.entrada.value).toBe('');
+    expect(vista.botonEnviar.disabled).toBe(true);
+    expect(vista.el.querySelector('[data-bienvenida]')).toBeNull();
+
+    respuesta.resolver({ ...BOT, id: 'm-bot-nuevo' });
+    await esperar();
+
+    const [usuario, bot] = vista.mensajes();
+    expect(usuario).toBe(pregunta);
+    expect(bot.dataset.mensajeId).toBe('m-bot-nuevo');
+    expect(vista.el.querySelector('.chatbot-ventana__escribiendo')).toBeNull();
+    expect(vista.botonEnviar.disabled).toBe(false);
+  });
+
+  test('si el envío falla, la pregunta sale y su texto vuelve a la caja', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({
+        enviarMensaje: jest.fn(async () => {
+          throw new ErrorDelChatbot(null, 0);
+        }),
+      }),
+    });
+
+    await enviar(vista, 'como pujo');
+
+    expect(vista.entrada.value).toBe('como pujo');
+    expect(vista.el.querySelector('.chatbot-ventana__mensaje--usuario')).toBeNull();
+    expect(vista.el.querySelector('.chatbot-ventana__escribiendo')).toBeNull();
+    // La conversación estaba vacía: vuelve la bienvenida.
+    expect(textoDe(vista.mensajes()[0])).toBe(TEXTOS.bienvenida);
+    expect(document.activeElement).toBe(vista.entrada);
+  });
+
+  test('si mientras tanto se empezó otra pregunta, no se pierde ninguna', async () => {
+    const respuesta = diferida();
+    const vista = await montar({
+      cliente: clienteFalso({
+        obtenerHistorial: jest.fn(async () => [USUARIO, BOT]),
+        enviarMensaje: jest.fn(() => respuesta.promesa),
+      }),
+    });
+
+    await enviar(vista, 'primera');
+    vista.entrada.value = 'segunda';
+    respuesta.rechazar(new ErrorDelChatbot(null, 500));
+    await esperar();
+
+    expect(vista.entrada.value).toBe('primera\nsegunda');
+    // El historial que ya había sigue intacto.
+    expect(vista.mensajes().map(textoDe)).toEqual([USUARIO.contenido, BOT.contenido]);
+  });
+});
+
+// #506 — cada rechazo con su motivo, y el texto se queda para corregirlo.
+describe('mensajes rechazados', () => {
+  const rechazo = (motivo, estado, opciones) =>
+    new ErrorDelChatbot({ title: 'x', motivo }, estado, opciones);
+
+  test.each([
+    ['CONTENIDO_BLOQUEADO', 422, TEXTOS.contenidoBloqueado, 'advertencia'],
+    ['INYECCION_DETECTADA', 422, TEXTOS.inyeccionDetectada, 'advertencia'],
+    ['MODERACION_NO_DISPONIBLE', 503, TEXTOS.moderacionNoDisponible, 'error'],
+  ])('%s (%i) se explica y conserva lo escrito', async (motivo, estado, texto, tono) => {
+    const vista = await montar({
+      cliente: clienteFalso({
+        enviarMensaje: jest.fn(async () => {
+          throw rechazo(motivo, estado);
+        }),
+      }),
+    });
+
+    await enviar(vista, '<script>alert(1)</script>');
+
+    const aviso = vista.aviso();
+    expect(aviso.hidden).toBe(false);
+    expect(aviso.textContent).toBe(texto);
+    expect(aviso.querySelector(`.aviso--${tono}[role="alert"]`)).not.toBeNull();
+    // No es «el asistente no está»: ni chat general ni bloqueo de la caja.
+    expect(aviso.querySelector('[data-accion="ir-al-chat"]')).toBeNull();
+    expect(vista.entrada.value).toBe('<script>alert(1)</script>');
+    expect(vista.entrada.disabled).toBe(false);
+    expect(vista.botonEnviar.disabled).toBe(false);
+  });
+
+  test('los textos de la ventana son los acordados', () => {
+    expect(TEXTOS.contenidoBloqueado).toBe(
+      'Tu mensaje no se envió porque tiene palabras que no están permitidas. Escríbelo de otra forma.',
+    );
+    expect(TEXTOS.inyeccionDetectada).toBe(
+      'Tu mensaje no se envió porque parece contener código o instrucciones del sistema. Escribe tu pregunta con palabras.',
+    );
+    expect(TEXTOS.demasiadosMensajes(30)).toBe(
+      'Escribiste muchos mensajes seguidos. Espera 30 s y vuelve a intentarlo.',
+    );
+    expect(TEXTOS.demasiadosMensajes(null)).toBe(
+      'Escribiste muchos mensajes seguidos. Espera un momento y vuelve a intentarlo.',
+    );
+    expect(TEXTOS.moderacionNoDisponible).toBe(
+      'No pude revisar tu mensaje en este momento. Inténtalo de nuevo en unos minutos.',
+    );
+  });
+
+  test('un 429 dice cuánto esperar, desactiva «Enviar» y lo reactiva solo', async () => {
+    const reloj = crearReloj();
+    const enviarMensaje = jest.fn(async () => {
+      throw rechazo('LIMITE_DE_FRECUENCIA', 429, { reintentarEn: 30 });
+    });
+    const vista = await montar({ cliente: clienteFalso({ enviarMensaje }), reloj });
+
+    await enviar(vista, 'otra vez');
+
+    expect(vista.aviso().textContent).toBe(TEXTOS.demasiadosMensajes(30));
+    expect(vista.aviso().querySelector('.aviso--advertencia')).not.toBeNull();
+    expect(vista.entrada.value).toBe('otra vez');
+    expect(vista.entrada.disabled).toBe(false);
+    expect(vista.botonEnviar.disabled).toBe(true);
+    expect(reloj.setTimeout).toHaveBeenCalledWith(expect.any(Function), 30_000);
+
+    // Ni Enter ni una pregunta rápida envían durante la espera, y la pregunta
+    // rápida no pisa lo que hay escrito.
+    vista.entrada.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    vista.el.querySelector('[data-accion="pregunta-rapida"]')?.click();
+    await esperar();
+    expect(enviarMensaje).toHaveBeenCalledTimes(1);
+    expect(vista.entrada.value).toBe('otra vez');
+
+    reloj.cumplir();
+
+    expect(vista.botonEnviar.disabled).toBe(false);
+    expect(vista.aviso().hidden).toBe(true);
+    await enviar(vista, 'otra vez');
+    expect(enviarMensaje).toHaveBeenCalledTimes(2);
+  });
+
+  test('un 429 sin Retry-After espera un momento (la espera por omisión)', async () => {
+    const reloj = crearReloj();
+    const vista = await montar({
+      cliente: clienteFalso({
+        enviarMensaje: jest.fn(async () => {
+          throw new ErrorDelChatbot(null, 429);
+        }),
+      }),
+      reloj,
+    });
+
+    await enviar(vista, 'hola');
+
+    expect(vista.aviso().textContent).toBe(TEXTOS.demasiadosMensajes(null));
+    expect(vista.botonEnviar.disabled).toBe(true);
+    expect(reloj.setTimeout).toHaveBeenCalledWith(
+      expect.any(Function),
+      ESPERA_POR_OMISION_S * 1000,
+    );
+  });
+});
+
+// #506 — quién habla, para el lector de pantalla, y la conversación como registro.
+describe('accesibilidad de la conversación', () => {
+  test('cada mensaje dice quién habla, sin tocar el texto del mensaje', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({ obtenerHistorial: jest.fn(async () => [USUARIO, BOT]) }),
+    });
+
+    const [usuario, bot] = vista.mensajes();
+    expect(usuario.querySelector('.solo-lectores').textContent.trim()).toBe(TEXTOS.prefijoUsuario);
+    expect(bot.querySelector('.solo-lectores').textContent.trim()).toBe(TEXTOS.prefijoAsistente);
+    expect(TEXTOS.prefijoUsuario).toBe('Tú:');
+    expect(TEXTOS.prefijoAsistente).toBe('Asistente:');
+    expect(textoDe(usuario)).toBe(USUARIO.contenido);
+    // Va antes del texto, así que se lee primero.
+    expect(usuario.firstElementChild.classList).toContain('solo-lectores');
+  });
+
+  test('la bienvenida y la pregunta recién enviada también lo dicen', async () => {
+    const vista = await montar();
+    expect(vista.mensajes()[0].querySelector('.solo-lectores').textContent.trim()).toBe(
+      TEXTOS.prefijoAsistente,
+    );
+
+    await enviar(vista, 'hola');
+    const pregunta = vista.el.querySelector('.chatbot-ventana__mensaje--usuario');
+    expect(pregunta.querySelector('.solo-lectores').textContent.trim()).toBe(TEXTOS.prefijoUsuario);
+  });
+
+  test('la conversación es una región role="log" y la lista sigue siendo una lista', async () => {
+    const vista = await montar();
+
+    const registro = vista.el.querySelector('.chatbot-ventana__registro');
+    const region = registro.parentElement;
+    expect(region.getAttribute('role')).toBe('log');
+    expect(region.getAttribute('aria-live')).toBe('polite');
+    expect(region.getAttribute('aria-label')).toBe(TEXTOS.registro);
+    expect(registro.tagName).toBe('OL');
+    expect(registro.hasAttribute('role')).toBe(false);
+    // Una sola región viva: anidadas, cada mensaje se leería dos veces.
+    expect(registro.hasAttribute('aria-live')).toBe(false);
+  });
+
+  test('Soporte y Preferencias ocultan la región entera, no solo la lista', async () => {
+    const vista = await montar();
+    const region = vista.el.querySelector('[role="log"]');
+
+    vista.el.querySelector('[data-accion="preferencias-asistente"]').click();
+    await esperar();
+    expect(region.hidden).toBe(true);
+
+    vista.el.querySelector('[data-accion="preferencias-asistente"]').click();
+    expect(region.hidden).toBe(false);
+  });
+});
+
+// #506 — las acciones en su propia fila, sin cambiar el orden del tabulador.
+describe('cabecera', () => {
+  test('título con minimizar y cerrar; las acciones de texto en su propio grupo', async () => {
+    const vista = await montar();
+    const cabecera = vista.el.querySelector('.chatbot-ventana__cabecera');
+
+    const acciones = cabecera.querySelector('.chatbot-ventana__acciones');
+    const controles = cabecera.querySelector('.chatbot-ventana__controles');
+    expect([...acciones.children].map((b) => b.dataset.accion)).toEqual([
+      'preferencias-asistente',
+      'hablar-con-soporte',
+      'borrar-conversacion',
+    ]);
+    expect([...controles.children].map((b) => b.dataset.accion)).toEqual([
+      'minimizar-asistente',
+      'cerrar-asistente',
+    ]);
+    // El orden del tabulador es el de antes: las tres acciones, luego − y ×.
+    expect([...cabecera.querySelectorAll('button')].map((b) => b.dataset.accion)).toEqual([
+      'preferencias-asistente',
+      'hablar-con-soporte',
+      'borrar-conversacion',
+      'minimizar-asistente',
+      'cerrar-asistente',
+    ]);
+    // Las acciones de texto conservan su texto visible.
+    expect(acciones.textContent).toBe(`${TEXTOS.preferencias}${TEXTOS.soporte}${TEXTOS.borrar}`);
   });
 });
 
@@ -487,6 +850,44 @@ describe('calificar (HU-CHA-011)', () => {
       TEXTOS.errorAlCalificar,
     );
   });
+
+  // #506 — contrato 1.4.0: el comentario pasa por la lista negra y por la
+  // revisión de código; si se rechaza, se dice por qué y el texto se queda.
+  test.each([
+    ['CONTENIDO_BLOQUEADO', 422, TEXTOS.comentarioBloqueado],
+    ['INYECCION_DETECTADA', 422, TEXTOS.comentarioConCodigo],
+    ['MODERACION_NO_DISPONIBLE', 503, TEXTOS.comentarioSinRevisar],
+  ])('un comentario rechazado por %s se explica y se conserva', async (motivo, estado, texto) => {
+    const vista = await conUnaRespuesta({
+      calificar: jest.fn(async () => {
+        throw new ErrorDelChatbot({ title: 'x', motivo }, estado);
+      }),
+    });
+    vista.el.querySelector('[data-accion="calificar-no-util"]').click();
+    const comentario = vista.el.querySelector('.chatbot-calificacion textarea');
+    comentario.value = 'no sirve';
+
+    vista.el.querySelector('[data-accion="enviar-calificacion"]').click();
+    await esperar();
+
+    expect(vista.el.querySelector('.chatbot-calificacion__nota').textContent).toBe(texto);
+    expect(comentario.value).toBe('no sirve');
+    expect(vista.el.querySelector('[data-accion="enviar-calificacion"]').disabled).toBe(false);
+  });
+
+  test('un 429 al calificar dice cuánto esperar', async () => {
+    const vista = await conUnaRespuesta({
+      calificar: jest.fn(async () => {
+        throw new ErrorDelChatbot(null, 429, { reintentarEn: 12 });
+      }),
+    });
+    vista.el.querySelector('[data-accion="calificar-util"]').click();
+    await esperar();
+
+    expect(vista.el.querySelector('.chatbot-calificacion__nota').textContent).toBe(
+      TEXTOS.demasiadosMensajes(12),
+    );
+  });
 });
 
 describe('respuestas enriquecidas y vista', () => {
@@ -537,6 +938,38 @@ describe('respuestas enriquecidas y vista', () => {
     });
 
     expect(vista.el.querySelector('.chatbot-enriquecido')).not.toBeNull();
+  });
+
+  // #506 — defensa en profundidad: un enlace a una vista que esta sesión no
+  // puede ver no se pinta, ni suelto ni en una tarjeta.
+  test('a un jugador no le pinta enlaces a la consola de operación', async () => {
+    const conEnlaces = {
+      ...BOT,
+      id: 'm-bot-enlaces',
+      enriquecido: {
+        pasos: [],
+        enlaces: [
+          { texto: 'Ir a Catálogo', destino: 'productos' },
+          { texto: 'Ir a Subastas', destino: 'subastas' },
+        ],
+        tarjetas: [
+          { titulo: 'Usuarios', texto: 'x', enlace: { texto: 'Ver', destino: 'gestion-usuarios' } },
+        ],
+        respuestasRapidas: [],
+        ofrecerSoporteHumano: false,
+      },
+    };
+    const vista = await montar({
+      sesion: () => ({ autenticado: true, apodo: 'Kai', rol: 'JUGADOR' }),
+      cliente: clienteFalso({ obtenerHistorial: jest.fn(async () => [conEnlaces]) }),
+    });
+
+    const enlaces = [...vista.el.querySelectorAll('.chatbot-enriquecido__enlace')];
+    expect(enlaces.map((a) => a.dataset.destino)).toEqual(['subastas']);
+    expect(vista.el.querySelector('.chatbot-enriquecido__tarjeta').textContent).toContain(
+      'Usuarios',
+    );
+    expect(vista.el.querySelector('.chatbot-enriquecido__tarjeta a')).toBeNull();
   });
 });
 
@@ -612,15 +1045,91 @@ describe('soporte', () => {
     expect(vista.el.querySelector('[data-chatbot-soporte]').hidden).toBe(true);
   });
 
-  test('a un visitante el panel le ofrece iniciar sesión', async () => {
-    const vista = await montar();
+  // #506 — un visitante que pide una persona no se queda en un callejón sin
+  // salida. Desde ms-chatbot.yaml 1.12.0 (RF-CHA-007) abre la solicitud como
+  // cualquiera; la nota le dice hasta cuándo verá la respuesta y le ofrece,
+  // como salida secundaria, entrar o crear una cuenta.
+  test('a un visitante el panel le deja pedir ayuda y le ofrece una cuenta', async () => {
+    const vista = await montar({
+      login: () => 'http://localhost/cuentas/login.html?volver=%2Fcuentas%2Fsubastas.html',
+      registro: 'http://localhost/cuentas/registro.html',
+    });
 
     vista.el.querySelector('[data-accion="hablar-con-soporte"]').click();
+    await esperar();
 
-    expect(vista.el.querySelector('[data-chatbot-soporte]').textContent).toContain(
-      'necesitas iniciar sesión',
+    const panel = vista.el.querySelector('[data-chatbot-soporte]');
+    expect(panel.textContent).toContain('Estás como visitante');
+    expect(panel.querySelector('form')).not.toBeNull();
+    expect(vista.cliente.misTickets).toHaveBeenCalled();
+    expect(panel.querySelector('[data-accion="iniciar-sesion"]').getAttribute('href')).toBe(
+      'http://localhost/cuentas/login.html?volver=%2Fcuentas%2Fsubastas.html',
     );
-    expect(vista.cliente.misTickets).not.toHaveBeenCalled();
+    expect(panel.querySelector('[data-accion="crear-cuenta"]').getAttribute('href')).toBe(
+      'http://localhost/cuentas/registro.html',
+    );
+    // El chat general también pide sesión: era otra puerta al mismo login.
+    expect(panel.querySelector('[data-accion="chat-general"]')).toBeNull();
+    // Lo principal es pedir ayuda: el foco va al formulario, no a la cuenta.
+    expect(document.activeElement).toBe(panel.querySelector('select'));
+  });
+
+  test('por omisión, «Iniciar sesión» lleva al login con la vuelta a esta página', async () => {
+    window.history.replaceState(null, '', '/frontend/app-web/src/cuentas/subastas.html?q=1#lista');
+    try {
+      const vista = await montar();
+      vista.el.querySelector('[data-accion="hablar-con-soporte"]').click();
+
+      const login = new URL(
+        vista.el.querySelector('[data-accion="iniciar-sesion"]').getAttribute('href'),
+      );
+      expect(login.pathname).toMatch(/\/cuentas\/login\.html$/);
+      expect(login.searchParams.get('volver')).toBe(
+        '/frontend/app-web/src/cuentas/subastas.html?q=1#lista',
+      );
+      expect(vista.el.querySelector('[data-accion="crear-cuenta"]').getAttribute('href')).toMatch(
+        /\/cuentas\/registro\.html$/,
+      );
+    } finally {
+      window.history.replaceState(null, '', '/');
+    }
+  });
+
+  test('un jugador con sesión sigue viendo el formulario de solicitud', async () => {
+    const vista = await montar({ sesion: () => ({ autenticado: true, apodo: 'Kai' }) });
+
+    vista.el.querySelector('[data-accion="hablar-con-soporte"]').click();
+    await esperar();
+
+    const panel = vista.el.querySelector('[data-chatbot-soporte]');
+    expect(panel.querySelector('form')).not.toBeNull();
+    expect(panel.querySelector('[data-accion="iniciar-sesion"]')).toBeNull();
+    expect(panel.querySelector('[data-accion="crear-cuenta"]')).toBeNull();
+  });
+});
+
+describe('rutaDeEstaPagina (#506)', () => {
+  test('es la ruta segura de la página, con su búsqueda y su fragmento', () => {
+    expect(
+      rutaDeEstaPagina({
+        origin: 'http://localhost:8099',
+        pathname: '/cuentas/subastas.html',
+        search: '?q=1',
+        hash: '#x',
+      }),
+    ).toBe('/cuentas/subastas.html?q=1#x');
+  });
+
+  test('desde una pantalla de entrada no hay vuelta (sería un bucle)', () => {
+    expect(
+      rutaDeEstaPagina({
+        origin: 'http://localhost:8099',
+        pathname: '/cuentas/login.html',
+        search: '',
+        hash: '',
+      }),
+    ).toBeNull();
+    expect(rutaDeEstaPagina(null)).toBeNull();
   });
 });
 
@@ -711,7 +1220,7 @@ describe('borrar la conversación', () => {
 
     expect(vista.cliente.limpiarHistorial).toHaveBeenCalled();
     expect(vista.mensajes()).toHaveLength(1);
-    expect(vista.mensajes()[0].textContent).toBe(TEXTOS.bienvenida);
+    expect(textoDe(vista.mensajes()[0])).toBe(TEXTOS.bienvenida);
   });
 
   test('sin confirmación no borra nada', async () => {

@@ -6,14 +6,25 @@
  *   - RF-MIS-001 (§7.8.9): el tablón empieza con un «banner rotativo» de
  *     misiones destacadas, eventos especiales, novedades y misiones de tiempo
  *     limitado.
- *   - RF-INV-003 (§7.1): el inventario presenta un banner con las misiones
- *     disponibles y acceso directo al tablón. Sin misiones que mostrar,
- *     «contenido promocional alternativo»; con el módulo de misiones caído o
- *     inexistente, **el banner se oculta sin afectar el resto de la vista**.
+ *   - §7.1: el inventario «debe incluir un banner de presentación para las
+ *     misiones disponibles». Eso es todo lo que pide el documento.
  *
- * Esto último es lo que pasa cuando el servicio de misiones no responde (ver
- * `fuente-misiones.js`): en el inventario el banner no aparece. No es un
- * hueco: es la excepción que el requisito escribe para este caso.
+ * **Decisión del Product Owner del 13 de octubre de 2026 (Simón Pérez).** El
+ * SRS de Empresa A (RF-INV-003, «Banner de misiones disponibles»,
+ * `docs/gobierno/MAPA-RESPONSABILIDAD-RF.md`) pedía «contenido promocional
+ * alternativo» cuando no hubiera misiones que mostrar; el criterio 3 de
+ * HU-INV-012 (#105) pide lo contrario: «sin misiones disponibles el banner no
+ * se muestra y la cuadrícula ocupa su lugar». El PO resolvió la divergencia a
+ * favor de la historia, que es además lo único que fija §7.1 (un banner
+ * para las misiones *disponibles*): el inventario ya no pide la promoción de
+ * estrategia.
+ *
+ * Sin misiones que presentar, o con el módulo caído o inexistente, **el banner
+ * se oculta sin afectar al resto de la vista**: `fuente-misiones.js` devuelve
+ * no disponible y aquí se devuelve `'oculto'`.
+ *
+ * `promocionDeEstrategia` sigue existiendo pero **ya no la usa ninguna vista**.
+ * Es del módulo de misiones: la deja o la retira su dueño.
  *
  * ## Carrusel accesible
  *
@@ -338,8 +349,10 @@ export function bannerDeMisiones(
 }
 
 /**
- * El contenido promocional que RF-INV-003 pide cuando no hay misiones que
- * enseñar: el siguiente paso real, que es preparar la estrategia.
+ * El contenido promocional que RF-INV-003 pedía cuando no hay misiones que
+ * enseñar: el siguiente paso real, que es preparar la estrategia. Desde la
+ * decisión del PO del 13-oct-2026 (HU-INV-012, criterio 3) el inventario ya no
+ * la pide; queda para la vista que la pase con `hrefEstrategia`.
  *
  * @param {string} hrefEstrategia
  * @returns {HTMLElement}
