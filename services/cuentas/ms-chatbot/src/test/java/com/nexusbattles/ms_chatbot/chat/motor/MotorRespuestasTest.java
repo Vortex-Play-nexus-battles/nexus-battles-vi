@@ -234,7 +234,9 @@ class MotorRespuestasTest {
 
         assertThat(resultado.requiereEscalamiento()).isTrue();
         assertThat(resultado.categoria()).isNull();
-        assertThat(resultado.texto()).contains("soporte humano");
+        // 1.12.0: el contacto con soporte lo anade ChatService al abrir la solicitud.
+        assertThat(resultado.texto()).contains("quedó registrada");
+        assertThat(resultado.enriquecido().ofrecerSoporteHumano()).isTrue();
     }
 
     @Test
@@ -444,6 +446,20 @@ class MotorRespuestasTest {
 
         assertThat(resultado.requiereEscalamiento()).isFalse();
         assertThat(resultado.temaClave()).isEqualTo("clave-subasta");
+    }
+
+    // Segunda auditoria del 7.4: el vocabulario de la base son las palabras de
+    // las variantes de los temas ACTIVOS, en los dos idiomas.
+    @Test
+    void elVocabularioSonLasPalabrasDeLasVariantesDeLosTemasActivos() {
+        TemaConocimiento inactivo = new TemaConocimiento(null, "clave-vieja", Categoria.FAQ_GENERAL,
+            TipoRespuesta.DIRECTA, "Retirado", "palabraretirada", "retiredword", "x", "x", 0, false);
+        TemaConocimiento sinVariantes = new TemaConocimiento(null, "clave-sin", Categoria.FAQ_GENERAL,
+            TipoRespuesta.DIRECTA, "Sin variantes", "  ", null, "x", null, 0, true);
+
+        assertThat(MotorRespuestas.vocabularioDe(List.of(temaSubasta(), inactivo, sinVariantes)))
+            .contains("subasta", "subastas", "subastar", "vender", "auction", "sell")
+            .doesNotContain("palabraretirada", "retiredword", "");
     }
 
     private static TemaConocimiento temaTorneoSoloEnEspanol() {

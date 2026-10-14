@@ -61,24 +61,39 @@ public class V18__la_base_entiende_mas_formas_de_preguntar extends BaseJavaMigra
 
     @Override
     public void migrate(Context context) throws Exception {
-        JsonNode contenido = leerContenido();
-        List<Tema> nuevos = new ArrayList<>();
-        contenido.path("temasNuevos").forEach(nodo -> nuevos.add(tema(nodo)));
-        List<Variantes> variantes = new ArrayList<>();
-        contenido.path("variantesNuevas").forEach(nodo -> variantes.add(new Variantes(texto(nodo, "clave"),
-            lista(nodo.path("es")), lista(nodo.path("en")))));
+        aplicar(context.getConnection(), leerContenido());
+    }
 
-        Connection conexion = context.getConnection();
+    // Lo que hace la migracion con un contenido dado: las pruebas le pasan
+    // otro para los casos que el del repositorio no tiene. Se lee y se valida
+    // todo antes de escribir nada: un contenido incompleto no se aplica a medias.
+    static void aplicar(Connection conexion, JsonNode contenido) throws SQLException {
+        List<Tema> nuevos = temasNuevos(contenido);
+        List<Variantes> variantes = variantesNuevas(contenido);
+
         Optional<UUID> produccion = versionEn(conexion, "PRODUCCION");
         if (produccion.isPresent() && hayCambios(conexion, produccion.get(), nuevos, variantes)) {
             UUID nueva = publicarCopia(conexion, produccion.get());
-            aplicar(conexion, nueva, nuevos, variantes);
+            aplicarEn(conexion, nueva, nuevos, variantes);
         }
         Optional<UUID> borrador = versionEn(conexion, "BORRADOR");
         if (borrador.isPresent()) {
-            aplicar(conexion, borrador.get(), nuevos, variantes);
+            aplicarEn(conexion, borrador.get(), nuevos, variantes);
         }
         agregarCasos(conexion, contenido.path("casos"));
+    }
+
+    static List<Tema> temasNuevos(JsonNode contenido) {
+        List<Tema> nuevos = new ArrayList<>();
+        contenido.path("temasNuevos").forEach(nodo -> nuevos.add(tema(nodo)));
+        return nuevos;
+    }
+
+    static List<Variantes> variantesNuevas(JsonNode contenido) {
+        List<Variantes> variantes = new ArrayList<>();
+        contenido.path("variantesNuevas").forEach(nodo -> variantes.add(new Variantes(exigido(nodo, "clave"),
+            lista(nodo.path("es")), lista(nodo.path("en")))));
+        return variantes;
     }
 
     private static JsonNode leerContenido() throws IOException {
@@ -102,9 +117,18 @@ public class V18__la_base_entiende_mas_formas_de_preguntar extends BaseJavaMigra
     }
 
     private static Tema tema(JsonNode nodo) {
-        return new Tema(texto(nodo, "clave"), texto(nodo, "categoria"), texto(nodo, "tipoRespuesta"),
-            texto(nodo, "titulo"), unir(lista(nodo.path("variantesEs"))), unir(lista(nodo.path("variantesEn"))),
-            texto(nodo, "respuestaEs"), texto(nodo, "respuestaEn"), nodo.path("prioridad").asInt(0));
+        return new Tema(exigido(nodo, "clave"), exigido(nodo, "categoria"), exigido(nodo, "tipoRespuesta"),
+            exigido(nodo, "titulo"), unir(lista(nodo.path("variantesEs"))), unir(lista(nodo.path("variantesEn"))),
+            exigido(nodo, "respuestaEs"), texto(nodo, "respuestaEn"), nodo.path("prioridad").asInt(0));
+    }
+
+    // Lo que la base exige de un tema (y la clave de unas variantes).
+    private static String exigido(JsonNode nodo, String campo) {
+        String valor = texto(nodo, campo);
+        if (valor == null || valor.isBlank()) {
+            throw new IllegalStateException("Contenido incompleto en V18: falta «" + campo + "»");
+        }
+        return valor;
     }
 
     // Las variantes se guardan como un solo texto separado por «, », igual que
@@ -182,7 +206,7 @@ public class V18__la_base_entiende_mas_formas_de_preguntar extends BaseJavaMigra
         return a == null ? b == null : a.equals(b);
     }
 
-    private static void aplicar(Connection conexion, UUID version, List<Tema> nuevos, List<Variantes> variantes)
+    private static void aplicarEn(Connection conexion, UUID version, List<Tema> nuevos, List<Variantes> variantes)
             throws SQLException {
         for (Tema tema : nuevos) {
             if (palabrasDe(conexion, version, tema.clave()).isPresent()) {
