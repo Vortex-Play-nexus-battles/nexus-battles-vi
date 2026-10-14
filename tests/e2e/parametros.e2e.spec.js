@@ -75,8 +75,11 @@ test.describe('Parametros del sistema (HU-ADM-001)', () => {
     expect(porClave[PARAMETRO].maximo).toBe(365);
     expect(porClave['torneos.dias-entre-torneos'].inalterable).toBe(true);
     expect(porClave['torneos.dias-entre-torneos'].valor).toBe('91');
+    // D-25: la cifra de sanciones la fijo el PO (V6 la escribe en el catalogo);
+    // la de reportes sigue sin decision y nace vacia.
+    expect(porClave['metricas.umbral-sanciones-por-dia'].valor, 'decision del PO').toBe('3');
     expect(
-      porClave['metricas.umbral-sanciones-por-dia'].valor,
+      porClave['metricas.umbral-reportes-por-dia'].valor,
       'decision del PO sin tomar',
     ).toBeNull();
     const ligero = await api.get(`/api/v1/parametros/${PARAMETRO}/valor`);

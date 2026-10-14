@@ -2,6 +2,21 @@
 
 ## API
 
+### Versiones del diseño
+
+HU-PRD-011 reutiliza el historial auditado del catálogo para mostrar las
+versiones del diseño con fecha y autor. Un administrador puede exportar el
+diseño actual como JSON mediante
+`GET /api/v1/productos/{id}/diseno/plantilla` e importarlo sobre otro producto
+con `POST /api/v1/productos/{id}/diseno/importaciones`.
+
+La versión 1 de la plantilla contiene únicamente `imagen` y `descripcion`.
+Importarla no cambia el identificador, nombre, tipo, precios, tiraje ni reglas
+de combate. El documento declara `formato` y `versionFormato` para que los
+recursos gráficos de HU-PRD-009 puedan incorporarse en una versión posterior
+sin reinterpretar archivos existentes. Una plantilla inválida se rechaza antes
+de invocar la escritura del producto.
+
 - `GET /api/v1/productos?page=0&size=20&tipo=…&estado=…` (R16, `contracts/openapi/productos.yaml` 1.2.0): listado público y paginado del catálogo, sin token. Por omisión solo ACTIVO y UNICO (SUSPENDIDO únicamente con `estado=SUSPENDIDO`, y desde 1.4.0 solo para un servicio o un administrador), `size` entre 1 y 50 y orden estable (`creadoEn`, luego `id`); responde `{content, page, size, totalElements, totalPages}` y lo consume ms-ecommerce para proyectar su vitrina. Desde R16 el borde manda todo `/api/v1/productos` a este servicio (la vitrina vive en `/api/v1/vitrina`).
 
 ## Despliegue
@@ -27,5 +42,6 @@ Al arrancar, `SemillaDelCatalogo` crea los productos del catalogo inicial que to
 - `PUT /api/v1/productos/{id}/suspender` y `/reactivar` (ADMINISTRADOR, SUPER_ADMINISTRADOR): suspension logica, idempotente; el tiraje no cambia.
 - `POST /api/v1/productos/{id}/adquisiciones` (solo token de servicio, `Idempotency-Key` obligatoria): reserva atomica de una unidad con `findAndModify`; -1 es ilimitado y en 0 responde 409 AGOTADO. La clave se guarda con su resultado en la coleccion `adquisiciones` y, en el propio producto (`reservasRecientes`, ultimas 100), en la misma escritura que descuenta la unidad: repetir la clave nunca descuenta dos veces.
 - `version` es `@Version` de Spring Data: un PATCH que choca con otra escritura responde 409; suspender, reactivar y reservar suben la version. El respaldo de HU-PRD-003 guarda el autor (`uid` del token).
+- **Reversión auditada (HU-PRD-007).** Cada creación, modificación, suspensión, reactivación y reversión administrativa deja una entrada con producto, autor, fecha, estado anterior, estado aplicado y campos cambiados. `GET /api/v1/productos/{id}/historial` es de solo lectura y `POST /api/v1/productos/{id}/reversiones` restaura únicamente el cambio que produjo la versión actual; un respaldo obsoleto responde 409 para no pisar reservas u otras escrituras posteriores. Las unidades de inventario conservan el `productoId`, de modo que proyectan el estado restaurado sin copiar datos del catálogo.
 - Promociones: `promocion {porcentaje 1..90, desde, hasta}` opcional al crear y modificar; la vigencia la calcula el servidor.
 - Proyeccion publica: sin token, `GET /api/v1/productos` y `/{id}` no muestran productos SUSPENDIDO ni `version`, `tasaDeCaida`, `origen`, `semillaVersion` o `modificadoPor`; un jugador ve un SUSPENDIDO por su id (puede tenerlo en su inventario) sin los internos; servicio y administradores ven todo.
