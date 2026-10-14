@@ -191,6 +191,29 @@ describe('el detalle de una entrada', () => {
     expect(pares['N.º de registro']).toBe('e-1');
     expect(Object.keys(pares)).not.toContain('Referencia');
   });
+
+  test('SA-18: una operación del catálogo, con el nombre que tenía el producto y su reactivación', () => {
+    const titulares = { de: (uid) => ({ [MODERADORA]: { apodo: 'admin_catalogo' } })[uid] };
+    const pares = Object.fromEntries(
+      paresDelDetalle(
+        entrada({
+          tipoAccion: 'REACTIVACION',
+          afectado: 'producto:550e8400-e29b-41d4-a716-446655440000',
+          nombreAfectado: 'Espada solar',
+          valorAnterior: 'Estado: Suspendido',
+          valorNuevo: 'Estado: Activo',
+          motivo: 'Vuelve a la tienda',
+          referencia: 'productos:op-1',
+        }),
+        titulares,
+      ),
+    );
+    expect(pares['Acción']).toBe('Reactivación');
+    expect(pares.Sobre).toBe('«Espada solar» · Producto');
+    expect(pares.Antes).toBe('Estado: Suspendido');
+    expect(pares['Después']).toBe('Estado: Activo');
+    expect(pares['Identificador de lo afectado']).toBe('550e8400-e29b-41d4-a716-446655440000');
+  });
 });
 
 describe('la vista montada', () => {

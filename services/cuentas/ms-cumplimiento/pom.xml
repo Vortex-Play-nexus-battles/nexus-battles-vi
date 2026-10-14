@@ -127,10 +127,36 @@
       <artifactId>testcontainers-postgresql</artifactId>
       <scope>test</scope>
     </dependency>
+    <!--
+      SA-18: pacto de consumidor con productos (la bitacora importa las
+      operaciones administrativas del catalogo). Misma version que
+      ms-ecommerce y ms-subastas; solo el consumidor: lo escribe en
+      contracts/pactos/ (pact.rootDir en Surefire) y lo verifica productos.
+    -->
+    <dependency>
+      <groupId>au.com.dius.pact.consumer</groupId>
+      <artifactId>junit5</artifactId>
+      <version>4.6.17</version>
+      <scope>test</scope>
+    </dependency>
 	</dependencies>
 
 	<build>
 		<plugins>
+			<!--
+				SA-18: el pacto generado se versiona; es un artefacto de
+				contrato, no de build (mismo directorio que ms-ecommerce). Las
+				inclusiones siguen siendo las de Surefire por omision.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<systemPropertyVariables>
+						<pact.rootDir>${project.basedir}/../../../contracts/pactos</pact.rootDir>
+					</systemPropertyVariables>
+				</configuration>
+			</plugin>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>

@@ -64,13 +64,18 @@ public class AuditLogService {
     static final int MAXIMO_MOTIVO = 500;
     static final int MAXIMO_IP = 45;
     static final int MAXIMO_REFERENCIA = 120;
+    static final int MAXIMO_NOMBRE_AFECTADO = 255;
 
     /** Desfase de reloj admitido para {@code ocurridoEn}: una accion no ocurre en el futuro. */
     static final Duration DESFASE_ADMITIDO = Duration.ofMinutes(5);
 
-    /** Columnas del CSV (1.3.0), en este orden. */
+    /**
+     * Columnas del CSV (1.3.0), en este orden. 1.4.0 (SA-18) agrega
+     * {@code nombre_afectado} al final, para no mover las que ya se leian por
+     * posicion.
+     */
     static final List<String> COLUMNAS_CSV = List.of("id", "fecha_hora", "ocurrido_en", "administrador",
-        "tipo_accion", "afectado", "valor_anterior", "valor_nuevo", "motivo", "ip_origen");
+        "tipo_accion", "afectado", "valor_anterior", "valor_nuevo", "motivo", "ip_origen", "nombre_afectado");
 
     /** Formatos de exportacion (1.3.0): PDF para leer, CSV para analizar. */
     public enum Formato {
@@ -177,6 +182,21 @@ public class AuditLogService {
                               String ipOrigen,
                               Instant ocurridoEn,
                               String referencia) {
+        return registrar(tipoAccion, administradorId, afectado, valorAnterior, valorNuevo, motivo, ipOrigen,
+            ocurridoEn, referencia, null);
+    }
+
+    /** Como el anterior, con el nombre de lo afectado en ese momento (1.4.0, SA-18). */
+    public AuditLog registrar(AuditActionType tipoAccion,
+                              String administradorId,
+                              String afectado,
+                              String valorAnterior,
+                              String valorNuevo,
+                              String motivo,
+                              String ipOrigen,
+                              Instant ocurridoEn,
+                              String referencia,
+                              String nombreAfectado) {
         try {
             AuditLog entrada = AuditLog.builder()
                 .tipoAccion(tipoAccion)
@@ -188,6 +208,7 @@ public class AuditLogService {
                 .ipOrigen(ipOrigen)
                 .ocurridoEn(ocurridoEn)
                 .referencia(referencia)
+                .nombreAfectado(nombreAfectado)
                 .build();
             return repository.saveAndFlush(entrada);
         } catch (Exception e) {
@@ -320,7 +341,8 @@ public class AuditLogService {
                 celda(r.getValorAnterior()),
                 celda(r.getValorNuevo()),
                 celda(r.getMotivo()),
-                celda(r.getIpOrigen())))
+                celda(r.getIpOrigen()),
+                celda(r.getNombreAfectado())))
                 .append("\r\n");
         }
         return csv.toString().getBytes(StandardCharsets.UTF_8);
@@ -399,7 +421,9 @@ public class AuditLogService {
         String fecha = momento != null ? FORMATO_FECHA_PDF.format(momento) : "-";
         String admin = abreviar(registro.getAdministradorId(), 14);
         String tipo = registro.getTipoAccion() != null ? registro.getTipoAccion().name() : "-";
-        String afectado = abreviar(registro.getAfectado(), 21);
+        // El nombre de lo afectado (1.4.0) se lee mejor que su identificador.
+        String afectado = abreviar(registro.getNombreAfectado() != null
+            ? registro.getNombreAfectado() : registro.getAfectado(), 21);
         String motivo = abreviar(registro.getMotivo(), 44);
         String ip = abreviar(registro.getIpOrigen(), 15);
         return String.format(FORMATO_FILA, fecha, admin, tipo, afectado, motivo, ip);
@@ -410,9 +434,29 @@ public class AuditLogService {
         contenido.beginText();
         contenido.setFont(fuente, tamanoLetra);
         contenido.newLineAtOffset(x, y);
-        contenido.showText(texto);
+        contenido.showText(paraLaFuente(fuente, texto));
         contenido.endText();
         return y - ALTO_LINEA;
+    }
+
+    /**
+     * SA-18: el texto con lo que la fuente sabe dibujar. Las fuentes estándar
+     * del PDF solo cubren el alfabeto latino (WinAnsi); un nombre o un motivo
+     * con un emoji o una flecha hacía fallar toda la exportación. Lo que no se
+     * puede dibujar sale como {@code ?}; el CSV lo conserva tal cual.
+     */
+    static String paraLaFuente(PDType1Font fuente, String texto) {
+        StringBuilder limpio = new StringBuilder(texto.length());
+        texto.codePoints().forEach(punto -> {
+            String caracter = new String(Character.toChars(punto));
+            try {
+                fuente.encode(caracter);
+                limpio.append(caracter);
+            } catch (IllegalArgumentException | IOException sinGlifo) {
+                limpio.append('?');
+            }
+        });
+        return limpio.toString();
     }
 
     private String abreviar(String valor, int maximo) {
@@ -485,7 +529,8 @@ public class AuditLogService {
         try {
             return new ResultadoDeRegistro(registrar(tipoAccion, solicitud.administradorId().strip(),
                 solicitud.afectado().strip(), solicitud.valorAnterior(), solicitud.valorNuevo(),
-                solicitud.motivo().strip(), solicitud.ipOrigen().strip(), solicitud.ocurridoEn(), referencia), true);
+                solicitud.motivo().strip(), solicitud.ipOrigen().strip(), solicitud.ocurridoEn(), referencia,
+                vacioANulo(solicitud.nombreAfectado())), true);
         } catch (AuditWriteException fallo) {
             if (referencia != null && fallo.getCause() instanceof DataIntegrityViolationException) {
                 Optional<AuditLog> ganadora = repository.findByReferencia(referencia);
@@ -529,6 +574,7 @@ public class AuditLogService {
         exigirLargo("motivo", solicitud.motivo(), MAXIMO_MOTIVO);
         exigirLargo("ipOrigen", solicitud.ipOrigen(), MAXIMO_IP);
         exigirLargo("referencia", solicitud.referencia(), MAXIMO_REFERENCIA);
+        exigirLargo("nombreAfectado", solicitud.nombreAfectado(), MAXIMO_NOMBRE_AFECTADO);
         if (solicitud.ocurridoEn() != null && solicitud.ocurridoEn().isAfter(Instant.now().plus(DESFASE_ADMITIDO))) {
             throw new IllegalArgumentException("ocurridoEn no puede estar en el futuro: " + solicitud.ocurridoEn());
         }

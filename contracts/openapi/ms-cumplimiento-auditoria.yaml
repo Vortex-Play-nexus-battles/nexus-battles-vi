@@ -31,8 +31,25 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Bitacora de auditoria (ms-cumplimiento)
-  version: 1.3.0
+  version: 1.4.0
   description: |
+    **1.4.0 (§7.2.5 y §7.3.5, operaciones del catalogo — SA-18), aditivo:**
+    - La bitacora tambien guarda las acciones de los administradores sobre el
+      catalogo (productos, banners y recursos graficos). No le llegan por
+      `POST /eventos`: este servicio las importa de productos
+      (`GET /api/v1/productos/auditoria/operaciones`, productos.yaml 1.12.0)
+      con su credencial de servicio, cada `cumplimiento.catalogo.intervalo`
+      (30 s por omision). Entran con `afectado` = `producto:<id>`,
+      `banner:<id>` o `recurso:<id>`, su `referencia` (`productos:<id>`), el
+      momento en que ocurrieron (`ocurridoEn`) y la IP de quien actuo.
+    - `TipoAccion` suma `REACTIVACION` (un producto suspendido vuelve a la
+      venta) y `REVERSION` (un producto vuelve a un estado anterior).
+    - `RegistrarAuditoriaRequest` y `AuditLogResponse` suman
+      `nombreAfectado`, opcional: el nombre de lo afectado en el momento de la
+      accion (hasta 255 caracteres), para leer la entrada sin resolver
+      identificadores y sin perder el nombre si despues cambia.
+    - El CSV de `/exportar` agrega la columna `nombre_afectado` al final.
+
     **1.3.0 (§7.3.5, auditoria central — SA-5), aditivo:**
     - `POST /eventos` admite `ocurridoEn` (cuando ocurrio la accion en el
       servicio de origen; `fechaHora` sigue siendo cuando quedo registrada
@@ -459,8 +476,8 @@ paths:
             1.3.0 — `pdf` (por omision) o `csv`, sin distinguir mayusculas.
             Otro valor responde 400. El CSV lleva las columnas `id`,
             `fecha_hora`, `ocurrido_en`, `administrador`, `tipo_accion`,
-            `afectado`, `valor_anterior`, `valor_nuevo`, `motivo` e
-            `ip_origen`, todas entre comillas; una celda que empieza por `=`,
+            `afectado`, `valor_anterior`, `valor_nuevo`, `motivo`,
+            `ip_origen` y (1.4.0) `nombre_afectado`, todas entre comillas; una celda que empieza por `=`,
             `+`, `-` o `@` lleva delante un apostrofo, para que una hoja de
             calculo no la ejecute como formula.
           schema:
@@ -595,6 +612,8 @@ components:
         - RECHAZO
         - SECURITY_BYPASS_ATTEMPT
         - EXPORTACION
+        - REACTIVACION
+        - REVERSION
         - OTRO
 
     RegistrarAuditoriaRequest:
@@ -650,6 +669,12 @@ components:
             1.3.0 — la clave del evento en el servicio de origen (por ejemplo
             `moderacion-sanciones:sancion-<id>-emision`). Opcional; si ya hay
             una entrada con ella, se devuelve esa con 200.
+        nombreAfectado:
+          type: [string, 'null']
+          maxLength: 255
+          description: |
+            1.4.0 — el nombre de lo afectado en el momento de la accion (el de
+            un producto, el texto de un banner). Opcional.
 
     AuditLogResponse:
       type: object
@@ -702,6 +727,9 @@ components:
         referencia:
           type: [string, 'null']
           description: 1.3.0 — la clave del evento en su origen, si el origen la mando.
+        nombreAfectado:
+          type: [string, 'null']
+          description: 1.4.0 — el nombre de lo afectado en el momento de la accion, si el origen lo mando.
 
     PaginaDeAuditoria:
       type: object

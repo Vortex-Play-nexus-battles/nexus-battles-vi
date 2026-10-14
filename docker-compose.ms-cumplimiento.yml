@@ -82,6 +82,16 @@ services:
       DB_USER: ${MS_CUMPLIMIENTO_DB_USER}
       DB_PASSWORD: ${MS_CUMPLIMIENTO_DB_PASSWORD}
       IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
+      # SA-18 (§7.2.5, §7.3.5) — la bitacora importa de productos (host de
+      # contenido, el mismo destino que ya usan comentarios y notificaciones
+      # desde este host) las operaciones de los administradores sobre el
+      # catalogo, con SU credencial de servicio: ms-cumplimiento esta en
+      # CLIENTES_DE_SERVICIO de desplegar.sh, que genera el secreto en este
+      # host y lo registra en el emisor (mismo host). Sin secreto en GitHub.
+      CATALOGO_URL: ${PRODUCTOS_BASE_URL:-http://34.193.90.11:8103}
+      DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
+      DIRECTORIO_ACTIVO_CLIENT_ID: ms-cumplimiento
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_MS_CUMPLIMIENTO:-}
 
 volumes:
   cumplimiento-db-datos:

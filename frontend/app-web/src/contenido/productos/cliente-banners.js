@@ -94,10 +94,36 @@ export function editarBanner(id, solicitud, opciones = {}) {
   );
 }
 
+/**
+ * Retira un banner (retiro lógico). SA-18 (productos.yaml 1.12.0): con el
+ * `motivo` que escribió quien lo retira, que queda en su historial y en la
+ * bitácora central.
+ *
+ * @param {string} id
+ * @param {{motivo?: string|null, fetchImpl?: Function}} [opciones]
+ */
 export function retirarBanner(id, opciones = {}) {
+  const motivo = String(opciones.motivo ?? '').trim();
+  const consulta = motivo ? `?motivo=${encodeURIComponent(motivo)}` : '';
   return ejecutar(
-    `${RUTA_BANNERS}/${encodeURIComponent(id)}`,
+    `${RUTA_BANNERS}/${encodeURIComponent(id)}${consulta}`,
     { method: 'DELETE' },
+    opciones.fetchImpl ?? fetchWithHttpErrorInterceptor,
+  );
+}
+
+/**
+ * SA-18 (productos.yaml 1.12.0, `consultarHistorialBanner`): lo que se hizo
+ * con un banner, de lo más reciente a lo más antiguo, sin la IP.
+ *
+ * @param {string} id
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<Array<object>>}
+ */
+export function historialDeBanner(id, opciones = {}) {
+  return ejecutar(
+    `${RUTA_BANNERS}/${encodeURIComponent(id)}/historial`,
+    { method: 'GET' },
     opciones.fetchImpl ?? fetchWithHttpErrorInterceptor,
   );
 }

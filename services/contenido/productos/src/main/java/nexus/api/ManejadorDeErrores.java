@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import jakarta.servlet.http.HttpServletRequest;
+import nexus.auditoria.LectorNoAutorizadoException;
 import nexus.dominio.BannerNoEncontradoException;
 import nexus.dominio.ClaveDeIdempotenciaReutilizadaException;
 import nexus.dominio.ModificacionProductoInvalidaException;
@@ -333,6 +334,23 @@ public class ManejadorDeErrores {
                         "Solicitud inválida",
                         excepcion.getMessage(),
                         "urn:nexus:problema:solicitud-invalida",
+                        solicitud);
+        }
+
+        // SA-18: las operaciones administrativas del catalogo solo las lee la
+        // bitacora central. El rol SERVICIO lo exige la cadena de seguridad;
+        // que servicio es, el controlador (claim azp). Mismo 403 y mismo tipo
+        // que el de la cadena, para que el cliente no distinga por donde cayo.
+        @ExceptionHandler(LectorNoAutorizadoException.class)
+        ResponseEntity<ProblemDetail> manejarLectorNoAutorizado(
+                        LectorNoAutorizadoException excepcion,
+                        HttpServletRequest solicitud) {
+
+                return respuesta(
+                        HttpStatus.FORBIDDEN,
+                        "Acceso denegado",
+                        excepcion.getMessage(),
+                        "urn:nexus:problema:acceso-denegado",
                         solicitud);
         }
 

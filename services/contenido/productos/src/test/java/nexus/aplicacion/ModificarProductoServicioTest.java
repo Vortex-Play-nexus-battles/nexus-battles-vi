@@ -17,6 +17,7 @@ import java.util.UUID;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import nexus.api.SolicitudModificarProducto;
+import nexus.auditoria.RegistroDeOperaciones;
 import nexus.dominio.EstadoProducto;
 import nexus.dominio.ModificacionProductoInvalidaException;
 import nexus.dominio.Producto;
@@ -51,7 +52,7 @@ class ModificarProductoServicioTest {
                         .thenAnswer(invocacion -> guardadoVersionado(invocacion.getArgument(0, Producto.class)));
 
                 ModificarProductoServicio servicio = new ModificarProductoServicio(
-                        repositorio, respaldoRepositorio, mapper, validator);
+                        repositorio, respaldoRepositorio, mapper, validator, mock(RegistroDeOperaciones.class));
 
                 SolicitudModificarProducto cambios = solicitudConNombre("Espada solar+1");
 
@@ -84,7 +85,7 @@ class ModificarProductoServicioTest {
                         .thenThrow(new org.springframework.dao.OptimisticLockingFailureException("version 1 ya no existe"));
 
                 ModificarProductoServicio servicio = new ModificarProductoServicio(
-                        repositorio, respaldoRepositorio, mapper, validator);
+                        repositorio, respaldoRepositorio, mapper, validator, mock(RegistroDeOperaciones.class));
 
                 assertThrows(
                         org.springframework.dao.OptimisticLockingFailureException.class,
@@ -107,7 +108,7 @@ class ModificarProductoServicioTest {
                         .thenAnswer(invocacion -> guardadoVersionado(invocacion.getArgument(0, Producto.class)));
 
                 ModificarProductoServicio servicio = new ModificarProductoServicio(
-                        repositorio, respaldoRepositorio, mapper, validator);
+                        repositorio, respaldoRepositorio, mapper, validator, mock(RegistroDeOperaciones.class));
 
                 Producto resultado = servicio.modificar(
                         conVersion.id(), solicitudConNombre("Espada solar+1"), AUTOR);
@@ -128,7 +129,7 @@ class ModificarProductoServicioTest {
                         .thenAnswer(invocacion -> invocacion.getArgument(0, Producto.class));
 
                 ModificarProductoServicio servicio = new ModificarProductoServicio(
-                        repositorio, respaldoRepositorio, mapper, validator);
+                        repositorio, respaldoRepositorio, mapper, validator, mock(RegistroDeOperaciones.class));
 
                 servicio.modificar(existente.id(), solicitudConNombre("Espada solar+1"), AUTOR);
 
@@ -154,7 +155,7 @@ class ModificarProductoServicioTest {
                 when(repositorio.findById(existente.id())).thenReturn(Optional.of(existente));
 
                 ModificarProductoServicio servicio = new ModificarProductoServicio(
-                        repositorio, respaldoRepositorio, mapper, validator);
+                        repositorio, respaldoRepositorio, mapper, validator, mock(RegistroDeOperaciones.class));
 
                 SolicitudModificarProducto cambios = new SolicitudModificarProducto(
                         null, null, null, null, null, null, null, null, null,
@@ -179,7 +180,7 @@ class ModificarProductoServicioTest {
                 Producto epica = productoEpica(0, BigDecimal.ZERO);
                 when(repositorio.findById(epica.id())).thenReturn(Optional.of(epica));
                 ModificarProductoServicio servicio = new ModificarProductoServicio(
-                        repositorio, respaldoRepositorio, mapper, validator);
+                        repositorio, respaldoRepositorio, mapper, validator, mock(RegistroDeOperaciones.class));
 
                 ModificacionProductoInvalidaException error = assertThrows(
                         ModificacionProductoInvalidaException.class,
@@ -199,7 +200,7 @@ class ModificarProductoServicioTest {
                 Producto epica = productoEpica(0, BigDecimal.ZERO);
                 when(repositorio.findById(epica.id())).thenReturn(Optional.of(epica));
                 ModificarProductoServicio servicio = new ModificarProductoServicio(
-                        repositorio, respaldoRepositorio, mapper, validator);
+                        repositorio, respaldoRepositorio, mapper, validator, mock(RegistroDeOperaciones.class));
 
                 assertThrows(
                         ModificacionProductoInvalidaException.class,
@@ -216,7 +217,7 @@ class ModificarProductoServicioTest {
                 Producto epica = productoEpica(0, BigDecimal.ZERO);
                 when(repositorio.findById(epica.id())).thenReturn(Optional.of(epica));
                 ModificarProductoServicio servicio = new ModificarProductoServicio(
-                        repositorio, respaldoRepositorio, mapper, validator);
+                        repositorio, respaldoRepositorio, mapper, validator, mock(RegistroDeOperaciones.class));
 
                 assertThrows(
                         ModificacionProductoInvalidaException.class,
@@ -235,7 +236,7 @@ class ModificarProductoServicioTest {
                 when(repositorio.save(any(Producto.class)))
                         .thenAnswer(invocacion -> guardadoVersionado(invocacion.getArgument(0, Producto.class)));
                 ModificarProductoServicio servicio = new ModificarProductoServicio(
-                        repositorio, respaldoRepositorio, mapper, validator);
+                        repositorio, respaldoRepositorio, mapper, validator, mock(RegistroDeOperaciones.class));
 
                 Producto resultado = servicio.modificar(epica.id(), solicitudConNombre("Epica renombrada"), AUTOR);
 
@@ -253,7 +254,7 @@ class ModificarProductoServicioTest {
                 when(repositorio.save(any(Producto.class)))
                         .thenAnswer(invocacion -> guardadoVersionado(invocacion.getArgument(0, Producto.class)));
                 ModificarProductoServicio servicio = new ModificarProductoServicio(
-                        repositorio, respaldoRepositorio, mapper, validator);
+                        repositorio, respaldoRepositorio, mapper, validator, mock(RegistroDeOperaciones.class));
 
                 Producto resultado = servicio.modificar(
                         conPrecio.id(), cambiosDePrecio(0, BigDecimal.ZERO, false), AUTOR);
@@ -272,7 +273,7 @@ class ModificarProductoServicioTest {
                 when(repositorio.findById(id)).thenReturn(Optional.empty());
 
                 ModificarProductoServicio servicio = new ModificarProductoServicio(
-                        repositorio, respaldoRepositorio, mapper, validator);
+                        repositorio, respaldoRepositorio, mapper, validator, mock(RegistroDeOperaciones.class));
 
                 assertThrows(
                         ProductoNoEncontradoException.class,
@@ -293,7 +294,7 @@ class ModificarProductoServicioTest {
                         .thenThrow(new org.springframework.dao.DataAccessResourceFailureException("Mongo caido"));
 
                 ModificarProductoServicio servicio = new ModificarProductoServicio(
-                        repositorio, respaldoRepositorio, mapper, validator);
+                        repositorio, respaldoRepositorio, mapper, validator, mock(RegistroDeOperaciones.class));
 
                 assertThrows(
                         org.springframework.dao.DataAccessResourceFailureException.class,
@@ -314,7 +315,7 @@ class ModificarProductoServicioTest {
                         .thenThrow(new org.springframework.dao.DataAccessResourceFailureException("Mongo caido"));
 
                 ModificarProductoServicio servicio = new ModificarProductoServicio(
-                        repositorio, respaldoRepositorio, mapper, validator);
+                        repositorio, respaldoRepositorio, mapper, validator, mock(RegistroDeOperaciones.class));
 
                 assertThrows(
                         org.springframework.dao.DataAccessResourceFailureException.class,
