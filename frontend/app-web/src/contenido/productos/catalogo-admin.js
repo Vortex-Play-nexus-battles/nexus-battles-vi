@@ -14,6 +14,8 @@
  *     se modifica. El servidor valida el resultado fusionado: su motivo se
  *     enseña tal cual si lo rechaza.
  *   - `PUT /api/v1/productos/{id}/suspender|reactivar` — con confirmación.
+ *   - `GET  /api/v1/productos/{id}/historial` y `POST /reversiones` — historial
+ *     inmutable y restauración confirmada (HU-PRD-007).
  *
  * Aquí no se decide nada del catálogo: la validación de cada campo es la
  * misma del alta (`solicitud-producto.js`) y la última palabra es del servidor.
@@ -35,7 +37,13 @@ import {
   estadoVacio,
   pintarEstado,
 } from '../../comun/ui/estado-vista.js';
-import { cambiarDisponibilidad, listarProductos, modificarProducto } from './cliente-productos.js';
+import {
+  cambiarDisponibilidad,
+  consultarHistorialProducto,
+  listarProductos,
+  modificarProducto,
+  revertirProducto,
+} from './cliente-productos.js';
 import {
   CAMPOS_DE_PROMOCION,
   LIMITES_DE_PROMOCION,
@@ -512,6 +520,10 @@ export function abrirHojaDeProducto(
     clase: 'hoja-producto__disponibilidad',
     atributos: { 'aria-label': 'Disponibilidad' },
   });
+  const historial = h('section', {
+    clase: 'hoja-producto__historial',
+    atributos: { 'aria-labelledby': 'historial-producto-titulo' },
+  });
 
   function pintarResumen() {
     const promocion = textoDePromocion(actual.promocion);
@@ -606,6 +618,106 @@ export function abrirHojaDeProducto(
     alCambiar(actual);
   }
 
+  async function cargarHistorial() {
+    historial.replaceChildren(
+      h('h3', { texto: 'Historial y reversión', atributos: { id: 'historial-producto-titulo' } }),
+      h('p', { clase: 't-meta', texto: 'Consultando los cambios registrados…' }),
+    );
+    try {
+      const cambios = await consultarHistorialProducto(actual.id, { fetchImpl });
+      const elementos = cambios.map((cambio) => {
+        const boton = h('button', {
+          clase: 'boton boton--secundario boton--pequeno',
+          texto: 'Revertir',
+          atributos: { type: 'button', disabled: !cambio.revertible },
+          datos: { accion: 'revertir-producto', respaldo: cambio.id },
+        });
+        boton.addEventListener('click', async () => {
+          const seguro = await confirmarAccion({
+            titulo: `¿Revertir «${actual.nombre}»?`,
+            mensaje: `El producto volverá a la versión ${cambio.versionAnterior}. La reversión también quedará en el historial.`,
+            textoConfirmar: 'Revertir',
+            peligro: true,
+          });
+          if (!seguro) {
+            return;
+          }
+          conCarga(boton, true, 'Revirtiendo…');
+          try {
+            const restaurado = await revertirProducto(actual.id, cambio.id, { fetchImpl });
+            aplicar(restaurado);
+            pintarAviso(zonaAviso, {
+              tono: 'exito',
+              titulo: 'Producto restaurado',
+              detalle: `El estado anterior quedó aplicado como versión ${restaurado.version}.`,
+            });
+            await cargarHistorial();
+          } catch (error) {
+            pintarAviso(zonaAviso, avisoDeFallo(error, 'revertir el producto'));
+            conCarga(boton, false);
+          }
+        });
+        return h('li', {
+          hijos: [
+            h('div', {
+              hijos: [
+                h('strong', {
+                  texto:
+                    {
+                      REVERSION: 'Reversión',
+                      CREACION: 'Creación',
+                      SUSPENSION: 'Suspensión',
+                      REACTIVACION: 'Reactivación',
+                    }[cambio.tipo] ?? 'Modificación',
+                }),
+                h('p', {
+                  clase: 't-meta',
+                  texto: `${fechaHora(cambio.fecha)} · ${cambio.autor} · versión ${cambio.versionAnterior} → ${cambio.versionAplicada}`,
+                }),
+                h('p', {
+                  clase: 't-meta',
+                  texto: `Campos: ${cambio.campos?.join(', ') || 'estado del producto'}`,
+                }),
+              ],
+            }),
+            boton,
+          ],
+        });
+      });
+      historial.replaceChildren(
+        h('h3', { texto: 'Historial y reversión', atributos: { id: 'historial-producto-titulo' } }),
+        cambios.length
+          ? h('ul', { clase: 'hoja-producto__cambios', hijos: elementos })
+          : h('p', {
+              clase: 't-meta',
+              texto: 'Este producto todavía no tiene cambios registrados.',
+            }),
+      );
+    } catch (error) {
+      historial.replaceChildren(
+        h('h3', { texto: 'Historial y reversión', atributos: { id: 'historial-producto-titulo' } }),
+        h('p', { clase: 't-meta', texto: avisoDeFallo(error, 'consultar el historial').detalle }),
+        botonConsultarHistorial,
+      );
+    }
+  }
+
+  const botonConsultarHistorial = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: 'Ver historial',
+    atributos: { type: 'button' },
+    datos: { accion: 'consultar-historial' },
+  });
+  botonConsultarHistorial.addEventListener('click', () => void cargarHistorial());
+  historial.append(
+    h('h3', { texto: 'Historial y reversión', atributos: { id: 'historial-producto-titulo' } }),
+    h('p', {
+      clase: 't-meta',
+      texto: 'Consulta quién cambió el producto y restaura el último estado respaldado.',
+    }),
+    botonConsultarHistorial,
+  );
+
   const { formulario, marcarErrores } = formularioDeEdicion(actual);
   const guardar = h('button', {
     clase: 'boton boton--primario',
@@ -659,7 +771,7 @@ export function abrirHojaDeProducto(
   pintarDisponibilidad();
   const cuerpo = h('div', {
     clase: 'hoja-producto',
-    hijos: [resumen, zonaAviso, formulario, disponibilidad],
+    hijos: [resumen, zonaAviso, formulario, disponibilidad, historial],
   });
   const dialogo = abrirDialogo({ titulo: actual.nombre, cuerpo, cerrableFuera: false });
   dialogo.elemento.classList.add('dialogo--hoja');

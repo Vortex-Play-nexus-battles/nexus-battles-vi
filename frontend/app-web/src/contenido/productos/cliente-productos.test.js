@@ -1,7 +1,9 @@
 import { jest } from '@jest/globals';
 import {
+  consultarHistorialProducto,
   consultarEstadisticasCatalogo,
   crearProducto,
+  revertirProducto,
   RUTA_ESTADISTICAS,
   RUTA_PRODUCTOS,
 } from './cliente-productos.js';
@@ -94,5 +96,29 @@ test('conserva el detalle del error al consultar las estadísticas', async () =>
   await expect(consultarEstadisticasCatalogo({ fetchImpl })).rejects.toMatchObject({
     status: 401,
     message: 'Se requiere un token Bearer válido',
+  });
+});
+
+test('consulta el historial inmutable de un producto', async () => {
+  const cambios = [{ id: 'respaldo-1', tipo: 'MODIFICACION', revertible: true }];
+  const fetchImpl = jest.fn(async () => respuesta(200, cambios));
+
+  await expect(consultarHistorialProducto('producto 1', { fetchImpl })).resolves.toEqual(cambios);
+  expect(fetchImpl).toHaveBeenCalledWith('/api/v1/productos/producto%201/historial', {
+    method: 'GET',
+  });
+});
+
+test('envía la reversión elegida y devuelve el producto restaurado', async () => {
+  const restaurado = { id: 'producto-1', nombre: 'Estado anterior', version: 4 };
+  const fetchImpl = jest.fn(async () => respuesta(200, restaurado));
+
+  await expect(revertirProducto('producto-1', 'respaldo-1', { fetchImpl })).resolves.toEqual(
+    restaurado,
+  );
+  expect(fetchImpl).toHaveBeenCalledWith('/api/v1/productos/producto-1/reversiones', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ respaldoId: 'respaldo-1' }),
   });
 });

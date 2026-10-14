@@ -132,6 +132,39 @@ export async function modificarProducto(
   return cuerpo;
 }
 
+/** HU-PRD-007 — historial de cambios de solo lectura. */
+export async function consultarHistorialProducto(
+  id,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const respuesta = await fetchImpl(`${RUTA_PRODUCTOS}/${encodeURIComponent(id)}/historial`, {
+    method: 'GET',
+  });
+  const cuerpo = await cuerpoDe(respuesta);
+  if (!respuesta.ok) {
+    throw errorDe(cuerpo, respuesta.status, 'No se pudo consultar el historial del producto.');
+  }
+  return cuerpo;
+}
+
+/** HU-PRD-007 — crea una reversión auditada a partir de un respaldo. */
+export async function revertirProducto(
+  id,
+  respaldoId,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const respuesta = await fetchImpl(`${RUTA_PRODUCTOS}/${encodeURIComponent(id)}/reversiones`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ respaldoId }),
+  });
+  const cuerpo = await cuerpoDe(respuesta);
+  if (!respuesta.ok) {
+    throw errorDe(cuerpo, respuesta.status, 'No se pudo revertir el producto.');
+  }
+  return cuerpo;
+}
+
 /**
  * Suspende o reactiva un producto (`suspenderProducto` / `reactivarProducto`).
  *
