@@ -196,7 +196,7 @@ services:
       # B9: misiones bloquea y libera al heroe en inventario, pide la IA de cada
       # turno a heroes, los golpes al motor y los creditos a ms-finanzas.
       # HU-NOT-001: notificaciones lee los cambios del catalogo en productos.
-      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios;admin-parametros=e2e-secreto-de-admin-parametros;ms-ecommerce=e2e-secreto-de-ecommerce;misiones=e2e-secreto-de-misiones;ms-finanzas=e2e-secreto-de-finanzas;notificaciones=e2e-secreto-de-notificaciones
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios;admin-parametros=e2e-secreto-de-admin-parametros;ms-ecommerce=e2e-secreto-de-ecommerce;misiones=e2e-secreto-de-misiones;ms-finanzas=e2e-secreto-de-finanzas;notificaciones=e2e-secreto-de-notificaciones;ms-cumplimiento=e2e-secreto-de-cumplimiento
       # HU-AUT-007 — clave AES-256 con la que se cifra el secreto TOTP de cada
       # cuenta. Es la del BANCO DE PRUEBAS, no la de ningun entorno: base64 de
       # "e2e-clave-2fa-banco-de-pruebas!!" (32 bytes). Sin clave, enrolar
@@ -251,6 +251,16 @@ services:
       DB_PASSWORD: cumplimiento
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
       AUDITORIA_EXIGIR_2FA: "true"
+      # SA-18 (§7.2.5, §7.3.5) — la bitacora importa las operaciones de los
+      # administradores sobre el catalogo con su credencial de servicio
+      # (registrada arriba en AUTH_CLIENTES_SERVICIO). Rondas cada 3 s en el
+      # banco (30 s en DEV): las pruebas esperan a verlas en la bitacora.
+      CATALOGO_URL: http://srv-productos:8080
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: ms-cumplimiento
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-cumplimiento
+      AUDITORIA_CATALOGO_INTERVALO: PT3S
+      AUDITORIA_CATALOGO_RETRASO_INICIAL: PT5S
     depends_on:
       e2e-cumplimiento-db: { condition: service_healthy }
     healthcheck:

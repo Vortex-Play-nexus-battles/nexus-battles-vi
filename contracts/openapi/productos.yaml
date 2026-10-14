@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Servicio de productos
-  version: 1.11.0
+  version: 1.12.0
   description: >
     Creación de productos del catálogo de THE NEXUS BATTLES VI
     (HU-PRD-001), reserva de tiraje (HU-PRD-002), modificación con
@@ -123,6 +123,22 @@ info:
     inicial (400): suspender tiene su propia operación. Un producto UNICO se
     vende igual que uno ACTIVO; la tienda y el inventario lo identifican.
     Campo opcional nuevo en una petición: versión menor.
+
+    1.12.0 (SA-18, §7.2.5 «registro de auditoría de todas las operaciones
+    realizadas» y §7.3.5): cada operación de un administrador sobre el
+    catálogo —alta, modificación, cambio de balance, importación de diseño,
+    suspensión, reactivación y reversión de un producto; alta y retiro de un
+    recurso gráfico; publicación, edición y retiro de un banner— queda con su
+    momento, quién la hizo, el tipo, lo afectado y su nombre, los valores
+    antes y después, el motivo y la IP. (1) `GET
+    /api/v1/productos/auditoria/operaciones` las entrega por lotes a la
+    bitácora central (ms-cumplimiento), que las guarda inmutables y es donde
+    las consulta el Super Administrador: solo con token de servicio y solo
+    para los servicios autorizados (403 a cualquier otro y a cualquier
+    usuario). (2) `Banner` gana `creadoPor` y `modificadoPor` (opcionales:
+    los anteriores no los tienen). (3) `retirarBanner` admite `motivo`
+    opcional. (4) `GET /api/v1/banners/{id}/historial`, el historial de un
+    banner para la administración, sin la IP. Todo aditivo: versión menor.
 servers:
   - url: /
     description: Servicio publicado en el mismo origen configurado por la plataforma.
@@ -234,17 +250,144 @@ paths:
     delete:
       summary: Retira un banner sin eliminar su registro
       operationId: retirarBanner
+      description: >
+        Retiro lógico: deja de mostrarse y su registro se conserva. Retirar
+        uno ya retirado no cambia nada. Desde 1.12.0 (SA-18) queda en el
+        historial del banner y en la bitácora central con quien lo retiró,
+        desde qué IP y el `motivo` si se escribió.
       security:
         - BearerAuth: []
+      parameters:
+        - name: motivo
+          in: query
+          required: false
+          description: Por qué se retira (1.12.0). Queda en el historial del banner.
+          schema:
+            type: string
+            maxLength: 500
       responses:
         "204":
           description: Banner retirado
+        "400":
+          description: El motivo pasa de 500 caracteres
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
         "401":
           description: Token Bearer ausente, invalido o expirado
         "403":
           description: Se requiere rol de administracion
         "404":
           description: Banner inexistente
+
+  /api/v1/banners/{id}/historial:
+    get:
+      summary: Historial de un banner (1.12.0)
+      operationId: consultarHistorialBanner
+      description: >
+        Lo que se hizo con el banner —publicación, ediciones y retiro—, de lo
+        más reciente a lo más antiguo, con quién lo hizo (`uid`), sus valores
+        antes y después y el motivo. Para la administración del catálogo
+        (ADMINISTRADOR y SUPER_ADMINISTRADOR). No lleva la IP de quien actuó:
+        esa solo la ve el Super Administrador en la bitácora central (§7.3.5).
+        Los banners anteriores a 1.12.0 empiezan su historial con el primer
+        cambio que se les hizo después.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: El historial del banner, posiblemente vacío
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OperacionDelCatalogo"
+        "401":
+          description: Token Bearer ausente, invalido o expirado
+        "403":
+          description: Se requiere rol de administracion
+        "404":
+          description: Banner inexistente
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+  /api/v1/productos/auditoria/operaciones:
+    get:
+      summary: Operaciones administrativas del catálogo para la bitácora central (1.12.0)
+      operationId: consultarOperacionesAdministrativas
+      description: >
+        Las operaciones de los administradores sobre el catálogo, para que la
+        bitácora central (ms-cumplimiento) las guarde en su registro
+        inmutable (§7.3.5). Solo con token de servicio (rol SERVICIO, ADR-005)
+        y, de los servicios, solo los autorizados por configuración
+        (`productos.auditoria.lectores`, por omisión `ms-cumplimiento`): cada
+        operación lleva quién actuó y desde qué IP. Otro servicio o cualquier
+        usuario —también un Super Administrador, que las lee en la bitácora—
+        recibe 403.
+
+        Sin `desde`, desde la primera operación (la bitácora las necesita
+        todas, no una línea base). Con `desde`, las de `ocurridaEn` en
+        (desde, ahora], de la más antigua a la más reciente. El resto de las
+        reglas son las de `consultarCambiosDelCatalogo`: `hasta` es la marca
+        de la última entregada (o el propio `desde`), el lote nunca parte un
+        grupo con la misma marca de tiempo y `completo` es false si quedaron
+        operaciones por entregar.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: Punto de lectura exclusivo; sin él, desde la primera operación.
+          schema:
+            type: string
+            format: date-time
+        - name: limite
+          in: query
+          required: false
+          description: Cuántas operaciones como máximo por lote (sin partir una marca de tiempo).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+      responses:
+        "200":
+          description: Lote de operaciones administrativas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoteDeOperacionesAdministrativas"
+        "400":
+          description: "`desde` no es una fecha y hora válida o `limite` no está entre 1 y 200"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: >
+            El token no es de un servicio, o es de un servicio que no está
+            autorizado a leer las operaciones
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
 
   /api/v1/productos/alertas/inicio-sesion:
     get:
@@ -1405,6 +1548,16 @@ components:
         modificadoEn:
           type: string
           format: date-time
+        creadoPor:
+          type: string
+          description: >
+            `uid` de quien lo publicó (1.12.0). Ausente en los banners
+            publicados antes de esa versión.
+        modificadoPor:
+          type: string
+          description: >
+            `uid` de quien lo editó o retiró por última vez (1.12.0); al
+            publicarlo, el mismo que `creadoPor`.
 
     SolicitudCrearProducto:
       oneOf:
@@ -2152,6 +2305,120 @@ components:
           description: Del cambio más antiguo al más reciente.
           items:
             $ref: "#/components/schemas/AlertaCambioCatalogo"
+
+    TipoOperacionAdministrativa:
+      type: string
+      description: >
+        Lo que se hizo sobre el catálogo (1.12.0). La bitácora central lo
+        traduce a sus propios tipos de acción.
+      enum:
+        - ALTA_PRODUCTO
+        - MODIFICACION_PRODUCTO
+        - CAMBIO_DE_BALANCE
+        - IMPORTACION_DE_DISENO
+        - SUSPENSION_PRODUCTO
+        - REACTIVACION_PRODUCTO
+        - REVERSION_PRODUCTO
+        - ALTA_RECURSO
+        - RETIRO_RECURSO
+        - ALTA_BANNER
+        - MODIFICACION_BANNER
+        - RETIRO_BANNER
+
+    ObjetoAuditado:
+      type: string
+      description: Sobre qué se hizo la operación (1.12.0).
+      enum: [PRODUCTO, BANNER, RECURSO_GRAFICO]
+
+    OperacionAdministrativa:
+      type: object
+      description: >
+        Una operación de un administrador sobre el catálogo (1.12.0), con lo
+        que §7.3.5 pide de cada acción administrativa.
+      required: [id, ocurridaEn, autor, tipo, objeto, objetoId, descripcion]
+      properties:
+        id:
+          type: string
+          description: Identificador estable; la bitácora lo usa como referencia para no registrarla dos veces.
+        ocurridaEn:
+          type: string
+          format: date-time
+          description: Cuándo ocurrió, con milisegundos.
+        autor:
+          type: string
+          description: "`uid` de la cuenta que la hizo."
+        tipo:
+          $ref: "#/components/schemas/TipoOperacionAdministrativa"
+        objeto:
+          $ref: "#/components/schemas/ObjetoAuditado"
+        objetoId:
+          type: string
+        nombre:
+          type: string
+          maxLength: 120
+          description: El nombre de lo afectado en ese momento (el producto, el texto del banner, el archivo).
+        valorAnterior:
+          type: string
+          description: Los campos que cambiaron, con su valor antes; ausente en un alta.
+        valorNuevo:
+          type: string
+          description: Los campos que cambiaron, con su valor después; en un alta, lo que define al objeto.
+        motivo:
+          type: string
+          maxLength: 500
+          description: El que escribió quien actuó, si lo pidió la operación (suspender, reactivar, revertir, retirar).
+        descripcion:
+          type: string
+          description: Qué se hizo, en palabras.
+        ipOrigen:
+          type: string
+          maxLength: 45
+          description: Dirección IP desde donde se hizo; ausente si no se pudo saber.
+
+    LoteDeOperacionesAdministrativas:
+      type: object
+      additionalProperties: false
+      description: Respuesta de GET /api/v1/productos/auditoria/operaciones (1.12.0).
+      required: [hasta, completo, operaciones]
+      properties:
+        hasta:
+          type: string
+          format: date-time
+          description: Hasta dónde llega el lote; se envía como `desde` la vez siguiente.
+        completo:
+          type: boolean
+          description: false si quedaron operaciones posteriores a `hasta` sin entregar.
+        operaciones:
+          type: array
+          description: De la más antigua a la más reciente.
+          items:
+            $ref: "#/components/schemas/OperacionAdministrativa"
+
+    OperacionDelCatalogo:
+      type: object
+      description: >
+        Una entrada del historial de un banner (1.12.0): la operación sin la
+        IP de quien actuó.
+      required: [id, fecha, autor, tipo, descripcion]
+      properties:
+        id:
+          type: string
+        fecha:
+          type: string
+          format: date-time
+        autor:
+          type: string
+          description: "`uid` de la cuenta que la hizo."
+        tipo:
+          $ref: "#/components/schemas/TipoOperacionAdministrativa"
+        valorAnterior:
+          type: string
+        valorNuevo:
+          type: string
+        motivo:
+          type: string
+        descripcion:
+          type: string
 
     ClaseDeRecurso:
       type: string

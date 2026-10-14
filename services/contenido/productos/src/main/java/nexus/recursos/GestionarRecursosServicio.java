@@ -13,6 +13,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
+import nexus.auditoria.RegistroDeOperaciones;
+import nexus.auditoria.TipoOperacion;
 import nexus.dominio.Producto;
 import nexus.dominio.ProductoNoEncontradoException;
 import nexus.persistencia.ProductoRepository;
@@ -62,18 +64,21 @@ public class GestionarRecursosServicio {
     private final ProductoRepository productos;
     private final ExaminadorDeRecursos examinador;
     private final Clock reloj;
+    private final RegistroDeOperaciones operaciones;
 
     public GestionarRecursosServicio(
             RecursoGraficoRepository recursos,
             MongoTemplate mongo,
             ProductoRepository productos,
             ExaminadorDeRecursos examinador,
-            Clock reloj) {
+            Clock reloj,
+            RegistroDeOperaciones operaciones) {
         this.recursos = recursos;
         this.mongo = mongo;
         this.productos = productos;
         this.examinador = examinador;
         this.reloj = reloj;
+        this.operaciones = operaciones;
     }
 
     /**
@@ -107,7 +112,10 @@ public class GestionarRecursosServicio {
                 null,
                 null,
                 null);
-        return new Subida(recursos.insert(nuevo), true);
+        RecursoGrafico guardado = recursos.insert(nuevo);
+        // SA-18: solo un alta de verdad; el mismo archivo devuelto no es una operacion.
+        operaciones.deRecurso(TipoOperacion.ALTA_RECURSO, null, guardado, autor, null);
+        return new Subida(guardado, true);
     }
 
     /**
@@ -168,7 +176,9 @@ public class GestionarRecursosServicio {
         productos.findFirstByImagen(recurso.url()).ifPresent(producto -> {
             throw new RecursoEnUsoException(producto.nombre());
         });
-        return recursos.save(recurso.retirar(autor, Instant.now(reloj), limpio));
+        RecursoGrafico retirado = recursos.save(recurso.retirar(autor, Instant.now(reloj), limpio));
+        operaciones.deRecurso(TipoOperacion.RETIRO_RECURSO, recurso, retirado, autor, limpio);
+        return retirado;
     }
 
     /** La vista de un recurso con sus usos actuales. */

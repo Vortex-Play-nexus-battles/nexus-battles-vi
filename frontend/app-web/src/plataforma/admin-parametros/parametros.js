@@ -18,6 +18,9 @@
  * El servicio decide: un valor fuera de rango, un parámetro fijo o un permiso
  * que falta llegan como problem details y se cuentan por su `motivo`, nunca
  * con el texto del servidor (que nombra la clave técnica).
+ *
+ * Debajo, los cambios en las políticas de uso (SA-11, §7.3.7), en su panel:
+ * `politicas-de-uso.js`.
  */
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
@@ -49,6 +52,7 @@ import { respaldoPorEstado, tituloDelServidor } from '../../comun/ui/texto-de-fa
 import { consultar } from '../consola/cliente-consola.js';
 import { panel } from '../consola/panel.js';
 import { directorioDeTitulares } from '../consola/titulares.js';
+import { montarPoliticasDeUso } from './politicas-de-uso.js';
 
 export const ROLES_DE_ADMINISTRACION = Object.freeze(['ADMINISTRADOR', 'SUPER_ADMINISTRADOR']);
 
@@ -681,7 +685,10 @@ export function montarParametros(
   valores.sello.dataset.estado = 'datos';
   const zonaTablas = h('div', { clase: 'pila parametros__tablas', datos: { zona: 'tablas' } });
   vaciar(valores.zona).append(barra.elemento, zonaTablas);
-  zonaCatalogo?.replaceChildren(valores.elemento);
+  // SA-11 (§7.3.7): los cambios en las políticas de uso, en su propio panel,
+  // que se carga por su cuenta.
+  const politicas = montarPoliticasDeUso({ administra, zonaAviso, fetchImpl, abrirPanel });
+  zonaCatalogo?.replaceChildren(valores.elemento, politicas.elemento);
 
   function pintarCifras() {
     if (!zonaIndicadores) {
@@ -887,5 +894,5 @@ export function montarParametros(
   }
 
   cargar();
-  return { cargar, cambiar, verHistorial };
+  return { cargar, cambiar, verHistorial, politicas };
 }

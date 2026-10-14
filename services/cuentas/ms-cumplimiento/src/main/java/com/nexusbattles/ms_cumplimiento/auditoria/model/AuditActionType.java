@@ -26,5 +26,10 @@ public enum AuditActionType {
     // registrada con su propio tipo, para poder distinguirla de otros
     // accesos administrativos genéricos (OTRO).
     EXPORTACION,
+    // SA-18 (1.4.0): las operaciones del catalogo que importa la bitacora.
+    // Reactivar un producto suspendido y devolverlo a un estado anterior no
+    // son una actualizacion cualquiera: se distinguen al leer y al filtrar.
+    REACTIVACION,
+    REVERSION,
     OTRO
 }

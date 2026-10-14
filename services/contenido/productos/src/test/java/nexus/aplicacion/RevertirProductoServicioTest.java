@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
 
+import nexus.auditoria.RegistroDeOperaciones;
 import nexus.dominio.EstadoProducto;
 import nexus.dominio.Producto;
 import nexus.dominio.RespaldoProducto;
@@ -52,7 +53,7 @@ class RevertirProductoServicioTest {
                         return conVersion(guardado, guardado.version() + 1);
                 });
 
-                Producto resultado = new RevertirProductoServicio(productos, respaldos)
+                Producto resultado = new RevertirProductoServicio(productos, respaldos, mock(RegistroDeOperaciones.class))
                                 .revertir(PRODUCTO_ID, RESPALDO_ID, "admin-revisor", "  Precio mal puesto ");
 
                 assertEquals("Espada solar", resultado.nombre());
@@ -85,7 +86,7 @@ class RevertirProductoServicioTest {
                 when(productos.findById(PRODUCTO_ID)).thenReturn(Optional.of(producto("Otro cambio", 3)));
                 when(respaldos.findById(RESPALDO_ID)).thenReturn(Optional.of(respaldo));
 
-                RevertirProductoServicio servicio = new RevertirProductoServicio(productos, respaldos);
+                RevertirProductoServicio servicio = new RevertirProductoServicio(productos, respaldos, mock(RegistroDeOperaciones.class));
 
                 assertThrows(
                                 ReversionProductoEnConflictoException.class,
@@ -105,7 +106,7 @@ class RevertirProductoServicioTest {
                                 Instant.now(),
                                 "admin")));
 
-                RevertirProductoServicio servicio = new RevertirProductoServicio(productos, respaldos);
+                RevertirProductoServicio servicio = new RevertirProductoServicio(productos, respaldos, mock(RegistroDeOperaciones.class));
 
                 assertThrows(
                                 RespaldoProductoNoEncontradoException.class,

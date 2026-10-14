@@ -23,6 +23,7 @@ import {
   pintarMetricasDeSanciones,
   pintarServicios,
   pintarReincidentes,
+  pintarBloqueos,
 } from './control-integral.js';
 
 const asentar = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -1397,6 +1398,173 @@ describe('HU-USR-008 — comportamiento sospechoso: usuarios con varias sancione
   });
 });
 
+describe('SA-20 — comportamiento sospechoso: cuentas bloqueadas por intentos fallidos (D-45, señal 1)', () => {
+  const LINCE = '0f9a1c2e-1111-4a5b-8c6d-000000000001';
+  const LUZ = '0f9a1c2e-1111-4a5b-8c6d-000000000002';
+  const BLOQUEOS = {
+    desde: '2026-10-08',
+    total: 2,
+    ocultarPruebas: true,
+    calculadoEn: '2026-10-14T09:40:00-05:00',
+    cuentas: [
+      {
+        uid: LINCE,
+        apodo: 'lince_rojo',
+        rol: 'JUGADOR',
+        estado: 'ACTIVO',
+        bloqueadaEn: '2026-10-14T09:30:00-05:00',
+        vigente: true,
+        bloqueadaHasta: '2026-10-14T09:45:00-05:00',
+      },
+      {
+        uid: LUZ,
+        apodo: 'moderadora_luz',
+        rol: 'MODERADOR',
+        estado: 'ACTIVO',
+        bloqueadaEn: '2026-10-12T22:05:00-05:00',
+        vigente: false,
+        bloqueadaHasta: null,
+      },
+    ],
+  };
+
+  const contenedor = (partes) => {
+    const caja = document.createElement('div');
+    caja.append(...partes);
+    return caja;
+  };
+
+  test('el panel pide las de la última semana sin las cuentas de prueba y las lista por su apodo', async () => {
+    const raiz = pagina();
+    const consultarApi = apiSimulada({ '/admin/jugadores/bloqueos': conDatos(BLOQUEOS) });
+
+    montarControlIntegral(raiz, {}, { consultarApi });
+    await asentar();
+    await asentar();
+
+    const pedido = consultarApi.mock.calls.find(([recurso]) =>
+      recurso.startsWith('/admin/jugadores/bloqueos'),
+    );
+    expect(pedido[0]).toBe('/admin/jugadores/bloqueos?ocultarPruebas=true');
+    const panelDeBloqueos = raiz.querySelector('[data-panel="bloqueos"]');
+    const filas = panelDeBloqueos.querySelectorAll('tbody tr');
+    expect(filas).toHaveLength(2);
+    expect(filas[0].querySelector('th').textContent).toBe('lince_rojo');
+    expect(filas[0].textContent).toContain('Jugador');
+    expect(filas[0].textContent).toContain('Bloqueada');
+    expect(filas[1].querySelector('th').textContent).toBe('moderadora_luz');
+    expect(filas[1].textContent).toContain('Moderador');
+    expect(filas[1].textContent).toContain('Ya puede entrar');
+    expect(panelDeBloqueos.querySelector('[data-zona="resumen-bloqueos"]').textContent).toBe(
+      '2 cuentas se bloquearon por intentos fallidos desde el 8 de octubre. Una sigue bloqueada.',
+    );
+    expect(panelDeBloqueos.textContent).not.toMatch(ANDAMIO);
+    expect(panelDeBloqueos.textContent).not.toMatch(UUID);
+  });
+
+  test('cada fila lleva a la ficha de esa cuenta, con su apodo en el nombre accesible', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(
+      raiz,
+      {},
+      { consultarApi: apiSimulada({ '/admin/jugadores/bloqueos': conDatos(BLOQUEOS) }) },
+    );
+    await asentar();
+    await asentar();
+
+    const ficha = raiz.querySelector('[data-panel="bloqueos"] tbody tr [data-accion="ver-ficha"]');
+    expect(new URL(ficha.href).searchParams.get('usuario')).toBe(LINCE);
+    expect(ficha.getAttribute('aria-label')).toBe('Ver la ficha de lince_rojo');
+  });
+
+  test('la que sigue bloqueada dice hasta cuándo; la que ya puede entrar no inventa una hora', () => {
+    const caja = contenedor(pintarBloqueos(BLOQUEOS));
+    const [vigente, pasada] = caja.querySelectorAll('tbody tr');
+
+    expect(vigente.querySelector('[data-estado="BLOQUEADA"]')).not.toBeNull();
+    expect(vigente.textContent).toContain(
+      `hasta ${formatearFecha(BLOQUEOS.cuentas[0].bloqueadaHasta)}`,
+    );
+    expect(pasada.querySelector('[data-estado="BLOQUEADA"]')).toBeNull();
+    expect(pasada.textContent).toContain('Ya puede entrar');
+    expect(pasada.textContent).not.toContain('hasta');
+    expect(pasada.textContent).not.toContain('Sin dato');
+  });
+
+  test('sin bloqueos lo dice con el periodo y no pinta una tabla vacía', () => {
+    const caja = contenedor(pintarBloqueos({ desde: '2026-10-08', total: 0, cuentas: [] }));
+
+    expect(caja.querySelector('[data-zona="sin-bloqueos"]').textContent).toBe(
+      'Ninguna cuenta se bloqueó por intentos fallidos desde el 8 de octubre.',
+    );
+    expect(caja.querySelector('table')).toBeNull();
+  });
+
+  test('si la lista se cortó, dice cuántas hay de verdad y cuántas se muestran', () => {
+    const caja = contenedor(pintarBloqueos({ ...BLOQUEOS, total: 140 }));
+
+    expect(caja.querySelector('[data-zona="resumen-bloqueos"]').textContent).toBe(
+      '140 cuentas se bloquearon por intentos fallidos desde el 8 de octubre. Una sigue bloqueada.' +
+        ' Se muestran las 2 más recientes.',
+    );
+  });
+
+  test('una sola va en singular, y varias vigentes se cuentan', () => {
+    const una = contenedor(
+      pintarBloqueos({ desde: '2026-10-08', total: 1, cuentas: [BLOQUEOS.cuentas[1]] }),
+    );
+    expect(una.querySelector('[data-zona="resumen-bloqueos"]').textContent).toBe(
+      '1 cuenta se bloqueó por intentos fallidos desde el 8 de octubre.',
+    );
+
+    const dos = contenedor(
+      pintarBloqueos({
+        desde: '2026-10-08',
+        total: 2,
+        cuentas: [BLOQUEOS.cuentas[0], { ...BLOQUEOS.cuentas[0], uid: LUZ, apodo: 'otra' }],
+      }),
+    );
+    expect(dos.querySelector('[data-zona="resumen-bloqueos"]').textContent).toBe(
+      '2 cuentas se bloquearon por intentos fallidos desde el 8 de octubre. 2 siguen bloqueadas.',
+    );
+  });
+
+  test('con un cuerpo inesperado no revienta: lo trata como sin datos', () => {
+    expect(() => contenedor(pintarBloqueos([]))).not.toThrow();
+    expect(contenedor(pintarBloqueos(null)).querySelector('table')).toBeNull();
+    expect(contenedor(pintarBloqueos(null)).textContent).toBe(
+      'Ninguna cuenta se bloqueó por intentos fallidos en la última semana.',
+    );
+  });
+
+  test('con identidad caída lo dice ese panel y el resto sigue', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(
+      raiz,
+      {},
+      {
+        consultarApi: apiSimulada({
+          '/admin/jugadores/bloqueos': conFallo(
+            RESULTADO.SERVICIO_DEGRADADO,
+            503,
+            '/admin/jugadores/bloqueos',
+          ),
+        }),
+      },
+    );
+    await asentar();
+
+    expect(raiz.querySelector('[data-panel="bloqueos"] .panel-admin__estado').textContent).toBe(
+      'Sin conexión',
+    );
+    expect(raiz.querySelector('[data-panel="reincidentes"] .panel-admin__estado').textContent).toBe(
+      '',
+    );
+  });
+});
+
 describe('formatearFecha', () => {
   test('nulo es un guion largo, no la fecha de hoy', () => {
     expect(formatearFecha(null)).toBe('—');
@@ -1457,7 +1625,7 @@ describe('disposición de los paneles', () => {
     expect(usuarios.dataset.ancho).toBe('completo');
   });
 
-  test('moderación: las dos cifras juntas arriba; la lista de reincidentes, la bitácora y el recuento en su fila', async () => {
+  test('moderación: las dos cifras juntas arriba; las dos alertas, la bitácora y el recuento en su fila', async () => {
     const { raiz } = await montar();
 
     const rejilla = raiz.querySelector('[data-seccion="moderacion"] .consola-integral__rejilla');
@@ -1467,6 +1635,7 @@ describe('disposición de los paneles', () => {
     expect(orden).toEqual([
       ['alertas-moderacion', 'comentarios'],
       'reincidentes',
+      'bloqueos',
       'auditoria',
       'sanciones',
     ]);
@@ -1494,6 +1663,7 @@ describe('disposición de los paneles', () => {
       'subastas',
       'torneos',
       'reincidentes',
+      'bloqueos',
       'auditoria',
       'sanciones',
       'sistema',
