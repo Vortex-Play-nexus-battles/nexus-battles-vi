@@ -1,7 +1,7 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
 **Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.10.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.0.0 (canal en tiempo real, 7.4.9)
-**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V14) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
+**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V15) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
 ## Qué hace
@@ -30,8 +30,14 @@ dónde sale cada afirmación (contrato, código, regla o decisión), tema por te
   clave nueva, así que las analíticas de temas frecuentes siguen contando cada tema junto.
 - Añade 118 casos de evaluación (dos por tema, español e inglés).
 
+**V15 (1.11.0).** «¿Cuáles son las reglas del juego?», «¿cómo se juega?» o «what are the game
+rules?» no tenían respuesta (o caían en el tema de la IA o en el de las normas de conducta).
+V15 publica, como V11, una versión nueva con el tema «Reglas básicas del juego»
+(`reglas-del-juego`, enlace al centro de ayuda), que resume lo ya verificado en los temas de
+V11, y sus casos de evaluación; la copia conserva las intenciones adicionales de V12.
+
 `contenido/base-de-conocimiento.json` es la misma base en el formato de importación del
-panel (59 temas y 118 casos): sirve para restaurarla en otro entorno sin tocar la base de
+panel (60 temas y 123 casos): sirve para restaurarla en otro entorno sin tocar la base de
 datos. `BaseDeConocimientoEnProduccionIT` comprueba que cada caso activo lo responde su
 tema, que ningún tema enlaza a una vista de administración y que una pregunta en inglés se
 responde en inglés.
@@ -522,5 +528,5 @@ con producción, candidata y respuestas guardadas; `BaseDeConocimientoEnProducci
 V13, preguntas sin respuesta y fórmulas del tablero de 1.7.0;
 `SoporteDesdeLaConversacionYAyudaIT`: la solicitud desde la conversación y el centro de ayuda
 de 1.8.0; `CanalDelChatbotIT` y `RespuestasFrecuentesIT`: el canal en tiempo real y la caché
-de 7.4.9; `CatalogoEnVivoIT`: el catálogo de 1.10.0; `RedactarLaPuntuacionDeLosSecretosIT`: V14
-de 1.11.0). JaCoCo ≥ 80 %.
+de 7.4.9; `CatalogoEnVivoIT`: el catálogo de 1.10.0; `RedactarLaPuntuacionDeLosSecretosIT` y
+`ReglasDelJuegoIT`: V14 y V15 de 1.11.0). JaCoCo ≥ 80 %.

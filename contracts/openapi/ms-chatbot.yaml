@@ -45,7 +45,8 @@ openapi: 3.1.0
 #               la puntuacion en que termina un secreto (V14), un visitante
 #               que pide datos de su cuenta recibe que hace falta una sesion,
 #               las consultas en vivo se reconocen con mas formas de
-#               preguntar y la navegacion a secciones publicas es para todos
+#               preguntar, la navegacion a secciones publicas es para todos y
+#               las reglas del juego tienen su tema (V15)
 #   7.4 (1.3.0) lo que faltaba del modulo 7.4: tickets y soporte humano
 #               (RF-CHA-007, RF-ADM-004), sugerencias y autocompletado,
 #               respuestas enriquecidas sin imagenes, vista del jugador y
@@ -175,6 +176,11 @@ info:
       sobre lo propio («¿puedo cancelar mi puja?», «¿que pasa si abandono mi
       mision?», «¿tengo que pagar para subastar?») ya no se toma por una
       consulta: la responde la base.
+    * **Reglas del juego (7.4.2).** «¿Cuales son las reglas del juego?»,
+      «¿como se juega?» y «what are the game rules?» no tenian respuesta:
+      V15 publica una version nueva de la base con el tema «Reglas basicas
+      del juego» (`reglas-del-juego`), que resume lo ya verificado en V11, y
+      sus casos de evaluacion.
     * **Navegacion a secciones publicas, para todos (7.4.4).** «Llevame a la
       subasta», «ir al centro de ayuda», «take me to the store»: enlace a la
       vista (`resultado` NAVEGACION). La tienda, el chat general y «Jugar

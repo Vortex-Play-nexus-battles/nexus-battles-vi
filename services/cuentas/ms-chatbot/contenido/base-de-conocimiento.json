@@ -1,5 +1,5 @@
 {
-  "descripcion": "Base de conocimiento completa del chatbot tras la revisión final del 7.4 (V11): los 59 temas en el formato de importación del panel (bloque «temas», PUT /chatbot/admin/base-conocimiento/borrador/importacion, que REEMPLAZA la candidata entera) y sus casos de evaluación. La migración V11 ya la aplica en producción; este archivo sirve para revisarla y para restaurarla en una candidata.",
+  "descripcion": "Base de conocimiento completa del chatbot tras la revisión final del 7.4 (V11 y V15): los 60 temas en el formato de importación del panel (bloque «temas», PUT /chatbot/admin/base-conocimiento/borrador/importacion, que REEMPLAZA la candidata entera) y sus casos de evaluación. Las migraciones V11 y V15 ya la aplican en producción; este archivo sirve para revisarla y para restaurarla en una candidata.",
   "temas": [
     {
       "clave": "heroes-disponibles",
@@ -1960,6 +1960,39 @@
       "respuestaEn": "You can choose how I answer: 1) In this window press «Preferencias» (Preferences). 2) In «Idioma de las respuestas» (answer language) choose «Automático: el de mi pregunta» (same as your question), «Español» or «Inglés» (English); if a topic isn't available in English, I answer in Spanish. 3) In «Nivel de detalle» (detail level) choose «Breve» (brief), «Normal» or «Detallado» (detailed, adds related topics); step-by-step guides always show all their steps. 4) Press «Guardar preferencias» (Save preferences). If you're signed in, I remember them on all your devices.",
       "prioridad": 0,
       "activo": true
+    },
+    {
+      "clave": "reglas-del-juego",
+      "categoria": "MECANICA_JUEGO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Reglas básicas del juego",
+      "variantesEs": [
+        "reglas del juego",
+        "cuales son las reglas",
+        "cuales son las reglas del juego",
+        "reglas basicas",
+        "reglas generales",
+        "como se juega",
+        "como se juega a nexus battles",
+        "explicame las reglas",
+        "normas del juego",
+        "reglas para jugar"
+      ],
+      "variantesEn": [
+        "game rules",
+        "rules of the game",
+        "what are the rules",
+        "what are the game rules",
+        "basic rules",
+        "how do you play",
+        "how do you play this game",
+        "how is the game played",
+        "explain the rules"
+      ],
+      "respuestaEs": "Las reglas básicas de THE NEXUS BATTLES VI: 1) Juegas con héroes que equipas en «Mi inventario» con armas, armaduras e ítems; para salir a una misión o entrar a una sala, tu héroe debe llevar al menos uno de ellos. 2) El combate es por turnos: el orden se sortea al empezar y se mantiene; en tu turno recuperas 2 de poder y eliges una sola acción: la básica, una especial que pagas con poder o una épica. 3) Para dañar, tu tirada de ataque debe superar la defensa del rival; gana el último héroe o equipo en pie y, si no queda nadie, es empate. 4) Las reglas son las mismas contra otro jugador o contra la IA: en «Jugar online» (1 contra 1, Solo o Hasta seis), en las misiones de «Misiones» y en los torneos, que se juegan en equipos de 2. 5) Perder no te quita héroes ni objetos; en una batalla en línea, si gana otro jugador, sí pierdes los créditos que pusiste en juego. 6) Las normas de conducta prohíben el lenguaje ofensivo, el acoso, el fraude, las trampas y la suplantación de identidad.",
+      "respuestaEn": "The basic rules of THE NEXUS BATTLES VI: 1) You play with heroes you equip in «Mi inventario» (My inventory) with weapons, armor and items; to go on a mission or join a room, your hero must carry at least one of them. 2) Combat is turn-based: the order is drawn at the start and kept; on your turn you recover 2 power and choose a single action: the basic one, a special one you pay with power, or an epic. 3) To deal damage, your attack roll must beat the opponent's defense; the last hero or team standing wins and, if nobody is left, it's a draw. 4) The rules are the same against another player or against the AI: in «Jugar online» (Play online: 1 contra 1, Solo or Hasta seis), in the missions of «Misiones» (Missions) and in tournaments, which are played in teams of 2. 5) Losing never takes heroes or items; in an online battle, if another player wins, you do lose the credits you put at stake. 6) The code of conduct forbids offensive language, harassment, fraud, cheating and impersonation.",
+      "prioridad": 0,
+      "activo": true
     }
   ],
   "casos": [
@@ -2434,6 +2467,26 @@
     {
       "pregunta": "can you answer in English",
       "temaClaveEsperada": "preferencias-del-asistente"
+    },
+    {
+      "pregunta": "¿Cuáles son las reglas del juego?",
+      "temaClaveEsperada": "reglas-del-juego"
+    },
+    {
+      "pregunta": "¿Cómo se juega?",
+      "temaClaveEsperada": "reglas-del-juego"
+    },
+    {
+      "pregunta": "Explícame las reglas",
+      "temaClaveEsperada": "reglas-del-juego"
+    },
+    {
+      "pregunta": "What are the game rules?",
+      "temaClaveEsperada": "reglas-del-juego"
+    },
+    {
+      "pregunta": "How do you play this game?",
+      "temaClaveEsperada": "reglas-del-juego"
     }
   ]
 }
