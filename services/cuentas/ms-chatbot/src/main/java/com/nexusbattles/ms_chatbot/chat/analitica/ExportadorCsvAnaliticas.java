@@ -1,7 +1,9 @@
 package com.nexusbattles.ms_chatbot.chat.analitica;
 
 import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.PalabraClave;
+import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.PreguntaFrecuente;
 import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.PuntoDeTendencia;
+import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.RespuestasPorResultado;
 import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.ResumenDeTickets;
 import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.TemaFrecuente;
 import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.TicketsPorCategoria;
@@ -19,12 +21,21 @@ import java.util.Locale;
 //   - lineas CRLF (RFC 4180) y celdas con ';', comillas o saltos de linea
 //     entre comillas dobles.
 // Bloques separados por una linea en blanco: resumen, temas frecuentes,
-// tendencia diaria y, desde 1.3.7, solicitudes de soporte y palabras clave.
+// tendencia diaria, desde 1.3.7 solicitudes de soporte y palabras clave, y
+// desde 1.7.0 resultado de las respuestas y preguntas frecuentes.
+//
+// 1.7.0 — sin formulas (inyeccion CSV, OWASP): las preguntas, las palabras
+// clave y los titulos los escriben personas, y una celda que empieza por '=',
+// '+', '-', '@', tabulador o retorno de carro la hoja de calculo la ejecuta
+// como formula ('=HYPERLINK(...)', '@SUM(...)'). Esas celdas llevan delante
+// una comilla simple, que la hoja muestra como texto; despues se escapan las
+// comillas y el separador como siempre.
 final class ExportadorCsvAnaliticas {
 
     private static final String SEPARADOR = ";";
     private static final String FIN_DE_LINEA = "\r\n";
-    private static final String MARCA_BOM = "\uFEFF";
+    private static final String MARCA_BOM = "﻿";
+    private static final String INICIOS_DE_FORMULA = "=+-@\t\r";
 
     private ExportadorCsvAnaliticas() {
     }
@@ -35,16 +46,29 @@ final class ExportadorCsvAnaliticas {
         fila(csv, "Analiticas del chatbot", desde + " a " + hasta + " (" + analitica.zonaHoraria() + ")");
         csv.append(FIN_DE_LINEA);
 
+        ResumenDeTickets tickets = analitica.tickets() == null ? ResumenDeTickets.VACIO : analitica.tickets();
         fila(csv, "Indicador", "Valor");
-        fila(csv, "Conversaciones", analitica.conversaciones());
+        fila(csv, "Conversaciones iniciadas", analitica.conversaciones());
+        fila(csv, "Conversaciones con preguntas", analitica.conversacionesConActividad());
         fila(csv, "Preguntas", analitica.preguntas());
         fila(csv, "Respuestas medidas", analitica.respuestasMedidas());
-        fila(csv, "Escalamientos", analitica.escalamientos());
+        fila(csv, "Respuestas con resultado", analitica.respuestasClasificadas());
+        fila(csv, "Respuestas resueltas sin intervencion humana", analitica.respuestasResueltas());
         fila(csv, "Tasa de resolucion (%)", porcentaje(analitica.tasaResolucion()));
+        fila(csv, "Veces que el asistente ofrecio soporte humano", analitica.escalamientos());
+        fila(csv, "Solicitudes de soporte abiertas", tickets.total());
         fila(csv, "Tiempo de respuesta promedio (ms)", entero(analitica.tiempoRespuestaPromedioMs()));
         fila(csv, "Calificaciones", analitica.calificaciones());
         fila(csv, "Calificaciones utiles", analitica.calificacionesUtiles());
         fila(csv, "Satisfaccion (%)", porcentaje(analitica.satisfaccion()));
+        csv.append(FIN_DE_LINEA);
+
+        fila(csv, "Resultado de las respuestas");
+        fila(csv, "Resultado", "Respuestas", "Cuenta en la tasa como");
+        for (RespuestasPorResultado resultado : lista(analitica.resultados())) {
+            fila(csv, resultado.resultado(), resultado.respuestas(),
+                resultado.resultado().resuelve() ? "Resuelta" : "No resuelta");
+        }
         csv.append(FIN_DE_LINEA);
 
         fila(csv, "Temas frecuentes");
@@ -54,14 +78,20 @@ final class ExportadorCsvAnaliticas {
         }
         csv.append(FIN_DE_LINEA);
 
+        fila(csv, "Preguntas frecuentes");
+        fila(csv, "Pregunta", "Veces", "Conversaciones");
+        for (PreguntaFrecuente pregunta : lista(analitica.preguntasFrecuentes())) {
+            fila(csv, pregunta.texto(), pregunta.preguntas(), pregunta.conversaciones());
+        }
+        csv.append(FIN_DE_LINEA);
+
         fila(csv, "Tendencia diaria");
-        fila(csv, "Dia", "Conversaciones", "Preguntas", "Respuestas", "Escalamientos");
+        fila(csv, "Dia", "Conversaciones iniciadas", "Preguntas", "Respuestas", "Escalamientos");
         for (PuntoDeTendencia punto : analitica.tendencia()) {
             fila(csv, punto.dia(), punto.conversaciones(), punto.preguntas(), punto.respuestas(), punto.escalamientos());
         }
         csv.append(FIN_DE_LINEA);
 
-        ResumenDeTickets tickets = analitica.tickets() == null ? ResumenDeTickets.VACIO : analitica.tickets();
         fila(csv, "Solicitudes de soporte");
         fila(csv, "Indicador", "Valor");
         fila(csv, "Abiertas en el periodo", tickets.total());
@@ -76,14 +106,18 @@ final class ExportadorCsvAnaliticas {
         }
         csv.append(FIN_DE_LINEA);
 
-        List<PalabraClave> palabras = analitica.palabrasClave() == null ? List.of() : analitica.palabrasClave();
         fila(csv, "Palabras clave");
-        fila(csv, "Palabra", "Preguntas", "Conversaciones");
-        for (PalabraClave palabra : palabras) {
-            fila(csv, palabra.palabra(), palabra.preguntas(), palabra.conversaciones());
+        fila(csv, "Palabra", "Preguntas", "Conversaciones", "Preguntas en el periodo anterior", "Tendencia");
+        for (PalabraClave palabra : lista(analitica.palabrasClave())) {
+            fila(csv, palabra.palabra(), palabra.preguntas(), palabra.conversaciones(),
+                palabra.preguntasPeriodoAnterior(), palabra.tendencia());
         }
 
         return csv.toString();
+    }
+
+    private static <T> List<T> lista(List<T> valores) {
+        return valores == null ? List.of() : valores;
     }
 
     private static void fila(StringBuilder csv, Object... celdas) {
@@ -96,10 +130,19 @@ final class ExportadorCsvAnaliticas {
         csv.append(FIN_DE_LINEA);
     }
 
-    private static String escapar(Object valor) {
-        String texto = valor == null ? "" : valor.toString();
+    // Primero se desarma la formula y despues se entrecomilla: la comilla
+    // simple queda DENTRO de las comillas dobles, que es como Excel la lee.
+    static String escapar(Object valor) {
+        String texto = sinFormula(valor == null ? "" : valor.toString());
         if (texto.contains(SEPARADOR) || texto.contains("\"") || texto.contains("\n") || texto.contains("\r")) {
             return "\"" + texto.replace("\"", "\"\"") + "\"";
+        }
+        return texto;
+    }
+
+    static String sinFormula(String texto) {
+        if (!texto.isEmpty() && INICIOS_DE_FORMULA.indexOf(texto.charAt(0)) >= 0) {
+            return "'" + texto;
         }
         return texto;
     }

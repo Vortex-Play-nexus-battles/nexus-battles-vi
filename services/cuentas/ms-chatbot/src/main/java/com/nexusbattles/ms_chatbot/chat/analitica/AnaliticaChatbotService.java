@@ -1,129 +1,169 @@
 package com.nexusbattles.ms_chatbot.chat.analitica;
 
 import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.PuntoDeTendencia;
+import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.RespuestasPorResultado;
 import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.TemaFrecuente;
 import com.nexusbattles.ms_chatbot.chat.model.Remitente;
+import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
 import com.nexusbattles.ms_chatbot.chat.motor.repository.TemaConocimientoRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.CalificacionRepository;
+import com.nexusbattles.ms_chatbot.chat.repository.ConversacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
 import com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporteRepository;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 // HU-CHA-012 (RF-CHA-012): calcula el tablero de analiticas del chatbot.
 //
-// Definiciones (acordadas en la planeacion de la HU):
-//   conversaciones   conversaciones distintas con al menos una pregunta en el
-//                    periodo (cada sesion reutiliza siempre su conversacion,
-//                    asi que "creadas en el periodo" contaria de menos).
-//   tasa resolucion  proporcion de respuestas del bot NO escaladas.
+// Definiciones (ms-chatbot.yaml 1.7.0, 7.4.7; la explicacion larga esta en el
+// contrato, campo por campo):
+//   conversaciones   las INICIADAS en el periodo (conversaciones.fecha_inicio).
+//                    Borrar un historial no las cambia: la fila queda. Hasta
+//                    1.6.0 eran las que tenian alguna pregunta en el periodo,
+//                    y eso sigue como conversacionesConActividad.
+//   tasa resolucion  resueltas / clasificadas: de las respuestas con
+//                    resultado guardado (V13), las que resolvio un tema, una
+//                    consulta en vivo con datos o una navegacion. Las de antes
+//                    de V13 no cuentan. Hasta 1.6.0 era «no escaladas», y un
+//                    «servicio no disponible» contaba como resuelto.
+//   escalamientos    veces que el ASISTENTE ofrecio soporte humano (escalado
+//                    o «no me sirvio»). Las solicitudes que de verdad se
+//                    abrieron son tickets.total.
 //   satisfaccion     proporcion de calificaciones "util".
-//   tiempo           promedio de ms entre que llega la pregunta y sale la
-//                    respuesta.
+//   tiempo           promedio de ms que tarda el servidor en generar la
+//                    respuesta: desde que la pregunta, ya revisada y aprobada
+//                    por la lista negra, empieza a procesarse hasta que la
+//                    respuesta esta lista para guardarse (ChatService).
 //   tickets          (1.3.7) los abiertos en el periodo, por estado y
 //                    categoria (AnaliticaDeTickets).
-//   palabras clave   (1.3.7) las mas usadas en las preguntas del periodo,
-//                    de las ultimas MAXIMO_PREGUNTAS_PARA_PALABRAS
-//                    (PalabrasClaveFrecuentes).
-// Solo cuentan las respuestas generadas desde V4: las anteriores no guardaban
+//   palabras clave   (1.3.7) las mas usadas en las preguntas del periodo, de
+//                    las ultimas MAXIMO_PREGUNTAS_PARA_PALABRAS
+//                    (PalabrasClaveFrecuentes); desde 1.7.0 con su tendencia
+//                    contra el periodo anterior de los mismos dias.
+//   preguntas        (1.7.0) las mas repetidas, de esas mismas preguntas,
+//   frecuentes       solo si las hicieron 3 conversaciones (PreguntasFrecuentes).
+// Los tiempos y escalamientos cuentan desde V4: las anteriores no guardaban
 // si se escalaron ni cuanto tardaron.
 @Service
 public class AnaliticaChatbotService {
 
-    public static final ZoneId ZONA_POR_DEFECTO = ZoneId.of("America/Bogota");
+    public static final ZoneId ZONA_POR_DEFECTO = PeriodoDelPanel.ZONA;
 
     static final int TOP_TEMAS = 10;
     static final int TOP_PALABRAS = 15;
+    static final int TOP_PREGUNTAS = 10;
 
-    // Las palabras clave se cuentan en memoria: con las ultimas 5000 preguntas
-    // del periodo basta para ver de que se habla, sin cargar un ano entero.
+    // Las palabras clave y las preguntas frecuentes se cuentan en memoria: con
+    // las ultimas 5000 preguntas del periodo basta para ver de que se habla,
+    // sin cargar un ano entero.
     static final int MAXIMO_PREGUNTAS_PARA_PALABRAS = 5000;
 
     // Un periodo mas largo haria cargar demasiados registros en memoria para
     // armar la tendencia diaria; un ano cubre el uso real de un tablero.
-    static final int MAXIMO_DIAS = 366;
+    static final int MAXIMO_DIAS = PeriodoDelPanel.MAXIMO_DIAS;
 
     private final MensajeRepository mensajeRepository;
     private final CalificacionRepository calificacionRepository;
     private final TemaConocimientoRepository temaConocimientoRepository;
     private final TicketSoporteRepository ticketSoporteRepository;
+    private final ConversacionRepository conversacionRepository;
 
     public AnaliticaChatbotService(MensajeRepository mensajeRepository, CalificacionRepository calificacionRepository,
                                    TemaConocimientoRepository temaConocimientoRepository,
-                                   TicketSoporteRepository ticketSoporteRepository) {
+                                   TicketSoporteRepository ticketSoporteRepository,
+                                   ConversacionRepository conversacionRepository) {
         this.mensajeRepository = mensajeRepository;
         this.calificacionRepository = calificacionRepository;
         this.temaConocimientoRepository = temaConocimientoRepository;
         this.ticketSoporteRepository = ticketSoporteRepository;
+        this.conversacionRepository = conversacionRepository;
     }
 
     // 'desde' y 'hasta' son dias completos e inclusivos en 'zona'.
     @Transactional(readOnly = true)
     public AnaliticaChatbot calcular(LocalDate desde, LocalDate hasta, ZoneId zona) {
-        validarPeriodo(desde, hasta);
+        PeriodoDelPanel.validar(desde, hasta);
         Instant inicio = desde.atStartOfDay(zona).toInstant();
         Instant fin = hasta.plusDays(1).atStartOfDay(zona).toInstant();
+        // 1.7.0: el periodo anterior de los mismos dias, para la tendencia de
+        // las palabras clave.
+        long dias = ChronoUnit.DAYS.between(desde, hasta) + 1;
+        Instant inicioAnterior = desde.minusDays(dias).atStartOfDay(zona).toInstant();
 
         List<RegistroDePregunta> preguntas = mensajeRepository.buscarPreguntasEntre(Remitente.USUARIO, inicio, fin);
         List<RegistroDeRespuesta> respuestas = mensajeRepository.buscarRespuestasMedidasEntre(Remitente.BOT, inicio, fin);
+        List<Instant> iniciadas = conversacionRepository.buscarIniciosEntre(inicio, fin);
         List<Boolean> calificaciones = calificacionRepository.buscarUtilidadEntre(inicio, fin);
+        List<RegistroDeTexto> textos = textosDePreguntasEntre(inicio, fin);
+        List<RegistroDeTexto> textosAnteriores = textosDePreguntasEntre(inicioAnterior, inicio);
 
-        long conversaciones = preguntas.stream().map(RegistroDePregunta::conversacionId).distinct().count();
+        long conversacionesConActividad = preguntas.stream().map(RegistroDePregunta::conversacionId).distinct().count();
         long escalamientos = respuestas.stream().filter(r -> Boolean.TRUE.equals(r.escalado())).count();
         long calificacionesUtiles = calificaciones.stream().filter(Boolean.TRUE::equals).count();
+        List<RespuestasPorResultado> resultados = porResultado(respuestas);
+        long clasificadas = resultados.stream().mapToLong(RespuestasPorResultado::respuestas).sum();
+        long resueltas = resultados.stream().filter(r -> r.resultado().resuelve())
+            .mapToLong(RespuestasPorResultado::respuestas).sum();
 
         return new AnaliticaChatbot(
             inicio,
             fin,
             zona.getId(),
-            conversaciones,
+            iniciadas.size(),
+            conversacionesConActividad,
             preguntas.size(),
             respuestas.size(),
             escalamientos,
-            proporcion(respuestas.size() - escalamientos, respuestas.size()),
+            clasificadas,
+            resueltas,
+            proporcion(resueltas, clasificadas),
+            resultados,
             tiempoPromedio(respuestas),
             calificaciones.size(),
             calificacionesUtiles,
             proporcion(calificacionesUtiles, calificaciones.size()),
             temasFrecuentes(inicio, fin),
-            tendencia(desde, hasta, zona, preguntas, respuestas),
+            PreguntasFrecuentes.contar(textos, TOP_PREGUNTAS),
+            tendencia(desde, hasta, zona, iniciadas, preguntas, respuestas),
             AnaliticaDeTickets.resumir(ticketSoporteRepository.buscarCreadosEntre(inicio, fin)),
-            PalabrasClaveFrecuentes.contar(
-                mensajeRepository.buscarTextosDePreguntasEntre(Remitente.USUARIO, inicio, fin,
-                    PageRequest.of(0, MAXIMO_PREGUNTAS_PARA_PALABRAS)),
-                TOP_PALABRAS)
+            PalabrasClaveFrecuentes.contar(textos, textosAnteriores, TOP_PALABRAS)
         );
     }
 
-    private void validarPeriodo(LocalDate desde, LocalDate hasta) {
-        if (desde == null || hasta == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El periodo necesita fecha 'desde' y 'hasta'.");
+    private List<RegistroDeTexto> textosDePreguntasEntre(Instant inicio, Instant fin) {
+        return mensajeRepository.buscarTextosDePreguntasEntre(Remitente.USUARIO, inicio, fin,
+            PageRequest.of(0, MAXIMO_PREGUNTAS_PARA_PALABRAS));
+    }
+
+    // 1.7.0: cuantas respuestas de cada resultado, en el orden del enum y con
+    // los que no ocurrieron en 0. Las que no tienen resultado (anteriores a
+    // V13) no son de ninguno.
+    private static List<RespuestasPorResultado> porResultado(List<RegistroDeRespuesta> respuestas) {
+        Map<ResultadoDeRespuesta, Long> conteo = new EnumMap<>(ResultadoDeRespuesta.class);
+        for (RegistroDeRespuesta respuesta : respuestas) {
+            if (respuesta.resultado() != null) {
+                conteo.merge(respuesta.resultado(), 1L, Long::sum);
+            }
         }
-        if (hasta.isBefore(desde)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha 'hasta' no puede ser anterior a 'desde'.");
-        }
-        if (ChronoUnit.DAYS.between(desde, hasta) + 1 > MAXIMO_DIAS) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "El periodo no puede superar " + MAXIMO_DIAS + " dias.");
-        }
+        return Arrays.stream(ResultadoDeRespuesta.values())
+            .map(resultado -> new RespuestasPorResultado(resultado, conteo.getOrDefault(resultado, 0L)))
+            .toList();
     }
 
     private List<TemaFrecuente> temasFrecuentes(Instant inicio, Instant fin) {
@@ -145,15 +185,18 @@ public class AnaliticaChatbotService {
             .toList();
     }
 
-    private List<PuntoDeTendencia> tendencia(LocalDate desde, LocalDate hasta, ZoneId zona,
+    private List<PuntoDeTendencia> tendencia(LocalDate desde, LocalDate hasta, ZoneId zona, List<Instant> iniciadas,
                                              List<RegistroDePregunta> preguntas,
                                              List<RegistroDeRespuesta> respuestas) {
+        // 1.7.0: las conversaciones de cada dia son las que empezaron ese dia.
+        Map<LocalDate, Long> conversacionesPorDia = new HashMap<>();
+        for (Instant inicio : iniciadas) {
+            conversacionesPorDia.merge(LocalDate.ofInstant(inicio, zona), 1L, Long::sum);
+        }
+
         Map<LocalDate, Long> preguntasPorDia = new HashMap<>();
-        Map<LocalDate, Set<UUID>> conversacionesPorDia = new HashMap<>();
         for (RegistroDePregunta pregunta : preguntas) {
-            LocalDate dia = LocalDate.ofInstant(pregunta.fechaEnvio(), zona);
-            preguntasPorDia.merge(dia, 1L, Long::sum);
-            conversacionesPorDia.computeIfAbsent(dia, d -> new HashSet<>()).add(pregunta.conversacionId());
+            preguntasPorDia.merge(LocalDate.ofInstant(pregunta.fechaEnvio(), zona), 1L, Long::sum);
         }
 
         Map<LocalDate, Long> respuestasPorDia = new HashMap<>();
@@ -172,7 +215,7 @@ public class AnaliticaChatbotService {
         for (LocalDate dia = desde; !dia.isAfter(hasta); dia = dia.plusDays(1)) {
             puntos.add(new PuntoDeTendencia(
                 dia,
-                conversacionesPorDia.getOrDefault(dia, Set.of()).size(),
+                conversacionesPorDia.getOrDefault(dia, 0L),
                 preguntasPorDia.getOrDefault(dia, 0L),
                 respuestasPorDia.getOrDefault(dia, 0L),
                 escalamientosPorDia.getOrDefault(dia, 0L)));
