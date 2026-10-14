@@ -88,7 +88,8 @@ test.describe('Recorrido del Super Administrador (SA-9)', () => {
       `/frontend/app-web/src/plataforma/moderacion-sanciones/ficha-usuario.html?usuario=${superAdmin.claims.uid}`,
     );
     await expect(page).toHaveURL(
-      new RegExp(`/consola/usuarios/ficha\\?usuario=${superAdmin.claims.uid}$`),
+      // La ficha abre en su pestaña «Resumen» y la anota en el fragmento (#resumen).
+      new RegExp(`/consola/usuarios/ficha\\?usuario=${superAdmin.claims.uid}(?:#[a-z-]+)?$`),
     );
     // Mientras carga dice «Ficha del usuario»; con la cuenta, «Ficha de <apodo>».
     await expect(page.locator('h1').first()).toHaveText(
