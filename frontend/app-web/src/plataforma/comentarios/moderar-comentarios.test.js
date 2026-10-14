@@ -2155,15 +2155,15 @@ describe('SA-16 — el comentario en su contexto (§7.3.8, comentarios.yaml 1.17
     expect(filas.map((f) => f.dataset.comentarioId)).toEqual(['c-a', 'c-b', 'com-1', 'c-c']);
     const este = filas[2];
     expect(este.getAttribute('aria-current')).toBe('true');
-    expect(este.querySelector('[data-campo="este"]').textContent).toBe(
+    expect(este.querySelector('[data-dato="este"]').textContent).toBe(
       'El comentario que estás revisando',
     );
     expect(filas.filter((f) => f.hasAttribute('aria-current'))).toHaveLength(1);
     // Los estados con palabras: lo que el lector no veía se distingue.
-    expect(filas[1].querySelector('[data-campo="estado"]').textContent).toBe('Oculto');
-    expect(filas[3].querySelector('[data-campo="estado"]').textContent).toBe('Eliminado');
+    expect(filas[1].querySelector('[data-dato="estado"]').textContent).toBe('Oculto');
+    expect(filas[3].querySelector('[data-dato="estado"]').textContent).toBe('Eliminado');
     expect(filas[0].textContent).toContain('Ana');
-    expect(filas[0].querySelector('[data-campo="texto"]').textContent).toBe('Dice Ana');
+    expect(filas[0].querySelector('[data-dato="texto"]').textContent).toBe('Dice Ana');
     expect(zona.querySelector('[data-campo="resumen-del-hilo"]').textContent).toBe(
       'El hilo del producto tiene 9 comentarios; estos son los 4 más cercanos a este.',
     );

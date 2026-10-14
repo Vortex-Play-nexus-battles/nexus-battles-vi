@@ -2152,7 +2152,7 @@ export const ESCENARIOS = [
     exige: [
       '[data-zona="contexto"] [data-campo="producto"]',
       '[data-zona="contexto-hilo"] li[aria-current="true"]',
-      '[data-zona="contexto-hilo"] li [data-campo="estado"]',
+      '[data-zona="contexto-hilo"] li [data-dato="estado"]',
     ],
   },
   {

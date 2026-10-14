@@ -182,19 +182,24 @@ export const RESULTADO_DE_ACCION = Object.freeze({
  * siempre), si esta marcado para seguimiento y si moderacion edito su texto.
  *
  * @param {object} comentario `ComentarioResponse` de moderacion
- * @param {{conEstado?: boolean, prioridadElevada?: boolean}} [opciones] `conEstado`: pintar
- *   tambien EN_REVISION; `prioridadElevada` (comentarios.yaml 1.6.0): solo `true` pinta el
- *   distintivo. Viene de la entrada de la cola, no del comentario: el detalle no la trae.
+ * @param {{conEstado?: boolean, prioridadElevada?: boolean, atributo?: string}} [opciones]
+ *   `conEstado`: pintar tambien EN_REVISION; `prioridadElevada` (comentarios.yaml 1.6.0): solo
+ *   `true` pinta el distintivo. Viene de la entrada de la cola, no del comentario: el detalle no
+ *   la trae. `atributo` (SA-16): el `data-*` que nombra cada distintivo; la conversación del
+ *   contexto usa `dato` para no repetir los `data-campo` del comentario que se revisa.
  * @returns {HTMLElement[]}
  */
-export function distintivosDe(comentario, { conEstado = false, prioridadElevada = false } = {}) {
+export function distintivosDe(
+  comentario,
+  { conEstado = false, prioridadElevada = false, atributo = 'campo' } = {},
+) {
   const lista = [];
   if (prioridadElevada === true) {
     // Con texto y no solo con color: el tono ambar no basta para quien no lo distingue.
     lista.push(
       h('span', {
         clase: 'distintivo distintivo--aviso',
-        datos: { campo: 'prioridad' },
+        datos: { [atributo]: 'prioridad' },
         texto: 'Prioridad elevada',
       }),
     );
@@ -203,7 +208,7 @@ export function distintivosDe(comentario, { conEstado = false, prioridadElevada 
     lista.push(
       h('span', {
         clase: 'distintivo',
-        datos: { campo: 'estado' },
+        datos: { [atributo]: 'estado' },
         texto: ESTADO_LEGIBLE[comentario?.estado] ?? comentario?.estado ?? '',
       }),
     );
@@ -212,7 +217,7 @@ export function distintivosDe(comentario, { conEstado = false, prioridadElevada 
     lista.push(
       h('span', {
         clase: 'distintivo distintivo--aviso',
-        datos: { campo: 'marcado' },
+        datos: { [atributo]: 'marcado' },
         texto: 'Marcado para seguimiento',
       }),
     );
@@ -221,7 +226,7 @@ export function distintivosDe(comentario, { conEstado = false, prioridadElevada 
     lista.push(
       h('span', {
         clase: 'distintivo distintivo--moderador',
-        datos: { campo: 'editado' },
+        datos: { [atributo]: 'editado' },
         texto: 'Editado por moderación',
       }),
     );
@@ -720,7 +725,10 @@ function resumenDelHilo(total, vistos) {
 
 /**
  * Un comentario de la conversación: quién, cuándo, su estado y su texto. El
- * que se modera va marcado (`aria-current`) para leerlo en su sitio.
+ * que se modera va marcado (`aria-current`) para leerlo en su sitio. Sus datos
+ * van en `data-dato` y no en `data-campo`: el comentario que se revisa ya
+ * tiene los suyos en el detalle, y dos `data-campo="marcado"` en el mismo
+ * panel no se distinguirían.
  *
  * @param {object} item `ItemDelContexto` (comentarios.yaml 1.17.0) o el comentario abierto
  * @param {boolean} esEste
@@ -737,20 +745,20 @@ function itemDelContexto(item, esEste) {
           h('strong', { texto: item.apodoAutor || 'Alguien' }),
           h('span', {
             clase: 't-meta',
-            datos: { campo: 'fecha' },
+            datos: { dato: 'fecha' },
             texto: item.fechaPublicacion ? fechaHora(item.fechaPublicacion) : '',
           }),
-          ...distintivosDe(item, { conEstado: true }),
+          ...distintivosDe(item, { conEstado: true, atributo: 'dato' }),
           esEste
             ? h('span', {
                 clase: 'distintivo distintivo--en-juego',
-                datos: { campo: 'este' },
+                datos: { dato: 'este' },
                 texto: 'El comentario que estás revisando',
               })
             : null,
         ],
       }),
-      h('p', { clase: 't-cuerpo', datos: { campo: 'texto' }, texto: item.texto ?? '' }),
+      h('p', { clase: 't-cuerpo', datos: { dato: 'texto' }, texto: item.texto ?? '' }),
     ],
   });
 }
