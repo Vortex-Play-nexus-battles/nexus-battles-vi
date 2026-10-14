@@ -440,6 +440,37 @@ class AdminDirectorioHttpTest {
     }
 
     @Test
+    @DisplayName("SA-21: las fechas de la fila salen con su zona, el mismo instante que se guardo")
+    @SuppressWarnings("unchecked")
+    void fechasConSuZona() throws Exception {
+        com.nexusbattles.ms_identidad.auth.model.Usuario ana = new com.nexusbattles.ms_identidad.auth.model.Usuario();
+        ana.setId(15L);
+        ana.setPublicId(UUID.fromString("11111111-2222-3333-4444-555555555555"));
+        ana.setApodo("Ana");
+        ana.setEmail("ana@ejemplo.org");
+        ana.setEstado("ACTIVO");
+        ana.setCreadoEn(java.time.LocalDateTime.of(2026, 9, 1, 17, 30));
+        ana.setUltimoAcceso(java.time.LocalDateTime.of(2026, 10, 4, 21, 15));
+        when(directorio.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(ana), PageRequest.of(0, 20), 1));
+
+        String cuerpo = mvc.perform(get(DIRECTORIO).param("rol", "jugador")
+                        .header("Authorization", token("ADMINISTRADOR")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+
+        String creadoEn = com.jayway.jsonpath.JsonPath.read(cuerpo, "$.contenido[0].creadoEn");
+        String ultimoAcceso = com.jayway.jsonpath.JsonPath.read(cuerpo, "$.contenido[0].ultimoAcceso");
+        java.time.ZoneId servidor = java.time.ZoneId.systemDefault();
+        // Con desfase («Z» o «±hh:mm»): un navegador ya no la lee como hora suya.
+        assertThat(creadoEn).matches(".*(Z|[+-]\\d{2}:\\d{2})$");
+        assertThat(OffsetDateTime.parse(creadoEn).toInstant())
+                .isEqualTo(java.time.LocalDateTime.of(2026, 9, 1, 17, 30).atZone(servidor).toInstant());
+        assertThat(OffsetDateTime.parse(ultimoAcceso).toInstant())
+                .isEqualTo(java.time.LocalDateTime.of(2026, 10, 4, 21, 15).atZone(servidor).toInstant());
+    }
+
+    @Test
     @DisplayName("listado con una fecha mal escrita: 400 que nombra el campo, no una lista vacia")
     void listadoConFechaInvalida() throws Exception {
         mvc.perform(get(DIRECTORIO).param("registradoHasta", "30/09/2026")

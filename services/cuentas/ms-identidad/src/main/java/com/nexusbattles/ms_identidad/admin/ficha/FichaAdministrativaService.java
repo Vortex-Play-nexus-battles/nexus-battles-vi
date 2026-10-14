@@ -85,7 +85,7 @@ public class FichaAdministrativaService {
         Usuario cuenta = resolver(usuario).orElseThrow(CuentaNoEncontradaException::new);
         PerfilUsuario perfil = perfiles.findByIdConUsuario(cuenta.getId()).orElse(null);
         boolean auditado = auditar(cuenta, administrador, ipOrigen);
-        return FichaAdministrativa.desde(cuenta, perfil, auditado, LocalDateTime.now(reloj));
+        return FichaAdministrativa.desde(cuenta, perfil, auditado, LocalDateTime.now(reloj), reloj.getZone());
     }
 
     /**

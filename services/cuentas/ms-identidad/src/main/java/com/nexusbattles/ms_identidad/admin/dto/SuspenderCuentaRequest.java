@@ -5,12 +5,20 @@ import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import tools.jackson.databind.annotation.JsonDeserialize;
+
 import java.time.LocalDateTime;
 
 public class SuspenderCuentaRequest {
 
+    /**
+     * SA-21: llega como instante con su zona (la consola manda
+     * {@code toISOString()}) y se guarda en la hora del servidor; una hora sin
+     * zona se lee como antes ({@link HoraDelServidor}).
+     */
     @NotNull
     @Future
+    @JsonDeserialize(using = HoraDelServidor.class)
     private LocalDateTime suspendidoHasta;
 
     /**

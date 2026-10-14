@@ -26,6 +26,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.lang.reflect.RecordComponent;
+import java.time.ZoneId;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
@@ -202,8 +203,11 @@ class AdminDirectorioControllerTest {
         assertEquals("ana@nexus.test", fila.email());
         assertEquals("ACTIVO", fila.estado());
         assertEquals("JUGADOR", fila.rol());
-        assertEquals(LocalDateTime.of(2026, 1, 5, 10, 0), fila.creadoEn());
-        assertEquals(LocalDateTime.of(2026, 9, 20, 18, 30), fila.ultimoAcceso());
+        // SA-21: con la zona del servidor, el mismo instante.
+        assertEquals(LocalDateTime.of(2026, 1, 5, 10, 0).atZone(ZoneId.systemDefault()).toOffsetDateTime(),
+                fila.creadoEn());
+        assertEquals(LocalDateTime.of(2026, 9, 20, 18, 30).atZone(ZoneId.systemDefault()).toOffsetDateTime(),
+                fila.ultimoAcceso());
         assertEquals(jugador.getPublicId(), fila.uid());
         assertFalse(
                 Arrays.stream(AdminUsuarioDirectorioResponse.class.getRecordComponents())
@@ -243,7 +247,8 @@ class AdminDirectorioControllerTest {
         AdminUsuarioDirectorioResponse fila = listar(controlador, null, false, 0, 20).contenido().get(0);
 
         assertTrue(fila.bloqueada());
-        assertEquals(LocalDateTime.of(2026, 12, 31, 0, 0), fila.suspendidoHasta());
+        assertEquals(LocalDateTime.of(2026, 12, 31, 0, 0).atZone(ZoneId.systemDefault()).toOffsetDateTime(),
+                fila.suspendidoHasta());
     }
 
     /** Un bloqueo que ya vencio no bloquea: la fecha esta, el estado no. */
