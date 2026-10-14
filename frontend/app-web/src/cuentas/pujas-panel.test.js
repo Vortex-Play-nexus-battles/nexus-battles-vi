@@ -877,6 +877,38 @@ describe('compartir una subasta', () => {
     ctrl.destruir();
   });
 
+  test('detrás del borde, el enlace copiado es la dirección limpia de la subasta (SA-7)', async () => {
+    const escribir = jest.fn(async () => {});
+    const anterior = globalThis.navigator.clipboard;
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: { writeText: escribir },
+      configurable: true,
+    });
+    const marca = document.createElement('meta');
+    marca.name = 'nexus-rutas';
+    marca.content = 'limpias';
+    document.head.append(marca);
+    const api = apiFalsa();
+    const { contenedor, ctrl } = montar({ api });
+    await ctrl.iniciar();
+    ctrl.abrirDetalle('abierta-1');
+    await esperar();
+
+    contenedor.querySelector('#btn-compartir').click();
+    await esperar();
+
+    // La URL de los módulos en Jest es `file://`; en el navegador es la del borde.
+    const [copiado] = escribir.mock.calls[0];
+    expect(new URL(copiado).pathname).toBe('/subastas/pujar');
+    expect(new URL(copiado).search).toBe('?id=abierta-1');
+    marca.remove();
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: anterior,
+      configurable: true,
+    });
+    ctrl.destruir();
+  });
+
   test('si no se puede copiar, lo dice sin tecnicismos', async () => {
     Object.defineProperty(globalThis.navigator, 'clipboard', {
       value: {

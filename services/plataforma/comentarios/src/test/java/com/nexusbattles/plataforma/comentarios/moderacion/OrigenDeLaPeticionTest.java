@@ -56,4 +56,16 @@ class OrigenDeLaPeticionTest {
         assertFalse(OrigenDeLaPeticion.pareceUnaIp("fe80::1%eth0"));
         assertFalse(OrigenDeLaPeticion.pareceUnaIp(null));
     }
+
+    @Test
+    @DisplayName("SA-5: X-Real-IP, la que fija el borde, gana a la que declara el cliente en X-Forwarded-For")
+    void primeroLaDelBorde() {
+        MockHttpServletRequest conBorde = peticion("1.2.3.4, 203.0.113.9", "172.18.0.9");
+        conBorde.addHeader("X-Real-IP", " 203.0.113.9 ");
+        assertEquals("203.0.113.9", OrigenDeLaPeticion.ipDe(conBorde));
+
+        MockHttpServletRequest falsa = peticion("198.51.100.23", "172.18.0.9");
+        falsa.addHeader("X-Real-IP", "<script>");
+        assertEquals("198.51.100.23", OrigenDeLaPeticion.ipDe(falsa));
+    }
 }

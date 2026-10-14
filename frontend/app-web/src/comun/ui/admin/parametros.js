@@ -51,6 +51,12 @@ export const CATALOGO_DE_PARAMETROS = Object.freeze({
       'A partir de cuántas sanciones en un mismo día se avisa de una frecuencia inusual. Sin valor, no se avisa.',
     grupo: 'Sanciones y moderación',
   },
+  'metricas.umbral-reportes-por-dia': {
+    nombre: 'Alerta de reportes por día',
+    ayuda:
+      'A partir de cuántos reportes de comentarios en un mismo día se avisa de una frecuencia inusual. Sin valor, se muestran los conteos y no se avisa.',
+    grupo: 'Sanciones y moderación',
+  },
   'salas.participantes-maximo': {
     nombre: 'Jugadores por batalla',
     ayuda: 'Cuántos participantes admite, como máximo, una batalla.',
@@ -194,6 +200,7 @@ const UNIDADES = Object.freeze({
   mensajes: 'mensajes',
   'mensajes/min': 'mensajes por minuto',
   'sanciones/dia': 'sanciones por día',
+  'reportes/dia': 'reportes por día',
   segundos: 'segundos',
   subastas: 'subastas',
   pujas: 'pujas',

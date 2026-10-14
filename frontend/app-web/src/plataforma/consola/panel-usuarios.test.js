@@ -86,6 +86,15 @@ describe('consultas que arman los filtros', () => {
     );
   });
 
+  test('SA-3: el historial de sanciones va en la consulta y en la exportación', () => {
+    expect(recursoDelDirectorio({ pagina: 0, historialSanciones: 'CON' }, 16)).toBe(
+      '/admin/jugadores?page=0&size=16&historialSanciones=CON',
+    );
+    expect(recursoDeExportacion({ historialSanciones: 'SIN', ocultarPruebas: true })).toBe(
+      '/admin/jugadores/exportacion?historialSanciones=SIN&ocultarPruebas=true',
+    );
+  });
+
   test('la exportación lleva los mismos filtros, sin página', () => {
     expect(recursoDeExportacion({ pagina: 3 })).toBe('/admin/jugadores/exportacion');
     expect(

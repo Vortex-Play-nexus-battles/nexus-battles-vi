@@ -1,6 +1,8 @@
 package nexus.persistencia;
 
 import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
 
 import nexus.dominio.Producto;
 import nexus.dominio.EstadoProducto;
@@ -29,4 +31,11 @@ public interface ProductoRepository
                         TipoProducto tipo,
                         Collection<EstadoProducto> estados,
                         Pageable paginacion);
+
+        // HU-PRD-009 — que productos usan hoy un recurso grafico como imagen
+        // (la biblioteca lo dice junto a cada recurso) y si alguno lo usa
+        // (no se retira la imagen actual de un producto).
+        List<Producto> findByImagenIn(Collection<String> imagenes);
+
+        Optional<Producto> findFirstByImagen(String imagen);
 }

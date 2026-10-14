@@ -183,6 +183,7 @@ describe('puedeVer (RF-RBAC-002)', () => {
     // POST/PUT/DELETE /api/v1/banners y para el listado completo.
     expect(MATRIZ.banners).toEqual({
       ruta: 'contenido/productos/banners.html',
+      limpia: '/consola/productos/banners',
       acceso: ACCESO.ADMINISTRACION,
       armazon: 'admin',
     });
@@ -255,34 +256,34 @@ describe('vistaDeRuta y urlDeVista', () => {
     );
   });
 
-  test('R17.3, B1, F6 y 6-oct — catorce direcciones limpias, únicas, y cada una de una vista del jugador o del portal', () => {
-    const limpias = Object.entries(MATRIZ).filter(([, v]) => v.limpia);
-    // B1 suma las dos a las que llevan los enlaces del correo (correo 1.4.0):
-    // la verificación de la cuenta y el canje del código de recuperación. F6
-    // suma la raíz: la portada pública con la tienda. El 6-oct, pedir el
-    // código de recuperación y el tablón de misiones.
-    expect(limpias.map(([, v]) => v.limpia).sort()).toEqual([
-      '/',
-      '/cuenta',
-      '/inicio',
-      '/inventario',
-      '/jugar',
-      '/login',
-      '/misiones',
-      '/preparando',
-      '/recuperar',
-      '/registro',
-      '/restablecer',
-      '/subastas',
-      '/torneos',
-      '/verificar',
-    ]);
-    for (const [, entrada] of limpias) {
-      expect(['publico', 'jugador']).toContain(entrada.armazon);
-      expect(entrada.limpia).toMatch(/^\/[a-z]*$/);
+  test('R17.3 y SA-7 — toda vista tiene su dirección limpia, única, sin carpetas ni .html', () => {
+    const entradas = Object.entries(MATRIZ);
+    // SA-7 (punto crítico externo del informe de revisión): ya no queda
+    // ninguna vista que solo se sirva por la ruta de su fichero.
+    expect(entradas.filter(([, v]) => !v.limpia).map(([id]) => id)).toEqual([]);
+    const limpias = entradas.map(([, v]) => v.limpia);
+    expect(limpias).toEqual(expect.arrayContaining(['/', '/login', '/jugar', '/consola']));
+    const malas = [];
+    for (const [id, entrada] of entradas) {
+      if (!/^\/(?:[a-z-]+(?:\/[a-z-]+)*)?$/.test(entrada.limpia)) {
+        malas.push(`${id}: ${entrada.limpia} no es una dirección limpia`);
+      }
+      // La consola vive bajo /consola; el juego y el portal, fuera.
+      const enLaConsola = /^\/consola(?:\/|$)/.test(entrada.limpia);
+      if (enLaConsola !== (entrada.armazon === 'admin')) {
+        malas.push(`${id}: ${entrada.limpia} con armazón ${entrada.armazon}`);
+      }
+      // Y la dirección limpia abre su propia vista, con o sin barra final.
+      if (vistaDeRuta(entrada.limpia) !== id) {
+        malas.push(`${id}: ${entrada.limpia} abre ${vistaDeRuta(entrada.limpia)}`);
+      }
+      if (entrada.limpia !== '/' && vistaDeRuta(`${entrada.limpia}/`) !== id) {
+        malas.push(`${id}: ${entrada.limpia}/ abre ${vistaDeRuta(`${entrada.limpia}/`)}`);
+      }
     }
+    expect(malas).toEqual([]);
     // Las direcciones no se repiten: dos vistas no pueden servirse en la misma.
-    expect(new Set(limpias.map(([, v]) => v.limpia)).size).toBe(limpias.length);
+    expect(new Set(limpias).size).toBe(limpias.length);
   });
 
   test('6-oct — /recuperar y /misiones abren su vista, y cada una con su acceso', () => {

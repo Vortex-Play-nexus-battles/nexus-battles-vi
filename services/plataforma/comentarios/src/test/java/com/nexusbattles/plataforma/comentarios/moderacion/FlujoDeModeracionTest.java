@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 
 import com.nexusbattles.plataforma.comentarios.Comentario;
+import com.nexusbattles.plataforma.comentarios.DeteccionAutomatica;
 import com.nexusbattles.plataforma.comentarios.publicacion.ComentarioRepository;
 import com.nexusbattles.plataforma.comentarios.publicacion.RegistroDeComentario;
 import com.nexusbattles.plataforma.comentarios.publicacion.ResumenDeComentario;
@@ -79,9 +80,11 @@ class FlujoDeModeracionTest {
     private Map<String, RegistroDeComentario> filasDeComentarios;
     private List<RegistroDeReporte> filasDeReportes;
     private List<AsientoDeModeracion> filasDeAsientos;
+    private Map<String, RegistroDeDeteccion> filasDeDetecciones;
     private ComentarioRepository comentarios;
     private ReporteRepository reportes;
     private AsientoRepository asientos;
+    private DeteccionRepository detecciones;
     private List<String> avisos;
     private List<String> auditados;
     private ServicioDeModeracion servicio;
@@ -100,9 +103,11 @@ class FlujoDeModeracionTest {
         filasDeComentarios = new LinkedHashMap<>();
         filasDeReportes = new ArrayList<>();
         filasDeAsientos = new ArrayList<>();
+        filasDeDetecciones = new LinkedHashMap<>();
         comentarios = comentariosEnMemoria(filasDeComentarios);
         reportes = reportesEnMemoria(filasDeReportes, filasDeAsientos);
         asientos = asientosEnMemoria(filasDeAsientos);
+        detecciones = deteccionesEnMemoria(filasDeDetecciones);
         avisos = new ArrayList<>();
         auditados = new ArrayList<>();
 
@@ -120,7 +125,7 @@ class FlujoDeModeracionTest {
      */
     private ServicioDeModeracion servicioConUmbrales(int prioridad, int ocultamiento, Clock reloj) {
         return new ServicioDeModeracion(
-                comentarios, reportes, asientos,
+                comentarios, reportes, asientos, detecciones,
                 (comentario, asiento) -> {
                     avisos.add(comentario.autorId() + ":" + asiento.accion());
                     return true;
@@ -749,7 +754,7 @@ class FlujoDeModeracionTest {
         @DisplayName("un aviso que no sale no deshace la decision (HU-DIS-003)")
         void avisoFailOpen() {
             ServicioDeModeracion conAvisoCaido = new ServicioDeModeracion(
-                    comentarios, reportes, asientos,
+                    comentarios, reportes, asientos, detecciones,
                     (c, a) -> false,
                     asiento -> { },
                     Clock.fixed(AHORA, ZoneOffset.UTC), plantilla, 10, 0, 0);
@@ -780,6 +785,68 @@ class FlujoDeModeracionTest {
             assertEquals("publicidad", detalle.reportes().get(0).descripcion());
             assertEquals(1, detalle.historial().size());
             assertEquals(AccionDeModeracion.OCULTAR, detalle.historial().get(0).accion());
+        }
+    }
+
+    @Nested
+    @DisplayName("Deteccion automatica en la cola y el detalle (HU-COM-007 CA-01)")
+    class DeteccionAutomaticaVisible {
+
+        private final DeteccionAutomatica porLaListaNegra = new DeteccionAutomatica(
+                AHORA.minusSeconds(3600), List.of(7L, 9L), "OFENSIVO",
+                "El texto contiene un termino no permitido", false);
+
+        private final DeteccionAutomatica sinServicio = new DeteccionAutomatica(
+                AHORA.minusSeconds(1800), List.of(), null, "respuesta vacia del servicio", true);
+
+        @Test
+        @DisplayName("lo que retuvo el filtro trae, en la cola y en el detalle, que reglas lo senalaron")
+        void retenidoPorElFiltro() {
+            retenido("c-1", "autor-1");
+            detecciones.save(new RegistroDeDeteccion("c-1", porLaListaNegra));
+
+            assertEquals(porLaListaNegra, servicio.cola(null, null, null, null, 0, 20).entradas().get(0).deteccion());
+            assertEquals(porLaListaNegra, servicio.detalle("c-1").deteccion());
+        }
+
+        @Test
+        @DisplayName("lo que llego a la cola por reportes no trae deteccion")
+        void porReportesSinDeteccion() {
+            publicar("c-1", "autor-1");
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+
+            assertNull(servicio.cola(null, null, null, null, 0, 20).entradas().get(0).deteccion());
+            assertNull(servicio.detalle("c-1").deteccion());
+        }
+
+        @Test
+        @DisplayName("las detecciones de toda la cola salen de una sola consulta, no de una por entrada")
+        void unaConsultaParaLaCola() {
+            retenido("c-1", "autor-1");
+            retenido("c-2", "autor-2");
+            publicar("c-3", "autor-3");
+            servicio.reportar(PRODUCTO, "c-3", "jugador-a", CategoriaDeReporte.SPAM, null);
+            detecciones.save(new RegistroDeDeteccion("c-1", porLaListaNegra));
+            detecciones.save(new RegistroDeDeteccion("c-2", sinServicio));
+            clearInvocations(detecciones);
+
+            ServicioDeModeracion.Cola cola = servicio.cola(null, null, null, null, 0, 20);
+
+            Map<String, DeteccionAutomatica> porComentario = new LinkedHashMap<>();
+            cola.entradas().forEach(e -> porComentario.put(e.comentario().id(), e.deteccion()));
+            assertEquals(porLaListaNegra, porComentario.get("c-1"));
+            assertEquals(sinServicio, porComentario.get("c-2"));
+            assertTrue(porComentario.containsKey("c-3"));
+            assertNull(porComentario.get("c-3"), "el reportado no la tiene");
+            verify(detecciones, times(1)).findAllById(any());
+            verify(detecciones, never()).findById(anyString());
+        }
+
+        @Test
+        @DisplayName("una cola vacia no pregunta por detecciones")
+        void colaVaciaNoConsulta() {
+            assertEquals(0, servicio.cola(null, null, null, null, 0, 20).total());
+            verifyNoInteractions(detecciones);
         }
     }
 
@@ -1505,7 +1572,7 @@ class FlujoDeModeracionTest {
         @DisplayName("11: un autor sin notificar no invalida el lote: autorNotificado=false solo en su item")
         void autorNoNotificado() {
             ServicioDeModeracion conAvisoQueFalla = new ServicioDeModeracion(
-                    comentarios, reportes, asientos,
+                    comentarios, reportes, asientos, detecciones,
                     (c, a) -> {
                         avisos.add(c.autorId() + ":" + a.accion());
                         return !c.id().equals("c-2");
@@ -1531,7 +1598,7 @@ class FlujoDeModeracionTest {
         @DisplayName("11b: un aviso que lanza tampoco invalida el lote ni corta los avisos de los demas")
         void avisoQueLanza() {
             ServicioDeModeracion conAvisoQueExplota = new ServicioDeModeracion(
-                    comentarios, reportes, asientos,
+                    comentarios, reportes, asientos, detecciones,
                     (c, a) -> {
                         if (c.id().equals("c-2")) {
                             throw new IllegalStateException("simulado: servicio de avisos caido");
@@ -1825,6 +1892,30 @@ class FlujoDeModeracionTest {
         });
         when(repo.findByComentarioIdOrderByFechaAsc(anyString())).thenAnswer(inv ->
                 datos.stream().filter(x -> x.comentarioId().equals(inv.getArgument(0))).toList());
+        return repo;
+    }
+
+    /** Una deteccion por comentario, como la clave primaria de V7. */
+    private static DeteccionRepository deteccionesEnMemoria(Map<String, RegistroDeDeteccion> datos) {
+        DeteccionRepository repo = mock(DeteccionRepository.class);
+
+        when(repo.save(any(RegistroDeDeteccion.class))).thenAnswer(inv -> {
+            RegistroDeDeteccion d = inv.getArgument(0);
+            datos.put(d.comentarioId(), d);
+            return d;
+        });
+        when(repo.findById(anyString())).thenAnswer(inv ->
+                Optional.ofNullable(datos.get(inv.<String>getArgument(0))));
+        when(repo.findAllById(any())).thenAnswer(inv -> {
+            Iterable<String> ids = inv.getArgument(0);
+            List<RegistroDeDeteccion> encontradas = new ArrayList<>();
+            ids.forEach(id -> {
+                if (datos.containsKey(id)) {
+                    encontradas.add(datos.get(id));
+                }
+            });
+            return encontradas;
+        });
         return repo;
     }
 }

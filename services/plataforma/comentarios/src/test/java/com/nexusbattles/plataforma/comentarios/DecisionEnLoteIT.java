@@ -244,6 +244,13 @@ class DecisionEnLoteIT {
                 "los tres asientos llevan al moderador del token y las cinco cosas que pide RF-COM-008");
         verify(aviso, times(3)).notificar(any(), any());
         verify(auditoria, times(3)).registrar(any());
+        // SA-5 (V9): los tres asientos quedan en la cola de la bitacora central, con la IP de la peticion.
+        assertEquals(3, jdbc.queryForObject("""
+                select count(*) from comentarios.comentario_moderacion
+                where comentario_id in (?, ?, ?) and auditado_en is null and intentos_de_auditoria = 0
+                  and ip_origen is not null
+                """, Integer.class, c1, c2, c3),
+                "los asientos nuevos esperan su entrega a ms-cumplimiento");
     }
 
     @Test

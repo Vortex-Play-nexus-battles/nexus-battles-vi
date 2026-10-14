@@ -1,9 +1,10 @@
 package com.nexusbattles.plataforma.adminparametros.parametros;
 
 /**
- * Puerto hacia la auditoria de ms-cumplimiento (HU-AUD-001). Fail-open: si
- * no responde, el cambio se aplica igual (el historial local es la
- * evidencia) y se anota en la bitacora.
+ * Deja constancia de un cambio en la bitacora JSON (regla 6), dentro de la
+ * peticion del administrador. La bitacora central de ms-cumplimiento la
+ * alimenta {@link EnvioDeAuditoria} desde la propia version (SA-5): aqui no
+ * se llama a ningun servicio.
  */
 public interface Auditoria {
 

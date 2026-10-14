@@ -158,7 +158,40 @@ info:
     hizo, igual que en el detalle de la cola. Misma guarda que el resto de la
     moderacion (Moderador, Administrador, Super Administrador). Solo anade
     una operacion y esquemas: es menor.
-  version: 1.12.0
+
+    1.13.0 (HU-COM-007 CA-01, #521; #889 de Alexander Nino, integrado en SA-4 y
+    renumerado tras 1.12.0): el moderador ve por que el filtro
+    automatico retuvo un comentario. Hasta aqui el servicio pedia la
+    verificacion a la lista negra y se quedaba solo con `aprobado` y `accion`:
+    el comentario entraba en EN_REVISION y en la cola no decia que termino
+    lo senalo, asi que CA-01 («registra la deteccion») quedaba a medias. Ahora
+    cada entrada de la cola y el detalle de moderacion traen `deteccion`,
+    opcional: los `id` de las reglas que coincidieron (`reglas` de
+    moderacion-lista-negra.yaml 2.1.0, que solo salen con token de servicio),
+    la categoria, el motivo generico y la fecha de la verificacion; nunca el
+    texto del comentario. Si el comentario quedo retenido porque la lista
+    negra no respondio (RF-COM-007: retener antes que publicar sin filtrar),
+    `deteccion` lo dice con `servicioNoDisponible: true` y sin reglas. Ausente
+    cuando el comentario llego a la cola por reportes y no por el filtro.
+    Un objeto opcional en dos respuestas que ya existian: menor.
+
+    1.14.0 (§7.3.3 «Histórico de moderación», SA-4): nueva `GET
+    /comentarios/moderacion/historial` (`historialDeModeracion`), todas las
+    acciones de moderacion de la mas reciente a la mas antigua, con filtros
+    por accion, por el apodo de quien decidio (o parte) y por periodo, y con
+    lo minimo del comentario para reconocerlo (producto, autor, extracto). La
+    IP de origen que guarda cada asiento no sale. Misma guarda que el resto de
+    la moderacion. Solo anade una operacion y esquemas: es menor.
+
+    1.15.0 (§7.3.8 «Alertas de actividad sospechosa o alta frecuencia de
+    reportes», RF-MET-001, SA-4): nueva `GET
+    /comentarios/moderacion/reportes/frecuencia` (`frecuenciaDeReportes`),
+    cuantos reportes se hicieron en un periodo, por dia y por categoria, mas
+    cuantos comentarios distintos se reportaron y cuantas personas
+    reportaron. Solo cuentas: ningun identificador sale. La consume el
+    tablero de moderacion de metricas-plataforma reenviando el token de quien
+    lo mira. Solo anade una operacion y un esquema: es menor.
+  version: 1.15.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -817,6 +850,146 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HistorialDelAutorResponse"
+        "401":
+          description: Sin token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
+          description: El rol no modera.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+
+  /comentarios/moderacion/historial:
+    get:
+      summary: Historico de moderacion (§7.3.3)
+      operationId: historialDeModeracion
+      description: >
+        1.14.0 — Solo MODERADOR, ADMINISTRADOR y SUPER_ADMINISTRADOR. Todas las
+        acciones de moderacion, de la mas reciente a la mas antigua: quien
+        decidio (su apodo), que accion, con que motivo, entre que estados y si
+        cambio el texto, con el comentario sobre el que se decidio (producto,
+        autor y un extracto de hasta 160 caracteres). Los filtros se combinan.
+        La IP de origen que guarda cada asiento no sale por aqui. Sin
+        resultados es `200` con lista vacia y `total: 0`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: accion
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/AccionDeModeracion"
+        - name: moderador
+          in: query
+          required: false
+          description: El apodo de quien decidio, o parte de el, sin distinguir mayusculas.
+          schema:
+            type: string
+            maxLength: 100
+        - name: desde
+          in: query
+          required: false
+          description: Desde este instante (incluido), ISO-8601.
+          schema:
+            type: string
+            format: date-time
+        - name: hasta
+          in: query
+          required: false
+          description: Antes de este instante (excluido), ISO-8601; posterior a `desde`.
+          schema:
+            type: string
+            format: date-time
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: tamano
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 16
+      responses:
+        "200":
+          description: Pagina del historico (puede venir vacia).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginaDeHistorialDeModeracion"
+        "400":
+          description: Una accion fuera del enumerado, una fecha que no es ISO o un periodo al reves.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Sin token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
+          description: El rol no modera.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+
+  /comentarios/moderacion/reportes/frecuencia:
+    get:
+      summary: Frecuencia de reportes de un periodo (§7.3.8, RF-MET-001)
+      operationId: frecuenciaDeReportes
+      description: >
+        1.15.0 — Solo MODERADOR, ADMINISTRADOR y SUPER_ADMINISTRADOR. Cuantos
+        reportes (RF-COM-006) se hicieron en el periodo, en total, por dia y
+        por categoria, cuantos comentarios distintos recibieron alguno y
+        cuantas personas distintas reportaron. Los dias son dias UTC, el mismo
+        corte que `GET /sanciones/metricas` de moderacion-sanciones, para que
+        el tablero compare las dos series dia a dia; solo salen los dias con
+        algun reporte. `porCategoria` trae siempre las seis categorias, con 0
+        si no hubo ninguna. No sale ningun identificador de comentario, de
+        autor ni de reportante. Sin periodo, los ultimos 30 dias; como mucho
+        366 dias de una vez. Un periodo sin reportes es `200` con `total: 0`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: Desde este instante (incluido), ISO-8601. Por omision, 30 dias antes de `hasta`.
+          schema:
+            type: string
+            format: date-time
+        - name: hasta
+          in: query
+          required: false
+          description: Antes de este instante (excluido), ISO-8601. Por omision, ahora.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: La frecuencia de reportes del periodo (puede ser cero).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FrecuenciaDeReportes"
+        "400":
+          description: Una fecha que no es ISO, un periodo al reves o de mas de 366 dias.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
         "401":
           description: Sin token.
           content:
@@ -1666,6 +1839,8 @@ components:
           type: string
           format: date-time
           description: Desempata la cola a igualdad de reportes.
+        deteccion:
+          $ref: "#/components/schemas/DeteccionAutomatica"
 
     ColaDeModeracionResponse:
       type: object
@@ -1686,6 +1861,74 @@ components:
           type: integer
         tamano:
           type: integer
+
+    AsientoDelHistorial:
+      type: object
+      description: >
+        1.14.0 — un asiento del historico de moderacion, sin la IP de origen,
+        con lo minimo del comentario. Si el comentario ya no se pudiera leer,
+        sus campos (`productoId`, `autorId`, `apodoAutor`, `extracto`) van a
+        `null`.
+      required: [id, fecha, accion, moderadorId, apodoModerador, motivo, estadoAnterior, estadoNuevo, textoEditado, comentarioId, productoId, autorId, apodoAutor, extracto]
+      properties:
+        id: { type: string }
+        fecha: { type: string, format: date-time }
+        accion: { $ref: "#/components/schemas/AccionDeModeracion" }
+        moderadorId: { type: string }
+        apodoModerador: { type: string }
+        motivo: { type: string }
+        estadoAnterior: { type: string }
+        estadoNuevo: { type: string }
+        textoEditado: { type: boolean, description: "true si la accion cambio el texto (EDITAR)." }
+        comentarioId: { type: string }
+        productoId: { type: [string, "null"] }
+        autorId: { type: [string, "null"] }
+        apodoAutor: { type: [string, "null"] }
+        extracto: { type: [string, "null"], maxLength: 160 }
+
+    PaginaDeHistorialDeModeracion:
+      type: object
+      required: [contenido, pagina, tamano, total, totalPaginas]
+      properties:
+        contenido:
+          type: array
+          items: { $ref: "#/components/schemas/AsientoDelHistorial" }
+        pagina: { type: integer, minimum: 0 }
+        tamano: { type: integer, minimum: 1 }
+        total: { type: integer, minimum: 0 }
+        totalPaginas: { type: integer, minimum: 0 }
+
+    FrecuenciaDeReportes:
+      type: object
+      description: >
+        1.15.0 — la frecuencia de reportes de un periodo. Solo cuentas.
+      required: [desde, hasta, total, porDia, porCategoria, comentariosReportados, reportantes]
+      properties:
+        desde: { type: string, format: date-time }
+        hasta: { type: string, format: date-time }
+        total: { type: integer, minimum: 0 }
+        porDia:
+          type: array
+          description: Un elemento por dia UTC con algun reporte, del mas antiguo al mas reciente.
+          items:
+            type: object
+            required: [fecha, reportes]
+            properties:
+              fecha: { type: string, format: date }
+              reportes: { type: integer, minimum: 1 }
+        porCategoria:
+          type: object
+          description: Las seis categorias de RF-COM-006, siempre presentes (0 si no hubo).
+          required: [SPAM, CONTENIDO_OFENSIVO, ACOSO, INFORMACION_FALSA, CONTENIDO_INAPROPIADO, VIOLACION_DE_DERECHOS]
+          properties:
+            SPAM: { type: integer, minimum: 0 }
+            CONTENIDO_OFENSIVO: { type: integer, minimum: 0 }
+            ACOSO: { type: integer, minimum: 0 }
+            INFORMACION_FALSA: { type: integer, minimum: 0 }
+            CONTENIDO_INAPROPIADO: { type: integer, minimum: 0 }
+            VIOLACION_DE_DERECHOS: { type: integer, minimum: 0 }
+        comentariosReportados: { type: integer, minimum: 0, description: Comentarios distintos con algun reporte en el periodo. }
+        reportantes: { type: integer, minimum: 0, description: Personas distintas que reportaron en el periodo. }
 
     ItemDelHistorial:
       type: object
@@ -1847,6 +2090,53 @@ components:
           description: Acciones de moderacion ya aplicadas, de la mas antigua a la mas reciente.
           items:
             $ref: "#/components/schemas/AsientoDeModeracion"
+        deteccion:
+          $ref: "#/components/schemas/DeteccionAutomatica"
+
+    DeteccionAutomatica:
+      type: object
+      description: >
+        1.10.0 (HU-COM-007 CA-01) — por que el filtro automatico retuvo el
+        comentario. El servicio lo guarda al encolarlo, con lo que la lista
+        negra respondio a `POST /lista-negra/verificar` (moderacion-lista-negra.yaml
+        2.1.0), y lo devuelve en la cola y en el detalle para que el moderador
+        decida sabiendo que regla lo senalo. Nunca lleva el texto del
+        comentario ni los terminos coincidentes: las reglas se nombran por su
+        `id`, que la consola de lista negra resuelve. Ausente cuando el
+        comentario entro a la cola por reportes y no por el filtro.
+      required:
+        - fecha
+        - reglas
+        - servicioNoDisponible
+      properties:
+        fecha:
+          type: string
+          format: date-time
+          description: Cuando se verifico el texto (al publicar).
+        reglas:
+          type: array
+          description: >
+            Los `id` de los terminos de la lista negra que coincidieron
+            (`reglas` de la respuesta 2.1.0, que solo sale con token de
+            servicio). Vacio si la lista negra no respondio.
+          items:
+            type: integer
+            format: int64
+        categoria:
+          type: string
+          enum: [OFENSIVO, MARCA, CELEBRIDAD, POLITICO, DIRIGENTE, OTRO]
+          description: La categoria que informo la lista negra. Ausente si no respondio.
+        motivo:
+          type: string
+          description: >
+            El mensaje generico de la lista negra (sin el termino) o, si no
+            respondio, la razon de la retencion.
+        servicioNoDisponible:
+          type: boolean
+          description: >
+            `true` si el comentario quedo retenido porque la lista negra no
+            respondio (RF-COM-007: retener antes que publicar sin filtrar);
+            entonces `reglas` viene vacio y `motivo` lo explica.
 
     CalificacionRequest:
       type: object
