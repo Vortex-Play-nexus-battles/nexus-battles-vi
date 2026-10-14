@@ -181,6 +181,7 @@
 .inventario-editor__guardar,
 .inventario-editor__cancelar,
 .vitrina__editar,
+.vitrina__eliminar,
 .vitrina__equipo,
 .inventario-equipo__cerrar,
 .inventario-equipo__equipar,
@@ -204,6 +205,7 @@
 .inventario-editor__guardar:hover,
 .inventario-editor__cancelar:hover,
 .vitrina__editar:hover,
+.vitrina__eliminar:hover,
 .vitrina__equipo:hover,
 .inventario-equipo__cerrar:hover,
 .inventario-equipo__equipar:hover,
@@ -615,6 +617,7 @@
 }
 
 .vitrina__editar,
+.vitrina__eliminar,
 .vitrina__equipo {
   min-height: 30px;
   padding: 4px 8px;

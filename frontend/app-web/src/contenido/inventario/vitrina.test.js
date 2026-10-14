@@ -186,3 +186,32 @@ describe('Cuadricula de la vitrina a 1360 x 768', () => {
     expect(vitrina.querySelectorAll('.vitrina__detalle')).toHaveLength(0);
   });
 });
+
+/*
+ * HU-INV-008 — la tarjeta ofrece retirar el elemento. Se deshabilita cuando el
+ * elemento no esta disponible (en mision, publicado en subasta o equipado):
+ * el servicio lo rechazaria igual, pero ofrecerlo y luego negarlo es peor
+ * experiencia que no ofrecerlo.
+ */
+test('la tarjeta trae un boton de eliminar que avisa con el elemento', () => {
+  const avisados = [];
+  const alEliminar = (retirado) => avisados.push(retirado);
+  const vitrina = construirVitrina(paginaCon(1), { alEliminar });
+  const boton = vitrina.querySelector('.vitrina__eliminar');
+
+  expect(boton).not.toBeNull();
+  expect(boton.getAttribute('aria-label')).toBe('Eliminar Espada 0');
+  boton.click();
+  expect(avisados).toHaveLength(1);
+  expect(avisados[0].id).toBe('elemento-0');
+});
+
+test('un elemento no disponible no se puede eliminar desde la tarjeta', () => {
+  const pagina = paginaCon(1);
+  // En mision, publicado en subasta o puesto: el servicio lo rechazaria.
+  pagina.elementos[0].disponible = false;
+
+  const vitrina = construirVitrina(pagina, { alEliminar: () => {} });
+
+  expect(vitrina.querySelector('.vitrina__eliminar').disabled).toBe(true);
+});

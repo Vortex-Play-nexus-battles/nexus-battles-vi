@@ -37,7 +37,9 @@ async function escribir(ruta, metodo, identidad, cuerpo, fetchImpl) {
       'Content-Type': 'application/json',
       'X-User-Name': identidadNormalizada(identidad),
     },
-    body: JSON.stringify(cuerpo),
+    // Un DELETE no lleva cuerpo: enviar "null" haria que el servicio
+    // intentara leerlo como JSON.
+    body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
   });
   if (!respuesta.ok) {
     const fallo = new Error(`El servicio de inventario respondio ${respuesta.status} al guardar`);
@@ -249,6 +251,35 @@ export async function modificarElemento(
     'PATCH',
     identidad,
     { nombrePropio: nombrePropio.trim() },
+    fetchImpl,
+  );
+}
+
+/**
+ * Retira un elemento del inventario del jugador autenticado (HU-INV-008).
+ *
+ * Quien decide si se puede es el servicio: rechaza el elemento que esta en una
+ * mision, el publicado en una subasta, el que el heroe lleva puesto y el que
+ * no es de quien pide. Aqui solo se manda la peticion y se deja subir el fallo
+ * con su detalle, para que la vista explique el motivo en lugar del codigo.
+ *
+ * @param {string} identidad jugador autenticado, que viaja en la cabecera.
+ * @param {string} elementoId elemento a retirar.
+ * @param {{fetchImpl?: Function}} opciones inyeccion para las pruebas.
+ */
+export async function eliminarElemento(
+  identidad,
+  elementoId,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  if (!textoObligatorio(elementoId)) {
+    throw new TypeError('El elemento es obligatorio');
+  }
+  return escribir(
+    `${RUTA}/${encodeURIComponent(elementoId.trim())}`,
+    'DELETE',
+    identidad,
+    undefined,
     fetchImpl,
   );
 }

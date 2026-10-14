@@ -10,6 +10,7 @@ import {
   consultarEquipamiento,
   equiparElemento,
   desequiparElemento,
+  eliminarElemento,
 } from './cliente-inventario.js';
 
 function respuesta(cuerpo, ok = true, status = 200) {
@@ -294,4 +295,29 @@ describe('Cliente de equipamiento', () => {
       equiparElemento('jugador-A', 'heroe-1', 'arma-3', { fetchImpl: fetchFalso }),
     ).rejects.toMatchObject({ status: 409 });
   });
+});
+
+/*
+ * HU-INV-008 — el jugador retira de su inventario lo que ya no usa. El
+ * servicio es quien decide si puede: aqui solo se comprueba que la peticion
+ * sale como el contrato manda, con el metodo y la ruta del elemento.
+ */
+test('eliminarElemento pide el DELETE del elemento con la identidad', async () => {
+  const { fetchFalso, llamadas } = espia({});
+
+  await eliminarElemento('jugador-A', 'elemento-7', { fetchImpl: fetchFalso });
+
+  expect(llamadas).toHaveLength(1);
+  expect(llamadas[0].url).toBe('/api/v1/inventario/elementos/elemento-7');
+  expect(llamadas[0].opciones.method).toBe('DELETE');
+  expect(llamadas[0].opciones.headers['X-User-Name']).toBe('jugador-A');
+});
+
+test('eliminarElemento no deja pasar un identificador vacio', async () => {
+  const { fetchFalso, llamadas } = espia({});
+
+  await expect(eliminarElemento('jugador-A', '  ', { fetchImpl: fetchFalso })).rejects.toThrow(
+    TypeError,
+  );
+  expect(llamadas).toHaveLength(0);
 });
