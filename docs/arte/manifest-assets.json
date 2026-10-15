@@ -1,0 +1,1509 @@
+{
+  "version": 1,
+  "actualizado": "2026-10-14",
+  "raiz": "shared/ui-kit/arte",
+  "bloques": {
+    "estilo": "Ilustración digital de fantasía oscura, estilo concept art de videojuego RPG premium, con pincelada detallada y acabado cinematográfico, del mismo mundo, estilo, paleta e iluminación que la imagen de referencia adjunta: la Ciudadela del Nexo, una fantasía medieval atravesada por la energía arcana del Nexo. Paleta: azul marino e índigo profundos, violeta, y energía cian eléctrica en runas y en cristales en forma de rombo, con acentos cálidos ámbar puntuales. Materiales creíbles y con desgaste: acero oscuro, plata envejecida, cuero, tela gruesa, madera oscura, cristal. Iluminación: luz principal fría y azulada desde arriba a la izquierda, contraluz cian suave que recorta la silueta, sombras profundas y alto contraste.",
+    "evitar": "sin texto, letras, números ni runas que formen palabras; sin logotipos, marcas de agua, firmas, marcos, bordes, viñetas decorativas ni elementos de interfaz; sin estilo caricaturesco, chibi, anime, pixel art, render plástico 3D ni fotografía realista; sin armas de fuego ni tecnología moderna",
+    "lote0": "genera solo HER-01 (Guerrero Tanque), ARM-01 (Espada de una mano) y MIS-01 (El Templo Olvidado), ponlas una al lado de la otra y comprueba que parecen del mismo juego que los fondos. Si una desentona, se ajusta su prompt antes de seguir; las tres aprobadas son la referencia de su categoría para el resto."
+  },
+  "categorias": {
+    "heroe": {
+      "tipo": "Héroe (retrato)",
+      "ratio": "1:1",
+      "generar": "1024 × 1024 PNG",
+      "exportar": "WebP 640 × 640, calidad 82",
+      "peso": "≤ 90 KB",
+      "formato": "Retrato de UN solo personaje, de la cintura hacia arriba, en vista de tres cuartos, mirando hacia la izquierda del espectador. Formato cuadrado 1:1. La cara y los hombros van centrados en horizontal y en la franja central-superior (los ojos a un 38 % de la altura): la imagen se recorta en un círculo pequeño, en un cuadrado y en una franja horizontal ancha, así que no puede haber nada importante en las esquinas ni en el 12 % de cada borde. El arma o foco del héroe se ve junto al pecho, dentro del centro. Fondo: penumbra azul marino con niebla y un halo suave del color de su rol detrás de la cabeza, sin escenario detallado y oscuro hacia los bordes. Proporciones heroicas pero realistas, manos con cinco dedos bien formadas.",
+      "referencia": "Mismo encuadre, tamaño de cabeza, fondo e iluminación que el retrato de héroe aprobado que adjunto como referencia (desde el segundo héroe).",
+      "negativos": [
+        "un solo personaje",
+        "sin miembros extra ni manos deformes",
+        "sin rostro de actor real",
+        "sin texto de nombre ni estadísticas"
+      ],
+      "crop": "Círculo de las tarjetas (≈ 72–96 px) centrado en la cara; ficha de detalle: franja 16:7 con `object-position: 50% 30%`; combate y sala: círculo. Se exporta el cuadrado completo."
+    },
+    "mision": {
+      "tipo": "Misión (escena)",
+      "ratio": "16:9",
+      "generar": "1536 × 1024 PNG (se recorta a 16:9)",
+      "exportar": "WebP 960 × 540, calidad 76",
+      "peso": "≤ 110 KB",
+      "formato": "Escena ambiental de paisaje y lugar, sin personajes protagonistas, en formato horizontal 16:9 (si el generador solo da 3:2, deja cielo y suelo de sobra para recortar arriba y abajo). Un único punto focal en el centro exacto, reconocible aunque la imagen se vea a 300 px de ancho y aunque se recorte en un círculo centrado. Las dos esquinas superiores tranquilas y oscuras, porque ahí van etiquetas; el cuarto inferior en penumbra, porque ahí empieza el texto. Profundidad atmosférica, niebla y una sola fuente de luz dominante. Las criaturas, si aparecen, son siluetas lejanas sin rostro.",
+      "referencia": "Mismo estilo de pincel, paleta e iluminación que la escena de misión aprobada que adjunto como referencia (desde la segunda misión).",
+      "negativos": [
+        "sin personajes en primer plano",
+        "sin rostros",
+        "sin sangre ni gore"
+      ],
+      "crop": "Tarjeta del tablón: 16:9 completo; banner «Nueva» y reporte: círculo centrado; detalle: franja ancha con `object-position: 50% 45%`."
+    },
+    "arma": {
+      "tipo": "Arma (objeto)",
+      "ratio": "1:1",
+      "generar": "1024 × 1024 PNG con fondo transparente",
+      "exportar": "WebP 512 × 512 con alfa, calidad 80",
+      "peso": "≤ 45 KB",
+      "formato": "Ilustración pintada de UN único objeto de RPG, aislado y centrado, en vista de tres cuartos ligeramente desde arriba, colocado en diagonal si es alargado, ocupando el 72 % del lienzo con margen uniforme. Formato cuadrado 1:1 con fondo transparente (si el generador no permite transparencia: fondo liso azul marino muy oscuro, #121831, sin degradados ni escenario). Luz fría desde arriba a la izquierda y contraluz cian; sin suelo ni sombra proyectada. Tiene que reconocerse qué es aunque se vea a 96 px.",
+      "referencia": "Mismo estilo, ángulo, tamaño en el lienzo e iluminación que el objeto aprobado que adjunto como referencia (desde el segundo objeto).",
+      "negativos": [
+        "un único objeto (o un único par si se indica)",
+        "sin manos ni personajes",
+        "sin pedestal salvo que se indique",
+        "sin fondo de escenario"
+      ],
+      "crop": "Centrado con margen; la tienda y la subasta lo encajan con `object-fit: contain` sobre la ranura oscura."
+    },
+    "armadura": {
+      "tipo": "Armadura (objeto)",
+      "ratio": "1:1",
+      "generar": "1024 × 1024 PNG con fondo transparente",
+      "exportar": "WebP 512 × 512 con alfa, calidad 80",
+      "peso": "≤ 45 KB",
+      "formato": "Ilustración pintada de UNA única pieza de armadura de RPG (o un único par si es de manos o pies), aislada y centrada, sin persona dentro: si es una prenda, como si la llevara un maniquí invisible. Vista de tres cuartos ligeramente desde arriba, ocupando el 72 % del lienzo con margen uniforme. Formato cuadrado 1:1 con fondo transparente (si el generador no permite transparencia: fondo liso azul marino muy oscuro, #121831). Luz fría desde arriba a la izquierda y contraluz cian; sin suelo ni sombra proyectada. Tiene que reconocerse qué parte del cuerpo cubre aunque se vea a 96 px.",
+      "referencia": "Mismo estilo, ángulo, tamaño en el lienzo e iluminación que el objeto aprobado que adjunto como referencia.",
+      "negativos": [
+        "sin persona ni cabeza dentro de la pieza",
+        "sin manos",
+        "un único objeto o par",
+        "sin fondo de escenario"
+      ],
+      "crop": "Centrado con margen; mismo encaje que las armas."
+    },
+    "item": {
+      "tipo": "Ítem (objeto)",
+      "ratio": "1:1",
+      "generar": "1024 × 1024 PNG con fondo transparente",
+      "exportar": "WebP 512 × 512 con alfa, calidad 80",
+      "peso": "≤ 45 KB",
+      "formato": "Ilustración pintada de UN único objeto pequeño de RPG (un accesorio o un consumible, que no debe parecer un arma ni una armadura), aislado y centrado, en vista de tres cuartos ligeramente desde arriba, ocupando el 60 % del lienzo con margen amplio y un brillo mágico suave a su alrededor. Formato cuadrado 1:1 con fondo transparente (si no se puede: fondo liso azul marino muy oscuro, #121831). Luz fría desde arriba a la izquierda y contraluz cian; sin suelo. Reconocible a 96 px.",
+      "referencia": "Mismo estilo e iluminación que el objeto aprobado que adjunto como referencia, pero un poco más pequeño en el lienzo.",
+      "negativos": [
+        "un único objeto",
+        "sin manos ni personajes",
+        "sin fondo de escenario"
+      ],
+      "crop": "Centrado con margen amplio."
+    },
+    "epica": {
+      "tipo": "Épica (poder)",
+      "ratio": "1:1",
+      "generar": "1024 × 1024 PNG",
+      "exportar": "WebP 512 × 512, calidad 82",
+      "peso": "≤ 70 KB",
+      "formato": "Ilustración de un poder épico, no de un objeto corriente: una composición circular y centrada que se pueda recortar en círculo o en rombo, sobre un fondo propio índigo muy oscuro con un anillo tenue de runas cian que no formen letras. Tiene que sentirse excepcional a primera vista: más contraste, partículas de energía, un halo violeta y cian alrededor del motivo central y más detalle que un objeto normal, sin marco dorado. Formato cuadrado 1:1. Sin personajes: el poder se cuenta con objetos y energía.",
+      "referencia": "Mismo tratamiento de anillo rúnico, halo y partículas que la épica aprobada que adjunto como referencia (desde la segunda épica), cambiando el color de acento del héroe.",
+      "negativos": [
+        "sin personajes ni manos",
+        "sin marco dorado",
+        "sin letras en el anillo de runas"
+      ],
+      "crop": "Círculo centrado (inventario, recompensa de misión) y cuadrado (ficha)."
+    },
+    "otro": {
+      "tipo": "Otro (objeto)",
+      "ratio": "1:1",
+      "generar": "1024 × 1024 PNG con fondo transparente",
+      "exportar": "WebP 512 × 512 con alfa, calidad 80",
+      "peso": "≤ 45 KB",
+      "formato": "Ilustración pintada de UN único objeto de RPG, aislado y centrado, en vista de tres cuartos ligeramente desde arriba, ocupando el 70 % del lienzo. Formato cuadrado 1:1 con fondo transparente (si no se puede: fondo liso azul marino muy oscuro, #121831). Luz fría desde arriba a la izquierda y contraluz cian. Reconocible a 96 px.",
+      "negativos": [
+        "un único objeto",
+        "sin personajes",
+        "sin fondo de escenario"
+      ],
+      "crop": "Centrado con margen."
+    },
+    "emblema": {
+      "tipo": "Emblema de equipo",
+      "ratio": "1:1",
+      "generar": "1024 × 1024 PNG",
+      "exportar": "WebP 256 × 256, calidad 80",
+      "peso": "≤ 25 KB",
+      "formato": "Emblema heráldico para el estandarte de un equipo de torneo: un escudo de armas de forma de rombo alargado, de acero oscuro con borde de plata, con un único símbolo central grande y simple, sobre fondo azul marino muy oscuro. Formato cuadrado 1:1, centrado, legible a 48 px: formas grandes, pocos detalles, contraste alto. Todos los emblemas comparten la misma forma de escudo y solo cambian el símbolo y su color de acento.",
+      "negativos": [
+        "sin personajes",
+        "sin letras ni iniciales"
+      ],
+      "crop": "Círculo y cuadrado pequeños (selector de equipo, cuadro del torneo)."
+    }
+  },
+  "lotes": {
+    "0": {
+      "nombre": "Prueba de dirección artística",
+      "nota": "Un héroe, un arma y una misión, juntos, antes de producir el resto. Las tres aprobadas son la referencia de su categoría."
+    },
+    "1": {
+      "nombre": "Héroes y misiones (P0)",
+      "nota": "Los siete héroes y las siete misiones que faltan tras la prueba."
+    },
+    "2": {
+      "nombre": "Armas",
+      "nota": "Las quince armas que faltan tras la prueba (Tablas 8-19 del documento)."
+    },
+    "3": {
+      "nombre": "Armaduras",
+      "nota": "Las dieciséis armaduras, una por parte del cuerpo indicada en el documento."
+    },
+    "4": {
+      "nombre": "Ítems y épicas",
+      "nota": "Ocho ítems y nueve épicas (ocho de la Tabla 20 y la de la misión del Templo)."
+    },
+    "5": {
+      "nombre": "Otros (opcional, decisión del PO)",
+      "nota": "No bloquean el cierre: el Cofre de Bronce (recompensa del Templo, sin producto en el catálogo) y los diez emblemas de equipo de torneo, que hoy son ilustraciones caricaturescas de otro estilo."
+    }
+  },
+  "assets": [
+    {
+      "id": "HER-01",
+      "categoria": "heroe",
+      "nombre": "Guerrero Tanque",
+      "entidad": "heroe-guerrero-tanque",
+      "archivo": "heroes/guerrero-tanque.webp",
+      "uso": [
+        "Héroes del Nexo",
+        "detalle del héroe",
+        "inventario y equipo",
+        "tienda",
+        "selector y validación",
+        "sala y combate",
+        "estrategia de misión"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "0",
+      "fuente": "Tabla 6 · `heroe-guerrero-tanque` (catalogo-inicial.json)",
+      "descripcion": "el Guerrero Tanque, defensor de primera línea del Nexo: armadura pesada de placas de acero oscuro con remaches de plata y un rombo cian grabado en el peto, hombreras anchas, capa corta azul cobalto gastada. Sostiene delante del pecho un gran escudo con relieve de cabeza de dragón en plata y una espada recta de una mano. Rostro curtido y sereno, barba corta, cicatriz en la ceja. Halo azul cobalto detrás. Silueta ancha y sólida, la más pesada de los ocho."
+    },
+    {
+      "id": "HER-02",
+      "categoria": "heroe",
+      "nombre": "Guerrero Armas",
+      "entidad": "heroe-guerrero-armas",
+      "archivo": "heroes/guerrero-armas.webp",
+      "uso": [
+        "Héroes del Nexo",
+        "detalle del héroe",
+        "inventario y equipo",
+        "tienda",
+        "selector y validación",
+        "sala y combate",
+        "estrategia de misión"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "1",
+      "fuente": "Tabla 6 · `heroe-guerrero-armas` (catalogo-inicial.json)",
+      "descripcion": "la Guerrera Armas, maestra del mandoble: armadura media de acero y cuero, brazaletes de bronce con grabados de llama y guanteletes articulados, sin escudo. Apoya sobre el hombro un mandoble de hoja ancha con runas cian a lo largo del vaceo. Cabello oscuro recogido en trenza, mirada decidida y agresiva, una pintura de guerra ámbar en la mejilla. Halo rojo ámbar de brasa detrás. Silueta atlética y diagonal por la espada."
+    },
+    {
+      "id": "HER-03",
+      "categoria": "heroe",
+      "nombre": "Mago Fuego",
+      "entidad": "heroe-mago-fuego",
+      "archivo": "heroes/mago-fuego.webp",
+      "uso": [
+        "Héroes del Nexo",
+        "detalle del héroe",
+        "inventario y equipo",
+        "tienda",
+        "selector y validación",
+        "sala y combate",
+        "estrategia de misión"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "1",
+      "fuente": "Tabla 6 · `heroe-mago-fuego` (catalogo-inicial.json)",
+      "descripcion": "el Mago Fuego: túnica arcana índigo gruesa con bordados dorados y runas color ascua, bajos chamuscados. En la mano izquierda, a la altura del pecho, un orbe de cristal ahumado sujeto por garras de bronce con fuego naranja girando dentro; en el dedo, un anillo de oro oscuro con una gema anaranjada. Rostro anguloso de mediana edad, ojos que reflejan las llamas, chispas flotando. Halo naranja fuego detrás."
+    },
+    {
+      "id": "HER-04",
+      "categoria": "heroe",
+      "nombre": "Mago Hielo",
+      "entidad": "heroe-mago-hielo",
+      "archivo": "heroes/mago-hielo.webp",
+      "uso": [
+        "Héroes del Nexo",
+        "detalle del héroe",
+        "inventario y equipo",
+        "tienda",
+        "selector y validación",
+        "sala y combate",
+        "estrategia de misión"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "1",
+      "fuente": "Tabla 6 · `heroe-mago-hielo` (catalogo-inicial.json)",
+      "descripcion": "la Maga Hielo: manto de pieles blancas y placas de plata escarchada, una corona de cristales de hielo en forma de rombo sobre el cabello plateado. Sostiene en diagonal un báculo de madera petrificada por la escarcha coronado por un cristal de hielo con anillos de plata; vaho frío alrededor. Expresión serena y distante, piel pálida con reflejos azules. Halo blanco escarcha y cian pálido detrás."
+    },
+    {
+      "id": "HER-05",
+      "categoria": "heroe",
+      "nombre": "Pícaro Veneno",
+      "entidad": "heroe-picaro-veneno",
+      "archivo": "heroes/picaro-veneno.webp",
+      "uso": [
+        "Héroes del Nexo",
+        "detalle del héroe",
+        "inventario y equipo",
+        "tienda",
+        "selector y validación",
+        "sala y combate",
+        "estrategia de misión"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "1",
+      "fuente": "Tabla 6 · `heroe-picaro-veneno` (catalogo-inicial.json)",
+      "descripcion": "la Pícara Veneno: capucha oscura que deja ver media cara, coraza ligera de cuero con correas cruzadas de cuero carmesí, guantes de cuero negro gastados. Sostiene junto al pecho una daga curva por cuya acanaladura corre un veneno verde-violeta que gotea; un frasco facetado al cinto. Ojos atentos y astutos, media sonrisa. Halo verde tóxico y violeta detrás. Silueta esbelta y en sombra."
+    },
+    {
+      "id": "HER-06",
+      "categoria": "heroe",
+      "nombre": "Pícaro Machete",
+      "entidad": "heroe-picaro-machete",
+      "archivo": "heroes/picaro-machete.webp",
+      "uso": [
+        "Héroes del Nexo",
+        "detalle del héroe",
+        "inventario y equipo",
+        "tienda",
+        "selector y validación",
+        "sala y combate",
+        "estrategia de misión"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "1",
+      "fuente": "Tabla 6 · `heroe-picaro-machete` (catalogo-inicial.json)",
+      "descripcion": "el Pícaro Machete: luchador rudo de los caminos, chaleco de cuero endurecido, brazaletes con púas de hierro y piedras rojo oscuro, pañuelo carmesí al cuello. Apoya en el hombro un machete ancho y pesado cuya hoja está envuelta a medias en vendas claras con runas cian pintadas. Rostro moreno con barba de días y una sonrisa desafiante. Halo carmesí oscuro detrás."
+    },
+    {
+      "id": "HER-07",
+      "categoria": "heroe",
+      "nombre": "Chamán",
+      "entidad": "heroe-chaman",
+      "archivo": "heroes/chaman.webp",
+      "uso": [
+        "Héroes del Nexo",
+        "detalle del héroe",
+        "inventario y equipo",
+        "tienda",
+        "selector y validación",
+        "sala y combate",
+        "estrategia de misión"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "1",
+      "fuente": "Tabla 6 · `heroe-chaman` (catalogo-inicial.json)",
+      "descripcion": "el Chamán, sanador del bosque: peto de pieles, cuero y musgo con cuentas de hueso, y un yelmo de hueso y madera con astas cortas, plumas y ojos tallados que brillan cian. Sostiene junto al pecho una raíz retorcida usada como talismán, atada con cordones, de la que salen brotes con luz verde-cian. Rostro mayor, sabio y tranquilo, pintura ritual en la frente. Halo verde musgo y cian detrás."
+    },
+    {
+      "id": "HER-08",
+      "categoria": "heroe",
+      "nombre": "Médico",
+      "entidad": "heroe-medico",
+      "archivo": "heroes/medico.webp",
+      "uso": [
+        "Héroes del Nexo",
+        "detalle del héroe",
+        "inventario y equipo",
+        "tienda",
+        "selector y validación",
+        "sala y combate",
+        "estrategia de misión"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "1",
+      "fuente": "Tabla 6 · `heroe-medico` (catalogo-inicial.json)",
+      "descripcion": "la Médica de campaña del Nexo: bata larga color hueso con cinturones y bolsillos con viales, rodilleras de cuero, y en bandolera un maletín de cuero con herrajes de plata con un emblema en rombo verde azulado (no una cruz roja). Sostiene junto al pecho un dispositivo de reanimación arcano: dos palas de plata unidas por cables trenzados a un núcleo de cristal cian que chisporrotea. Mirada firme y compasiva, cabello corto recogido. Halo verde azulado detrás."
+    },
+    {
+      "id": "MIS-01",
+      "categoria": "mision",
+      "nombre": "El Templo Olvidado",
+      "entidad": "templo-olvidado",
+      "archivo": "misiones/templo-olvidado.webp",
+      "uso": [
+        "tablón (tarjeta)",
+        "banner «Nueva»",
+        "detalle de la misión",
+        "en curso",
+        "reporte"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "0",
+      "fuente": "Documento §7.8.14 · `templo-olvidado`",
+      "descripcion": "El Templo Olvidado, de noche, en las profundidades del Bosque Sombrío: un templo antiguo de piedra gris cubierto de raíces y musgo, con escalinata y columnas rotas, dedicado a los Dioses Olvidados. En el centro, su gran portal sellado brilla con runas cian tenues entre árboles retorcidos y niebla densa. A los lados de la escalinata, dos estatuas de guardianes de piedra; entre los árboles, siluetas lejanas de sombras corrompidas. Sensación de presencia arcana milenaria y de peligro. Dificultad normal: noche azul profunda."
+    },
+    {
+      "id": "MIS-02",
+      "categoria": "mision",
+      "nombre": "El Sendero de los Aprendices",
+      "entidad": "sendero-de-los-aprendices",
+      "archivo": "misiones/sendero-de-los-aprendices.webp",
+      "uso": [
+        "tablón (tarjeta)",
+        "banner «Nueva»",
+        "detalle de la misión",
+        "en curso",
+        "reporte"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "1",
+      "fuente": "Progresión (cambio autorizado n.º 2) · `sendero-de-los-aprendices`",
+      "descripcion": "El Sendero de los Aprendices, al atardecer: un camino de tierra que entra en un bosque claro desde un pequeño campamento de tiendas con estandartes azules del rombo y una fogata. En el centro del camino, una barricada improvisada de troncos y cajas de los saqueadores, con un farol ámbar. Luz cálida y amable, sensación de primera aventura y de peligro menor. Dificultad fácil: el cielo es la escena más luminosa de las ocho."
+    },
+    {
+      "id": "MIS-03",
+      "categoria": "mision",
+      "nombre": "La Mina Abandonada",
+      "entidad": "mina-abandonada",
+      "archivo": "misiones/mina-abandonada.webp",
+      "uso": [
+        "tablón (tarjeta)",
+        "banner «Nueva»",
+        "detalle de la misión",
+        "en curso",
+        "reporte"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "1",
+      "fuente": "Progresión · `mina-abandonada`",
+      "descripcion": "La Mina Abandonada: la boca de una vieja mina de hierro excavada en la roca, con un armazón de vigas de madera, raíles oxidados y una vagoneta volcada que entran en la oscuridad. En el centro, dentro del túnel, se adivina la silueta enorme de un golem de escombros hecho de rocas y raíles, con grietas de luz naranja. Murciélagos de ceniza revolotean. Polvo en el aire, un farol ámbar caído. Dificultad fácil: crepúsculo templado."
+    },
+    {
+      "id": "MIS-04",
+      "categoria": "mision",
+      "nombre": "El Pantano de los Susurros",
+      "entidad": "pantano-de-los-susurros",
+      "archivo": "misiones/pantano-de-los-susurros.webp",
+      "uso": [
+        "tablón (tarjeta)",
+        "banner «Nueva»",
+        "detalle de la misión",
+        "en curso",
+        "reporte"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "1",
+      "fuente": "Progresión · `pantano-de-los-susurros`",
+      "descripcion": "El Pantano de los Susurros: agua oscura y quieta entre árboles muertos cubiertos de musgo colgante, niebla espesa a ras del agua que forma remolinos como figuras. En el centro, una cabaña de bruja sobre pilotes con una luz azul helada en la ventana, y una pasarela de tablones que lleva hasta ella. Hielo fino en el borde del agua, sapos sobre las raíces. Atmósfera inquietante y silenciosa. Dificultad normal: luna velada."
+    },
+    {
+      "id": "MIS-05",
+      "categoria": "mision",
+      "nombre": "La Fortaleza Quebrada",
+      "entidad": "fortaleza-quebrada",
+      "archivo": "misiones/fortaleza-quebrada.webp",
+      "uso": [
+        "tablón (tarjeta)",
+        "banner «Nueva»",
+        "detalle de la misión",
+        "en curso",
+        "reporte"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "1",
+      "fuente": "Progresión · `fortaleza-quebrada`",
+      "descripcion": "La Fortaleza Quebrada: las ruinas de una fortaleza que cierra un paso de montaña, con murallas derrumbadas y una torre partida por la mitad. En el centro, sobre la puerta rota, un estandarte del Nexo desgarrado. En las almenas, siluetas fantasmales de soldados caídos en formación, con un brillo azul espectral; en la torre, una luz de hielo. Melancolía y guardia eterna. Dificultad normal: noche con niebla."
+    },
+    {
+      "id": "MIS-06",
+      "categoria": "mision",
+      "nombre": "Las Cumbres Heladas",
+      "entidad": "cumbres-heladas",
+      "archivo": "misiones/cumbres-heladas.webp",
+      "uso": [
+        "tablón (tarjeta)",
+        "banner «Nueva»",
+        "detalle de la misión",
+        "en curso",
+        "reporte"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "1",
+      "fuente": "Progresión · `cumbres-heladas`",
+      "descripcion": "Las Cumbres Heladas: un paso de alta montaña en plena ventisca, nieve que vuela en diagonal, picos afilados. En el centro, un refugio de piedra de pastores con la chimenea apagada y la puerta cubierta de escarcha. En la ladera, siluetas de lobos de escarcha con ojos cian; arriba, una forma de cristal de hielo enorme apenas visible en la tormenta. Frío extremo y desolación. Dificultad normal: blanco azulado frío, la escena más clara en tonos."
+    },
+    {
+      "id": "MIS-07",
+      "categoria": "mision",
+      "nombre": "El Volcán Dormido",
+      "entidad": "volcan-dormido",
+      "archivo": "misiones/volcan-dormido.webp",
+      "uso": [
+        "tablón (tarjeta)",
+        "banner «Nueva»",
+        "detalle de la misión",
+        "en curso",
+        "reporte"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "1",
+      "fuente": "Progresión · `volcan-dormido`",
+      "descripcion": "El Volcán Dormido: el cráter de un volcán que despierta, con ríos de lava naranja que bajan por grietas entre rocas de obsidiana negra. En el centro, en el fondo del cráter, un enorme corazón de magma que late con un brillo naranja y rojo. Junto a la lava, siluetas de salamandras de fuego; en el borde del cráter, guardianes de obsidiana. Humo, ceniza y calor. Dificultad difícil: la única escena dominada por naranja, contrastado con el índigo del cielo."
+    },
+    {
+      "id": "MIS-08",
+      "categoria": "mision",
+      "nombre": "La Ciudadela de las Sombras",
+      "entidad": "ciudadela-de-las-sombras",
+      "archivo": "misiones/ciudadela-de-las-sombras.webp",
+      "uso": [
+        "tablón (tarjeta)",
+        "banner «Nueva»",
+        "detalle de la misión",
+        "en curso",
+        "reporte"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "1",
+      "fuente": "Progresión · `ciudadela-de-las-sombras`",
+      "descripcion": "La Ciudadela de las Sombras: una ciudadela negra y sin puertas, de torres afiladas, en el linde del Bosque Sombrío. En el centro, su muralla lisa e impenetrable con un único arco cegado del que sale humo violeta. En los adarves, siluetas de caballeros negros con armadura pesada; en las sombras de los arcos, figuras veladas de asesinos. Amenaza, opresión y la sensación de última frontera antes del templo. Dificultad difícil: noche violeta muy oscura."
+    },
+    {
+      "id": "ARM-01",
+      "categoria": "arma",
+      "nombre": "Espada de una mano",
+      "entidad": "arma-guerrero-tanque-espada-de-una-mano",
+      "archivo": "productos/armas/espada-de-una-mano.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "0",
+      "fuente": "Tablas 8-19 · arma de Guerrero Tanque",
+      "descripcion": "la Espada de una mano del Guerrero Tanque: espada recta de una mano, hoja de acero oscuro con filo pulido, guarda corta en forma de rombo con un pequeño cristal cian en el centro, empuñadura de cuero azul cobalto y pomo de plata. Robusta y sobria, de defensor."
+    },
+    {
+      "id": "ARM-02",
+      "categoria": "arma",
+      "nombre": "Espada de dos manos",
+      "entidad": "arma-guerrero-armas-espada-de-dos-manos",
+      "archivo": "productos/armas/espada-de-dos-manos.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "2",
+      "fuente": "Tablas 8-19 · arma de Guerrero Armas",
+      "descripcion": "la Espada de dos manos del Guerrero Armas: mandoble largo de hoja ancha con runas cian grabadas a lo largo del vaceo, guarda ancha de plata envejecida con puntas, empuñadura larga envuelta en cuero rojo oscuro. Colocado en diagonal. Aspecto agresivo y pesado."
+    },
+    {
+      "id": "ARM-03",
+      "categoria": "arma",
+      "nombre": "Escudo de dragón",
+      "entidad": "arma-guerrero-tanque-escudo-de-dragon",
+      "archivo": "productos/armas/escudo-de-dragon.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "2",
+      "fuente": "Tablas 8-19 · arma de Guerrero Tanque",
+      "descripcion": "el Escudo de dragón del Guerrero Tanque (en el documento es un arma): escudo de acero oscuro con forma de lágrima, con una cabeza de dragón en relieve de plata en el centro, ojos de cristal cian y escamas grabadas a lo largo del borde. Visto de frente en tres cuartos."
+    },
+    {
+      "id": "ARM-04",
+      "categoria": "arma",
+      "nombre": "Piedra de afilar",
+      "entidad": "arma-guerrero-armas-piedra-de-afilar",
+      "archivo": "productos/armas/piedra-de-afilar.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "2",
+      "fuente": "Tablas 8-19 · arma de Guerrero Armas",
+      "descripcion": "la Piedra de afilar del Guerrero Armas: una piedra de afilar alargada de grano gris oscuro con vetas de cristal cian, sujeta a una correa de cuero con hebilla de plata para llevarla al cinto. Unas pocas chispas cian saltan de su superficie."
+    },
+    {
+      "id": "ARM-05",
+      "categoria": "arma",
+      "nombre": "Orbe de manos ardientes",
+      "entidad": "arma-mago-fuego-orbe-de-manos-ardientes",
+      "archivo": "productos/armas/orbe-de-manos-ardientes.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "2",
+      "fuente": "Tablas 8-19 · arma de Mago Fuego",
+      "descripcion": "el Orbe de manos ardientes del Mago Fuego: un orbe de cristal ahumado del tamaño de un puño, sujeto por garras de bronce oscuro, con fuego naranja y ámbar girando dentro y runas que brillan como brasas en su montura."
+    },
+    {
+      "id": "ARM-06",
+      "categoria": "arma",
+      "nombre": "Báculo de Permafrost",
+      "entidad": "arma-mago-hielo-baculo-de-permafrost",
+      "archivo": "productos/armas/baculo-de-permafrost.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "2",
+      "fuente": "Tablas 8-19 · arma de Mago Hielo",
+      "descripcion": "el Báculo de Permafrost del Mago Hielo: báculo largo de madera oscura petrificada y cubierta de escarcha, coronado por un gran cristal de hielo en forma de rombo rodeado de anillos de plata, con vaho frío que cae. Colocado en diagonal de esquina a esquina sin tocar los bordes."
+    },
+    {
+      "id": "ARM-07",
+      "categoria": "arma",
+      "nombre": "Fuego fatuo",
+      "entidad": "arma-mago-fuego-fuego-fatuo",
+      "archivo": "productos/armas/fuego-fatuo.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "2",
+      "fuente": "Tablas 8-19 · arma de Mago Fuego",
+      "descripcion": "el Fuego fatuo del Mago Fuego: una llama fatua etérea, de núcleo blanco y bordes violeta y ámbar, que flota sobre un pequeño disco de piedra oscura con runas talladas que brillan como brasas.",
+      "interpretacion": "es un arma del documento sin forma descrita; se representa como un foco mágico (llama sobre disco rúnico), sin atribuirle ninguna función."
+    },
+    {
+      "id": "ARM-08",
+      "categoria": "arma",
+      "nombre": "Venas heladas",
+      "entidad": "arma-mago-hielo-venas-heladas",
+      "archivo": "productos/armas/venas-heladas.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "2",
+      "fuente": "Tablas 8-19 · arma de Mago Hielo",
+      "descripcion": "las Venas heladas del Mago Hielo: un relicario alargado de cristal transparente con tapa y base de plata, atravesado por venas de hielo azul brillante que se ramifican por dentro como raíces, con escarcha en la superficie.",
+      "interpretacion": "arma sin forma descrita; se representa como relicario de cristal con venas de hielo."
+    },
+    {
+      "id": "ARM-09",
+      "categoria": "arma",
+      "nombre": "Daga purulenta",
+      "entidad": "arma-picaro-veneno-daga-purulenta",
+      "archivo": "productos/armas/daga-purulenta.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "2",
+      "fuente": "Tablas 8-19 · arma de Pícaro Veneno",
+      "descripcion": "la Daga purulenta del Pícaro Veneno: daga curva de hoja estrecha con una acanaladura por la que corre un veneno verde-violeta espeso que gotea de la punta, empuñadura envuelta en cuero negro y pomo con un pequeño cristal violeta."
+    },
+    {
+      "id": "ARM-10",
+      "categoria": "arma",
+      "nombre": "Machete vendito",
+      "entidad": "arma-picaro-machete-machete-vendito",
+      "archivo": "productos/armas/machete-vendito.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "2",
+      "fuente": "Tablas 8-19 · arma de Pícaro Machete",
+      "descripcion": "el Machete vendito del Pícaro Machete: machete ancho y pesado de hoja mellada, con la parte central de la hoja envuelta en vendas claras atadas con runas cian pintadas como una bendición, mango de madera oscura con remaches.",
+      "interpretacion": "el nombre del documento se conserva tal cual («vendito»); la imagen juega con «vendas» y «bendito»."
+    },
+    {
+      "id": "ARM-11",
+      "categoria": "arma",
+      "nombre": "Visión borrosa",
+      "entidad": "arma-picaro-veneno-vision-borrosa",
+      "archivo": "productos/armas/vision-borrosa.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "2",
+      "fuente": "Tablas 8-19 · arma de Pícaro Veneno",
+      "descripcion": "la Visión borrosa del Pícaro Veneno: un amuleto con forma de ojo de cristal empañado, dentro del cual se arremolina un humo violeta, colgado de una cadena negra con una montura de plata oscura.",
+      "interpretacion": "arma sin forma descrita; se representa como amuleto-ojo empañado."
+    },
+    {
+      "id": "ARM-12",
+      "categoria": "arma",
+      "nombre": "Cierra sangrienta",
+      "entidad": "arma-picaro-machete-cierra-sangrienta",
+      "archivo": "productos/armas/cierra-sangrienta.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "2",
+      "fuente": "Tablas 8-19 · arma de Pícaro Machete",
+      "descripcion": "la Cierra sangrienta del Pícaro Machete: una hoja corta de sierra con dientes grandes y curvos, montada en un mango de hierro envuelto en cuero, con un brillo carmesí oscuro en los dientes y el filo, sin sangre goteando.",
+      "interpretacion": "el nombre del documento se conserva tal cual («Cierra»); la imagen es una sierra."
+    },
+    {
+      "id": "ARM-13",
+      "categoria": "arma",
+      "nombre": "Raíz china",
+      "entidad": "arma-chaman-raiz-china",
+      "archivo": "productos/armas/raiz-china.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "2",
+      "fuente": "Tablas 8-19 · arma de Chamán",
+      "descripcion": "la Raíz china del Chamán: una raíz retorcida y nudosa usada como talismán, atada con cordones de colores terrosos y cuentas de hueso, de la que salen brotes pequeños con una luz verde-cian suave."
+    },
+    {
+      "id": "ARM-14",
+      "categoria": "arma",
+      "nombre": "Kit de urgencias",
+      "entidad": "arma-medico-kit-de-urgencias",
+      "archivo": "productos/armas/kit-de-urgencias.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "2",
+      "fuente": "Tablas 8-19 · arma de Médico",
+      "descripcion": "el Kit de urgencias del Médico: un maletín de campaña de cuero marrón oscuro con herrajes de plata, entreabierto, del que asoman vendas, frascos de vidrio con líquidos verde azulado y una pinza; en la tapa, un emblema de rombo verde azulado (no una cruz roja)."
+    },
+    {
+      "id": "ARM-15",
+      "categoria": "arma",
+      "nombre": "Yerbabuena",
+      "entidad": "arma-chaman-yerbabuena",
+      "archivo": "productos/armas/yerbabuena.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "2",
+      "fuente": "Tablas 8-19 · arma de Chamán",
+      "descripcion": "la Yerbabuena del Chamán: un manojo de ramas frescas de hierbabuena atado con un cordel, con gotas de rocío que brillan como pequeñas chispas cian y un vapor verde muy suave."
+    },
+    {
+      "id": "ARM-16",
+      "categoria": "arma",
+      "nombre": "Reanimador",
+      "entidad": "arma-medico-reanimador",
+      "archivo": "productos/armas/reanimador.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "2",
+      "fuente": "Tablas 8-19 · arma de Médico",
+      "descripcion": "el Reanimador del Médico: un dispositivo arcano-tecnológico de reanimación, dos palas de plata y latón unidas por cables trenzados a un núcleo de cristal cian del tamaño de un puño del que saltan chispas de energía."
+    },
+    {
+      "id": "ARD-01",
+      "categoria": "armadura",
+      "nombre": "Defensa del enfurecido",
+      "entidad": "armadura-guerrero-tanque-defensa-del-enfurecido",
+      "archivo": "productos/armaduras/defensa-del-enfurecido.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "3",
+      "fuente": "Tablas 8-19 · Pecho de Guerrero Tanque",
+      "descripcion": "la armadura «Defensa del enfurecido» del Guerrero Tanque, pieza de pecho: peto pesado de placas de acero oscuro con un rombo en relieve en el centro, remaches de plata y rasguños de batalla, hombreras incluidas. Color de acento: azul cobalto y acero."
+    },
+    {
+      "id": "ARD-02",
+      "categoria": "armadura",
+      "nombre": "Puño lúcido",
+      "entidad": "armadura-guerrero-armas-puno-lucido",
+      "archivo": "productos/armaduras/puno-lucido.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "3",
+      "fuente": "Tablas 8-19 · Guantes de Guerrero Armas",
+      "descripcion": "la armadura «Puño lúcido» del Guerrero Armas, pieza de guantes: un par de guanteletes articulados de acero oscuro con nudillos reforzados y una runa cian que brilla en el dorso de cada uno. Color de acento: rojo ámbar de brasa y acero."
+    },
+    {
+      "id": "ARD-03",
+      "categoria": "armadura",
+      "nombre": "Magma Ardiente",
+      "entidad": "armadura-guerrero-tanque-magma-ardiente",
+      "archivo": "productos/armaduras/magma-ardiente.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "3",
+      "fuente": "Tablas 8-19 · Casco de Guerrero Tanque",
+      "descripcion": "la armadura «Magma Ardiente» del Guerrero Tanque, pieza de casco: yelmo cerrado de acero ennegrecido con visera estrecha y grietas por las que brilla magma naranja. Color de acento: azul cobalto y acero."
+    },
+    {
+      "id": "ARD-04",
+      "categoria": "armadura",
+      "nombre": "Puños en llamas",
+      "entidad": "armadura-guerrero-armas-punos-en-llamas",
+      "archivo": "productos/armaduras/punos-en-llamas.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "3",
+      "fuente": "Tablas 8-19 · Brazaletes de Guerrero Armas",
+      "descripcion": "la armadura «Puños en llamas» del Guerrero Armas, pieza de brazaletes: un par de brazaletes (avambrazos) de bronce oscuro con grabados en forma de llama y brasas ámbar en las juntas. Color de acento: rojo ámbar de brasa y acero."
+    },
+    {
+      "id": "ARD-05",
+      "categoria": "armadura",
+      "nombre": "Túnica arcana",
+      "entidad": "armadura-mago-fuego-tunica-arcana",
+      "archivo": "productos/armaduras/tunica-arcana.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "3",
+      "fuente": "Tablas 8-19 · Pecho de Mago Fuego",
+      "descripcion": "la armadura «Túnica arcana» del Mago Fuego, pieza de pecho: túnica de mago de tela índigo gruesa con bordados dorados y runas color ascua en el pecho y los puños, presentada sobre un maniquí invisible. Color de acento: naranja fuego y ámbar."
+    },
+    {
+      "id": "ARD-06",
+      "categoria": "armadura",
+      "nombre": "Corona de hielo",
+      "entidad": "armadura-mago-hielo-corona-de-hielo",
+      "archivo": "productos/armaduras/corona-de-hielo.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "3",
+      "fuente": "Tablas 8-19 · Casco de Mago Hielo",
+      "descripcion": "la armadura «Corona de hielo» del Mago Hielo, pieza de casco: corona de cristales de hielo en forma de rombos ascendentes sobre una banda de plata, con escarcha y un brillo cian pálido. Color de acento: blanco escarcha y cian pálido."
+    },
+    {
+      "id": "ARD-07",
+      "categoria": "armadura",
+      "nombre": "Caída de fuego",
+      "entidad": "armadura-mago-fuego-caida-de-fuego",
+      "archivo": "productos/armaduras/caida-de-fuego.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "3",
+      "fuente": "Tablas 8-19 · Pantalón de Mago Fuego",
+      "descripcion": "la armadura «Caída de fuego» del Mago Fuego, pieza de pantalón: pantalones de mago de tela gruesa índigo y rojo oscuro, con los bajos chamuscados y ribetes que brillan como brasas, presentados sobre un maniquí invisible. Color de acento: naranja fuego y ámbar."
+    },
+    {
+      "id": "ARD-08",
+      "categoria": "armadura",
+      "nombre": "Ventisca",
+      "entidad": "armadura-mago-hielo-ventisca",
+      "archivo": "productos/armaduras/ventisca.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "3",
+      "fuente": "Tablas 8-19 · Pecho de Mago Hielo",
+      "descripcion": "la armadura «Ventisca» del Mago Hielo, pieza de pecho: manto-peto de pieles blancas y placas de plata escarchada, con un remolino de viento helado y copos a su alrededor, sobre un maniquí invisible. Color de acento: blanco escarcha y cian pálido."
+    },
+    {
+      "id": "ARD-09",
+      "categoria": "armadura",
+      "nombre": "Mano del desterrado",
+      "entidad": "armadura-picaro-veneno-mano-del-desterrado",
+      "archivo": "productos/armaduras/mano-del-desterrado.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "3",
+      "fuente": "Tablas 8-19 · Guantes de Pícaro Veneno",
+      "descripcion": "la armadura «Mano del desterrado» del Pícaro Veneno, pieza de guantes: un par de guantes de cuero negro gastados, con correas y hebillas pequeñas y una marca violeta tenue en la palma. Color de acento: verde tóxico y violeta."
+    },
+    {
+      "id": "ARD-10",
+      "categoria": "armadura",
+      "nombre": "Pie de atleta",
+      "entidad": "armadura-picaro-machete-pie-de-atleta",
+      "archivo": "productos/armaduras/pie-de-atleta.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "3",
+      "fuente": "Tablas 8-19 · Zapatos de Pícaro Machete",
+      "descripcion": "la armadura «Pie de atleta» del Pícaro Machete, pieza de zapatos: un par de botas ligeras de cuero con suela flexible, vendas atadas en el tobillo y costuras carmesí. Color de acento: carmesí oscuro y cuero."
+    },
+    {
+      "id": "ARD-11",
+      "categoria": "armadura",
+      "nombre": "Atadura carmesí",
+      "entidad": "armadura-picaro-veneno-atadura-carmesi",
+      "archivo": "productos/armaduras/atadura-carmesi.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "3",
+      "fuente": "Tablas 8-19 · Pecho de Pícaro Veneno",
+      "descripcion": "la armadura «Atadura carmesí» del Pícaro Veneno, pieza de pecho: coraza ligera de cuero negro con correas cruzadas de cuero carmesí y hebillas de plata, sobre un maniquí invisible. Color de acento: verde tóxico y violeta."
+    },
+    {
+      "id": "ARD-12",
+      "categoria": "armadura",
+      "nombre": "Sangre cruel",
+      "entidad": "armadura-picaro-machete-sangre-cruel",
+      "archivo": "productos/armaduras/sangre-cruel.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "3",
+      "fuente": "Tablas 8-19 · Brazaletes de Pícaro Machete",
+      "descripcion": "la armadura «Sangre cruel» del Pícaro Machete, pieza de brazaletes: un par de brazaletes de cuero endurecido con púas de hierro y piedras rojo oscuro engastadas. Color de acento: carmesí oscuro y cuero."
+    },
+    {
+      "id": "ARD-13",
+      "categoria": "armadura",
+      "nombre": "Piel de Caminante del Bosque",
+      "entidad": "armadura-chaman-piel-de-caminante-del-bosque",
+      "archivo": "productos/armaduras/piel-de-caminante-del-bosque.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "3",
+      "fuente": "Tablas 8-19 · Pecho de Chamán",
+      "descripcion": "la armadura «Piel de Caminante del Bosque» del Chamán, pieza de pecho: peto de pieles y cuero con musgo, hojas secas y cuentas de hueso, con una capa corta de piel, sobre un maniquí invisible. Color de acento: verde musgo, hueso y cian."
+    },
+    {
+      "id": "ARD-14",
+      "categoria": "armadura",
+      "nombre": "Bata de Cirujano",
+      "entidad": "armadura-medico-bata-de-cirujano",
+      "archivo": "productos/armaduras/bata-de-cirujano.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "3",
+      "fuente": "Tablas 8-19 · Pecho de Médico",
+      "descripcion": "la armadura «Bata de Cirujano» del Médico, pieza de pecho: bata larga de campaña color hueso con cinturones de cuero, bolsillos con viales y un emblema de rombo verde azulado (no una cruz roja), sobre un maniquí invisible. Color de acento: verde azulado y blanco hueso."
+    },
+    {
+      "id": "ARD-15",
+      "categoria": "armadura",
+      "nombre": "Casco de Ecos Ancestrales",
+      "entidad": "armadura-chaman-casco-de-ecos-ancestrales",
+      "archivo": "productos/armaduras/casco-de-ecos-ancestrales.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "3",
+      "fuente": "Tablas 8-19 · Casco de Chamán",
+      "descripcion": "la armadura «Casco de Ecos Ancestrales» del Chamán, pieza de casco: yelmo de hueso y madera tallada con astas cortas, plumas y conchas, y dos ojos tallados que brillan cian. Color de acento: verde musgo, hueso y cian."
+    },
+    {
+      "id": "ARD-16",
+      "categoria": "armadura",
+      "nombre": "Pantalón de Expedición Médica",
+      "entidad": "armadura-medico-pantalon-de-expedicion-medica",
+      "archivo": "productos/armaduras/pantalon-de-expedicion-medica.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "3",
+      "fuente": "Tablas 8-19 · Pantalón de Médico",
+      "descripcion": "la armadura «Pantalón de Expedición Médica» del Médico, pieza de pantalón: pantalón de expedición resistente color arena oscuro, con rodilleras de cuero y bolsillos con vendas y viales, sobre un maniquí invisible. Color de acento: verde azulado y blanco hueso."
+    },
+    {
+      "id": "ITM-01",
+      "categoria": "item",
+      "nombre": "Pinchos de escudo",
+      "entidad": "item-guerrero-tanque-pinchos-de-escudo",
+      "archivo": "productos/items/pinchos-de-escudo.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Tablas 8-19 · ítem de Guerrero Tanque",
+      "descripcion": "el ítem «Pinchos de escudo» del Guerrero Tanque: una placa circular de refuerzo de acero oscuro con pinchos cortos y afilados, pensada para acoplarse a un escudo, con tornillería de plata. Color de acento: azul cobalto y acero."
+    },
+    {
+      "id": "ITM-02",
+      "categoria": "item",
+      "nombre": "Empuñadura de Furia",
+      "entidad": "item-guerrero-armas-empunadura-de-furia",
+      "archivo": "productos/items/empunadura-de-furia.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Tablas 8-19 · ítem de Guerrero Armas",
+      "descripcion": "el ítem «Empuñadura de Furia» del Guerrero Armas: una empuñadura de espada suelta, sin hoja, envuelta en cuero rojo oscuro, con un cristal ámbar que palpita en el pomo. Color de acento: rojo ámbar de brasa y acero."
+    },
+    {
+      "id": "ITM-03",
+      "categoria": "item",
+      "nombre": "Anillo para Piro-explosión",
+      "entidad": "item-mago-fuego-anillo-para-piro-explosion",
+      "archivo": "productos/items/anillo-para-piro-explosion.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Tablas 8-19 · ítem de Mago Fuego",
+      "descripcion": "el ítem «Anillo para Piro-explosión» del Mago Fuego: un anillo de oro oscuro con una gema naranja facetada con fuego en su interior y pequeñas chispas a su alrededor. Color de acento: naranja fuego y ámbar."
+    },
+    {
+      "id": "ITM-04",
+      "categoria": "item",
+      "nombre": "Libro de la ventisca helada",
+      "entidad": "item-mago-hielo-libro-de-la-ventisca-helada",
+      "archivo": "productos/items/libro-de-la-ventisca-helada.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Tablas 8-19 · ítem de Mago Hielo",
+      "descripcion": "el ítem «Libro de la ventisca helada» del Mago Hielo: un grimorio cerrado con tapas de cuero azul cubiertas de escarcha, cierre de plata y un cristal de hielo en el centro de la tapa. Color de acento: blanco escarcha y cian pálido."
+    },
+    {
+      "id": "ITM-05",
+      "categoria": "item",
+      "nombre": "Veneno lacerante",
+      "entidad": "item-picaro-veneno-veneno-lacerante",
+      "archivo": "productos/items/veneno-lacerante.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Tablas 8-19 · ítem de Pícaro Veneno",
+      "descripcion": "el ítem «Veneno lacerante» del Pícaro Veneno: un frasco de vidrio facetado con un veneno verde-violeta espeso y burbujeante, tapón de cera negra y una etiqueta de cuero sin escritura. Color de acento: verde tóxico y violeta."
+    },
+    {
+      "id": "ITM-06",
+      "categoria": "item",
+      "nombre": "Mancuerna yugular",
+      "entidad": "item-picaro-machete-mancuerna-yugular",
+      "archivo": "productos/items/mancuerna-yugular.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Tablas 8-19 · ítem de Pícaro Machete",
+      "descripcion": "el ítem «Mancuerna yugular» del Pícaro Machete: una pesa de mano (mancuerna) de hierro forjado con dientes de sierra en los discos y un grabado carmesí oscuro en la barra. Color de acento: carmesí oscuro y cuero.",
+      "interpretacion": "«mancuerna» se representa como pesa de mano dentada; el efecto del documento no se dibuja."
+    },
+    {
+      "id": "ITM-07",
+      "categoria": "item",
+      "nombre": "Pluma sanadora",
+      "entidad": "item-chaman-pluma-sanadora",
+      "archivo": "productos/items/pluma-sanadora.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Tablas 8-19 · ítem de Chamán",
+      "descripcion": "el ítem «Pluma sanadora» del Chamán: una pluma grande e iridiscente de raquis dorado que desprende motas de luz verde-cian. Color de acento: verde musgo, hueso y cian."
+    },
+    {
+      "id": "ITM-08",
+      "categoria": "item",
+      "nombre": "Benditas",
+      "entidad": "item-medico-benditas",
+      "archivo": "productos/items/benditas.webp",
+      "uso": [
+        "tienda (tarjeta y ficha)",
+        "inventario",
+        "equipamiento",
+        "subasta",
+        "detalle"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Tablas 8-19 · ítem de Médico",
+      "descripcion": "el ítem «Benditas» del Médico: un pequeño estuche de tela abierto con tiras de vendaje adhesivo cortas, cada una con una runa cian dibujada. Color de acento: verde azulado y blanco hueso.",
+      "interpretacion": "«benditas» se lee como tiritas o vendas adhesivas (sana heridas durante tres turnos)."
+    },
+    {
+      "id": "EPI-01",
+      "categoria": "epica",
+      "nombre": "Golpe de defensa",
+      "entidad": "epica-guerrero-tanque-golpe-de-defensa",
+      "archivo": "productos/epicas/golpe-de-defensa.webp",
+      "uso": [
+        "inventario",
+        "detalle de la épica",
+        "recompensa de misión (Master)",
+        "combate (activación)"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Tabla 20 · épica de Guerrero Tanque",
+      "descripcion": "la épica «Golpe de defensa» del Guerrero Tanque: un escudo de acero en el centro del que estalla una onda de choque circular cian que rompe el aire en fragmentos de energía. Color de acento: azul cobalto y acero."
+    },
+    {
+      "id": "EPI-02",
+      "categoria": "epica",
+      "nombre": "Segundo impulso",
+      "entidad": "epica-guerrero-armas-segundo-impulso",
+      "archivo": "productos/epicas/segundo-impulso.webp",
+      "uso": [
+        "inventario",
+        "detalle de la épica",
+        "recompensa de misión (Master)",
+        "combate (activación)"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Tabla 20 · épica de Guerrero Armas",
+      "descripcion": "la épica «Segundo impulso» del Guerrero Armas: un mandoble clavado en el suelo rodeado por un torbellino ascendente de energía ámbar y cian, como quien vuelve a levantarse. Color de acento: rojo ámbar de brasa y acero."
+    },
+    {
+      "id": "EPI-03",
+      "categoria": "epica",
+      "nombre": "Luz cegadora",
+      "entidad": "epica-mago-fuego-luz-cegadora",
+      "archivo": "productos/epicas/luz-cegadora.webp",
+      "uso": [
+        "inventario",
+        "detalle de la épica",
+        "recompensa de misión (Master)",
+        "combate (activación)"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Tabla 20 · épica de Mago Fuego",
+      "descripcion": "la épica «Luz cegadora» del Mago Fuego: un orbe del que nace un estallido de luz blanca y ámbar con rayos radiales que lo llenan todo. Color de acento: naranja fuego y ámbar."
+    },
+    {
+      "id": "EPI-04",
+      "categoria": "epica",
+      "nombre": "Frio concentrado",
+      "entidad": "epica-mago-hielo-frio-concentrado",
+      "archivo": "productos/epicas/frio-concentrado.webp",
+      "uso": [
+        "inventario",
+        "detalle de la épica",
+        "recompensa de misión (Master)",
+        "combate (activación)"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Tabla 20 · épica de Mago Hielo",
+      "descripcion": "la épica «Frio concentrado» del Mago Hielo: un cristal de hielo perfecto suspendido dentro de una esfera protectora de escarcha y viento helado. Color de acento: blanco escarcha y cian pálido."
+    },
+    {
+      "id": "EPI-05",
+      "categoria": "epica",
+      "nombre": "Toma y lleva",
+      "entidad": "epica-picaro-veneno-toma-y-lleva",
+      "archivo": "productos/epicas/toma-y-lleva.webp",
+      "uso": [
+        "inventario",
+        "detalle de la épica",
+        "recompensa de misión (Master)",
+        "combate (activación)"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Tabla 20 · épica de Pícaro Veneno",
+      "descripcion": "la épica «Toma y lleva» del Pícaro Veneno: dos dagas cruzadas que reflejan un golpe, con una espiral de energía violeta y verde que se devuelve hacia afuera. Color de acento: verde tóxico y violeta."
+    },
+    {
+      "id": "EPI-06",
+      "categoria": "epica",
+      "nombre": "Intimidación sangrienta",
+      "entidad": "epica-picaro-machete-intimidacion-sangrienta",
+      "archivo": "productos/epicas/intimidacion-sangrienta.webp",
+      "uso": [
+        "inventario",
+        "detalle de la épica",
+        "recompensa de misión (Master)",
+        "combate (activación)"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Tabla 20 · épica de Pícaro Machete",
+      "descripcion": "la épica «Intimidación sangrienta» del Pícaro Machete: una máscara de guerra de hierro con ojos que brillan carmesí detrás de un machete envuelto en humo rojo oscuro. Color de acento: carmesí oscuro y cuero."
+    },
+    {
+      "id": "EPI-07",
+      "categoria": "epica",
+      "nombre": "Té changua",
+      "entidad": "epica-chaman-te-changua",
+      "archivo": "productos/epicas/te-changua.webp",
+      "uso": [
+        "inventario",
+        "detalle de la épica",
+        "recompensa de misión (Master)",
+        "combate (activación)"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Tabla 20 · épica de Chamán",
+      "descripcion": "la épica «Té changua» del Chamán: un cuenco de cerámica rústica humeante con una infusión de hierbas de la que sube un vapor verde-cian sanador en espirales. Color de acento: verde musgo, hueso y cian."
+    },
+    {
+      "id": "EPI-08",
+      "categoria": "epica",
+      "nombre": "Reanimador 3000",
+      "entidad": "epica-medico-reanimador-3000",
+      "archivo": "productos/epicas/reanimador-3000.webp",
+      "uso": [
+        "inventario",
+        "detalle de la épica",
+        "recompensa de misión (Master)",
+        "combate (activación)"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Tabla 20 · épica de Médico",
+      "descripcion": "la épica «Reanimador 3000» del Médico: una versión superior del reanimador: un gran núcleo de cristal cian con anillos de plata que giran, palas de plata y rayos de energía cian y violeta, como un latido. Color de acento: verde azulado y blanco hueso."
+    },
+    {
+      "id": "EPI-09",
+      "categoria": "epica",
+      "nombre": "Velo de Sombras",
+      "entidad": "epica-picaro-veneno-velo-de-sombras",
+      "archivo": "productos/epicas/velo-de-sombras.webp",
+      "uso": [
+        "inventario",
+        "detalle de la épica",
+        "recompensa de misión (Master)",
+        "combate (activación)"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "4",
+      "fuente": "Documento §7.8.14 (Master «Sombra del Olvido») · épica de Pícaro Veneno",
+      "descripcion": "la épica «Velo de Sombras» del Pícaro Veneno: un velo de tela oscura semitransparente que flota en el aire, con humo violeta y gotas de veneno verde escapando de sus bordes; sensación de intangibilidad. Color de acento: verde tóxico y violeta."
+    },
+    {
+      "id": "OTR-01",
+      "categoria": "otro",
+      "nombre": "Cofre de Bronce",
+      "entidad": "recompensa-templo-olvidado",
+      "archivo": "otros/cofre-de-bronce.webp",
+      "uso": [
+        "Mis cofres",
+        "recompensa de misión"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "5",
+      "fuente": "Documento §7.8.14 (recompensa garantizada; sin producto en el catálogo)",
+      "descripcion": "un cofre de madera oscura reforzado con herrajes de bronce, cerrado, con una cerradura de cristal cian y un leve resplandor dorado por las juntas."
+    },
+    {
+      "id": "EMB-01",
+      "categoria": "emblema",
+      "nombre": "Emblema «Guerrero»",
+      "entidad": "emblema-01",
+      "archivo": "emblemas/emblema-01.webp",
+      "uso": [
+        "crear equipo (torneos)",
+        "cuadro del torneo"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "5",
+      "fuente": "`plataforma/torneos/equipo-formulario.js` · `emblema-01` (hoy `cuentas/avatares/*.jpg`)",
+      "descripcion": "el emblema «Guerrero»: como símbolo central, una espada vertical, en acero y rojo ámbar con brillo cian tenue."
+    },
+    {
+      "id": "EMB-02",
+      "categoria": "emblema",
+      "nombre": "Emblema «Escudo»",
+      "entidad": "emblema-02",
+      "archivo": "emblemas/emblema-02.webp",
+      "uso": [
+        "crear equipo (torneos)",
+        "cuadro del torneo"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "5",
+      "fuente": "`plataforma/torneos/equipo-formulario.js` · `emblema-02` (hoy `cuentas/avatares/*.jpg`)",
+      "descripcion": "el emblema «Escudo»: como símbolo central, un escudo pequeño con un rombo, en azul cobalto con brillo cian tenue."
+    },
+    {
+      "id": "EMB-03",
+      "categoria": "emblema",
+      "nombre": "Emblema «Fuego»",
+      "entidad": "emblema-03",
+      "archivo": "emblemas/emblema-03.webp",
+      "uso": [
+        "crear equipo (torneos)",
+        "cuadro del torneo"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "5",
+      "fuente": "`plataforma/torneos/equipo-formulario.js` · `emblema-03` (hoy `cuentas/avatares/*.jpg`)",
+      "descripcion": "el emblema «Fuego»: como símbolo central, una llama, en naranja fuego con brillo cian tenue."
+    },
+    {
+      "id": "EMB-04",
+      "categoria": "emblema",
+      "nombre": "Emblema «Hielo»",
+      "entidad": "emblema-04",
+      "archivo": "emblemas/emblema-04.webp",
+      "uso": [
+        "crear equipo (torneos)",
+        "cuadro del torneo"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "5",
+      "fuente": "`plataforma/torneos/equipo-formulario.js` · `emblema-04` (hoy `cuentas/avatares/*.jpg`)",
+      "descripcion": "el emblema «Hielo»: como símbolo central, un copo de nieve geométrico, en cian pálido con brillo cian tenue."
+    },
+    {
+      "id": "EMB-05",
+      "categoria": "emblema",
+      "nombre": "Emblema «Sabio»",
+      "entidad": "emblema-05",
+      "archivo": "emblemas/emblema-05.webp",
+      "uso": [
+        "crear equipo (torneos)",
+        "cuadro del torneo"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "5",
+      "fuente": "`plataforma/torneos/equipo-formulario.js` · `emblema-05` (hoy `cuentas/avatares/*.jpg`)",
+      "descripcion": "el emblema «Sabio»: como símbolo central, un ojo dentro de un rombo, en violeta con brillo cian tenue."
+    },
+    {
+      "id": "EMB-06",
+      "categoria": "emblema",
+      "nombre": "Emblema «Sombra»",
+      "entidad": "emblema-06",
+      "archivo": "emblemas/emblema-06.webp",
+      "uso": [
+        "crear equipo (torneos)",
+        "cuadro del torneo"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "5",
+      "fuente": "`plataforma/torneos/equipo-formulario.js` · `emblema-06` (hoy `cuentas/avatares/*.jpg`)",
+      "descripcion": "el emblema «Sombra»: como símbolo central, una luna creciente atravesada por una daga, en violeta oscuro con brillo cian tenue."
+    },
+    {
+      "id": "EMB-07",
+      "categoria": "emblema",
+      "nombre": "Emblema «Arco»",
+      "entidad": "emblema-07",
+      "archivo": "emblemas/emblema-07.webp",
+      "uso": [
+        "crear equipo (torneos)",
+        "cuadro del torneo"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "5",
+      "fuente": "`plataforma/torneos/equipo-formulario.js` · `emblema-07` (hoy `cuentas/avatares/*.jpg`)",
+      "descripcion": "el emblema «Arco»: como símbolo central, un arco tensado con una flecha, en verde bosque con brillo cian tenue."
+    },
+    {
+      "id": "EMB-08",
+      "categoria": "emblema",
+      "nombre": "Emblema «Sanación»",
+      "entidad": "emblema-08",
+      "archivo": "emblemas/emblema-08.webp",
+      "uso": [
+        "crear equipo (torneos)",
+        "cuadro del torneo"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "5",
+      "fuente": "`plataforma/torneos/equipo-formulario.js` · `emblema-08` (hoy `cuentas/avatares/*.jpg`)",
+      "descripcion": "el emblema «Sanación»: como símbolo central, una hoja con una gota de luz, en verde azulado con brillo cian tenue."
+    },
+    {
+      "id": "EMB-09",
+      "categoria": "emblema",
+      "nombre": "Emblema «Alquimia»",
+      "entidad": "emblema-09",
+      "archivo": "emblemas/emblema-09.webp",
+      "uso": [
+        "crear equipo (torneos)",
+        "cuadro del torneo"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "5",
+      "fuente": "`plataforma/torneos/equipo-formulario.js` · `emblema-09` (hoy `cuentas/avatares/*.jpg`)",
+      "descripcion": "el emblema «Alquimia»: como símbolo central, un matraz con burbujas, en verde tóxico con brillo cian tenue."
+    },
+    {
+      "id": "EMB-10",
+      "categoria": "emblema",
+      "nombre": "Emblema «Comandante»",
+      "entidad": "emblema-10",
+      "archivo": "emblemas/emblema-10.webp",
+      "uso": [
+        "crear equipo (torneos)",
+        "cuadro del torneo"
+      ],
+      "estado": "PENDIENTE",
+      "lote": "5",
+      "fuente": "`plataforma/torneos/equipo-formulario.js` · `emblema-10` (hoy `cuentas/avatares/*.jpg`)",
+      "descripcion": "el emblema «Comandante»: como símbolo central, un yelmo con alas, en plata y oro viejo con brillo cian tenue."
+    }
+  ]
+}
