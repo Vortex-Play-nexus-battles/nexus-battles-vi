@@ -70,6 +70,10 @@ public final class Ejecucion {
     private Double experienciaAcumulada;
     private int intentosDeSimulacion;
     private boolean canceladaSinPenalizacion;
+    private int encuentrosCompletados;
+    private int encuentrosTotales;
+    private Instant siguienteEncuentroEn;
+    private RecompensasDeEjecucion recompensasAcumuladas;
     private Long version;
 
     private Ejecucion(Estado e) {
@@ -102,6 +106,10 @@ public final class Ejecucion {
         this.experienciaAcumulada = e.experienciaAcumulada;
         this.intentosDeSimulacion = e.intentosDeSimulacion == null ? 0 : e.intentosDeSimulacion;
         this.canceladaSinPenalizacion = Boolean.TRUE.equals(e.sinPenalizacion);
+        this.encuentrosCompletados = e.encuentrosCompletados == null ? 0 : e.encuentrosCompletados;
+        this.encuentrosTotales = e.encuentrosTotales == null ? 0 : e.encuentrosTotales;
+        this.siguienteEncuentroEn = e.siguienteEncuentroEn == null ? this.terminaEn : e.siguienteEncuentroEn;
+        this.recompensasAcumuladas = e.recompensasAcumuladas;
         this.version = e.version;
     }
 
@@ -121,6 +129,7 @@ public final class Ejecucion {
         e.semilla = semilla;
         e.claveIdempotencia = claveIdempotencia;
         e.estado = EstadoEjecucion.EN_PROGRESO;
+        e.siguienteEncuentroEn = e.terminaEn;
         return new Ejecucion(e);
     }
 
@@ -146,12 +155,54 @@ public final class Ejecucion {
         return !ahora.isBefore(terminaEn);
     }
 
+    public void prepararExploracion(int totalDeEncuentros) {
+        exigirEnProgreso("preparar");
+        if (totalDeEncuentros <= 0) {
+            throw new IllegalArgumentException("Una exploracion necesita al menos un encuentro.");
+        }
+        encuentrosTotales = totalDeEncuentros;
+        encuentrosCompletados = 0;
+        recompensasAcumuladas = sinRecompensasAcumuladas();
+        siguienteEncuentroEn = momentoDelEncuentro(1);
+    }
+
+    public int encuentrosQueDebenEstarResueltos(Instant ahora) {
+        if (encuentrosTotales <= 0) {
+            return vencida(ahora) ? Integer.MAX_VALUE : 0;
+        }
+        long total = Math.max(1, Duration.between(iniciadaEn, terminaEn).toMillis());
+        long transcurrido = Math.max(0, Duration.between(iniciadaEn, ahora).toMillis());
+        int vencidos = (int) Math.floor((double) transcurrido * encuentrosTotales / total);
+        return Math.max(encuentrosCompletados, Math.min(encuentrosTotales, vencidos));
+    }
+
+    public void registrarProgresoDeExploracion(ResultadoDeMision parcial,
+                                                RecompensasDeEjecucion acumuladas) {
+        exigirEnProgreso("registrar el progreso de");
+        Objects.requireNonNull(parcial);
+        if (encuentrosTotales <= 0 || parcial.encuentrosCompletados() >= encuentrosTotales) {
+            throw new IllegalStateException("El progreso parcial necesita una exploracion sin terminar.");
+        }
+        encuentrosCompletados = parcial.encuentrosCompletados();
+        recompensasAcumuladas = Objects.requireNonNull(acumuladas);
+        siguienteEncuentroEn = momentoDelEncuentro(encuentrosCompletados + 1);
+        proximoIntento = null;
+        intentosDeLiquidacion = 0;
+        ultimoError = null;
+    }
+
+    private Instant momentoDelEncuentro(int numero) {
+        long total = Math.max(1, Duration.between(iniciadaEn, terminaEn).toMillis());
+        long desplazamiento = Math.round((double) total * numero / encuentrosTotales);
+        return iniciadaEn.plusMillis(Math.min(total, desplazamiento));
+    }
+
     /**
      * Vencida, en progreso y sin un intento de simulacion aplazado para mas
      * tarde: es lo que el trabajo en segundo plano debe simular ahora.
      */
     public boolean listaParaSimular(Instant ahora) {
-        return estado == EstadoEjecucion.EN_PROGRESO && vencida(ahora)
+        return estado == EstadoEjecucion.EN_PROGRESO && !ahora.isBefore(siguienteEncuentroEn)
                 && (proximoIntento == null || !proximoIntento.isAfter(ahora));
     }
 
@@ -184,6 +235,13 @@ public final class Ejecucion {
         terminadaEn = ahora;
         pasos.clear();
         pasos.put(PasoDeLiquidacion.LIBERACION, EstadoDePaso.PENDIENTE);
+        if (canceladaSinPenalizacion && recompensasAcumuladas != null) {
+            recompensas = recompensasAcumuladas;
+            agregarPasosDeEntrega(recompensas);
+        } else {
+            recompensasAcumuladas = sinRecompensasAcumuladas();
+            encuentrosCompletados = 0;
+        }
         empezarLiquidacion(ahora);
     }
 
@@ -213,19 +271,17 @@ public final class Ejecucion {
         exigirEnProgreso("terminar");
         this.resultado = Objects.requireNonNull(resultado);
         this.recompensas = Objects.requireNonNull(recompensas);
+        this.recompensasAcumuladas = recompensas;
+        this.encuentrosCompletados = resultado.encuentrosCompletados();
+        if (encuentrosTotales == 0) {
+            encuentrosTotales = resultado.encuentrosCompletados();
+        }
+        this.siguienteEncuentroEn = terminaEn;
         this.estado = resultado.exito() ? EstadoEjecucion.COMPLETADA : EstadoEjecucion.FALLIDA;
         this.terminadaEn = ahora;
         pasos.clear();
         pasos.put(PasoDeLiquidacion.LIBERACION, EstadoDePaso.PENDIENTE);
-        if (recompensas.creditos() > 0) {
-            pasos.put(PasoDeLiquidacion.CREDITOS, EstadoDePaso.PENDIENTE);
-        }
-        if (!recompensas.productos().isEmpty()) {
-            pasos.put(PasoDeLiquidacion.BOTIN, EstadoDePaso.PENDIENTE);
-        }
-        if (recompensas.tieneEpicaEntregable()) {
-            pasos.put(PasoDeLiquidacion.EPICA, EstadoDePaso.PENDIENTE);
-        }
+        agregarPasosDeEntrega(recompensas);
         if (conCorreo) {
             pasos.put(PasoDeLiquidacion.CORREO, EstadoDePaso.PENDIENTE);
             if (!recompensas.epicas().isEmpty()) {
@@ -242,6 +298,22 @@ public final class Ejecucion {
             }
         }
         empezarLiquidacion(ahora);
+    }
+
+    private void agregarPasosDeEntrega(RecompensasDeEjecucion aEntregar) {
+        if (aEntregar.creditos() > 0) {
+            pasos.put(PasoDeLiquidacion.CREDITOS, EstadoDePaso.PENDIENTE);
+        }
+        if (!aEntregar.productos().isEmpty()) {
+            pasos.put(PasoDeLiquidacion.BOTIN, EstadoDePaso.PENDIENTE);
+        }
+        if (aEntregar.tieneEpicaEntregable()) {
+            pasos.put(PasoDeLiquidacion.EPICA, EstadoDePaso.PENDIENTE);
+        }
+    }
+
+    public static RecompensasDeEjecucion sinRecompensasAcumuladas() {
+        return new RecompensasDeEjecucion(0, List.of(), List.of(), 0, List.of(), List.of(), false);
     }
 
     /**
@@ -464,6 +536,26 @@ public final class Ejecucion {
         return canceladaSinPenalizacion;
     }
 
+    public int encuentrosCompletados() {
+        return encuentrosCompletados;
+    }
+
+    public int encuentrosTotales() {
+        return encuentrosTotales;
+    }
+
+    public Instant siguienteEncuentroEn() {
+        return siguienteEncuentroEn;
+    }
+
+    public long tiempoRestanteSegundos(Instant ahora) {
+        return Math.max(0, Duration.between(ahora, terminaEn).toSeconds());
+    }
+
+    public RecompensasDeEjecucion recompensasAcumuladas() {
+        return recompensasAcumuladas == null ? sinRecompensasAcumuladas() : recompensasAcumuladas;
+    }
+
     public Long version() {
         return version;
     }
@@ -495,6 +587,10 @@ public final class Ejecucion {
         public Integer intentosDeSimulacion;
         /** Nulo en lo guardado antes de la cancelacion sin penalizacion: se lee como falso. */
         public Boolean sinPenalizacion;
+        public Integer encuentrosCompletados;
+        public Integer encuentrosTotales;
+        public Instant siguienteEncuentroEn;
+        public RecompensasDeEjecucion recompensasAcumuladas;
         public Long version;
     }
 }

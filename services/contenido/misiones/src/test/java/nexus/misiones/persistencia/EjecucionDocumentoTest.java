@@ -13,6 +13,8 @@ import nexus.misiones.dominio.Escalon;
 import nexus.misiones.dominio.EstadoDePaso;
 import nexus.misiones.dominio.HeroeEnMision;
 import nexus.misiones.dominio.PasoDeLiquidacion;
+import nexus.misiones.dominio.RecompensasDeEjecucion;
+import nexus.misiones.dominio.simulacion.ResultadoDeMision;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -44,7 +46,8 @@ class EjecucionDocumentoTest {
                 guardado.estado(), guardado.terminadaEn(), guardado.resultado(), guardado.recompensas(), pasos,
                 motivos, guardado.intentosDeLiquidacion(), guardado.proximoIntento(), guardado.ultimoError(),
                 guardado.nivelAlcanzado(), guardado.experienciaAcumulada(), true, guardado.version(),
-                guardado.intentosDeSimulacion(), guardado.sinPenalizacion());
+                guardado.intentosDeSimulacion(), guardado.sinPenalizacion(), guardado.encuentrosCompletados(),
+                guardado.encuentrosTotales(), guardado.siguienteEncuentroEn(), guardado.recompensasAcumuladas());
 
         Ejecucion leida = conOtraVersion.aDominio();
 
@@ -70,6 +73,27 @@ class EjecucionDocumentoTest {
     }
 
     @Test
+    @DisplayName("HU-MIS-005: el progreso de la exploracion sobrevive a guardar y leer")
+    void progresoDeExploracionIdaYVuelta() {
+        Ejecucion ejecucion = Ejecucion.nueva(UUID.randomUUID(), "expedicion", "uid-1", HEROE, List.of(),
+                Escalon.NORMAL, INICIO, Duration.ofHours(24), 99L, null);
+        ejecucion.prepararExploracion(3);
+        RecompensasDeEjecucion acumuladas = new RecompensasDeEjecucion(0, List.of(), List.of(), 12.5,
+                List.of(), List.of(), false);
+        ResultadoDeMision parcial = new ResultadoDeMision(true, false, 1, true, 10, 2, 3, 0,
+                List.of(), List.of(), List.of(), 80, 12.5, List.of(4));
+        ejecucion.registrarProgresoDeExploracion(parcial, acumuladas);
+
+        Ejecucion leida = EjecucionDocumento.de(ejecucion, 4).aDominio();
+
+        assertThat(leida.encuentrosCompletados()).isEqualTo(1);
+        assertThat(leida.encuentrosTotales()).isEqualTo(3);
+        assertThat(leida.siguienteEncuentroEn()).isEqualTo(INICIO.plus(Duration.ofHours(16)));
+        assertThat(leida.recompensasAcumuladas()).isEqualTo(acumuladas);
+        assertThat(leida.version()).isEqualTo(4L);
+    }
+
+    @Test
     @DisplayName("HU-SIM-007: una ejecucion guardada antes de este cambio, sin el campo, se lee con cero intentos y lista para simular")
     void documentoViejo() {
         Ejecucion ejecucion = Ejecucion.nueva(UUID.randomUUID(), "templo-olvidado", "uid-1", HEROE, List.of(),
@@ -80,7 +104,7 @@ class EjecucionDocumentoTest {
                 nuevo.semilla(), nuevo.claveIdempotencia(), nuevo.estado(), nuevo.terminadaEn(), nuevo.resultado(),
                 nuevo.recompensas(), nuevo.pasos(), nuevo.motivos(), nuevo.intentosDeLiquidacion(),
                 nuevo.proximoIntento(), nuevo.ultimoError(), nuevo.nivelAlcanzado(), nuevo.experienciaAcumulada(),
-                nuevo.liquidacionPendiente(), nuevo.version(), null, null);
+                nuevo.liquidacionPendiente(), nuevo.version(), null, null, null, null, null, null);
 
         Ejecucion leida = viejo.aDominio();
 
@@ -134,7 +158,7 @@ class EjecucionDocumentoTest {
                 sana.claveIdempotencia(), sana.estado(), sana.terminadaEn(), sana.resultado(), sana.recompensas(),
                 sana.pasos(), sana.motivos(), sana.intentosDeLiquidacion(), sana.proximoIntento(), sana.ultimoError(),
                 sana.nivelAlcanzado(), sana.experienciaAcumulada(), sana.liquidacionPendiente(), sana.version(),
-                null, null);
+                null, null, null, null, null, null);
 
         assertThat(vieja.aDominio().canceladaSinPenalizacion()).isFalse();
     }

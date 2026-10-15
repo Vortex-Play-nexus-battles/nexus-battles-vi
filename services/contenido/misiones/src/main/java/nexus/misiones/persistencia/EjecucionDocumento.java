@@ -48,7 +48,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @Document(collection = "ejecuciones")
 @CompoundIndexes({
         @CompoundIndex(name = "jugador_inicio", def = "{'jugadorUid': 1, 'iniciadaEn': -1}"),
-        @CompoundIndex(name = "vencidas", def = "{'estado': 1, 'terminaEn': 1}"),
+        @CompoundIndex(name = "por_procesar", def = "{'estado': 1, 'siguienteEncuentroEn': 1}"),
         @CompoundIndex(name = "liquidacion", def = "{'liquidacionPendiente': 1, 'proximoIntento': 1}"),
         @CompoundIndex(name = "clave_unica", def = "{'jugadorUid': 1, 'claveIdempotencia': 1}", unique = true,
                 partialFilter = "{'claveIdempotencia': {'$exists': true}}"),
@@ -80,7 +80,11 @@ record EjecucionDocumento(
         boolean liquidacionPendiente,
         long version,
         Integer intentosDeSimulacion,
-        Boolean sinPenalizacion) {
+        Boolean sinPenalizacion,
+        Integer encuentrosCompletados,
+        Integer encuentrosTotales,
+        Instant siguienteEncuentroEn,
+        RecompensasDeEjecucion recompensasAcumuladas) {
 
     /** El documento que se escribe, ya con la version siguiente. */
     static EjecucionDocumento de(Ejecucion e, long version) {
@@ -93,7 +97,8 @@ record EjecucionDocumento(
                 e.terminadaEn(), e.resultado(), e.recompensas(), pasos, motivos, e.intentosDeLiquidacion(),
                 e.proximoIntento(), e.ultimoError(), e.nivelAlcanzado(), e.experienciaAcumulada(),
                 e.liquidacionPendiente(), version, e.intentosDeSimulacion(),
-                e.canceladaSinPenalizacion() ? Boolean.TRUE : null);
+                e.canceladaSinPenalizacion() ? Boolean.TRUE : null, e.encuentrosCompletados(),
+                e.encuentrosTotales(), e.siguienteEncuentroEn(), e.recompensasAcumuladas());
     }
 
     Ejecucion aDominio() {
@@ -130,6 +135,10 @@ record EjecucionDocumento(
         s.experienciaAcumulada = experienciaAcumulada;
         s.intentosDeSimulacion = intentosDeSimulacion;
         s.sinPenalizacion = sinPenalizacion;
+        s.encuentrosCompletados = encuentrosCompletados;
+        s.encuentrosTotales = encuentrosTotales;
+        s.siguienteEncuentroEn = siguienteEncuentroEn;
+        s.recompensasAcumuladas = recompensasAcumuladas;
         s.version = version;
         return Ejecucion.reconstruir(s);
     }

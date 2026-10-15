@@ -74,7 +74,14 @@ final class Respuestas {
 
     record MisionActiva(UUID ejecucionId, String misionId, String nombre, Categoria categoria, HeroeVista heroe,
                         Instant iniciadaEn, Instant terminaEn, Double progreso, String penalizacion, Escalon escalon,
-                        String estado) {
+                        String estado, int encuentrosCompletados, int encuentrosTotales,
+                        long tiempoRestanteSegundos, RecompensasAcumuladas recompensasAcumuladas) {
+    }
+
+    record RecompensasAcumuladas(int creditos, double experiencia, List<ObjetoAcumulado> objetos) {
+    }
+
+    record ObjetoAcumulado(String nombre, int cantidad) {
     }
 
     record HeroeVista(String id, String nombre, String prototipo, Integer nivel) {

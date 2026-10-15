@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.LongSupplier;
 import java.util.stream.Collectors;
+import nexus.misiones.dominio.Categoria;
 import nexus.misiones.dominio.CatalogoDeMisiones;
 import nexus.misiones.dominio.Ejecucion;
 import nexus.misiones.dominio.EjecucionModificadaConcurrentemente;
@@ -26,6 +27,8 @@ import nexus.misiones.dominio.ReglasDeMatricula;
 import nexus.misiones.dominio.RepositorioDeEjecuciones;
 import nexus.misiones.dominio.RepositorioDeEstrategias;
 import nexus.misiones.dominio.SituacionDelJugador;
+import nexus.misiones.dominio.simulacion.AzarConSemilla;
+import nexus.misiones.dominio.simulacion.TiradaDeMasters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -139,6 +142,11 @@ public class MatricularHeroe {
         long semilla = parametros.semillaDePruebas() != null ? parametros.semillaDePruebas() : semillas.getAsLong();
         Ejecucion ejecucion = Ejecucion.nueva(UUID.randomUUID(), mision.id(), jugadorUid, enMision, estrategia,
                 escalon, ahora, duracion, semilla, clave == null || clave.isBlank() ? null : clave);
+        if (mision.categoria() == Categoria.EXPLORACION) {
+            int masters = TiradaDeMasters.quienesAparecen(mision, enMision.prototipo(), catalogo.tabla20(),
+                    new AzarConSemilla(semilla)).size();
+            ejecucion.prepararExploracion(mision.encuentros() + masters);
+        }
 
         // 6. Bloquear y guardar, o liberar y avisar.
         inventario.bloquear(heroe.id(), jugadorUid, ejecucion.id());
