@@ -86,7 +86,7 @@ class MapeadorDelCatalogoTest {
     private static final EntradaCatalogo EPICA = new EntradaCatalogo(
             "epica-guerrero-tanque-golpe-de-defensa", "EPICA", "Golpe de defensa", null,
             "Guerrero Tanque", null, null, null, null,
-            "+1 al ataque", "+4 al daño, +2% de crítico", "0.04%", null,
+            "+1 al ataque", "+4 al daño, +2% de crítico", "4%", null,
             "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes");
 
     private static final PreciosDemostracion PRECIOS = new PreciosDemostracion(
@@ -221,7 +221,7 @@ class MapeadorDelCatalogoTest {
         assertEquals("+4 al daño, +2% de crítico", s.efectoPotenciado());
         assertEquals(2, s.turnosRecarga());
         assertEquals(MapeadorDelCatalogo.identificador("heroe-guerrero-tanque"), s.heroe());
-        assertTrue(s.descripcion().contains("0.04%"), s.descripcion());
+        assertTrue(s.descripcion().contains("Máster en una misión: 4%."), s.descripcion());
     }
 
     @Test
