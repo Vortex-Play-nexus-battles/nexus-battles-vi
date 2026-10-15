@@ -258,6 +258,8 @@ public final class Dobles {
         public RuntimeException fallarAlEntregar;
         /** Falla solo las entregas cuya clave cumpla la condicion (el botin sin la epica, o al reves). */
         public java.util.function.Predicate<String> fallarEntregaSi;
+        /** Productos (epicas) que el jugador ya tiene: el inventario no los entrega y los devuelve en yaTenia. */
+        public final Set<String> yaTiene = new HashSet<>();
 
         public Inventario conHeroe(String id, String duenoUid, String productoId, boolean equipado) {
             return conHeroeEnNivel(id, duenoUid, productoId, equipado, 1);
@@ -336,7 +338,8 @@ public final class Dobles {
         }
 
         @Override
-        public void entregar(String jugadorUid, UUID ejecucionId, List<ProductoAEntregar> productos, String clave) {
+        public List<String> entregar(String jugadorUid, UUID ejecucionId, List<ProductoAEntregar> productos,
+                                     String clave) {
             llamadas.add("entregar " + clave);
             if (fallarAlEntregar != null) {
                 throw fallarAlEntregar;
@@ -348,6 +351,7 @@ public final class Dobles {
                 clavesDeEntrega.add(clave);
                 entregas.add(productos);
             }
+            return productos.stream().map(ProductoAEntregar::productoId).filter(yaTiene::contains).toList();
         }
     }
 

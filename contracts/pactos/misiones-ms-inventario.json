@@ -585,6 +585,133 @@
       "response": {
         "status": 201
       }
+    },
+    {
+      "description": "la entrega de una epica que el jugador ya tiene",
+      "providerStates": [
+        {
+          "name": "el jugador ya tiene la epica"
+        }
+      ],
+      "request": {
+        "body": {
+          "origen": "MISION",
+          "productos": [
+            {
+              "cantidad": 1,
+              "productoId": "4481eb34-384a-3fa0-ba9a-1aac9562c38f"
+            }
+          ],
+          "referencia": "mision-0c7a2d9e-4f8b-4a55-9b65-6f1d3b2f0a11",
+          "uid": "5f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "mision-0c7a2d9e-4f8b-4a55-9b65-6f1d3b2f0a11-epica"
+        },
+        "matchingRules": {
+          "body": {
+            "$.productos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.productos[*].cantidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.productos[*].productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.referencia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.uid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": ".+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/inventario/entregas"
+      },
+      "response": {
+        "body": {
+          "yaTenia": [
+            "4481eb34-384a-3fa0-ba9a-1aac9562c38f"
+          ]
+        },
+        "headers": {
+          "Content-Type": "application/json; charset=UTF-8"
+        },
+        "matchingRules": {
+          "body": {
+            "$.yaTenia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.yaTenia[*]": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json(;\\s?charset=[\\w\\-]+)?"
+                }
+              ]
+            }
+          }
+        },
+        "status": 201
+      }
     }
   ],
   "metadata": {

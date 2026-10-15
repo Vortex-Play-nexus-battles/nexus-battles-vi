@@ -122,6 +122,20 @@ class EjecucionTest {
     }
 
     @Test
+    @DisplayName("un paso hecho puede llevar una nota (la epica que ya tenia); sin nota no queda nada")
+    void pasoHechoConNota() {
+        Ejecucion ejecucion = enCurso();
+        ejecucion.terminar(exito(), recompensas(60, false), false, INICIO.plus(Duration.ofHours(12)));
+
+        ejecucion.pasoHecho(PasoDeLiquidacion.EPICA, "ya-la-tenia");
+        ejecucion.pasoHecho(PasoDeLiquidacion.CREDITOS);
+
+        assertThat(ejecucion.estadoDe(PasoDeLiquidacion.EPICA)).isEqualTo(EstadoDePaso.HECHO);
+        assertThat(ejecucion.notaDe(PasoDeLiquidacion.EPICA)).isEqualTo("ya-la-tenia");
+        assertThat(ejecucion.notaDe(PasoDeLiquidacion.CREDITOS)).isNull();
+    }
+
+    @Test
     @DisplayName("reintentar mas tarde espera cada vez el doble, con tope")
     void esperaExponencial() {
         Ejecucion ejecucion = enCurso();

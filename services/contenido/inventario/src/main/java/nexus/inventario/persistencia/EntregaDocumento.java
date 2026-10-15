@@ -29,6 +29,7 @@ record EntregaDocumento(
         String referencia,
         List<LineaDocumento> productos,
         List<ElementoEntregadoDocumento> elementos,
+        List<String> yaTenia,
         EstadoEntrega estado,
         String solicitante,
         Instant creadaEn,
@@ -38,6 +39,8 @@ record EntregaDocumento(
     EntregaDocumento {
         productos = productos == null ? List.of() : List.copyOf(productos);
         elementos = elementos == null ? List.of() : List.copyOf(elementos);
+        // Las entregas anteriores a la regla de la epica unica no traen el campo.
+        yaTenia = yaTenia == null ? List.of() : List.copyOf(yaTenia);
     }
 
     static EntregaDocumento de(Entrega entrega) {
@@ -46,6 +49,7 @@ record EntregaDocumento(
                 entrega.referencia(),
                 entrega.productos().stream().map(l -> new LineaDocumento(l.productoId(), l.cantidad())).toList(),
                 entrega.elementos().stream().map(ElementoEntregadoDocumento::de).toList(),
+                entrega.yaTenia(),
                 entrega.estado(), entrega.solicitante(), entrega.creadaEn(), entrega.entregadaEn());
     }
 
@@ -54,6 +58,7 @@ record EntregaDocumento(
                 id, clave, huella, uid, origen, referencia,
                 productos.stream().map(l -> new LineaDeEntrega(l.productoId(), l.cantidad())).toList(),
                 elementos.stream().map(ElementoEntregadoDocumento::aDominio).toList(),
+                yaTenia,
                 estado, solicitante, creadaEn, entregadaEn);
     }
 }
