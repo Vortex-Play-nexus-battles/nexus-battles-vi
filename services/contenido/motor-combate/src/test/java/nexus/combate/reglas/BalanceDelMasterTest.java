@@ -121,6 +121,19 @@ class BalanceDelMasterTest {
     }
 
     @Test
+    @DisplayName("«Sombra del Olvido» pelea con su épica, «Velo de Sombras»: el motor ya la conoce y el balance debe medirla")
+    void sombraDelOlvidoPeleaConSuEpica() {
+        Mision templo = catalogo.stream().filter(m -> m.id().equals("templo-olvidado")).findFirst()
+                .orElseThrow(() -> new AssertionError("la semilla no trae el Templo"));
+        SimuladorDeMisiones.MasterDePrueba sombra = templo.masters().stream()
+                .filter(m -> m.nombre().equals("Sombra del Olvido")).findFirst()
+                .orElseThrow(() -> new AssertionError("el Templo no trae a Sombra del Olvido"));
+
+        assertEquals("Velo de Sombras", sombra.epica(), "si el simulador no le da su épica, el balance mide un "
+                + "Máster que no es el del juego");
+    }
+
+    @Test
     @DisplayName("hay misiones de nivel 1 a 8 para medir: ningún nivel queda sin duelo")
     void haySemillasParaCadaNivel() {
         for (int nivel = 1; nivel <= 8; nivel++) {
@@ -131,8 +144,8 @@ class BalanceDelMasterTest {
 
     /**
      * Solo para informar, con un piso minimo: el Templo completo, con un heroe de nivel 8, sin Master y con el
-     * Master de la mision («Sombra del Olvido», Pícaro Veneno: su epica, «Velo de Sombras», no esta entre las ocho
-     * que conoce el motor, asi que la juega sin ella). La unica fuente de epicas (RG-085) no puede quedar cerrada
+     * Master de la mision («Sombra del Olvido», Pícaro Veneno, con su epica «Velo de Sombras», que el motor ya
+     * conoce). La unica fuente de epicas (RG-085) no puede quedar cerrada
      * en la practica: antes de la regla, con el Master aparecido, el exito del Templo caia al 1,3 %.
      */
     @Test

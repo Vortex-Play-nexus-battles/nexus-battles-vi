@@ -126,13 +126,13 @@ class CatalogoContraMongoIT {
         class Semilla {
 
                 @Test
-                @DisplayName("base vacia: el arranque deja el catalogo completo, 56 productos marcados SEMILLA")
+                @DisplayName("base vacia: el arranque deja el catalogo completo, 57 productos marcados SEMILLA")
                 void elArranqueSiembraElCatalogoCompleto() {
                         List<Producto> sembrados = productos.findAll().stream()
                                 .filter(p -> p.origen() == OrigenProducto.SEMILLA)
                                 .toList();
 
-                        assertEquals(56, sembrados.size());
+                        assertEquals(57, sembrados.size());
                         assertTrue(productos.existsById(id("heroe-guerrero-tanque")));
                         assertTrue(productos.existsById(id("epica-medico-reanimador-3000")));
                         // Las pruebas comparten la base: otra puede haber aplicado la v2.
@@ -141,13 +141,13 @@ class CatalogoContraMongoIT {
                 }
 
                 @Test
-                @DisplayName("RG-085: las 8 epicas existen y no tienen precio de venta, para que la tienda no las ofrezca")
+                @DisplayName("RG-085: las 9 epicas existen y no tienen precio de venta, para que la tienda no las ofrezca")
                 void lasEpicasNoSeVenden() {
                         List<Producto> epicas = productos.findAll().stream()
                                 .filter(p -> p.tipo() == TipoProducto.EPICA)
                                 .toList();
 
-                        assertEquals(8, epicas.size());
+                        assertEquals(9, epicas.size());
                         assertTrue(epicas.stream().allMatch(p -> p.precioCreditos() != null && p.precioCreditos() == 0),
                                 "precios en creditos: " + epicas.stream().map(Producto::precioCreditos).toList());
                         assertTrue(epicas.stream().allMatch(p -> p.precioMonedaReal() != null && p.precioMonedaReal().signum() == 0),
@@ -161,7 +161,7 @@ class CatalogoContraMongoIT {
 
                         assertEquals(List.of(), otra.insertados());
                         assertEquals(List.of(), otra.actualizados());
-                        assertEquals(56, otra.existentes().size() + otra.respetados().size());
+                        assertEquals(57, otra.existentes().size() + otra.respetados().size());
                 }
 
                 @Test

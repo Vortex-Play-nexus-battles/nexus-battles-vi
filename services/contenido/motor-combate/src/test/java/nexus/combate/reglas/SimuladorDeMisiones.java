@@ -65,7 +65,7 @@ final class SimuladorDeMisiones {
                   List<Enemigo> encuentros, boolean tieneJefe, List<MasterDePrueba> masters) {
     }
 
-    /** Un Master de la semilla: su prototipo y su epica si el motor la conoce (la de la Tabla 20; si no, ninguna). */
+    /** Un Master de la semilla: su prototipo y su epica si el motor la conoce (las de la Tabla 20 y «Velo de Sombras»; si no, ninguna). */
     record MasterDePrueba(String nombre, String prototipo, String epica) {
     }
 
@@ -197,7 +197,7 @@ final class SimuladorDeMisiones {
                 for (JsonNode master : m.path("masters")) {
                     String epica = master.path("epica").path("nombre").asText();
                     masters.add(new MasterDePrueba(master.path("nombre").asText(), master.path("prototipo").asText(),
-                            SimuladorDeCombates.EPICA_AFIN.containsValue(epica) ? epica : null));
+                            SimuladorDeCombates.elMotorConoce(epica) ? epica : null));
                 }
                 misiones.add(new Mision(m.path("id").asText(), m.path("nombre").asText(), m.path("origen").asText(),
                         m.path("nivelRecomendado").isNull() ? null : m.path("nivelRecomendado").asInt(),

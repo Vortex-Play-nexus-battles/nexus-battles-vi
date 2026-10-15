@@ -225,7 +225,7 @@ El resto de variables está en [`.env.example`](.env.example) y explicado en `sr
 | Créditos por escalón («mejores recompensas») | el mismo factor que las estadísticas (×1,5 y ×2) | `MISIONES_CREDITOS_*` |
 | Tiradas de Máster en exploración («mayor probabilidad») | una por cada 24 horas | `TiradaDeMasters` |
 | «Explorar las 5 cámaras» | superar todos los encuentros regulares | semilla |
-| Recompensas del ejemplo que no están en el catálogo oficial (Cofre de Bronce, Fragmentos del Sello Antiguo, «Piel del Guardián», «Espada del Templo», «Velo de Sombras», el título) | se informan en el reporte como `sinEntregar`; no se inventan productos | semilla (`productoId`) |
+| Recompensas del ejemplo que no están en el catálogo oficial (Cofre de Bronce, Fragmentos del Sello Antiguo, «Piel del Guardián», «Espada del Templo», el título; «Velo de Sombras» sí está: es un producto EPICA del catálogo y se entrega al derrotar a su Máster) | se informan en el reporte como `sinEntregar`; no se inventan productos | semilla (`productoId`) |
 | Qué hacer con una simulación que falla para siempre (HU-SIM-007) | se reintenta sin límite con la espera de #851 (30 s, 1, 2 y 4 min, tope 5); el héroe sigue en misión hasta que el servicio responda o el jugador cancele | `Ejecucion.simulacionAplazada` (la espera base es `MISIONES_REINTENTO_SEGUNDOS`) |
 | Cuánto dura la reserva de una simulación (HU-SIM-007) | 5 minutos | `Ejecucion.ARRIENDO_DE_SIMULACION` |
 | Preferencias de correo por categoría | no hay dónde leerlas: `debeEnviarCorreo` siempre verdadero | `MISIONES_CORREO_ACTIVO` apaga el correo del módulo |

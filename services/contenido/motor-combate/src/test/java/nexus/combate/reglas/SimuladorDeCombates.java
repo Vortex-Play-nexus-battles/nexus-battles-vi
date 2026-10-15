@@ -38,6 +38,14 @@ final class SimuladorDeCombates {
             "Pícaro Veneno", "Toma y lleva", "Pícaro Machete", "Intimidación sangrienta",
             "Chamán", "Té changua", "Médico", "Reanimador 3000");
 
+    /** La epica del Master del Templo (7.8.14): no es de ningun tipo de heroe, pero el motor la conoce. */
+    static final String EPICA_DEL_MASTER_DEL_TEMPLO = "Velo de Sombras";
+
+    /** Las epicas que el motor sabe jugar: las ocho de la Tabla 20 y la del Master del Templo. */
+    static boolean elMotorConoce(String epica) {
+        return EPICA_AFIN.containsValue(epica) || EPICA_DEL_MASTER_DEL_TEMPLO.equals(epica);
+    }
+
     /** Como juega un bando. */
     enum Estrategia {
         /** La regla fija anterior (D-B7-12): referencia. */

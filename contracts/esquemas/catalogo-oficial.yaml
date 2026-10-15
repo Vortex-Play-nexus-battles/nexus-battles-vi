@@ -30,9 +30,20 @@
 #     define es la de las epicas (Tabla 20: efecto general para todos, efecto
 #     potenciado para el tipo afin).
 #   * `probabilidadCaida` y `probabilidadMaster` son porcentajes (3 = 3 %).
+#   * Las claves de primer nivel van en minusculas y sin guiones: el spec E2E del
+#     profesor (tests/e2e/contrato-del-profesor.smoke.spec.js) lee este archivo
+#     linea a linea con /^([a-z]+):/, y una clave con mayusculas no cierraria la
+#     seccion anterior (el guardian lo exige). De ahi `epicasdemision`.
+#   * `epicasdemision` no es de la Tabla 20: es la epica que el documento define
+#     DENTRO de la mision de ejemplo (seccion 7.8.14). Es un producto EPICA del
+#     catalogo, pero no una de las ocho de `EpicasIniciales` (heroes), que son
+#     las de la Tabla 20 y a las que cada tipo de heroe tiene derecho; por eso el
+#     guardian la exige en la semilla de productos y la rechaza en heroes.
+#     Su Master dice "0.15 % (15 % de probabilidad)": se toma la aclaracion
+#     entre parentesis, como en la semilla de misiones.
 
-version: 1
-fuente: "Proyecto Integrador II, seccion 6.1: Tablas 5 y 6 (heroes), 7 (acciones), 8-11 (armas), 12-15 (armaduras), 16-19 (items), 20 (epicas)"
+version: 2
+fuente: "Proyecto Integrador II, seccion 6.1: Tablas 5 y 6 (heroes), 7 (acciones), 8-11 (armas), 12-15 (armaduras), 16-19 (items), 20 (epicas); seccion 7.8.14 (epica de la mision de ejemplo)"
 
 # Tablas 5 y 6: prototipos y estadisticas de nivel 1. `null` = "-" en la tabla.
 heroes:
@@ -150,3 +161,11 @@ epicas:
   - {nombre: Intimidación sangrienta, heroe: Pícaro Machete, probabilidadMaster: 0.01}
   - {nombre: Té changua, heroe: Chamán, probabilidadMaster: 0.1}
   - {nombre: Reanimador 3000, heroe: Médico, probabilidadMaster: 0.1}
+
+# Seccion 7.8.14, "Enemigo Master" de "El Templo Olvidado": Sombra del Olvido
+# (Pícaro Veneno, 15 % de probabilidad) suelta la epica "Velo de Sombras".
+#   Efecto general: +2 a la defensa para todos los heroes.
+#   Efecto epico (solo Pícaro Veneno): intangible 1 turno, sin recibir dano y con
+#   veneno al atacante (+3 por veneno durante 2 turnos).
+epicasdemision:
+  - {nombre: Velo de Sombras, heroe: Pícaro Veneno, probabilidadMaster: 15}

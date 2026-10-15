@@ -291,7 +291,7 @@ class MapeadorDelCatalogoTest {
     // --------------------------------------------------- el archivo real
 
     @Test
-    @DisplayName("los 56 productos del JSON real pasan las validaciones del alta")
+    @DisplayName("los 57 productos del JSON real pasan las validaciones del alta")
     void catalogoRealCompleto() throws Exception {
         CatalogoInicial real;
         try (InputStream json = getClass().getResourceAsStream("/semilla/catalogo-inicial.json")) {
@@ -299,8 +299,8 @@ class MapeadorDelCatalogoTest {
         }
 
         List<EntradaCatalogo> todas = real.todas();
-        assertEquals(56, todas.size());
-        assertEquals(56, todas.stream().map(EntradaCatalogo::id).distinct().count(),
+        assertEquals(57, todas.size());
+        assertEquals(57, todas.stream().map(EntradaCatalogo::id).distinct().count(),
                 "los slugs deben ser unicos");
 
         Map<TipoProducto, Long> porTipo = todas.stream()
@@ -322,7 +322,7 @@ class MapeadorDelCatalogoTest {
                 TipoProducto.ARMA, 16L,
                 TipoProducto.ARMADURA, 16L,
                 TipoProducto.ITEM, 8L,
-                TipoProducto.EPICA, 8L), porTipo);
+                TipoProducto.EPICA, 9L), porTipo);
     }
 
     @Test

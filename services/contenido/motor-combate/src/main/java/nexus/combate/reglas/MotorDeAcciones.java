@@ -323,6 +323,13 @@ public final class MotorDeAcciones {
         }
 
         if (categoria != CategoriaEfecto.SIN_EFECTO) {
+            // Velo de Sombras (7.8.14): quien golpea al intangible queda envenenado.
+            for (EfectoActivo velo : defensor.efectos()) {
+                if (velo.tipo() == TipoDeEfecto.ENVENENA_AL_ATACANTE) {
+                    mesa.aplicarEfecto(idAtacante, new EfectoActivo("VELO_DE_SOMBRAS", velo.nombre(),
+                            TipoDeEfecto.DANO_POR_TURNO, velo.valor(), velo.turnos(), idDefensor));
+                }
+            }
             for (PlantillaDeEfecto efecto : golpe.alAcertar()) {
                 mesa.aplicarEfecto(idDefensor, efecto.crear(azar, idAtacante));
             }
