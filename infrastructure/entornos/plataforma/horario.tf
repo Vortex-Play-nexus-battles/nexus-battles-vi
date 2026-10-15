@@ -1,6 +1,16 @@
 # Apagado nocturno y encendido antes de la jornada del host de plataforma,
 # en hora de Colombia, con EventBridge Scheduler (29-sep).
 #
+# ## 14-oct-2026 — horario desactivado: el host queda encendido 24 h
+#
+# Por decision del responsable del bloque. Los dos horarios siguen creados
+# pero en DISABLED (horario_activo = false en variables.tf) y los crones de
+# infra-dev.yml que hacian de respaldo se quitaron en el mismo cambio: nada
+# apaga ni enciende el host solo. Se desactivan en vez de borrarse porque la
+# compuerta de infra-dev.yml no deja que un apply automatico destruya nada.
+# Volver al horario: horario_activo = true y restaurar los `schedule` de
+# infra-dev.yml desde el historial de git.
+#
 # ## Por que aqui y no en el cron de infra-dev.yml
 #
 # El horario vivia solo en los `schedule` de infra-dev.yml, y el planificador
@@ -17,11 +27,8 @@
 # Llama directamente a EC2 (StartInstances / StopInstances) con el rol del
 # planificador, que solo puede encender y apagar ESTA instancia.
 #
-# infra-dev.yml conserva sus `schedule`: para el host de contenido y como
-# respaldo de este. Cuando estos dos horarios existen y estan activos, su
-# paso de encender/apagar de plataforma no hace nada (no hay dos
-# planificadores haciendo lo mismo); si faltan o se desactivan, vuelve a
-# actuar el cron.
+# Hasta el 14-oct, infra-dev.yml conservaba sus `schedule` para el host de
+# contenido y como respaldo de este; ya no los tiene (ver arriba).
 #
 # Idempotente: encender una instancia encendida o apagar una apagada no hace
 # nada. Si el CD necesita el host fuera de horario, lo enciende el mismo

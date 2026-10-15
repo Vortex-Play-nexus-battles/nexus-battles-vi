@@ -104,9 +104,9 @@ variable "tope_mensual_usd" {
 }
 
 variable "horario_activo" {
-  description = "Apagado nocturno y encendido programados del host (horario.tf). false los desactiva sin borrarlos: por ejemplo, la semana de la demo si hace falta el entorno 24 h. Con c7i-flex.large cada noche encendida cuesta ~0,65 USD de credito."
+  description = "Apagado nocturno y encendido programados del host (horario.tf). false los desactiva sin borrarlos. Desde el 14-oct-2026 vale false por decision del responsable del bloque: el host queda encendido las 24 h (c7i-flex.large 24x7 ~ 62 USD/mes de credito, frente a ~ 31 con el horario). true lo reactiva tal cual; entonces hay que restaurar tambien los schedule de infra-dev.yml."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "horario_apagar" {

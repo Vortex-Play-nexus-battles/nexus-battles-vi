@@ -67,9 +67,9 @@ Si en vez de eso aparece **un solo** `destroy` o `replace` sobre la instancia, l
 
 **Lo primero que va a aparecer**, y conviene saberlo de antemano: `tls_private_key.contenido_dev` no se puede importar, porque la clave privada solo existió en la memoria del proceso que la generó. Al adoptar el key pair sin ella, Terraform propondrá reemplazarlo para regenerarla — y eso es un `replace`. La salida limpia es sacar la generación de la llave de Terraform (la llave real ya está en los secrets del entorno `dev`) y declarar el key pair con `lifecycle { ignore_changes = [public_key] }`.
 
-## Apagado automático — R9.3
+## Apagado automático — R9.3 (retirado el 14-oct-2026)
 
-Este host **ya no se queda encendido las 24 h**. `infra-dev.yml` cubre ahora los dos hosts con la misma política horaria, sin cambiar ni un horario:
+**Desde el 14-oct-2026 no hay horario:** `infra-dev.yml` ya no tiene `schedule` y los hosts quedan encendidos las 24 h por decisión del responsable del bloque. Además, sin `AWS_ROLE_ARN_CONTENIDO` el rol de plataforma nunca vio esta instancia: los crones de abajo terminaban en «No hay instancia nexus-contenido-dev: nada que stop», así que este host no lo llegó a apagar nuestro pipeline. Se conserva la tabla como historia de lo que hubo:
 
 | Acción | Cron (UTC) | Hora Colombia |
 |---|---|---|
@@ -251,10 +251,8 @@ Con el rol puesto:
   contenido, accion reglas-sg` aplica `reglas-entrada.json` (probado en CI con
   `scripts/cd/pruebas/reglas-sg-contenido.sh`). Si el dueño solo hace el paso B, Grupo 6
   hace el A desde ahí.
-- **El horario de plataforma pasa a aplicarse también a este host:** se apaga a las 23:23 y
-  se enciende a las 07:17 (hora Colombia) de lunes a viernes, y queda apagado el fin de
-  semana. Si el Grupo 2 necesita su host encendido 24 h, que el rol **no** incluya
-  `ec2:StopInstances`.
+- **Sin horario (desde el 14-oct-2026):** con el rol puesto, `start` y `stop` solo corren a
+  mano desde `Actions → Infra dev`; nada apaga el host solo.
 
 ### Lo que ya está en este host antes del paso A, y lo que queda después
 
