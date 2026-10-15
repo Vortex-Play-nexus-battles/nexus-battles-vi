@@ -29,9 +29,10 @@
 #
 # ## Cuando
 #
-# 02:30 UTC = 21:30 en Colombia, antes del apagado nocturno de las 23:00; los
-# fines de semana los hosts estan apagados y el job solo lo anota. Los cron de
-# GitHub solo corren desde la rama por defecto y pueden llegar con retraso.
+# 02:30 UTC = 21:30 en Colombia, todos los dias. Desde el 14-oct-2026 los
+# hosts no tienen apagado programado, asi que el respaldo corre siempre; si
+# alguien apaga un host a mano, el job solo lo anota. Los cron de GitHub solo
+# corren desde la rama por defecto y pueden llegar con retraso.
 name: Respaldo de DEV
 
 on:
