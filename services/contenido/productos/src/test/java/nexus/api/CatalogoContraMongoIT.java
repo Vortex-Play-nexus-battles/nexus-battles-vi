@@ -175,15 +175,15 @@ class CatalogoContraMongoIT {
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$.modificadoPor").value(UID_ADMIN.toString()));
 
-                        // El arranque ya aplico la version del archivo (2); la 3 pone al dia lo no tocado.
-                        ResultadoSemilla v2 = semillaConOtraVersion(3).sembrar();
+                        // El arranque ya aplico la version del archivo (3); la 4 pone al dia lo no tocado.
+                        ResultadoSemilla v2 = semillaConOtraVersion(4).sembrar();
 
                         assertTrue(v2.respetados().contains(editado), v2.respetados().toString());
                         assertTrue(v2.actualizados().size() >= 50, "actualizados: " + v2.actualizados().size());
                         Producto respetado = productos.findById(editado).orElseThrow();
                         assertEquals("Descripcion reescrita por el administrador", respetado.descripcion());
-                        assertEquals(2, respetado.semillaVersion());
-                        assertEquals(3, productoDeLaSemilla("item-mago-fuego-anillo-para-piro-explosion").semillaVersion());
+                        assertEquals(3, respetado.semillaVersion());
+                        assertEquals(4, productoDeLaSemilla("item-mago-fuego-anillo-para-piro-explosion").semillaVersion());
                 }
 
                 private SemillaDelCatalogo semillaConOtraVersion(int version) throws IOException {
