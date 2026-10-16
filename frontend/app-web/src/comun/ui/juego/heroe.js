@@ -21,6 +21,7 @@ import { h, clases } from '../dom.js';
 import { claseDeMarco, distintivoDeRareza } from '../distintivo.js';
 import { icono } from '../icono.js';
 import { identidadDePrototipo } from './prototipos.js';
+import { retratoDe } from './arte.js';
 import { bloqueDeEstadisticas } from './estadisticas.js';
 import { selloDeEstado, RANURAS_TOTALES } from './estado-heroe.js';
 
@@ -36,7 +37,9 @@ import { selloDeEstado, RANURAS_TOTALES } from './estado-heroe.js';
  * @returns {HTMLElement}
  */
 export function retratoDeHeroe(heroe, { conNombre = true } = {}) {
-  const { nombre, nivel, rareza, imagen, prototipo } = heroe ?? {};
+  const { nombre, nivel, rareza, prototipo } = heroe ?? {};
+  // Fase 2 de arte: la imagen real, o el retrato aprobado de su prototipo.
+  const imagen = retratoDe(heroe);
   const etiquetaRareza = rareza ? String(rareza).toLowerCase() : null;
   // UXC-1 — con el prototipo conocido, su simbolo sustituye a la inicial: los
   // ocho prototipos de la Tabla 6 dejan de ser el mismo circulo. Sin prototipo

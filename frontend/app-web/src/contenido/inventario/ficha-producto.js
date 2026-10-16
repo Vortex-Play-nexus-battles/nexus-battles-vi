@@ -20,6 +20,7 @@ import { construirDetalleDeHeroe } from './detalle-heroe.js';
 import { icono } from '../../comun/ui/icono.js';
 import { ICONO_DEL_TIPO } from './vitrina.js';
 import { identidadDePrototipo } from '../../comun/ui/juego/prototipos.js';
+import { imagenDeProducto } from '../../comun/ui/juego/arte.js';
 import { NOMBRE_DEL_TIPO } from '../../comun/ui/formato.js';
 import { bloquearDesplazamiento, esElModalDeArriba } from '../../comun/ui/dialogo.js';
 
@@ -91,10 +92,13 @@ export function construirFicha(
   ficha.setAttribute('aria-labelledby', idNombre);
 
   let imagen;
-  if (producto.imagen) {
+  // Fase 2 de arte: la figura provisional de la semilla se cambia por el arte
+  // aprobado del producto.
+  const url = imagenDeProducto(producto);
+  if (url) {
     imagen = document.createElement('img');
     imagen.className = 'ficha__imagen';
-    imagen.src = producto.imagen;
+    imagen.src = url;
     // El texto alternativo es el nombre: quien no ve la imagen sigue sabiendo
     // que producto esta mirando (RNF-ACC-002).
     imagen.alt = producto.nombre ?? '';

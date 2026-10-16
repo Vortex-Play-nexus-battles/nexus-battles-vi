@@ -11,6 +11,7 @@
 import { icono } from '../comun/ui/icono.js';
 import { ICONO_DEL_TIPO } from '../contenido/inventario/vitrina.js';
 import { nombreLegible } from './nombre-de-producto.js';
+import { imagenDeProducto } from '../comun/ui/juego/arte.js';
 
 /** Etiqueta legible de cada tipo, igual que el inventario (mismo catalogo). */
 const NOMBRE_DEL_TIPO = {
@@ -211,7 +212,15 @@ function construirMiniatura(subasta) {
       clase: 'icono subastas__simbolo',
       etiqueta: null,
     });
-  if (subasta.miniaturaUrl) {
+  // Fase 2 de arte: la miniatura copiada al publicar puede ser la figura
+  // provisional de la semilla; entonces va el arte aprobado del producto, que
+  // se busca por id o, si la subasta no lo trae, por su nombre del catalogo.
+  const miniaturaUrl = imagenDeProducto({
+    productoId: subasta.productoId,
+    nombre: subasta.nombreProducto,
+    imagen: subasta.miniaturaUrl,
+  });
+  if (miniaturaUrl) {
     miniatura.dataset.imagen = 'si';
     const imagen = document.createElement('img');
     // El nombre ya se lee debajo, en la tarjeta: repetirlo como texto
@@ -227,7 +236,7 @@ function construirMiniatura(subasta) {
       },
       { once: true },
     );
-    imagen.src = subasta.miniaturaUrl;
+    imagen.src = miniaturaUrl;
     miniatura.appendChild(imagen);
   } else {
     miniatura.dataset.imagen = 'no';

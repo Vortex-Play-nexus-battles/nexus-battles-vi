@@ -62,7 +62,12 @@ export function cartaDelNexo(producto, { tuyo, hrefTienda = hrefDeLaTiendaPara }
     atributos: { 'aria-labelledby': idNombre },
     hijos: [
       retratoDeHeroe(
-        { nombre: producto.nombre, imagen: producto.imagen ?? null, prototipo: producto.prototipo },
+        {
+          nombre: producto.nombre,
+          imagen: producto.imagen ?? null,
+          prototipo: producto.prototipo,
+          productoId: producto.id,
+        },
         { conNombre: false },
       ),
       h('div', {

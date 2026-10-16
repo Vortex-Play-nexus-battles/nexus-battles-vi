@@ -157,6 +157,7 @@ export function pintarValidacion(raiz, verificacion, acciones = {}) {
           nombre: verificacion.heroe.nombre,
           nivel: verificacion.heroe.nivel ?? undefined,
           imagen: verificacion.heroe.retratoUrl ?? undefined,
+          prototipo: verificacion.heroe.prototipo ?? undefined,
         },
         { conNombre: false },
       )

@@ -42,6 +42,7 @@ import { clases, h, vaciar } from '../../comun/ui/dom.js';
 import { icono } from '../../comun/ui/icono.js';
 import { cuantoFalta } from '../../comun/ui/formato.js';
 import { categoriaDe, dificultadDe, textoDeDuracion } from './modelo-misiones.js';
+import { imagenDeMision } from '../../comun/ui/juego/arte.js';
 
 /** Cada cuánto pasa a la siguiente, si nadie la ha pausado. */
 export const INTERVALO_DE_ROTACION_MS = 8000;
@@ -91,10 +92,10 @@ function diapositiva(mision, { posicion, total, hrefDe }) {
         clase: 'banner-misiones__arte',
         atributos: { 'aria-hidden': 'true' },
         hijos: [
-          mision.imagen
+          imagenDeMision(mision)
             ? h('img', {
                 clase: 'banner-misiones__imagen',
-                atributos: { src: mision.imagen, alt: '', loading: 'lazy' },
+                atributos: { src: imagenDeMision(mision), alt: '', loading: 'lazy' },
               })
             : icono(categoria?.icono ?? 'mapa', {
                 clase: 'icono banner-misiones__emblema',

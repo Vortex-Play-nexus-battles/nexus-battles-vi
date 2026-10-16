@@ -340,4 +340,35 @@ class MapeadorDelCatalogoTest {
         assertEquals(3, conAtaque);
         assertEquals(13, real.armas().size() - conAtaque);
     }
+
+    @Test
+    @DisplayName("fase 2 de arte: los 57 productos del JSON real traen su WebP de shared/ui-kit/arte, sin repetir archivo")
+    void cadaProductoTraeSuArte() throws Exception {
+        CatalogoInicial real;
+        try (InputStream json = getClass().getResourceAsStream("/semilla/catalogo-inicial.json")) {
+            real = SemillaDelCatalogo.leer(json);
+        }
+
+        java.util.Set<String> vistas = new java.util.HashSet<>();
+        for (CatalogoInicial.EntradaCatalogo e : real.todas()) {
+            SolicitudCrearProducto s = mapeador.aSolicitud(e, real);
+            assertTrue(s.imagen().startsWith("/shared/ui-kit/arte/productos/")
+                    || s.imagen().startsWith("/shared/ui-kit/arte/heroes/"), e.id() + " -> " + s.imagen());
+            assertTrue(s.imagen().endsWith(".webp"), s.imagen());
+            assertTrue(vistas.add(s.imagen()), "imagen repetida: " + s.imagen());
+        }
+        assertEquals(57, vistas.size());
+    }
+
+    @Test
+    @DisplayName("al poner al dia, la semilla cambia la figura provisional o su propio arte, pero respeta la imagen que puso un administrador")
+    void imagenAlPonerAlDia() {
+        String arte = "/shared/ui-kit/arte/heroes/chaman.webp";
+        assertEquals(arte, MapeadorDelCatalogo.imagenAlPonerAlDia("data:image/svg+xml,%3Csvg", arte));
+        assertEquals(arte, MapeadorDelCatalogo.imagenAlPonerAlDia(null, arte));
+        assertEquals(arte, MapeadorDelCatalogo.imagenAlPonerAlDia(" ", arte));
+        assertEquals(arte, MapeadorDelCatalogo.imagenAlPonerAlDia("/shared/ui-kit/arte/heroes/viejo.webp", arte));
+        assertEquals("https://cdn.example/mi-chaman.png",
+                MapeadorDelCatalogo.imagenAlPonerAlDia("https://cdn.example/mi-chaman.png", arte));
+    }
 }
