@@ -28,6 +28,8 @@
  * @module tienda-adaptador
  */
 
+import { imagenDeProducto } from '../comun/ui/juego/arte.js';
+
 /**
  * Un importe del DTO, que llega como `BigDecimal` serializado (numero o
  * cadena), convertido a numero — o null si no vino.
@@ -148,7 +150,9 @@ export function aProductoDeVitrina(dto = {}) {
     habilidades:
       typeof dto.habilidades === 'string' && dto.habilidades.trim() ? dto.habilidades : null,
     tipo: typeof dto.tipo === 'string' ? dto.tipo : '',
-    imagenUrl: typeof dto.imagenUrl === 'string' && dto.imagenUrl.trim() ? dto.imagenUrl : null,
+    // Fase 2 de arte: la figura provisional de la semilla se cambia por el arte
+    // aprobado del producto; sin arte, null y la vitrina pone el símbolo del tipo.
+    imagenUrl: imagenDeProducto({ id: dto.id, nombre: dto.nombre, imagen: dto.imagenUrl }),
     precio,
     precioAnterior: hayRebaja ? original : null,
     moneda,
@@ -221,10 +225,7 @@ export function aFilaDeCarrito(item = {}, moneda = null) {
       ? Math.min(item.maximo, MAXIMO_POR_LINEA)
       : MAXIMO_POR_LINEA;
   const disponible = item.disponible !== false;
-  const imagen =
-    typeof item.producto?.imagen === 'string' && item.producto.imagen.trim()
-      ? item.producto.imagen
-      : null;
+  const imagen = item.producto ? imagenDeProducto(item.producto) : null;
   // G3 (1.7.0): una línea que solo se vende en créditos no tiene importe en
   // dinero real; enseña el de créditos que calculó el servidor (unidad y
   // `subtotalCreditos`), nunca «Sin precio» ni «0 COP».

@@ -71,7 +71,7 @@ class SemillaDelCatalogoTest {
      * producto del JSON: la 2 es la que quita el precio de venta a las epicas
      * (RG-085) en las bases que ya las tenian sembradas con la 1.
      */
-    private static final int VERSION_DEL_CATALOGO = 2;
+    private static final int VERSION_DEL_CATALOGO = 3;
 
     private ValidatorFactory fabrica;
     private Validator validador;

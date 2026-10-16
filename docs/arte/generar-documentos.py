@@ -5,7 +5,7 @@ Genera los documentos de la fase 2 de arte a partir de UNA fuente:
 
     python3 docs/arte/generar-documentos.py
 
-Escribe:
+Escribe (y despues: npx prettier --write sobre arte-manifiesto.js):
   * docs/arte/manifest-assets.md      — la tabla del manifiesto (estado de cada asset)
   * docs/arte/PROMPTS-ASSETS-NEXUS.md  — un prompt listo para copiar por asset, por lote
 
@@ -210,6 +210,49 @@ def comprobar(m):
     return errores
 
 
+def escribir_modulo_frontend(m):
+    """El mapa del frontend: una sola fuente (el manifiesto) para las vistas."""
+    raiz_repo = AQUI.parent.parent
+    seed = json.loads((raiz_repo / 'services/contenido/productos/src/main/resources/semilla/'
+                       'catalogo-inicial.json').read_text(encoding='utf-8'))
+    nombres = {e['id']: e['nombre'] for k in ('heroes', 'armas', 'armaduras', 'items', 'epicas') for e in seed[k]}
+    protos = {e['id']: e.get('prototipo') for e in seed['heroes']}
+    raiz = '/' + m['raiz'] + '/'
+    prod, mis, her = [], [], []
+    for a in m['assets']:
+        c = a['categoria']
+        if c in ('otro', 'emblema') or a['estado'] != 'INTEGRADO':
+            continue
+        url = raiz + a['archivo']
+        if c == 'mision':
+            mis.append((a['entidad'], url))
+            continue
+        prod.append((a['entidad'], nombres[a['entidad']], url))
+        if c == 'heroe':
+            her.append((protos[a['entidad']], url))
+    lineas = [
+        '// Generado por docs/arte/generar-documentos.py desde docs/arte/manifest-assets.json.',
+        '// No editar a mano. El guardian tests/contratos/arte-del-catalogo.py lo compara con el manifiesto.',
+        '',
+        '/** productoId -> [nombre del catalogo, WebP]. */',
+        'export const ARTE_DE_PRODUCTOS = Object.freeze({',
+        *[f"  '{i}': ['{n}', '{u}']," for i, n, u in prod],
+        '});',
+        '',
+        '/** misionId -> WebP panoramico. */',
+        'export const ARTE_DE_MISIONES = Object.freeze({',
+        *[f"  '{i}': '{u}'," for i, u in mis],
+        '});',
+        '',
+        '/** prototipo (Tabla 6) -> retrato. */',
+        'export const RETRATOS_DE_PROTOTIPOS = Object.freeze({',
+        *[f"  '{p}': '{u}'," for p, u in her],
+        '});',
+    ]
+    (raiz_repo / 'frontend/app-web/src/comun/ui/juego/arte-manifiesto.js').write_text(
+        '\n'.join(lineas) + '\n', encoding='utf-8')
+
+
 if __name__ == '__main__':
     manifiesto = cargar()
     fallos = comprobar(manifiesto)
@@ -217,4 +260,5 @@ if __name__ == '__main__':
         sys.exit('\n'.join(fallos))
     escribir_manifiesto(manifiesto)
     escribir_prompts(manifiesto)
+    escribir_modulo_frontend(manifiesto)
     print(f"{len(manifiesto['assets'])} assets: manifest-assets.md y PROMPTS-ASSETS-NEXUS.md al día.")

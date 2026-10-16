@@ -153,9 +153,11 @@ describe('estado del heroe y del objeto', () => {
 });
 
 describe('retrato y carta del heroe propio', () => {
-  test('con prototipo conocido el simbolo sustituye a la inicial', () => {
+  test('con prototipo conocido, el retrato aprobado de su prototipo sustituye a la inicial (fase 2 de arte)', () => {
     const retrato = retratoDeHeroe({ nombre: 'Oyá', prototipo: 'Chamán' });
-    expect(retrato.querySelector('.marco-heroe__simbolo')).not.toBeNull();
+    expect(retrato.querySelector('.marco-heroe__imagen').getAttribute('src')).toBe(
+      '/shared/ui-kit/arte/heroes/chaman.webp',
+    );
     expect(retrato.querySelector('.marco-heroe__inicial')).toBeNull();
     expect(retrato.getAttribute('aria-label')).toBe('Oyá, Chamán');
   });

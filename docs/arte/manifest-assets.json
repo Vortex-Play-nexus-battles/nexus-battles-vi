@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "actualizado": "2026-10-14",
+  "actualizado": "2026-10-16",
   "raiz": "shared/ui-kit/arte",
   "bloques": {
     "estilo": "Ilustración digital de fantasía oscura, estilo concept art de videojuego RPG premium, con pincelada detallada y acabado cinematográfico, del mismo mundo, estilo, paleta e iluminación que la imagen de referencia adjunta: la Ciudadela del Nexo, una fantasía medieval atravesada por la energía arcana del Nexo. Paleta: azul marino e índigo profundos, violeta, y energía cian eléctrica en runas y en cristales en forma de rombo, con acentos cálidos ámbar puntuales. Materiales creíbles y con desgaste: acero oscuro, plata envejecida, cuero, tela gruesa, madera oscura, cristal. Iluminación: luz principal fría y azulada desde arriba a la izquierda, contraluz cian suave que recorta la silueta, sombras profundas y alto contraste.",
@@ -171,7 +171,7 @@
         "sala y combate",
         "estrategia de misión"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "0",
       "fuente": "Tabla 6 · `heroe-guerrero-tanque` (catalogo-inicial.json)",
       "descripcion": "el Guerrero Tanque, defensor de primera línea del Nexo: armadura pesada de placas de acero oscuro con remaches de plata y un rombo cian grabado en el peto, hombreras anchas, capa corta azul cobalto gastada. Sostiene delante del pecho un gran escudo con relieve de cabeza de dragón en plata y una espada recta de una mano. Rostro curtido y sereno, barba corta, cicatriz en la ceja. Halo azul cobalto detrás. Silueta ancha y sólida, la más pesada de los ocho."
@@ -191,7 +191,7 @@
         "sala y combate",
         "estrategia de misión"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "1",
       "fuente": "Tabla 6 · `heroe-guerrero-armas` (catalogo-inicial.json)",
       "descripcion": "la Guerrera Armas, maestra del mandoble: armadura media de acero y cuero, brazaletes de bronce con grabados de llama y guanteletes articulados, sin escudo. Apoya sobre el hombro un mandoble de hoja ancha con runas cian a lo largo del vaceo. Cabello oscuro recogido en trenza, mirada decidida y agresiva, una pintura de guerra ámbar en la mejilla. Halo rojo ámbar de brasa detrás. Silueta atlética y diagonal por la espada."
@@ -211,7 +211,7 @@
         "sala y combate",
         "estrategia de misión"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "1",
       "fuente": "Tabla 6 · `heroe-mago-fuego` (catalogo-inicial.json)",
       "descripcion": "el Mago Fuego: túnica arcana índigo gruesa con bordados dorados y runas color ascua, bajos chamuscados. En la mano izquierda, a la altura del pecho, un orbe de cristal ahumado sujeto por garras de bronce con fuego naranja girando dentro; en el dedo, un anillo de oro oscuro con una gema anaranjada. Rostro anguloso de mediana edad, ojos que reflejan las llamas, chispas flotando. Halo naranja fuego detrás."
@@ -231,7 +231,7 @@
         "sala y combate",
         "estrategia de misión"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "1",
       "fuente": "Tabla 6 · `heroe-mago-hielo` (catalogo-inicial.json)",
       "descripcion": "la Maga Hielo: manto de pieles blancas y placas de plata escarchada, una corona de cristales de hielo en forma de rombo sobre el cabello plateado. Sostiene en diagonal un báculo de madera petrificada por la escarcha coronado por un cristal de hielo con anillos de plata; vaho frío alrededor. Expresión serena y distante, piel pálida con reflejos azules. Halo blanco escarcha y cian pálido detrás."
@@ -251,7 +251,7 @@
         "sala y combate",
         "estrategia de misión"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "1",
       "fuente": "Tabla 6 · `heroe-picaro-veneno` (catalogo-inicial.json)",
       "descripcion": "la Pícara Veneno: capucha oscura que deja ver media cara, coraza ligera de cuero con correas cruzadas de cuero carmesí, guantes de cuero negro gastados. Sostiene junto al pecho una daga curva por cuya acanaladura corre un veneno verde-violeta que gotea; un frasco facetado al cinto. Ojos atentos y astutos, media sonrisa. Halo verde tóxico y violeta detrás. Silueta esbelta y en sombra."
@@ -271,7 +271,7 @@
         "sala y combate",
         "estrategia de misión"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "1",
       "fuente": "Tabla 6 · `heroe-picaro-machete` (catalogo-inicial.json)",
       "descripcion": "el Pícaro Machete: luchador rudo de los caminos, chaleco de cuero endurecido, brazaletes con púas de hierro y piedras rojo oscuro, pañuelo carmesí al cuello. Apoya en el hombro un machete ancho y pesado cuya hoja está envuelta a medias en vendas claras con runas cian pintadas. Rostro moreno con barba de días y una sonrisa desafiante. Halo carmesí oscuro detrás."
@@ -291,7 +291,7 @@
         "sala y combate",
         "estrategia de misión"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "1",
       "fuente": "Tabla 6 · `heroe-chaman` (catalogo-inicial.json)",
       "descripcion": "el Chamán, sanador del bosque: peto de pieles, cuero y musgo con cuentas de hueso, y un yelmo de hueso y madera con astas cortas, plumas y ojos tallados que brillan cian. Sostiene junto al pecho una raíz retorcida usada como talismán, atada con cordones, de la que salen brotes con luz verde-cian. Rostro mayor, sabio y tranquilo, pintura ritual en la frente. Halo verde musgo y cian detrás."
@@ -311,7 +311,7 @@
         "sala y combate",
         "estrategia de misión"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "1",
       "fuente": "Tabla 6 · `heroe-medico` (catalogo-inicial.json)",
       "descripcion": "la Médica de campaña del Nexo: bata larga color hueso con cinturones y bolsillos con viales, rodilleras de cuero, y en bandolera un maletín de cuero con herrajes de plata con un emblema en rombo verde azulado (no una cruz roja). Sostiene junto al pecho un dispositivo de reanimación arcano: dos palas de plata unidas por cables trenzados a un núcleo de cristal cian que chisporrotea. Mirada firme y compasiva, cabello corto recogido. Halo verde azulado detrás."
@@ -329,7 +329,7 @@
         "en curso",
         "reporte"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "0",
       "fuente": "Documento §7.8.14 · `templo-olvidado`",
       "descripcion": "El Templo Olvidado, de noche, en las profundidades del Bosque Sombrío: un templo antiguo de piedra gris cubierto de raíces y musgo, con escalinata y columnas rotas, dedicado a los Dioses Olvidados. En el centro, su gran portal sellado brilla con runas cian tenues entre árboles retorcidos y niebla densa. A los lados de la escalinata, dos estatuas de guardianes de piedra; entre los árboles, siluetas lejanas de sombras corrompidas. Sensación de presencia arcana milenaria y de peligro. Dificultad normal: noche azul profunda."
@@ -347,7 +347,7 @@
         "en curso",
         "reporte"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "1",
       "fuente": "Progresión (cambio autorizado n.º 2) · `sendero-de-los-aprendices`",
       "descripcion": "El Sendero de los Aprendices, al atardecer: un camino de tierra que entra en un bosque claro desde un pequeño campamento de tiendas con estandartes azules del rombo y una fogata. En el centro del camino, una barricada improvisada de troncos y cajas de los saqueadores, con un farol ámbar. Luz cálida y amable, sensación de primera aventura y de peligro menor. Dificultad fácil: el cielo es la escena más luminosa de las ocho."
@@ -365,7 +365,7 @@
         "en curso",
         "reporte"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "1",
       "fuente": "Progresión · `mina-abandonada`",
       "descripcion": "La Mina Abandonada: la boca de una vieja mina de hierro excavada en la roca, con un armazón de vigas de madera, raíles oxidados y una vagoneta volcada que entran en la oscuridad. En el centro, dentro del túnel, se adivina la silueta enorme de un golem de escombros hecho de rocas y raíles, con grietas de luz naranja. Murciélagos de ceniza revolotean. Polvo en el aire, un farol ámbar caído. Dificultad fácil: crepúsculo templado."
@@ -383,7 +383,7 @@
         "en curso",
         "reporte"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "1",
       "fuente": "Progresión · `pantano-de-los-susurros`",
       "descripcion": "El Pantano de los Susurros: agua oscura y quieta entre árboles muertos cubiertos de musgo colgante, niebla espesa a ras del agua que forma remolinos como figuras. En el centro, una cabaña de bruja sobre pilotes con una luz azul helada en la ventana, y una pasarela de tablones que lleva hasta ella. Hielo fino en el borde del agua, sapos sobre las raíces. Atmósfera inquietante y silenciosa. Dificultad normal: luna velada."
@@ -401,7 +401,7 @@
         "en curso",
         "reporte"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "1",
       "fuente": "Progresión · `fortaleza-quebrada`",
       "descripcion": "La Fortaleza Quebrada: las ruinas de una fortaleza que cierra un paso de montaña, con murallas derrumbadas y una torre partida por la mitad. En el centro, sobre la puerta rota, un estandarte del Nexo desgarrado. En las almenas, siluetas fantasmales de soldados caídos en formación, con un brillo azul espectral; en la torre, una luz de hielo. Melancolía y guardia eterna. Dificultad normal: noche con niebla."
@@ -419,7 +419,7 @@
         "en curso",
         "reporte"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "1",
       "fuente": "Progresión · `cumbres-heladas`",
       "descripcion": "Las Cumbres Heladas: un paso de alta montaña en plena ventisca, nieve que vuela en diagonal, picos afilados. En el centro, un refugio de piedra de pastores con la chimenea apagada y la puerta cubierta de escarcha. En la ladera, siluetas de lobos de escarcha con ojos cian; arriba, una forma de cristal de hielo enorme apenas visible en la tormenta. Frío extremo y desolación. Dificultad normal: blanco azulado frío, la escena más clara en tonos."
@@ -437,7 +437,7 @@
         "en curso",
         "reporte"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "1",
       "fuente": "Progresión · `volcan-dormido`",
       "descripcion": "El Volcán Dormido: el cráter de un volcán que despierta, con ríos de lava naranja que bajan por grietas entre rocas de obsidiana negra. En el centro, en el fondo del cráter, un enorme corazón de magma que late con un brillo naranja y rojo. Junto a la lava, siluetas de salamandras de fuego; en el borde del cráter, guardianes de obsidiana. Humo, ceniza y calor. Dificultad difícil: la única escena dominada por naranja, contrastado con el índigo del cielo."
@@ -455,7 +455,7 @@
         "en curso",
         "reporte"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "1",
       "fuente": "Progresión · `ciudadela-de-las-sombras`",
       "descripcion": "La Ciudadela de las Sombras: una ciudadela negra y sin puertas, de torres afiladas, en el linde del Bosque Sombrío. En el centro, su muralla lisa e impenetrable con un único arco cegado del que sale humo violeta. En los adarves, siluetas de caballeros negros con armadura pesada; en las sombras de los arcos, figuras veladas de asesinos. Amenaza, opresión y la sensación de última frontera antes del templo. Dificultad difícil: noche violeta muy oscura."
@@ -473,7 +473,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "0",
       "fuente": "Tablas 8-19 · arma de Guerrero Tanque",
       "descripcion": "la Espada de una mano del Guerrero Tanque: espada recta de una mano, hoja de acero oscuro con filo pulido, guarda corta en forma de rombo con un pequeño cristal cian en el centro, empuñadura de cuero azul cobalto y pomo de plata. Robusta y sobria, de defensor."
@@ -491,7 +491,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "2",
       "fuente": "Tablas 8-19 · arma de Guerrero Armas",
       "descripcion": "la Espada de dos manos del Guerrero Armas: mandoble largo de hoja ancha con runas cian grabadas a lo largo del vaceo, guarda ancha de plata envejecida con puntas, empuñadura larga envuelta en cuero rojo oscuro. Colocado en diagonal. Aspecto agresivo y pesado."
@@ -509,7 +509,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "2",
       "fuente": "Tablas 8-19 · arma de Guerrero Tanque",
       "descripcion": "el Escudo de dragón del Guerrero Tanque (en el documento es un arma): escudo de acero oscuro con forma de lágrima, con una cabeza de dragón en relieve de plata en el centro, ojos de cristal cian y escamas grabadas a lo largo del borde. Visto de frente en tres cuartos."
@@ -527,7 +527,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "2",
       "fuente": "Tablas 8-19 · arma de Guerrero Armas",
       "descripcion": "la Piedra de afilar del Guerrero Armas: una piedra de afilar alargada de grano gris oscuro con vetas de cristal cian, sujeta a una correa de cuero con hebilla de plata para llevarla al cinto. Unas pocas chispas cian saltan de su superficie."
@@ -545,7 +545,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "2",
       "fuente": "Tablas 8-19 · arma de Mago Fuego",
       "descripcion": "el Orbe de manos ardientes del Mago Fuego: un orbe de cristal ahumado del tamaño de un puño, sujeto por garras de bronce oscuro, con fuego naranja y ámbar girando dentro y runas que brillan como brasas en su montura."
@@ -563,7 +563,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "2",
       "fuente": "Tablas 8-19 · arma de Mago Hielo",
       "descripcion": "el Báculo de Permafrost del Mago Hielo: báculo largo de madera oscura petrificada y cubierta de escarcha, coronado por un gran cristal de hielo en forma de rombo rodeado de anillos de plata, con vaho frío que cae. Colocado en diagonal de esquina a esquina sin tocar los bordes."
@@ -581,7 +581,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "2",
       "fuente": "Tablas 8-19 · arma de Mago Fuego",
       "descripcion": "el Fuego fatuo del Mago Fuego: una llama fatua etérea, de núcleo blanco y bordes violeta y ámbar, que flota sobre un pequeño disco de piedra oscura con runas talladas que brillan como brasas.",
@@ -600,7 +600,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "2",
       "fuente": "Tablas 8-19 · arma de Mago Hielo",
       "descripcion": "las Venas heladas del Mago Hielo: un relicario alargado de cristal transparente con tapa y base de plata, atravesado por venas de hielo azul brillante que se ramifican por dentro como raíces, con escarcha en la superficie.",
@@ -619,7 +619,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "2",
       "fuente": "Tablas 8-19 · arma de Pícaro Veneno",
       "descripcion": "la Daga purulenta del Pícaro Veneno: daga curva de hoja estrecha con una acanaladura por la que corre un veneno verde-violeta espeso que gotea de la punta, empuñadura envuelta en cuero negro y pomo con un pequeño cristal violeta."
@@ -637,7 +637,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "2",
       "fuente": "Tablas 8-19 · arma de Pícaro Machete",
       "descripcion": "el Machete vendito del Pícaro Machete: machete ancho y pesado de hoja mellada, con la parte central de la hoja envuelta en vendas claras atadas con runas cian pintadas como una bendición, mango de madera oscura con remaches.",
@@ -656,7 +656,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "2",
       "fuente": "Tablas 8-19 · arma de Pícaro Veneno",
       "descripcion": "la Visión borrosa del Pícaro Veneno: un amuleto con forma de ojo de cristal empañado, dentro del cual se arremolina un humo violeta, colgado de una cadena negra con una montura de plata oscura.",
@@ -675,7 +675,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "2",
       "fuente": "Tablas 8-19 · arma de Pícaro Machete",
       "descripcion": "la Cierra sangrienta del Pícaro Machete: una hoja corta de sierra con dientes grandes y curvos, montada en un mango de hierro envuelto en cuero, con un brillo carmesí oscuro en los dientes y el filo, sin sangre goteando.",
@@ -694,7 +694,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "2",
       "fuente": "Tablas 8-19 · arma de Chamán",
       "descripcion": "la Raíz china del Chamán: una raíz retorcida y nudosa usada como talismán, atada con cordones de colores terrosos y cuentas de hueso, de la que salen brotes pequeños con una luz verde-cian suave."
@@ -712,7 +712,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "2",
       "fuente": "Tablas 8-19 · arma de Médico",
       "descripcion": "el Kit de urgencias del Médico: un maletín de campaña de cuero marrón oscuro con herrajes de plata, entreabierto, del que asoman vendas, frascos de vidrio con líquidos verde azulado y una pinza; en la tapa, un emblema de rombo verde azulado (no una cruz roja)."
@@ -730,7 +730,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "2",
       "fuente": "Tablas 8-19 · arma de Chamán",
       "descripcion": "la Yerbabuena del Chamán: un manojo de ramas frescas de hierbabuena atado con un cordel, con gotas de rocío que brillan como pequeñas chispas cian y un vapor verde muy suave."
@@ -748,7 +748,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "2",
       "fuente": "Tablas 8-19 · arma de Médico",
       "descripcion": "el Reanimador del Médico: un dispositivo arcano-tecnológico de reanimación, dos palas de plata y latón unidas por cables trenzados a un núcleo de cristal cian del tamaño de un puño del que saltan chispas de energía."
@@ -766,7 +766,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "3",
       "fuente": "Tablas 8-19 · Pecho de Guerrero Tanque",
       "descripcion": "la armadura «Defensa del enfurecido» del Guerrero Tanque, pieza de pecho: peto pesado de placas de acero oscuro con un rombo en relieve en el centro, remaches de plata y rasguños de batalla, hombreras incluidas. Color de acento: azul cobalto y acero."
@@ -784,7 +784,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "3",
       "fuente": "Tablas 8-19 · Guantes de Guerrero Armas",
       "descripcion": "la armadura «Puño lúcido» del Guerrero Armas, pieza de guantes: un par de guanteletes articulados de acero oscuro con nudillos reforzados y una runa cian que brilla en el dorso de cada uno. Color de acento: rojo ámbar de brasa y acero."
@@ -802,7 +802,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "3",
       "fuente": "Tablas 8-19 · Casco de Guerrero Tanque",
       "descripcion": "la armadura «Magma Ardiente» del Guerrero Tanque, pieza de casco: yelmo cerrado de acero ennegrecido con visera estrecha y grietas por las que brilla magma naranja. Color de acento: azul cobalto y acero."
@@ -820,7 +820,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "3",
       "fuente": "Tablas 8-19 · Brazaletes de Guerrero Armas",
       "descripcion": "la armadura «Puños en llamas» del Guerrero Armas, pieza de brazaletes: un par de brazaletes (avambrazos) de bronce oscuro con grabados en forma de llama y brasas ámbar en las juntas. Color de acento: rojo ámbar de brasa y acero."
@@ -838,7 +838,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "3",
       "fuente": "Tablas 8-19 · Pecho de Mago Fuego",
       "descripcion": "la armadura «Túnica arcana» del Mago Fuego, pieza de pecho: túnica de mago de tela índigo gruesa con bordados dorados y runas color ascua en el pecho y los puños, presentada sobre un maniquí invisible. Color de acento: naranja fuego y ámbar."
@@ -856,7 +856,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "3",
       "fuente": "Tablas 8-19 · Casco de Mago Hielo",
       "descripcion": "la armadura «Corona de hielo» del Mago Hielo, pieza de casco: corona de cristales de hielo en forma de rombos ascendentes sobre una banda de plata, con escarcha y un brillo cian pálido. Color de acento: blanco escarcha y cian pálido."
@@ -874,7 +874,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "3",
       "fuente": "Tablas 8-19 · Pantalón de Mago Fuego",
       "descripcion": "la armadura «Caída de fuego» del Mago Fuego, pieza de pantalón: pantalones de mago de tela gruesa índigo y rojo oscuro, con los bajos chamuscados y ribetes que brillan como brasas, presentados sobre un maniquí invisible. Color de acento: naranja fuego y ámbar."
@@ -892,7 +892,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "3",
       "fuente": "Tablas 8-19 · Pecho de Mago Hielo",
       "descripcion": "la armadura «Ventisca» del Mago Hielo, pieza de pecho: manto-peto de pieles blancas y placas de plata escarchada, con un remolino de viento helado y copos a su alrededor, sobre un maniquí invisible. Color de acento: blanco escarcha y cian pálido."
@@ -910,7 +910,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "3",
       "fuente": "Tablas 8-19 · Guantes de Pícaro Veneno",
       "descripcion": "la armadura «Mano del desterrado» del Pícaro Veneno, pieza de guantes: un par de guantes de cuero negro gastados, con correas y hebillas pequeñas y una marca violeta tenue en la palma. Color de acento: verde tóxico y violeta."
@@ -928,7 +928,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "3",
       "fuente": "Tablas 8-19 · Zapatos de Pícaro Machete",
       "descripcion": "la armadura «Pie de atleta» del Pícaro Machete, pieza de zapatos: un par de botas ligeras de cuero con suela flexible, vendas atadas en el tobillo y costuras carmesí. Color de acento: carmesí oscuro y cuero."
@@ -946,7 +946,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "3",
       "fuente": "Tablas 8-19 · Pecho de Pícaro Veneno",
       "descripcion": "la armadura «Atadura carmesí» del Pícaro Veneno, pieza de pecho: coraza ligera de cuero negro con correas cruzadas de cuero carmesí y hebillas de plata, sobre un maniquí invisible. Color de acento: verde tóxico y violeta."
@@ -964,7 +964,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "3",
       "fuente": "Tablas 8-19 · Brazaletes de Pícaro Machete",
       "descripcion": "la armadura «Sangre cruel» del Pícaro Machete, pieza de brazaletes: un par de brazaletes de cuero endurecido con púas de hierro y piedras rojo oscuro engastadas. Color de acento: carmesí oscuro y cuero."
@@ -982,7 +982,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "3",
       "fuente": "Tablas 8-19 · Pecho de Chamán",
       "descripcion": "la armadura «Piel de Caminante del Bosque» del Chamán, pieza de pecho: peto de pieles y cuero con musgo, hojas secas y cuentas de hueso, con una capa corta de piel, sobre un maniquí invisible. Color de acento: verde musgo, hueso y cian."
@@ -1000,7 +1000,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "3",
       "fuente": "Tablas 8-19 · Pecho de Médico",
       "descripcion": "la armadura «Bata de Cirujano» del Médico, pieza de pecho: bata larga de campaña color hueso con cinturones de cuero, bolsillos con viales y un emblema de rombo verde azulado (no una cruz roja), sobre un maniquí invisible. Color de acento: verde azulado y blanco hueso."
@@ -1018,7 +1018,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "3",
       "fuente": "Tablas 8-19 · Casco de Chamán",
       "descripcion": "la armadura «Casco de Ecos Ancestrales» del Chamán, pieza de casco: yelmo de hueso y madera tallada con astas cortas, plumas y conchas, y dos ojos tallados que brillan cian. Color de acento: verde musgo, hueso y cian."
@@ -1036,7 +1036,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "3",
       "fuente": "Tablas 8-19 · Pantalón de Médico",
       "descripcion": "la armadura «Pantalón de Expedición Médica» del Médico, pieza de pantalón: pantalón de expedición resistente color arena oscuro, con rodilleras de cuero y bolsillos con vendas y viales, sobre un maniquí invisible. Color de acento: verde azulado y blanco hueso."
@@ -1054,7 +1054,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Tablas 8-19 · ítem de Guerrero Tanque",
       "descripcion": "el ítem «Pinchos de escudo» del Guerrero Tanque: una placa circular de refuerzo de acero oscuro con pinchos cortos y afilados, pensada para acoplarse a un escudo, con tornillería de plata. Color de acento: azul cobalto y acero."
@@ -1072,7 +1072,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Tablas 8-19 · ítem de Guerrero Armas",
       "descripcion": "el ítem «Empuñadura de Furia» del Guerrero Armas: una empuñadura de espada suelta, sin hoja, envuelta en cuero rojo oscuro, con un cristal ámbar que palpita en el pomo. Color de acento: rojo ámbar de brasa y acero."
@@ -1090,7 +1090,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Tablas 8-19 · ítem de Mago Fuego",
       "descripcion": "el ítem «Anillo para Piro-explosión» del Mago Fuego: un anillo de oro oscuro con una gema naranja facetada con fuego en su interior y pequeñas chispas a su alrededor. Color de acento: naranja fuego y ámbar."
@@ -1108,7 +1108,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Tablas 8-19 · ítem de Mago Hielo",
       "descripcion": "el ítem «Libro de la ventisca helada» del Mago Hielo: un grimorio cerrado con tapas de cuero azul cubiertas de escarcha, cierre de plata y un cristal de hielo en el centro de la tapa. Color de acento: blanco escarcha y cian pálido."
@@ -1126,7 +1126,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Tablas 8-19 · ítem de Pícaro Veneno",
       "descripcion": "el ítem «Veneno lacerante» del Pícaro Veneno: un frasco de vidrio facetado con un veneno verde-violeta espeso y burbujeante, tapón de cera negra y una etiqueta de cuero sin escritura. Color de acento: verde tóxico y violeta."
@@ -1144,7 +1144,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Tablas 8-19 · ítem de Pícaro Machete",
       "descripcion": "el ítem «Mancuerna yugular» del Pícaro Machete: una pesa de mano (mancuerna) de hierro forjado con dientes de sierra en los discos y un grabado carmesí oscuro en la barra. Color de acento: carmesí oscuro y cuero.",
@@ -1163,7 +1163,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Tablas 8-19 · ítem de Chamán",
       "descripcion": "el ítem «Pluma sanadora» del Chamán: una pluma grande e iridiscente de raquis dorado que desprende motas de luz verde-cian. Color de acento: verde musgo, hueso y cian."
@@ -1181,7 +1181,7 @@
         "subasta",
         "detalle"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Tablas 8-19 · ítem de Médico",
       "descripcion": "el ítem «Benditas» del Médico: un pequeño estuche de tela abierto con tiras de vendaje adhesivo cortas, cada una con una runa cian dibujada. Color de acento: verde azulado y blanco hueso.",
@@ -1199,7 +1199,7 @@
         "recompensa de misión (Master)",
         "combate (activación)"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Tabla 20 · épica de Guerrero Tanque",
       "descripcion": "la épica «Golpe de defensa» del Guerrero Tanque: un escudo de acero en el centro del que estalla una onda de choque circular cian que rompe el aire en fragmentos de energía. Color de acento: azul cobalto y acero."
@@ -1216,7 +1216,7 @@
         "recompensa de misión (Master)",
         "combate (activación)"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Tabla 20 · épica de Guerrero Armas",
       "descripcion": "la épica «Segundo impulso» del Guerrero Armas: un mandoble clavado en el suelo rodeado por un torbellino ascendente de energía ámbar y cian, como quien vuelve a levantarse. Color de acento: rojo ámbar de brasa y acero."
@@ -1233,7 +1233,7 @@
         "recompensa de misión (Master)",
         "combate (activación)"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Tabla 20 · épica de Mago Fuego",
       "descripcion": "la épica «Luz cegadora» del Mago Fuego: un orbe del que nace un estallido de luz blanca y ámbar con rayos radiales que lo llenan todo. Color de acento: naranja fuego y ámbar."
@@ -1250,7 +1250,7 @@
         "recompensa de misión (Master)",
         "combate (activación)"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Tabla 20 · épica de Mago Hielo",
       "descripcion": "la épica «Frio concentrado» del Mago Hielo: un cristal de hielo perfecto suspendido dentro de una esfera protectora de escarcha y viento helado. Color de acento: blanco escarcha y cian pálido."
@@ -1267,7 +1267,7 @@
         "recompensa de misión (Master)",
         "combate (activación)"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Tabla 20 · épica de Pícaro Veneno",
       "descripcion": "la épica «Toma y lleva» del Pícaro Veneno: dos dagas cruzadas que reflejan un golpe, con una espiral de energía violeta y verde que se devuelve hacia afuera. Color de acento: verde tóxico y violeta."
@@ -1284,7 +1284,7 @@
         "recompensa de misión (Master)",
         "combate (activación)"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Tabla 20 · épica de Pícaro Machete",
       "descripcion": "la épica «Intimidación sangrienta» del Pícaro Machete: una máscara de guerra de hierro con ojos que brillan carmesí detrás de un machete envuelto en humo rojo oscuro. Color de acento: carmesí oscuro y cuero."
@@ -1301,7 +1301,7 @@
         "recompensa de misión (Master)",
         "combate (activación)"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Tabla 20 · épica de Chamán",
       "descripcion": "la épica «Té changua» del Chamán: un cuenco de cerámica rústica humeante con una infusión de hierbas de la que sube un vapor verde-cian sanador en espirales. Color de acento: verde musgo, hueso y cian."
@@ -1318,7 +1318,7 @@
         "recompensa de misión (Master)",
         "combate (activación)"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Tabla 20 · épica de Médico",
       "descripcion": "la épica «Reanimador 3000» del Médico: una versión superior del reanimador: un gran núcleo de cristal cian con anillos de plata que giran, palas de plata y rayos de energía cian y violeta, como un latido. Color de acento: verde azulado y blanco hueso."
@@ -1335,7 +1335,7 @@
         "recompensa de misión (Master)",
         "combate (activación)"
       ],
-      "estado": "PENDIENTE",
+      "estado": "INTEGRADO",
       "lote": "4",
       "fuente": "Documento §7.8.14 (Master «Sombra del Olvido») · épica de Pícaro Veneno",
       "descripcion": "la épica «Velo de Sombras» del Pícaro Veneno: un velo de tela oscura semitransparente que flota en el aire, con humo violeta y gotas de veneno verde escapando de sus bordes; sensación de intangibilidad. Color de acento: verde tóxico y violeta."

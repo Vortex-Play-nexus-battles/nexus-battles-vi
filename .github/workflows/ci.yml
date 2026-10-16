@@ -342,6 +342,15 @@ jobs:
           python3 tests/contratos/catalogo-oficial.py
           python3 tests/contratos/catalogo-oficial.py --autoprueba
 
+      # Fase 2 de arte (ART-9): cada asset INTEGRADO del manifiesto tiene su
+      # WebP (formato, tamano y peso), no hay WebP sin declarar, y las semillas
+      # de productos y misiones y el mapa del frontend apuntan a la misma ruta.
+      - name: El arte del catalogo es el del manifiesto
+        shell: bash
+        run: |
+          python3 tests/contratos/arte-del-catalogo.py
+          python3 tests/contratos/arte-del-catalogo.py --autoprueba
+
       # §7.3.6 (RF-PRV-002, ADR-010): las estadisticas que analizan la
       # plataforma salen solo agregadas. Falla si la respuesta de una de ellas
       # declara un dato que identifica a una persona (uid, correo, apodo,

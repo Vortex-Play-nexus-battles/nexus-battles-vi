@@ -29,6 +29,7 @@
  */
 
 import { consultarProducto } from './cliente-productos.js';
+import { imagenDeProducto } from '../../comun/ui/juego/arte.js';
 
 /** Imagen ya conocida por `productoId`. `null` = se pidio y no habia. */
 const cache = new Map();
@@ -96,10 +97,9 @@ async function imagenDe(id, consultar) {
   }
   try {
     const producto = await consultar(id);
-    const url =
-      typeof producto?.imagen === 'string' && producto.imagen.trim() !== ''
-        ? producto.imagen
-        : null;
+    // La figura provisional de la semilla no cuenta como retrato: se usa el
+    // arte aprobado del producto (y si tampoco hay, se queda el icono).
+    const url = imagenDeProducto({ ...producto, id: producto?.id ?? id });
     cache.set(id, url);
     return url;
   } catch (fallo) {

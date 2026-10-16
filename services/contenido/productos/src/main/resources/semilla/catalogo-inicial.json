@@ -1,11 +1,12 @@
 {
-  "version": 2,
+  "version": 3,
   "descripcion": "Catalogo inicial de productos extraido literalmente de las reglas del curso. Precios: NO estan en el documento del curso (RF-ADM-03 dice que los fija el administrador); los de `preciosDemostracion` son decision del PO para la demo. `version` es la version del contenido (B4): quien cambie un producto de este archivo la sube, y al arrancar la semilla pone al dia los productos sembrados con una version menor que ningun administrador edito. El guardian tests/contratos/catalogo-oficial.py compara este archivo con contracts/esquemas/catalogo-oficial.yaml.",
   "heroes": [
     {
       "tipo": "HEROE",
       "nombre": "Guerrero Tanque",
       "prototipo": "Guerrero Tanque",
+      "imagen": "/shared/ui-kit/arte/heroes/guerrero-tanque.webp",
       "id": "heroe-guerrero-tanque",
       "estadisticasNivel1": {
         "poder": "10",
@@ -21,6 +22,7 @@
       "tipo": "HEROE",
       "nombre": "Guerrero Armas",
       "prototipo": "Guerrero Armas",
+      "imagen": "/shared/ui-kit/arte/heroes/guerrero-armas.webp",
       "id": "heroe-guerrero-armas",
       "estadisticasNivel1": {
         "poder": "8",
@@ -36,6 +38,7 @@
       "tipo": "HEROE",
       "nombre": "Mago Fuego",
       "prototipo": "Mago Fuego",
+      "imagen": "/shared/ui-kit/arte/heroes/mago-fuego.webp",
       "id": "heroe-mago-fuego",
       "estadisticasNivel1": {
         "poder": "8",
@@ -51,6 +54,7 @@
       "tipo": "HEROE",
       "nombre": "Mago Hielo",
       "prototipo": "Mago Hielo",
+      "imagen": "/shared/ui-kit/arte/heroes/mago-hielo.webp",
       "id": "heroe-mago-hielo",
       "estadisticasNivel1": {
         "poder": "10",
@@ -66,6 +70,7 @@
       "tipo": "HEROE",
       "nombre": "Pícaro Veneno",
       "prototipo": "Pícaro Veneno",
+      "imagen": "/shared/ui-kit/arte/heroes/picaro-veneno.webp",
       "id": "heroe-picaro-veneno",
       "estadisticasNivel1": {
         "poder": "8",
@@ -81,6 +86,7 @@
       "tipo": "HEROE",
       "nombre": "Pícaro Machete",
       "prototipo": "Pícaro Machete",
+      "imagen": "/shared/ui-kit/arte/heroes/picaro-machete.webp",
       "id": "heroe-picaro-machete",
       "estadisticasNivel1": {
         "poder": "8",
@@ -96,6 +102,7 @@
       "tipo": "HEROE",
       "nombre": "Chamán",
       "prototipo": "Chamán",
+      "imagen": "/shared/ui-kit/arte/heroes/chaman.webp",
       "id": "heroe-chaman",
       "estadisticasNivel1": {
         "poder": "10",
@@ -111,6 +118,7 @@
       "tipo": "HEROE",
       "nombre": "Médico",
       "prototipo": "Médico",
+      "imagen": "/shared/ui-kit/arte/heroes/medico.webp",
       "id": "heroe-medico",
       "estadisticasNivel1": {
         "poder": "10",
@@ -132,6 +140,7 @@
       "efectos": "+1 al ataque, +1% de crítico al ataque",
       "probabilidadCaida": "3%",
       "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 8",
+      "imagen": "/shared/ui-kit/arte/productos/armas/espada-de-una-mano.webp",
       "id": "arma-guerrero-tanque-espada-de-una-mano"
     },
     {
@@ -142,6 +151,7 @@
       "efectos": "+1 al ataque, +3% de crítico al ataque",
       "probabilidadCaida": "1%",
       "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 8",
+      "imagen": "/shared/ui-kit/arte/productos/armas/espada-de-dos-manos.webp",
       "id": "arma-guerrero-armas-espada-de-dos-manos"
     },
     {
@@ -152,6 +162,7 @@
       "efectos": "+1 a la defensa",
       "probabilidadCaida": "5%",
       "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 8",
+      "imagen": "/shared/ui-kit/arte/productos/armas/escudo-de-dragon.webp",
       "id": "arma-guerrero-tanque-escudo-de-dragon"
     },
     {
@@ -162,6 +173,7 @@
       "efectos": "+2 al daño",
       "probabilidadCaida": "2%",
       "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 8",
+      "imagen": "/shared/ui-kit/arte/productos/armas/piedra-de-afilar.webp",
       "id": "arma-guerrero-armas-piedra-de-afilar"
     },
     {
@@ -172,6 +184,7 @@
       "efectos": "+1 al daño, +3% de crítico al ataque",
       "probabilidadCaida": "1%",
       "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 9",
+      "imagen": "/shared/ui-kit/arte/productos/armas/orbe-de-manos-ardientes.webp",
       "id": "arma-mago-fuego-orbe-de-manos-ardientes"
     },
     {
@@ -182,6 +195,7 @@
       "efectos": "-1 al daño del oponente, -2% de crítico al ataque del oponente",
       "probabilidadCaida": "2%",
       "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 9",
+      "imagen": "/shared/ui-kit/arte/productos/armas/baculo-de-permafrost.webp",
       "id": "arma-mago-hielo-baculo-de-permafrost"
     },
     {
@@ -192,6 +206,7 @@
       "efectos": "+1 al ataque",
       "probabilidadCaida": "3%",
       "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 9",
+      "imagen": "/shared/ui-kit/arte/productos/armas/fuego-fatuo.webp",
       "id": "arma-mago-fuego-fuego-fatuo"
     },
     {
@@ -202,6 +217,7 @@
       "efectos": "+1 al daño",
       "probabilidadCaida": "5%",
       "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 9",
+      "imagen": "/shared/ui-kit/arte/productos/armas/venas-heladas.webp",
       "id": "arma-mago-hielo-venas-heladas"
     },
     {
@@ -212,6 +228,7 @@
       "efectos": "+1 al daño por dos turnos, +3% de crítico al ataque",
       "probabilidadCaida": "1%",
       "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 10",
+      "imagen": "/shared/ui-kit/arte/productos/armas/daga-purulenta.webp",
       "id": "arma-picaro-veneno-daga-purulenta"
     },
     {
@@ -222,6 +239,7 @@
       "efectos": "+2 al daño, +2% de crítico al ataque",
       "probabilidadCaida": "1%",
       "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 10",
+      "imagen": "/shared/ui-kit/arte/productos/armas/machete-vendito.webp",
       "id": "arma-picaro-machete-machete-vendito"
     },
     {
@@ -232,6 +250,7 @@
       "efectos": "-1 al ataque del oponente",
       "probabilidadCaida": "4%",
       "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 10",
+      "imagen": "/shared/ui-kit/arte/productos/armas/vision-borrosa.webp",
       "id": "arma-picaro-veneno-vision-borrosa"
     },
     {
@@ -242,6 +261,7 @@
       "efectos": "+2 al daño por dos turnos",
       "probabilidadCaida": "1%",
       "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 10",
+      "imagen": "/shared/ui-kit/arte/productos/armas/cierra-sangrienta.webp",
       "id": "arma-picaro-machete-cierra-sangrienta"
     },
     {
@@ -252,6 +272,7 @@
       "efectos": "+(2d4) de sanación",
       "probabilidadCaida": "3%",
       "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 11",
+      "imagen": "/shared/ui-kit/arte/productos/armas/raiz-china.webp",
       "id": "arma-chaman-raiz-china"
     },
     {
@@ -262,6 +283,7 @@
       "efectos": "+(2d6) de sanación",
       "probabilidadCaida": "3%",
       "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 11",
+      "imagen": "/shared/ui-kit/arte/productos/armas/kit-de-urgencias.webp",
       "id": "arma-medico-kit-de-urgencias"
     },
     {
@@ -272,6 +294,7 @@
       "efectos": "+2 de sanación por dos turnos",
       "probabilidadCaida": "2%",
       "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 11",
+      "imagen": "/shared/ui-kit/arte/productos/armas/yerbabuena.webp",
       "id": "arma-chaman-yerbabuena"
     },
     {
@@ -282,6 +305,7 @@
       "efectos": "+(4d6) de sanación",
       "probabilidadCaida": "2%",
       "fuente": "Boveda/02-producto/reglas/armas.md, Tabla 11",
+      "imagen": "/shared/ui-kit/arte/productos/armas/reanimador.webp",
       "id": "arma-medico-reanimador"
     }
   ],
@@ -295,6 +319,7 @@
       "probabilidadCaida": "5%",
       "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 12",
       "parte": "Pecho",
+      "imagen": "/shared/ui-kit/arte/productos/armaduras/defensa-del-enfurecido.webp",
       "id": "armadura-guerrero-tanque-defensa-del-enfurecido"
     },
     {
@@ -306,6 +331,7 @@
       "probabilidadCaida": "2%",
       "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 12",
       "parte": "Guantes",
+      "imagen": "/shared/ui-kit/arte/productos/armaduras/puno-lucido.webp",
       "id": "armadura-guerrero-armas-puno-lucido"
     },
     {
@@ -317,6 +343,7 @@
       "probabilidadCaida": "5%",
       "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 12",
       "parte": "Casco",
+      "imagen": "/shared/ui-kit/arte/productos/armaduras/magma-ardiente.webp",
       "id": "armadura-guerrero-tanque-magma-ardiente"
     },
     {
@@ -328,6 +355,7 @@
       "probabilidadCaida": "2%",
       "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 12",
       "parte": "Brazaletes",
+      "imagen": "/shared/ui-kit/arte/productos/armaduras/punos-en-llamas.webp",
       "id": "armadura-guerrero-armas-punos-en-llamas"
     },
     {
@@ -339,6 +367,7 @@
       "probabilidadCaida": "3%",
       "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 13",
       "parte": "Pecho",
+      "imagen": "/shared/ui-kit/arte/productos/armaduras/tunica-arcana.webp",
       "id": "armadura-mago-fuego-tunica-arcana"
     },
     {
@@ -350,6 +379,7 @@
       "probabilidadCaida": "5%",
       "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 13",
       "parte": "Casco",
+      "imagen": "/shared/ui-kit/arte/productos/armaduras/corona-de-hielo.webp",
       "id": "armadura-mago-hielo-corona-de-hielo"
     },
     {
@@ -361,6 +391,7 @@
       "probabilidadCaida": "3%",
       "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 13",
       "parte": "Pantalón",
+      "imagen": "/shared/ui-kit/arte/productos/armaduras/caida-de-fuego.webp",
       "id": "armadura-mago-fuego-caida-de-fuego"
     },
     {
@@ -372,6 +403,7 @@
       "probabilidadCaida": "5%",
       "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 13",
       "parte": "Pecho",
+      "imagen": "/shared/ui-kit/arte/productos/armaduras/ventisca.webp",
       "id": "armadura-mago-hielo-ventisca"
     },
     {
@@ -383,6 +415,7 @@
       "probabilidadCaida": "4%",
       "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 14",
       "parte": "Guantes",
+      "imagen": "/shared/ui-kit/arte/productos/armaduras/mano-del-desterrado.webp",
       "id": "armadura-picaro-veneno-mano-del-desterrado"
     },
     {
@@ -394,6 +427,7 @@
       "probabilidadCaida": "1%",
       "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 14",
       "parte": "Zapatos",
+      "imagen": "/shared/ui-kit/arte/productos/armaduras/pie-de-atleta.webp",
       "id": "armadura-picaro-machete-pie-de-atleta"
     },
     {
@@ -405,6 +439,7 @@
       "probabilidadCaida": "3%",
       "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 14",
       "parte": "Pecho",
+      "imagen": "/shared/ui-kit/arte/productos/armaduras/atadura-carmesi.webp",
       "id": "armadura-picaro-veneno-atadura-carmesi"
     },
     {
@@ -416,6 +451,7 @@
       "probabilidadCaida": "5%",
       "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 14",
       "parte": "Brazaletes",
+      "imagen": "/shared/ui-kit/arte/productos/armaduras/sangre-cruel.webp",
       "id": "armadura-picaro-machete-sangre-cruel"
     },
     {
@@ -427,6 +463,7 @@
       "probabilidadCaida": "4%",
       "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 15",
       "parte": "Pecho",
+      "imagen": "/shared/ui-kit/arte/productos/armaduras/piel-de-caminante-del-bosque.webp",
       "id": "armadura-chaman-piel-de-caminante-del-bosque"
     },
     {
@@ -438,6 +475,7 @@
       "probabilidadCaida": "4%",
       "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 15",
       "parte": "Pecho",
+      "imagen": "/shared/ui-kit/arte/productos/armaduras/bata-de-cirujano.webp",
       "id": "armadura-medico-bata-de-cirujano"
     },
     {
@@ -449,6 +487,7 @@
       "probabilidadCaida": "2%",
       "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 15",
       "parte": "Casco",
+      "imagen": "/shared/ui-kit/arte/productos/armaduras/casco-de-ecos-ancestrales.webp",
       "id": "armadura-chaman-casco-de-ecos-ancestrales"
     },
     {
@@ -460,6 +499,7 @@
       "probabilidadCaida": "2%",
       "fuente": "Boveda/02-producto/reglas/armaduras.md, Tabla 15",
       "parte": "Pantalón",
+      "imagen": "/shared/ui-kit/arte/productos/armaduras/pantalon-de-expedicion-medica.webp",
       "id": "armadura-medico-pantalon-de-expedicion-medica"
     }
   ],
@@ -472,6 +512,7 @@
       "efectos": "Si el ataque del oponente es menor que la defensa del guerrero, el oponente recibe +1 de daño.",
       "probabilidadCaida": "20%",
       "fuente": "Boveda/02-producto/reglas/items.md, Tabla 16",
+      "imagen": "/shared/ui-kit/arte/productos/items/pinchos-de-escudo.webp",
       "id": "item-guerrero-tanque-pinchos-de-escudo"
     },
     {
@@ -482,6 +523,7 @@
       "efectos": "+1 de daño por dos turnos. Esto causa que el guerrero pierda -1 de vida en los mismos turnos.",
       "probabilidadCaida": "10%",
       "fuente": "Boveda/02-producto/reglas/items.md, Tabla 16",
+      "imagen": "/shared/ui-kit/arte/productos/items/empunadura-de-furia.webp",
       "id": "item-guerrero-armas-empunadura-de-furia"
     },
     {
@@ -492,6 +534,7 @@
       "efectos": "+3 de daño",
       "probabilidadCaida": "7%",
       "fuente": "Boveda/02-producto/reglas/items.md, Tabla 17",
+      "imagen": "/shared/ui-kit/arte/productos/items/anillo-para-piro-explosion.webp",
       "id": "item-mago-fuego-anillo-para-piro-explosion"
     },
     {
@@ -502,6 +545,7 @@
       "efectos": "+2 de daño",
       "probabilidadCaida": "10%",
       "fuente": "Boveda/02-producto/reglas/items.md, Tabla 17",
+      "imagen": "/shared/ui-kit/arte/productos/items/libro-de-la-ventisca-helada.webp",
       "id": "item-mago-hielo-libro-de-la-ventisca-helada"
     },
     {
@@ -512,6 +556,7 @@
       "efectos": "-1 al poder del oponente. Solo aplica cada dos turnos.",
       "probabilidadCaida": "9%",
       "fuente": "Boveda/02-producto/reglas/items.md, Tabla 18",
+      "imagen": "/shared/ui-kit/arte/productos/items/veneno-lacerante.webp",
       "id": "item-picaro-veneno-veneno-lacerante"
     },
     {
@@ -522,6 +567,7 @@
       "efectos": "Explota por 2 el valor en turno causado por la cierra sangrienta en el oponente.",
       "probabilidadCaida": "8%",
       "fuente": "Boveda/02-producto/reglas/items.md, Tabla 18",
+      "imagen": "/shared/ui-kit/arte/productos/items/mancuerna-yugular.webp",
       "id": "item-picaro-machete-mancuerna-yugular"
     },
     {
@@ -532,6 +578,7 @@
       "efectos": "Mejora la sanación multiplicando x2",
       "probabilidadCaida": "10%",
       "fuente": "Boveda/02-producto/reglas/items.md, Tabla 19",
+      "imagen": "/shared/ui-kit/arte/productos/items/pluma-sanadora.webp",
       "id": "item-chaman-pluma-sanadora"
     },
     {
@@ -542,6 +589,7 @@
       "efectos": "Sana las heridas por tres turnos o cura +1 por tres turnos",
       "probabilidadCaida": "10%",
       "fuente": "Boveda/02-producto/reglas/items.md, Tabla 19",
+      "imagen": "/shared/ui-kit/arte/productos/items/benditas.webp",
       "id": "item-medico-benditas"
     }
   ],
@@ -550,6 +598,7 @@
       "tipo": "EPICA",
       "nombre": "Golpe de defensa",
       "heroe": "Guerrero Tanque",
+      "imagen": "/shared/ui-kit/arte/productos/epicas/golpe-de-defensa.webp",
       "id": "epica-guerrero-tanque-golpe-de-defensa",
       "efectoGeneral": "+1 al ataque",
       "efectoPotenciado": "+4 al daño, +2% de crítico",
@@ -560,6 +609,7 @@
       "tipo": "EPICA",
       "nombre": "Segundo impulso",
       "heroe": "Guerrero Armas",
+      "imagen": "/shared/ui-kit/arte/productos/epicas/segundo-impulso.webp",
       "id": "epica-guerrero-armas-segundo-impulso",
       "efectoGeneral": "Recupera 1d4 de vida",
       "efectoPotenciado": "+3 a la vida, +5% de crítico",
@@ -570,6 +620,7 @@
       "tipo": "EPICA",
       "nombre": "Luz cegadora",
       "heroe": "Mago Fuego",
+      "imagen": "/shared/ui-kit/arte/productos/epicas/luz-cegadora.webp",
       "id": "epica-mago-fuego-luz-cegadora",
       "efectoGeneral": "+1 a la vida",
       "efectoPotenciado": "+2 al daño, +1% de crítico",
@@ -580,6 +631,7 @@
       "tipo": "EPICA",
       "nombre": "Frio concentrado",
       "heroe": "Mago Hielo",
+      "imagen": "/shared/ui-kit/arte/productos/epicas/frio-concentrado.webp",
       "id": "epica-mago-hielo-frio-concentrado",
       "efectoGeneral": "-1 de poder al oponente",
       "efectoPotenciado": "No recibe ningún daño en el siguiente turno",
@@ -590,6 +642,7 @@
       "tipo": "EPICA",
       "nombre": "Toma y lleva",
       "heroe": "Pícaro Veneno",
+      "imagen": "/shared/ui-kit/arte/productos/epicas/toma-y-lleva.webp",
       "id": "epica-picaro-veneno-toma-y-lleva",
       "efectoGeneral": "+1 al ataque",
       "efectoPotenciado": "Disminuye a la mitad del daño causado por el oponente y se lo retorna",
@@ -600,6 +653,7 @@
       "tipo": "EPICA",
       "nombre": "Intimidación sangrienta",
       "heroe": "Pícaro Machete",
+      "imagen": "/shared/ui-kit/arte/productos/epicas/intimidacion-sangrienta.webp",
       "id": "epica-picaro-machete-intimidacion-sangrienta",
       "efectoGeneral": "+1 al daño",
       "efectoPotenciado": "+2 a la vida, +2% de crítico",
@@ -610,6 +664,7 @@
       "tipo": "EPICA",
       "nombre": "Té changua",
       "heroe": "Chamán",
+      "imagen": "/shared/ui-kit/arte/productos/epicas/te-changua.webp",
       "id": "epica-chaman-te-changua",
       "efectoGeneral": "No aplica",
       "efectoPotenciado": "Sana a todos +(4d8)",
@@ -620,6 +675,7 @@
       "tipo": "EPICA",
       "nombre": "Reanimador 3000",
       "heroe": "Médico",
+      "imagen": "/shared/ui-kit/arte/productos/epicas/reanimador-3000.webp",
       "id": "epica-medico-reanimador-3000",
       "efectoGeneral": "No aplica",
       "efectoPotenciado": "Se asocia con un compañero. Si este último fallece, se reanima con el 20% de su salud.",
@@ -630,6 +686,7 @@
       "tipo": "EPICA",
       "nombre": "Velo de Sombras",
       "heroe": "Pícaro Veneno",
+      "imagen": "/shared/ui-kit/arte/productos/epicas/velo-de-sombras.webp",
       "id": "epica-picaro-veneno-velo-de-sombras",
       "efectoGeneral": "+2 a la defensa para todos los héroes.",
       "efectoPotenciado": "El héroe se vuelve intangible durante 1 turno, evitando todo el daño recibido y causando envenenamiento al atacante (+3 de daño por veneno durante 2 turnos).",

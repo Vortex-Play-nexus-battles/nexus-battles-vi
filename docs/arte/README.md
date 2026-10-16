@@ -45,3 +45,20 @@ editando la descripción en el JSON.
    y subir el estado en el JSON hasta INTEGRADO.
 5. Guarda `tests/contratos/arte-del-catalogo.py` (ART-9), laboratorio visual, PR, CI, despliegue y
    comprobación en DEV.
+
+## Integración (lote de 65, 2026-10-16)
+
+| Pieza | Dónde |
+|---|---|
+| WebP finales | `shared/ui-kit/arte/{heroes,misiones,productos/*}/` — 65 archivos, 4,8 MB (los PNG master sumaban 160 MB y no se suben) |
+| Exportación | `docs/arte/exportar-assets.py <carpeta-de-PNG>`: héroes 640×640, misiones 960×540, productos 512×512 recortados al contenido con margen (ítems al 60 % con halo), épicas 512×512 |
+| Semillas | `imagen` en `catalogo-inicial.json` (versión 3) y en las dos semillas de misiones |
+| Puesta al día | `MapeadorDelCatalogo.imagenAlPonerAlDia`: la semilla solo cambia la figura provisional, el vacío o su propia ruta de arte; la imagen de un administrador se respeta |
+| Frontend | `comun/ui/juego/arte.js` (+ `arte-manifiesto.js`, generado): la imagen de la API si es real; si es la provisional o falta, el WebP aprobado por id, por nombre (subastas) o por prototipo (combate); si no hay, el icono del tipo |
+| Guardián | `tests/contratos/arte-del-catalogo.py` (en CI) |
+
+### Decisiones pendientes del PO (no bloquean)
+
+- **MIS-08 «La Ciudadela de las Sombras»**: los estandartes de la ciudadela enemiga llevan el rombo del Nexo. Si el PO lo marca, se regenera solo esa escena.
+- **Género de los retratos**: cuatro mujeres (Guerrero Armas, Mago Hielo, Pícaro Veneno, Médico) y cuatro hombres. El documento no lo fija.
+- **Lote 5 opcional** (Cofre de Bronce y 10 emblemas): no se genera hasta que el PO lo apruebe.

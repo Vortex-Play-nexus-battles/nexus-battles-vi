@@ -99,7 +99,7 @@
       "nombre": "El Templo Olvidado",
       "categoria": "HISTORIA",
       "descripcionBreve": "En las profundidades del Bosque Sombrío yace un antiguo templo dedicado a los Dioses Olvidados.",
-      "imagen": null,
+      "imagen": "/shared/ui-kit/arte/misiones/templo-olvidado.webp",
       "dificultad": "NORMAL",
       "duracionHoras": 12,
       "nivelRecomendado": 8,
