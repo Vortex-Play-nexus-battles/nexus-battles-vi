@@ -176,34 +176,32 @@ AWS y los recordatorios de salida por SNS + EventBridge Scheduler.
 
 ---
 
-## 5. El apagado programado
+## 5. Encendido las 24 horas (sin apagado programado)
 
-Ningún host se queda encendido las 24 horas. `infra-dev.yml` cubre **los dos** con
-la misma política horaria, en una matriz:
+Desde el 14-oct-2026, por decisión del responsable del bloque, **ningún horario
+apaga ni enciende los hosts**:
 
-| Acción | Cron (UTC) | Hora Colombia |
-|---|---|---|
-| apagar | `23 4 * * *` y `23 5 * * *` | 23:23 y 00:23, todos los días |
-| encender | `17 12 * * 1-5` y `17 13 * * 1-5` | 07:17 y 08:17, lunes a viernes |
+- `infra-dev.yml` ya no tiene `schedule`: se quitaron los crones de apagado
+  (23:23 y 00:23) y de encendido (lunes a viernes por la mañana), hora de Colombia.
+- Los dos horarios de EventBridge Scheduler del host de plataforma
+  (`infrastructure/entornos/plataforma/horario.tf`) siguen creados pero en
+  `DISABLED` (`horario_activo = false`): la compuerta de `infra-dev.yml` no deja
+  que un `apply` automático destruya nada, y desactivarlos es reversible.
+- `start` y `stop` siguen en `infra-dev.yml`, solo a mano. El CD conserva la acción
+  `.github/actions/asegurar-host-encendido` por si alguien apaga un host a mano.
+- El host de contenido vive en la cuenta del Grupo 2; sin `AWS_ROLE_ARN_CONTENIDO`
+  nuestro pipeline nunca lo apagó.
 
-Cada acción se intenta dos veces con una hora de diferencia, y los minutos van
-fuera de punto. La razón es concreta: GitHub retrasa las tareas programadas cuando
-hay carga y, si el retraso es grande, las descarta sin más. Repetir no molesta
-porque encender y apagar son idempotentes; una noche sin apagar sí cuesta dinero.
-Los fines de semana quedan apagados a propósito.
-
-Quien necesite desplegar fuera de horario no tiene que hacer nada: el propio CD
-enciende el host que le toca con la acción local
-`.github/actions/asegurar-host-encendido`, espera los chequeos de EC2 y comprueba
-que el 22 responde antes de gastar el minuto del `scp` (R9.2).
+Coste del host de plataforma 24×7: `c7i-flex.large` ≈ 62 USD/mes de crédito del
+Free Plan, ≈ 67 con la IP elástica y el disco (≈ 36 con el horario). Volver al
+horario: `horario_activo = true` y restaurar los `schedule` de `infra-dev.yml`
+desde el historial de git.
 
 Con la instancia apagada solo factura la IP elástica y el disco. La IP se conserva,
 así que **los secretos de despliegue no cambian** tras un ciclo de apagado.
 
-> Límite conocido de GitHub: el botón *Run workflow* y los `cron` solo existen
-> cuando el archivo del workflow está en la rama por defecto (`main`). Mientras
-> `develop` no se promueva, el apagado automático depende de que `main` tenga la
-> versión vigente del workflow.
+> El botón *Run workflow* de `infra-dev.yml` solo existe en la rama por defecto,
+> que desde septiembre es `develop`.
 
 ---
 

@@ -60,6 +60,20 @@ class ClientesDeIdentidadYCorreoTest {
         }
 
         @Test
+        @DisplayName("SA-3: fija el historial de sanciones con PUT en su ruta interna y la forma HistorialDeSanciones")
+        void historial() {
+            servidor.expect(requestTo("http://srv-ms-identidad:8089/api/v1/internal/usuarios/" + UID
+                            + "/historial-sanciones"))
+                    .andExpect(method(HttpMethod.PUT))
+                    .andExpect(jsonPath("$.total").value(2))
+                    .andExpect(jsonPath("$.ultimaEn").value("2026-09-27T10:00:00Z"))
+                    .andRespond(withSuccess("{\"uid\":\"" + UID + "\",\"total\":2}", MediaType.APPLICATION_JSON));
+
+            cliente.historial(UID, new ClienteIdentidad.HistorialDeSanciones(2, HASTA));
+            servidor.verify();
+        }
+
+        @Test
         @DisplayName("lee el contacto e ignora lo que no usa")
         void contacto() {
             servidor.expect(requestTo("http://srv-ms-identidad:8089/api/v1/internal/usuarios/" + UID + "/contacto"))
@@ -72,6 +86,46 @@ class ClientesDeIdentidadYCorreoTest {
             assertThat(contacto.email()).isEqualTo("lyra@nexus.test");
             assertThat(contacto.apodo()).isEqualTo("Lyra");
             assertThat(contacto.estado()).isEqualTo("ACTIVO");
+        }
+
+        @Test
+        @DisplayName("lee el rol de la cuenta en su ruta propia, sin datos de contacto")
+        void rol() {
+            servidor.expect(requestTo("http://srv-ms-identidad:8089/api/v1/internal/usuarios/" + UID + "/rol"))
+                    .andExpect(method(HttpMethod.GET))
+                    .andRespond(withSuccess("{\"uid\":\"" + UID + "\",\"rol\":\"ADMINISTRADOR\",\"estado\":\"ACTIVO\"}",
+                            MediaType.APPLICATION_JSON));
+
+            ClienteIdentidad.RolDeCuenta rol = cliente.rol(UID);
+
+            assertThat(rol.rol()).isEqualTo("ADMINISTRADOR");
+            assertThat(rol.estado()).isEqualTo("ACTIVO");
+            servidor.verify();
+        }
+
+        @Test
+        @DisplayName("RolesDesdeIdentidad: 404 es cuenta inexistente; caida, 5xx o rol raro, fail-closed")
+        void rolesFailClosed() {
+            RolesDesdeIdentidad roles = new RolesDesdeIdentidad(cliente);
+            String ruta = "http://srv-ms-identidad:8089/api/v1/internal/usuarios/" + UID + "/rol";
+            // MockRestServiceServer exige declarar todo antes de la primera peticion.
+            servidor.expect(requestTo(ruta)).andRespond(withSuccess("{\"rol\":\" moderador \"}",
+                    MediaType.APPLICATION_JSON));
+            servidor.expect(requestTo(ruta)).andRespond(withStatus(HttpStatus.NOT_FOUND));
+            servidor.expect(requestTo(ruta)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+            servidor.expect(requestTo(ruta)).andRespond(withStatus(HttpStatus.FORBIDDEN));
+            servidor.expect(requestTo(ruta)).andRespond(withSuccess("{\"rol\":\"ROOT\"}", MediaType.APPLICATION_JSON));
+
+            assertThat(roles.rolDe(UID)).isEqualTo("MODERADOR");
+            assertThatThrownBy(() -> roles.rolDe(UID)).isInstanceOf(SancionRechazada.class)
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.NO_ENCONTRADA);
+            assertThatThrownBy(() -> roles.rolDe(UID))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.IDENTIDAD_NO_DISPONIBLE);
+            assertThatThrownBy(() -> roles.rolDe(UID))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.IDENTIDAD_NO_DISPONIBLE);
+            assertThatThrownBy(() -> roles.rolDe(UID))
+                    .extracting("motivo").isEqualTo(SancionRechazada.Motivo.IDENTIDAD_NO_DISPONIBLE);
+            servidor.verify();
         }
 
         @Test
@@ -105,10 +159,26 @@ class ClientesDeIdentidadYCorreoTest {
                     .andExpect(jsonPath("$.apelableHasta").value("2026-09-27T10:00:00Z"))
                     .andExpect(jsonPath("$.hasta").doesNotExist())
                     .andExpect(jsonPath("$.resultadoApelacion").doesNotExist())
+                    .andExpect(jsonPath("$.causal").doesNotExist())
+                    .andExpect(jsonPath("$.politica").doesNotExist())
                     .andRespond(withStatus(HttpStatus.ACCEPTED));
 
             cliente.enviar("sancion-" + SANCION + "-emision",
                     new ClienteCorreo.CorreoSancion("lyra@nexus.test", "Lyra", "BANEO", "Fraude", null, HASTA, null));
+            servidor.verify();
+        }
+
+        @Test
+        @DisplayName("1.6.0: la causal y la politica viajan cuando la sancion las tiene")
+        void conCausalYPolitica() {
+            servidor.expect(requestTo("http://srv-correo:8082/api/v1/correos/sancion"))
+                    .andExpect(jsonPath("$.causal").value("Acoso a otros jugadores"))
+                    .andExpect(jsonPath("$.politica").value("Normas de convivencia"))
+                    .andRespond(withStatus(HttpStatus.ACCEPTED));
+
+            cliente.enviar("sancion-" + SANCION + "-emision",
+                    new ClienteCorreo.CorreoSancion("lyra@nexus.test", "Lyra", "SUSPENSION", "Insultos", HASTA, HASTA,
+                            null, "Acoso a otros jugadores", "Normas de convivencia"));
             servidor.verify();
         }
     }

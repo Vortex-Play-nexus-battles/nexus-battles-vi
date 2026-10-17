@@ -75,7 +75,20 @@ public record CatalogoInicial(
             String efectoPotenciado,
             String probabilidadMaster,
             Map<String, String> estadisticasNivel1,
-            String fuente) {
+            String fuente,
+            String imagen) {
+
+        /**
+         * Sin imagen declarada (las entradas anteriores a la fase 2 de arte):
+         * el mapeador pone la figura provisional del tipo.
+         */
+        public EntradaCatalogo(String id, String tipo, String nombre, String prototipo, String heroe,
+                String grupo, String parte, String efectos, String probabilidadCaida,
+                String efectoGeneral, String efectoPotenciado, String probabilidadMaster,
+                Map<String, String> estadisticasNivel1, String fuente) {
+            this(id, tipo, nombre, prototipo, heroe, grupo, parte, efectos, probabilidadCaida,
+                    efectoGeneral, efectoPotenciado, probabilidadMaster, estadisticasNivel1, fuente, null);
+        }
     }
 
     /** Precios en creditos y en pesos (COP) por tipo, tiraje y modalidad de compra. */

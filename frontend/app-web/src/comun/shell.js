@@ -57,7 +57,9 @@ import { cerrarSesion, leerSesion, resolver, RUTAS } from './sesion.js';
 import { montarAsistente } from './ui/asistente.js';
 import { h } from './ui/dom.js';
 import { vigilarSesion } from './vigilante-sesion.js';
+import { vigilarInactividad } from './inactividad-administrativa.js';
 import { vigilarRed } from './ui/aviso-de-red.js';
+import { vigilarEnlaces } from './enlaces-limpios.js';
 import { montarAvisosDeCabecera } from './avisos-de-cabecera.js';
 
 const BASE_RUTAS = import.meta.url;
@@ -130,7 +132,11 @@ export const SECCIONES_CONSOLA = Object.freeze([
     icono: 'usuarios',
     barra: false,
   },
-  { id: 'productos', etiqueta: 'Productos', vista: 'productos', icono: 'mochila' },
+  // SA-6 — «Productos» lleva al catálogo (cifras, productos con su ficha y
+  // recursos gráficos); el alta se abre desde allí con «Nuevo producto». Antes
+  // llevaba directo al formulario de alta y el catálogo solo se encontraba
+  // por un enlace dentro de él.
+  { id: 'productos', etiqueta: 'Productos', vista: 'panel-catalogo', icono: 'mochila' },
   // B3 — la cola de comentarios reportados (RF-COM-005/008, 7.3.3). Existía y
   // ninguna entrada de la consola llevaba a ella: solo se llegaba escribiendo
   // su dirección. Mismo nivel que Sanciones y Lista negra (la matriz dice
@@ -367,6 +373,8 @@ function menuDeCuenta({ sesion, base, almacen, navegar, opcionesExtra = [] }) {
     // chat queda aquí, junto a la tienda.
     ['Chat', rutaDeVista('chat'), 'chat'],
     ['Mis sanciones', RUTAS.misSanciones, 'mis-sanciones'],
+    // ms-chatbot.yaml 1.8.0 — lo que el asistente sabe responder, para leerlo.
+    ['Centro de ayuda', rutaDeVista('ayuda'), 'ayuda'],
     ...opcionesExtra,
   ];
   for (const [texto, ruta, vista] of opciones) {
@@ -896,6 +904,7 @@ export function montarArmazonAdmin(
  * @param {string|null} [opciones.vista] clave de `MATRIZ` — de dónde sale todo
  * @param {'publico'|'jugador'|'admin'} [opciones.armazon] fuerza uno
  * @param {(opciones: object) => unknown} [opciones.vigilar] inyectable en pruebas
+ * @param {(opciones: object) => unknown} [opciones.inactividad] guarda de 7.3.9; inyectable en pruebas
  * @param {(opciones: {raiz: HTMLElement}) => unknown} [opciones.avisos]
  *   el contador de la campana (`avisos-de-cabecera.js`); inyectable en pruebas
  * @returns {{elemento: HTMLElement, sesion: object|null}}
@@ -915,6 +924,7 @@ export function montarArmazon(
     },
     documento = globalThis.document,
     vigilar = vigilarSesion,
+    inactividad = vigilarInactividad,
     avisos = montarAvisosDeCabecera,
   } = {},
 ) {
@@ -939,10 +949,20 @@ export function montarArmazon(
   montarAsistente(documento);
 
   if (sesion.autenticado) {
-    vigilar({ almacen, ahora, documento });
+    const vigilante = vigilar({ almacen, ahora, documento });
+    // 7.3.9 — las sesiones de Moderador, Administrador y Super Administrador
+    // se renuevan mientras se trabaja y avisan antes de cerrarse por
+    // inactividad. Para un jugador no hace nada.
+    if (vigilante?.terminar) {
+      inactividad({ terminar: vigilante.terminar, almacen, ahora, documento });
+    }
   }
   // UXC-9 — el aviso de red transversal: en todas las vistas, una vez.
   vigilarRed({ documento });
+  // SA-7 (punto crítico externo del informe de revisión) — detrás del borde,
+  // ningún enlace enseña la carpeta ni el `.html` de una vista: los que una
+  // vista escribe con la ruta de su fichero se ven con su dirección limpia.
+  vigilarEnlaces({ documento });
 
   if (elegido === 'publico') {
     return montarArmazonPublico(raiz, { vista: vista ?? 'login', base, almacen, navegar });

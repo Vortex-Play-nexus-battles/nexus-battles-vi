@@ -20,6 +20,7 @@ import { construirDetalleDeHeroe } from './detalle-heroe.js';
 import { icono } from '../../comun/ui/icono.js';
 import { ICONO_DEL_TIPO } from './vitrina.js';
 import { identidadDePrototipo } from '../../comun/ui/juego/prototipos.js';
+import { imagenDeProducto } from '../../comun/ui/juego/arte.js';
 import { NOMBRE_DEL_TIPO } from '../../comun/ui/formato.js';
 import { bloquearDesplazamiento, esElModalDeArriba } from '../../comun/ui/dialogo.js';
 
@@ -65,7 +66,10 @@ let secuencia = 0;
  * @param {object} producto tal como lo devuelve el servicio de productos.
  * @returns {HTMLElement} dialogo listo para insertar en el documento.
  */
-export function construirFicha(producto, { nombrePropio = null, contexto = 'inventario' } = {}) {
+export function construirFicha(
+  producto,
+  { nombrePropio = null, contexto = 'inventario', enTuInventario = null } = {},
+) {
   if (!producto || typeof producto !== 'object') {
     throw new TypeError('La ficha necesita un producto del catálogo');
   }
@@ -88,10 +92,13 @@ export function construirFicha(producto, { nombrePropio = null, contexto = 'inve
   ficha.setAttribute('aria-labelledby', idNombre);
 
   let imagen;
-  if (producto.imagen) {
+  // Fase 2 de arte: la figura provisional de la semilla se cambia por el arte
+  // aprobado del producto.
+  const url = imagenDeProducto(producto);
+  if (url) {
     imagen = document.createElement('img');
     imagen.className = 'ficha__imagen';
-    imagen.src = producto.imagen;
+    imagen.src = url;
     // El texto alternativo es el nombre: quien no ve la imagen sigue sabiendo
     // que producto esta mirando (RNF-ACC-002).
     imagen.alt = producto.nombre ?? '';
@@ -128,6 +135,21 @@ export function construirFicha(producto, { nombrePropio = null, contexto = 'inve
 
   ficha.append(imagen, nombre, tipo);
 
+  // SA-13 (§7.2.2 y §7.2.1): un producto de pago en moneda real y una pieza
+  // única se identifican también en el inventario, no solo en la tienda.
+  const marcas = marcasDelCatalogo(producto);
+  if (marcas) {
+    ficha.append(marcas);
+  }
+
+  // Revisión final del módulo (13-oct) — §7.1: la vista de detalle tiene «la
+  // información del inventario». Lo que es del jugador (cómo llamó a su
+  // objeto, si lo lleva un héroe, si está bloqueado) va aquí, junto a lo que
+  // dice el catálogo, que es lo mismo para todos.
+  if (enTuInventario) {
+    ficha.appendChild(construirEnTuInventario(producto, enTuInventario));
+  }
+
   // RN-27 (seccion 7.2.1): un producto suspendido no admite nuevas
   // adquisiciones, pero **permanece en los inventarios de quienes ya lo
   // poseen**. El flujo alternativo de la ficha pide mostrarla con el
@@ -149,6 +171,75 @@ export function construirFicha(producto, { nombrePropio = null, contexto = 'inve
   }
 
   return ficha;
+}
+
+/**
+ * Los distintivos del catálogo que el jugador tiene que ver: premium (se paga
+ * en moneda real y no se subasta) y pieza única. Null si no hay ninguno.
+ *
+ * @param {{premium?: boolean, estado?: string}} producto
+ * @returns {HTMLElement|null}
+ */
+export function marcasDelCatalogo(producto) {
+  const marcas = [];
+  if (producto?.premium === true) {
+    const premium = document.createElement('span');
+    premium.className = 'distintivo distintivo--epica producto-premium';
+    premium.title = 'Se paga en moneda real y no se puede subastar';
+    premium.append(icono('moneda', { clase: 'icono', etiqueta: null }));
+    const texto = document.createElement('span');
+    texto.textContent = 'Premium';
+    const explicacion = document.createElement('span');
+    explicacion.className = 'solo-lectores';
+    explicacion.textContent = ': se paga en moneda real y no se puede subastar';
+    premium.append(texto, explicacion);
+    marcas.push(premium);
+  }
+  if (producto?.estado === 'UNICO') {
+    const unico = document.createElement('span');
+    unico.className = 'distintivo distintivo--maestro-juego producto-unico';
+    unico.append(icono('estrella-llena', { clase: 'icono', etiqueta: null }));
+    const texto = document.createElement('span');
+    texto.textContent = 'Pieza única';
+    unico.append(texto);
+    marcas.push(unico);
+  }
+  if (marcas.length === 0) {
+    return null;
+  }
+  const zona = document.createElement('p');
+  zona.className = 'ficha__marcas fila';
+  zona.dataset.zona = 'marcas-del-catalogo';
+  zona.append(...marcas);
+  return zona;
+}
+
+/**
+ * «En tu inventario»: el nombre que le puso el jugador (si no es el del
+ * catálogo) y el sello de su estado (equipado en…, en subasta, disponible).
+ *
+ * @param {object} producto
+ * @param {{nombrePropio?: string|null, sello?: Node|null}} datos
+ * @returns {HTMLElement}
+ */
+function construirEnTuInventario(producto, { nombrePropio = null, sello = null } = {}) {
+  const bloque = document.createElement('section');
+  bloque.className = 'ficha__inventario';
+  bloque.dataset.zona = 'en-tu-inventario';
+  const titulo = document.createElement('h3');
+  titulo.className = 'ficha__subtitulo';
+  titulo.textContent = 'En tu inventario';
+  bloque.appendChild(titulo);
+  if (nombrePropio && nombrePropio !== producto.nombre) {
+    const propio = document.createElement('p');
+    propio.className = 'ficha__nombre-propio';
+    propio.textContent = `Lo llamas «${nombrePropio}»`;
+    bloque.appendChild(propio);
+  }
+  if (sello) {
+    bloque.appendChild(sello);
+  }
+  return bloque;
 }
 
 /**
@@ -246,6 +337,9 @@ export async function abrirFicha(
     // «inventario» (por omision), «tienda» o «portada»: cambia solo las frases
     // que hablan de lo que el jugador tiene.
     contexto = 'inventario',
+    // Revisión final del módulo (13-oct): `{nombrePropio, sello}` del elemento
+    // del inventario que se abrió (ver `construirEnTuInventario`).
+    enTuInventario = null,
   } = {},
 ) {
   cerrarFicha();
@@ -261,8 +355,18 @@ export async function abrirFicha(
   // («Eliminar tu comentario»), Escape cerraba las dos. Ahora solo actúa la
   // ficha si es el modal de más arriba; si no, la tecla es de la confirmación.
   const alPulsarTecla = (evento) => {
-    if (evento.key === 'Escape' && esElModalDeArriba(capa)) {
+    if (!esElModalDeArriba(capa)) {
+      return;
+    }
+    if (evento.key === 'Escape') {
       cerrarFicha();
+      return;
+    }
+    // RNF-ACC-002 / revisión final del módulo (13-oct): el foco no se escapa a
+    // la vista de atrás. Tab desde el último vuelve al primero y Mayús+Tab
+    // desde el primero al último, como el diálogo del kit.
+    if (evento.key === 'Tab') {
+      atraparFoco(capa, evento);
     }
   };
   document.addEventListener('keydown', alPulsarTecla);
@@ -287,7 +391,7 @@ export async function abrirFicha(
   if (abierta === null || abierta.capa !== capa) {
     return; // Se cerro mientras se consultaba.
   }
-  const ficha = construirFicha(producto, { nombrePropio, contexto });
+  const ficha = construirFicha(producto, { nombrePropio, contexto, enTuInventario });
   reemplazarContenido(capa, ficha);
   const zonaDeComplementos = anadirComplementos(ficha, producto, complementos);
 
@@ -389,4 +493,41 @@ function reemplazarContenido(capa, contenido) {
     }
   }
   capa.appendChild(contenido);
+  // Revisión final del módulo (13-oct): con la ficha ya pintada, el botón de
+  // cerrar pasa DENTRO del diálogo (`aria-modal`), donde lo encuentra un lector
+  // de pantalla, y queda en su esquina. Si tenía el foco, lo conserva.
+  if (cerrar && contenido.getAttribute?.('role') === 'dialog') {
+    const teniaElFoco = document.activeElement === cerrar;
+    contenido.prepend(cerrar);
+    contenido.classList.add('ficha--con-cerrar');
+    if (teniaElFoco) {
+      cerrar.focus();
+    }
+  }
+}
+
+/** Lo que el teclado puede alcanzar dentro de la capa, en orden. */
+function enfocablesDe(capa) {
+  return Array.from(
+    capa.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((nodo) => !nodo.hasAttribute('disabled') && nodo.getClientRects().length > 0);
+}
+
+function atraparFoco(capa, evento) {
+  const lista = enfocablesDe(capa);
+  if (lista.length === 0) {
+    return;
+  }
+  const primero = lista[0];
+  const ultimo = lista[lista.length - 1];
+  const dentro = capa.contains(document.activeElement);
+  if (evento.shiftKey && (document.activeElement === primero || !dentro)) {
+    evento.preventDefault();
+    ultimo.focus();
+  } else if (!evento.shiftKey && (document.activeElement === ultimo || !dentro)) {
+    evento.preventDefault();
+    primero.focus();
+  }
 }

@@ -48,6 +48,8 @@ class EntregasApiTest {
                         "Espada de una mano", "ARMA", null, "ACTIVO"))
                 .registrar("retirado", new ResolutorDeProducto.DetalleProducto(
                         "Retirado", "ITEM", null, "SUSPENDIDO"))
+                .registrar("epica", new ResolutorDeProducto.DetalleProducto(
+                        "Golpe de defensa", "EPICA", "Guerrero Tanque", "ACTIVO"))
                 .registrarArmadura("peto", ParteArmadura.PECHO)
                 .registrarArmadura("sin-parte", (ParteArmadura) null);
         EntregarProductos servicio = new EntregarProductos(new RepositorioDeEntregasEnMemoria(), inventarios, catalogo,
@@ -72,6 +74,26 @@ class EntregasApiTest {
             peticion = peticion.header("Idempotency-Key", clave);
         }
         return mvc.perform(peticion);
+    }
+
+    @Test
+    @DisplayName("una epica que el jugador ya tiene no crea otra copia: 201 con la lista vacia y yaTenia")
+    void epicaQueYaSeTiene() throws Exception {
+        String epica = """
+                {"uid":"%s","origen":"MISION","referencia":"mision-1",
+                 "productos":[{"productoId":"epica","cantidad":1}]}
+                """.formatted(JUGADOR);
+
+        entregar("mision-1-epica", epica).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.elementos.length()").value(1))
+                .andExpect(jsonPath("$.yaTenia.length()").value(0));
+        entregar("mision-2-epica", epica.replace("mision-1", "mision-2")).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.elementos.length()").value(0))
+                .andExpect(jsonPath("$.yaTenia[0]").value("epica"));
+        entregar("mision-2-epica", epica.replace("mision-1", "mision-2")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.yaTenia[0]").value("epica"));
+
+        assertEquals(1, inventarios.buscarPorPropietario(JUGADOR).orElseThrow().elementos().size());
     }
 
     @Test

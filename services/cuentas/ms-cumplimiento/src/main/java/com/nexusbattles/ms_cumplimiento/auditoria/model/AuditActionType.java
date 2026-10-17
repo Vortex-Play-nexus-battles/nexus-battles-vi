@@ -13,6 +13,9 @@ public enum AuditActionType {
     CREACION,
     ACTUALIZACION,
     ELIMINACION_LOGICA,
+    // 1.3.0 (SA-5): lo que se borra de verdad, como un termino de la lista
+    // negra. ELIMINACION_LOGICA queda para lo que se marca y se conserva.
+    ELIMINACION,
     SUSPENSION,
     SANCION,
     CAMBIO_ROL,
@@ -23,5 +26,10 @@ public enum AuditActionType {
     // registrada con su propio tipo, para poder distinguirla de otros
     // accesos administrativos genéricos (OTRO).
     EXPORTACION,
+    // SA-18 (1.4.0): las operaciones del catalogo que importa la bitacora.
+    // Reactivar un producto suspendido y devolverlo a un estado anterior no
+    // son una actualizacion cualquiera: se distinguen al leer y al filtrar.
+    REACTIVACION,
+    REVERSION,
     OTRO
 }

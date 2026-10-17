@@ -10,6 +10,8 @@ import nexus.misiones.dominio.EstadoDePaso;
 import nexus.misiones.dominio.PasoDeLiquidacion;
 import nexus.misiones.dominio.RepositorioDeEjecuciones;
 import nexus.misiones.dominio.TransicionNoPermitida;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Cancelar una mision en curso (7.8.7, «Abandonada: cancelada por el jugador,
@@ -23,12 +25,34 @@ import nexus.misiones.dominio.TransicionNoPermitida;
  */
 public class CancelarEjecucion {
 
+    private static final Logger BITACORA = LoggerFactory.getLogger(CancelarEjecucion.class);
+
     /**
      * La penalizacion provisional (decision del PO pendiente, HU-MIS-015 no la
      * cuantifica): se pierde todo lo de esta ejecucion, experiencia incluida.
      */
     public static final String PENALIZACION =
             "Pierdes todas las recompensas de esta misión, experiencia incluida.";
+
+    /**
+     * Lo que se le dice al jugador cuando la simulacion de su mision viene fallando por un error del sistema
+     * (decision del PO, 2026-10-06). Empieza por «Ninguna» porque la interfaz lo muestra tras «Penalización:». Es
+     * honesto con lo que se pierde: una simulacion que no se pudo hacer no calculo recompensas, asi que no se
+     * promete ninguna; lo que no ocurre es que el abandono cuente contra el jugador.
+     */
+    public static final String SIN_PENALIZACION =
+            "Ninguna. La simulación de esta misión falló por un error del sistema, no por ti: "
+                    + "cancelarla no cuenta como uno de tus intentos.";
+
+    /**
+     * Lo que le cuesta al jugador cancelar ESTA ejecucion: nada si su simulacion viene fallando por un error del
+     * sistema (o si ya se cancelo asi), la penalizacion de siempre en cualquier otro caso. Es el texto que el
+     * tablon de misiones en curso ensena en el dialogo de cancelar y el que contesta la cancelacion.
+     */
+    public static String penalizacionDe(Ejecucion ejecucion) {
+        return ejecucion.simulacionFallando() || ejecucion.canceladaSinPenalizacion() ? SIN_PENALIZACION
+                : PENALIZACION;
+    }
 
     private final RepositorioDeEjecuciones ejecuciones;
     private final LiquidarEjecucion liquidar;
@@ -44,7 +68,12 @@ public class CancelarEjecucion {
         Ejecucion ejecucion = ejecuciones.buscar(ejecucionId)
                 .filter(e -> e.jugadorUid().equals(jugadorUid))
                 .orElseThrow(EjecucionNoEncontrada::new);
+        String falloDelSistema = ejecucion.ultimoError();
         ejecucion.cancelar(reloj.instant());
+        if (ejecucion.canceladaSinPenalizacion()) {
+            BITACORA.info("Ejecucion {} cancelada sin penalizacion: su simulacion venia fallando por un error del"
+                    + " sistema ({})", ejecucion.id(), falloDelSistema);
+        }
         Ejecucion guardada;
         try {
             guardada = ejecuciones.guardar(ejecucion);
@@ -53,6 +82,6 @@ public class CancelarEjecucion {
         }
         Ejecucion liquidada = liquidar.liquidar(guardada);
         return new Cancelacion(liquidada, liquidada.estadoDe(PasoDeLiquidacion.LIBERACION) == EstadoDePaso.HECHO,
-                PENALIZACION);
+                penalizacionDe(liquidada));
     }
 }

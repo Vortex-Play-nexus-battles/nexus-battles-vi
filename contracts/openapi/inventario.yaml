@@ -36,7 +36,38 @@ info:
   # omision (1 y 0); la mision solo los hace avanzar. Equipar o desequipar un
   # heroe en mision responde 409. Aditivo: operaciones nuevas, propiedades
   # opcionales y una respuesta 409 mas; menor.
-  version: 1.6.0
+  # 1.7.0 (revision final del modulo Inventario, §7.1): la vitrina pagina en el
+  # servidor por pestana y la busqueda cubre la informacion del producto.
+  #   - GET /elementos acepta `categoria` (HEROES u OBJETOS, opcional): cada
+  #     pestana de «Mi inventario» pide al servidor solo la pagina de dieciseis
+  #     que ensena, en vez de reunir el inventario entero en el navegador.
+  #   - ElementoInventario gana `equipadoEn` (opcional): el heroe que lleva
+  #     puesto el elemento, en la vitrina y en la busqueda.
+  #   - GET /elementos/busqueda busca tambien en la informacion del producto en
+  #     el catalogo (nombre, descripcion, efectos, prototipo y acciones del
+  #     heroe) con un indice de cuatrigramas, y siempre por fragmento.
+  #   - nombrePropio admite como maximo 60 caracteres en CrearElemento y
+  #     ModificarElemento (400 si se pasa).
+  #   Menor: un parametro opcional, una propiedad opcional y un limite que
+  #   ningun nombre del catalogo (el mas largo, 29) alcanza.
+  # 1.7.1 (segunda auditoria de la revision final, 13-oct): la busqueda cubre
+  #   tambien los atributos del producto con la etiqueta que ensena su ficha
+  #   («Poder de ataque 42», «Defensa 3», «Turnos de carga 2»…) y el costo de
+  #   cada accion del heroe. Solo cambia la descripcion: ninguna ruta, campo
+  #   ni respuesta. Parche.
+  # 1.8.0 (§7.3.4, ficha administrativa del usuario — SA-3): nueva
+  #   GET /usuarios/{uid}/elementos, el inventario de una cuenta con la misma
+  #   pagina de dieciseis y las mismas categorias que la vitrina. Es la unica
+  #   lectura donde el dueno sale de la ruta y no del token: solo Administrador
+  #   y Super Administrador (403 para cualquier otro rol). Modificarlo sigue
+  #   siendo POST /entregas con origen ADMINISTRACION. Menor: una operacion.
+  # 1.9.0 (SIM-006, decision del PO del 2026-10-06 — epica unica): una epica
+  # que el jugador ya tiene no se entrega otra vez. POST /entregas no crea el
+  # elemento y lo dice en la propiedad nueva `yaTenia` de la entrega (los
+  # productos EPICA omitidos; vacia si no hubo ninguno). Sigue siendo 201 (o 200
+  # en la repeticion de la clave): la entrega se completa, solo que sin esa
+  # copia. Aditivo: propiedad nueva de respuesta, ninguna peticion cambia.
+  version: 1.9.0
   description: >
     Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
     de elementos propios del jugador para HU-INV-003, y equipamiento de
@@ -130,6 +161,17 @@ paths:
             type: integer
             minimum: 0
             default: 0
+        - name: categoria
+          in: query
+          required: false
+          description: >
+            1.7.0. HEROES pagina solo los elementos de tipo HEROE; OBJETOS, todo
+            lo demas (armas, armaduras, items, habilidades y epicas). Sin ella se
+            pagina el inventario entero. Los totales de la pagina son los de la
+            categoria pedida. Un valor desconocido es 400.
+          schema:
+            type: string
+            enum: [HEROES, OBJETOS]
       responses:
         "200":
           description: >
@@ -199,20 +241,81 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
+  /api/v1/inventario/usuarios/{uid}/elementos:
+    get:
+      summary: Inventario de una cuenta, para su ficha administrativa (1.8.0)
+      description: >
+        §7.3.4 «ver y modificar inventario del usuario». El inventario de la
+        cuenta `uid`, en paginas de dieciseis y con el mismo filtro de
+        categoria que la vitrina del jugador. Solo ADMINISTRADOR y
+        SUPER_ADMINISTRADOR: es la unica lectura donde el dueno sale de la ruta.
+        Una cuenta sin productos recibe una pagina vacia. Para darle productos,
+        `POST /api/v1/inventario/entregas` con origen ADMINISTRACION.
+      operationId: consultarInventarioDeUsuario
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          description: '`uid` de la cuenta (UUID). Otro valor es 400.'
+          schema:
+            type: string
+            format: uuid
+        - name: pagina
+          in: query
+          required: false
+          description: Numero de pagina, desde cero.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: categoria
+          in: query
+          required: false
+          description: HEROES u OBJETOS; sin ella, el inventario entero.
+          schema:
+            type: string
+            enum: [HEROES, OBJETOS]
+      responses:
+        "200":
+          description: Pagina del inventario de la cuenta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginaInventario"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          $ref: "#/components/responses/AccesoDenegado"
   /api/v1/inventario/elementos/busqueda:
     get:
       summary: Busca productos en el inventario del jugador autenticado
       description: >
-        HU-INV-002. Usa el indice de texto de la informacion registrada en los
-        elementos y solo consulta el inventario derivado de X-User-Name. El
-        criterio debe contener al menos cuatro caracteres y los resultados
-        conservan la paginacion fija de dieciseis elementos.
+        HU-INV-002 (§7.1: «busqueda para cualquier informacion presente en el
+        producto»). Solo consulta el inventario de quien llama. Un elemento
+        coincide si el criterio aparece, como fragmento y sin distinguir tildes
+        ni mayusculas, en lo que guarda el inventario (nombre propio, tipo,
+        parte de armadura, identificador del producto) o en la informacion de
+        su producto en el catalogo: nombre, descripcion, efectos, prototipo,
+        atributos con la etiqueta de la ficha (1.7.1: «Poder de ataque»,
+        «Defensa», «Costo de poder», «Turnos de carga»…) y, en los heroes, sus
+        acciones con su costo y su efecto (Tabla 7). Desde 1.7.0 la informacion del
+        catalogo se resuelve con un indice de cuatrigramas que el servicio
+        renueva solo (la vigencia por omision es de cinco minutos); si el
+        catalogo no responde, la busqueda se limita a lo que guarda el
+        inventario y no falla. El criterio debe contener al menos cuatro
+        caracteres y los resultados conservan la paginacion fija de dieciseis
+        elementos.
       operationId: buscarElementosInventario
       parameters:
         - name: criterio
           in: query
           required: true
-          description: Texto que se busca en productoId, tipo, nombre propio y parte de armadura.
+          description: >
+            Texto que se busca en el nombre propio, el tipo, la parte de armadura
+            y el identificador del elemento, y en el nombre, la descripcion, los
+            efectos, el prototipo y las acciones de su producto.
           schema:
             type: string
             minLength: 4
@@ -741,6 +844,14 @@ paths:
         `referencia`. Los heroes entregados empiezan en nivel 1 con 0 de
         experiencia.
 
+        Una epica no se tiene dos veces (1.9.0): si el jugador ya tiene un
+        elemento EPICA de ese producto, o la misma entrega la pide dos veces,
+        no se crea otra copia; el producto va en `yaTenia` y el resto de la
+        entrega se hace con normalidad. Vale para toda entrega, venga de una
+        mision o del premio de un torneo. Si todo lo pedido era una epica que
+        ya tenia, `elementos` queda vacio y la respuesta es igual 201 (200 en la
+        repeticion de la clave).
+
         Todo o nada, sin transacciones multi-documento: primero se valida todo
         contra el catalogo (si algo falla no se guarda nada); despues se
         registra la entrega PENDIENTE con sus elementos ya planeados (indice
@@ -892,8 +1003,18 @@ components:
           type: string
         elementos:
           type: array
+          description: Lo que el jugador recibio en esta entrega; vacio si todo era una epica que ya tenia.
           items:
             $ref: "#/components/schemas/ElementoInventario"
+        yaTenia:
+          type: array
+          description: >
+            1.9.0. Identificadores de producto EPICA que el jugador ya tenia y
+            que por eso no se entregaron otra vez. Vacia si no hubo ninguna.
+            Quien entrega (misiones, torneos) la trata como entregada y puede
+            decirle al jugador que ya la tenia.
+          items:
+            type: string
         entregadaEn:
           type: string
           format: date-time
@@ -923,6 +1044,8 @@ components:
         nombrePropio:
           type: string
           minLength: 1
+          maxLength: 60
+          description: 1.7.0, como maximo 60 caracteres.
         parteArmadura:
           $ref: "#/components/schemas/ParteArmadura"
     ModificarElemento:
@@ -933,6 +1056,8 @@ components:
         nombrePropio:
           type: string
           minLength: 1
+          maxLength: 60
+          description: 1.7.0, como maximo 60 caracteres.
     BloquearEnSubasta:
       type: object
       additionalProperties: false
@@ -1047,6 +1172,21 @@ components:
           description: >
             1.6.0 (B9): la ejecucion de mision en la que esta el heroe; presente
             = «En mision» (seccion 7.8.10). Ausente o nula si no esta en ninguna.
+        equipadoEn:
+          $ref: "#/components/schemas/EquipadoEn"
+    EquipadoEn:
+      type: object
+      additionalProperties: false
+      description: >
+        1.7.0: el heroe del mismo jugador que lleva puesto el elemento. Sale en
+        las paginas de la vitrina y de la busqueda; ausente si no esta puesto.
+      required: [heroeId]
+      properties:
+        heroeId:
+          type: string
+        nombreHeroe:
+          type: string
+          description: El nombre propio que el jugador le puso a ese heroe.
     DetalleElementoInventario:
       type: object
       additionalProperties: false

@@ -35,10 +35,18 @@
  * siga (por ejemplo, editar y despues aprobar). MARCAR y DESMARCAR son una
  * nota interna: el autor no recibe aviso, y la pantalla lo dice.
  *
+ * <h2>Por que se retuvo (HU-COM-007 CA-01)</h2>
+ *
+ * Lo que el filtro automatico retuvo trae su deteccion (comentarios.yaml
+ * 1.10.0): la tarjeta y el detalle dicen que reglas de la lista negra
+ * coincidieron, por su id, con la categoria y el motivo; o que la lista negra
+ * no respondio y se retuvo por precaucion. Lo que llego por reportes no la trae.
+ *
  * Nada se pinta con innerHTML: el texto de un comentario reportado es
  * exactamente el contenido del que hay que desconfiar.
  */
 
+import { nombreDeCategoriaDeTermino } from '../../comun/ui/admin/nombres.js';
 import { destinoVisible, urlDeVista } from '../../comun/acceso.js';
 import { h, vaciar } from '../../comun/ui/dom.js';
 import { pintarAviso, limpiarAviso } from '../../comun/ui/aviso.js';
@@ -59,8 +67,10 @@ import {
   consultarCola,
   hayReportesPendientes,
   consultarDetalle,
+  contextoDelComentario,
   historialDelAutor,
   imagenParaModeracion,
+  productoDelCatalogo,
   resolverComentario,
   resolverEnLote,
   ACCIONES_EN_LOTE,
@@ -78,6 +88,64 @@ import {
 
 /** Cuantas entradas se piden de una vez. El servicio recorta a 100. */
 const TAMANO = 20;
+
+/** Comentarios del hilo a cada lado del que se modera (comentarios.yaml 1.17.0 admite 1..10). */
+export const ALREDEDOR = 3;
+
+/**
+ * SA-16 — el nombre de cada producto, pedido una vez aunque el detalle y el
+ * historial del autor pregunten muchas veces. El catálogo que no contesta o
+ * no conoce el producto deja el nombre en `null` (y se vuelve a preguntar la
+ * próxima vez): la vista dice que no está disponible, nunca pinta su id.
+ *
+ * @param {(productoId: string) => Promise<object>} consultar `GET /productos/{id}`
+ * @returns {(productoId: string) => Promise<string|null>}
+ */
+export function nombresDeProductos(consultar) {
+  const pedidos = new Map();
+  return (productoId) => {
+    const clave = String(productoId ?? '');
+    if (!clave) {
+      return Promise.resolve(null);
+    }
+    if (!pedidos.has(clave)) {
+      pedidos.set(
+        clave,
+        Promise.resolve()
+          .then(() => consultar(clave))
+          .then((producto) =>
+            typeof producto?.nombre === 'string' && producto.nombre.trim()
+              ? producto.nombre.trim()
+              : null,
+          )
+          .catch(() => {
+            pedidos.delete(clave);
+            return null;
+          }),
+      );
+    }
+    return pedidos.get(clave);
+  };
+}
+
+/**
+ * «Producto: Espada de Vorn» en cuanto el catálogo lo dice; mientras tanto,
+ * «Producto: …». Sin quien lo pregunte no se pinta: nunca el id.
+ *
+ * @param {string} productoId
+ * @param {((productoId: string) => Promise<string|null>)|null} nombreDeProducto
+ * @returns {HTMLElement|null}
+ */
+function lineaDelProducto(productoId, nombreDeProducto) {
+  if (!nombreDeProducto || !productoId) {
+    return null;
+  }
+  const linea = h('span', { clase: 't-meta', datos: { campo: 'producto' }, texto: 'Producto: …' });
+  void nombreDeProducto(productoId).then((nombre) => {
+    linea.textContent = nombre ? `Producto: ${nombre}` : 'Producto: no disponible en el catálogo';
+  });
+  return linea;
+}
 
 /**
  * Mensajes por `motivo` del problem detail. Nunca se compara el texto del
@@ -114,19 +182,24 @@ export const RESULTADO_DE_ACCION = Object.freeze({
  * siempre), si esta marcado para seguimiento y si moderacion edito su texto.
  *
  * @param {object} comentario `ComentarioResponse` de moderacion
- * @param {{conEstado?: boolean, prioridadElevada?: boolean}} [opciones] `conEstado`: pintar
- *   tambien EN_REVISION; `prioridadElevada` (comentarios.yaml 1.6.0): solo `true` pinta el
- *   distintivo. Viene de la entrada de la cola, no del comentario: el detalle no la trae.
+ * @param {{conEstado?: boolean, prioridadElevada?: boolean, atributo?: string}} [opciones]
+ *   `conEstado`: pintar tambien EN_REVISION; `prioridadElevada` (comentarios.yaml 1.6.0): solo
+ *   `true` pinta el distintivo. Viene de la entrada de la cola, no del comentario: el detalle no
+ *   la trae. `atributo` (SA-16): el `data-*` que nombra cada distintivo; la conversación del
+ *   contexto usa `dato` para no repetir los `data-campo` del comentario que se revisa.
  * @returns {HTMLElement[]}
  */
-export function distintivosDe(comentario, { conEstado = false, prioridadElevada = false } = {}) {
+export function distintivosDe(
+  comentario,
+  { conEstado = false, prioridadElevada = false, atributo = 'campo' } = {},
+) {
   const lista = [];
   if (prioridadElevada === true) {
     // Con texto y no solo con color: el tono ambar no basta para quien no lo distingue.
     lista.push(
       h('span', {
         clase: 'distintivo distintivo--aviso',
-        datos: { campo: 'prioridad' },
+        datos: { [atributo]: 'prioridad' },
         texto: 'Prioridad elevada',
       }),
     );
@@ -135,7 +208,7 @@ export function distintivosDe(comentario, { conEstado = false, prioridadElevada 
     lista.push(
       h('span', {
         clase: 'distintivo',
-        datos: { campo: 'estado' },
+        datos: { [atributo]: 'estado' },
         texto: ESTADO_LEGIBLE[comentario?.estado] ?? comentario?.estado ?? '',
       }),
     );
@@ -144,7 +217,7 @@ export function distintivosDe(comentario, { conEstado = false, prioridadElevada 
     lista.push(
       h('span', {
         clase: 'distintivo distintivo--aviso',
-        datos: { campo: 'marcado' },
+        datos: { [atributo]: 'marcado' },
         texto: 'Marcado para seguimiento',
       }),
     );
@@ -153,7 +226,7 @@ export function distintivosDe(comentario, { conEstado = false, prioridadElevada 
     lista.push(
       h('span', {
         clase: 'distintivo distintivo--moderador',
-        datos: { campo: 'editado' },
+        datos: { [atributo]: 'editado' },
         texto: 'Editado por moderación',
       }),
     );
@@ -179,6 +252,111 @@ export function enlazadorDeFicha(rol) {
     destino.searchParams.set('usuario', autorId);
     return destino.href;
   };
+}
+
+/**
+ * SA-16 — la página pública del producto con su hilo de comentarios
+ * (`/comentar?producto=…`), donde el moderador ve lo que vio quien reportó.
+ *
+ * @param {string} productoId
+ * @returns {string|null}
+ */
+export function enlaceDelProducto(productoId) {
+  const base = urlDeVista('publicar-comentario');
+  if (!base || !productoId) {
+    return null;
+  }
+  const destino = new URL(base);
+  destino.searchParams.set('producto', productoId);
+  return destino.href;
+}
+
+/** «Regla 7», «Reglas 7, 9»; o que la lista negra no dijo cual. */
+function textoDeReglas(reglas) {
+  if (reglas.length === 0) {
+    return 'La lista negra no indicó qué término coincidió';
+  }
+  // SA-4 — el número de la regla es un identificador interno: a quien modera
+  // le sirve cuántos términos coincidieron y de qué categoría, no su id.
+  return reglas.length === 1
+    ? 'Coincidió con un término de la lista negra'
+    : `Coincidió con ${reglas.length} términos de la lista negra`;
+}
+
+/**
+ * HU-COM-007 CA-01 (comentarios.yaml 1.10.0) — por que el filtro automatico
+ * retuvo el comentario: cuantos terminos de la lista negra coincidieron (el
+ * termino nunca llega y su id no le dice nada a quien modera), con la
+ * categoria y el motivo generico. Si la
+ * lista negra no respondio, se dice eso y nada mas: el motivo tecnico no le
+ * sirve al moderador.
+ *
+ * @param {object} deteccion `DeteccionAutomatica` del contrato
+ * @returns {HTMLElement[]}
+ */
+function lineasDeDeteccion(deteccion) {
+  if (deteccion.servicioNoDisponible === true) {
+    return [
+      h('p', {
+        clase: 't-meta',
+        datos: { campo: 'deteccion-sin-servicio' },
+        texto: 'La lista negra no respondió; retenido por precaución',
+      }),
+    ];
+  }
+  const reglas = Array.isArray(deteccion.reglas) ? deteccion.reglas : [];
+  return [
+    h('p', {
+      clase: 't-meta fila fila--envuelta',
+      hijos: [
+        h('span', { datos: { campo: 'deteccion-reglas' }, texto: textoDeReglas(reglas) }),
+        deteccion.categoria
+          ? h('span', {
+              clase: 'distintivo',
+              datos: { campo: 'deteccion-categoria' },
+              texto: nombreDeCategoriaDeTermino(deteccion.categoria),
+            })
+          : null,
+      ],
+    }),
+    deteccion.motivo
+      ? h('p', { clase: 't-meta', datos: { campo: 'deteccion-motivo' }, texto: deteccion.motivo })
+      : null,
+  ].filter(Boolean);
+}
+
+/**
+ * SA-4 — la dirección para sancionar al autor de un comentario desde su
+ * detalle: la consola de sanciones con la cuenta ya elegida y el comentario
+ * ligado a la sanción. `null` si este rol no puede abrir la consola.
+ *
+ * @param {string|null} rol
+ * @returns {((autorId: string, comentarioId: string) => string)|null}
+ */
+export function enlazadorDeSancion(rol) {
+  if (!destinoVisible('sanciones-admin', { autenticado: true, rol })) {
+    return null;
+  }
+  return (autorId, comentarioId) => {
+    const destino = new URL(urlDeVista('sanciones-admin'));
+    destino.searchParams.set('usuario', autorId);
+    if (comentarioId) {
+      destino.searchParams.set('comentario', comentarioId);
+    }
+    return destino.href;
+  };
+}
+
+/** El nombre de una categoría de reporte (§7.3.3); una desconocida, humanizada. */
+function nombreDeCategoria(categoria) {
+  const conocida = CATEGORIAS.find((c) => c.valor === categoria);
+  if (conocida) {
+    return conocida.etiqueta;
+  }
+  const texto = String(categoria ?? '')
+    .replaceAll('_', ' ')
+    .toLowerCase();
+  return texto ? texto.charAt(0).toUpperCase() + texto.slice(1) : 'Sin categoría';
 }
 
 /**
@@ -243,6 +421,17 @@ export function tarjetaDeEntrada(
       h('span', { clase: 'distintivo', texto: `${nombre.replaceAll('_', ' ')}: ${cuantos}` }),
     );
   const reportes = entrada.reportes ?? 0;
+  // HU-COM-007 CA-01: solo lo que retuvo el filtro trae deteccion.
+  const deteccion = entrada.deteccion
+    ? h('div', {
+        clase: 'pila pila--compacta',
+        datos: { zona: 'deteccion' },
+        hijos: [
+          h('p', { clase: 'tarjeta__meta', texto: 'Detección automática' }),
+          ...lineasDeDeteccion(entrada.deteccion),
+        ],
+      })
+    : null;
 
   const articulo = h('article', {
     clase: 'tarjeta pila pila--compacta',
@@ -281,6 +470,7 @@ export function tarjetaDeEntrada(
       ],
     }),
     h('p', { clase: 't-cuerpo', datos: { campo: 'texto' }, texto: comentario.texto ?? '' }),
+    ...(deteccion ? [deteccion] : []),
     h('div', { clase: 'fila fila--envuelta', hijos: categorias }),
     h('div', {
       clase: 'fila',
@@ -367,7 +557,7 @@ function lineaDelHistorial(asiento) {
 }
 
 /** Un comentario del autor en su historial: texto, fecha, producto y estado con palabras. */
-function itemDelHistorial(item, comentarioAbiertoId) {
+function itemDelHistorial(item, comentarioAbiertoId, nombreDeProducto = null) {
   return h('li', {
     clase: 'pila pila--compacta',
     datos: { comentarioId: item.id ?? '' },
@@ -382,12 +572,9 @@ function itemDelHistorial(item, comentarioAbiertoId) {
             datos: { campo: 'fecha' },
             texto: fechaHora(item.fechaPublicacion),
           }),
-          // El contrato solo trae el identificador del producto, no su nombre.
-          h('span', {
-            clase: 't-meta',
-            datos: { campo: 'producto' },
-            texto: `Producto: ${item.productoId ?? ''}`,
-          }),
+          // SA-16: el contrato trae el identificador del producto; se dice su
+          // nombre, que es lo que la moderación reconoce.
+          lineaDelProducto(item.productoId, nombreDeProducto),
           item.id === comentarioAbiertoId
             ? h('span', {
                 clase: 't-meta',
@@ -415,7 +602,7 @@ function itemDelHistorial(item, comentarioAbiertoId) {
  * @param {(autorId: string, paginacion: {pagina: number}) => Promise<object>} cargar
  * @returns {HTMLElement}
  */
-function seccionHistorialDelAutor(comentario, cargar) {
+function seccionHistorialDelAutor(comentario, cargar, nombreDeProducto = null) {
   let pagina = 0;
   let pintados = 0;
   let total = 0;
@@ -499,7 +686,7 @@ function seccionHistorialDelAutor(comentario, cargar) {
         lista = h('ol', { clase: 'pila pila--compacta', datos: { zona: 'historial-autor-lista' } });
         cuerpo.append(lista);
       }
-      lista.append(...items.map((item) => itemDelHistorial(item, comentario.id)));
+      lista.append(...items.map((item) => itemDelHistorial(item, comentario.id, nombreDeProducto)));
       pintados += items.length;
       pagina = paginaPedida + 1;
     } catch (error) {
@@ -525,6 +712,143 @@ function seccionHistorialDelAutor(comentario, cargar) {
   });
 }
 
+/** Cuánto del hilo se ve: todo, o los más cercanos de cuántos hay. */
+function resumenDelHilo(total, vistos) {
+  if (total <= 1) {
+    return 'Es el único comentario del producto.';
+  }
+  if (total > vistos) {
+    return `El hilo del producto tiene ${total} comentarios; estos son los ${vistos} más cercanos a este.`;
+  }
+  return `El hilo completo del producto: ${total} comentarios.`;
+}
+
+/**
+ * Un comentario de la conversación: quién, cuándo, su estado y su texto. El
+ * que se modera va marcado (`aria-current`) para leerlo en su sitio. Sus datos
+ * van en `data-dato` y no en `data-campo`: el comentario que se revisa ya
+ * tiene los suyos en el detalle, y dos `data-campo="marcado"` en el mismo
+ * panel no se distinguirían.
+ *
+ * @param {object} item `ItemDelContexto` (comentarios.yaml 1.17.0) o el comentario abierto
+ * @param {boolean} esEste
+ */
+function itemDelContexto(item, esEste) {
+  return h('li', {
+    clase: 'contexto-hilo__comentario',
+    datos: { comentarioId: item.id ?? '' },
+    atributos: esEste ? { 'aria-current': 'true' } : {},
+    hijos: [
+      h('p', {
+        clase: 'fila fila--envuelta',
+        hijos: [
+          h('strong', { texto: item.apodoAutor || 'Alguien' }),
+          h('span', {
+            clase: 't-meta',
+            datos: { dato: 'fecha' },
+            texto: item.fechaPublicacion ? fechaHora(item.fechaPublicacion) : '',
+          }),
+          ...distintivosDe(item, { conEstado: true, atributo: 'dato' }),
+          esEste
+            ? h('span', {
+                clase: 'distintivo distintivo--en-juego',
+                datos: { dato: 'este' },
+                texto: 'El comentario que estás revisando',
+              })
+            : null,
+        ],
+      }),
+      h('p', { clase: 't-cuerpo', datos: { dato: 'texto' }, texto: item.texto ?? '' }),
+    ],
+  });
+}
+
+/**
+ * SA-16 — §7.3.8 «Vista previa del comentario en contexto»: el producto del
+ * comentario, con su página, y la conversación en la que estaba (los que lo
+ * rodean en el hilo, en cualquier estado), con el comentario en su sitio. Se
+ * pide al abrir el detalle: son pocos. Si falla, esta parte lo dice y el
+ * resto del detalle sigue operativo.
+ *
+ * @param {object} comentario el comentario abierto
+ * @param {{cargarContexto: ((comentarioId: string) => Promise<object>)|null,
+ *          nombreDeProducto: ((productoId: string) => Promise<string|null>)|null,
+ *          hrefDelProducto: ((productoId: string) => string|null)|null}} fuentes
+ * @returns {HTMLElement}
+ */
+function seccionDelContexto(comentario, { cargarContexto, nombreDeProducto, hrefDelProducto }) {
+  const producto = lineaDelProducto(comentario.productoId, nombreDeProducto);
+  const href = comentario.productoId ? (hrefDelProducto?.(comentario.productoId) ?? null) : null;
+  const cabecera = h('p', {
+    clase: 'fila fila--envuelta',
+    hijos: [
+      producto,
+      href
+        ? h('a', {
+            clase: 'boton boton--contorno boton--pequeno',
+            texto: 'Ver el producto y su hilo',
+            atributos: { href },
+            datos: { accion: 'ver-producto' },
+          })
+        : null,
+    ],
+  });
+  const estado = h('div', { datos: { zona: 'contexto-estado' } });
+  const aviso = h('div', { datos: { zona: 'contexto-aviso' }, atributos: { hidden: true } });
+  const cuerpo = h('div', { clase: 'pila pila--compacta' });
+
+  async function pedir() {
+    limpiarAviso(aviso);
+    vaciar(cuerpo);
+    pintarEstado(estado, estadoDeCarga({ filas: 2, etiqueta: 'Cargando la conversación…' }));
+    try {
+      const contexto = await cargarContexto(comentario.id);
+      vaciar(estado);
+      const anteriores = Array.isArray(contexto?.anteriores) ? contexto.anteriores : [];
+      const posteriores = Array.isArray(contexto?.posteriores) ? contexto.posteriores : [];
+      const vistos = anteriores.length + posteriores.length + 1;
+      const total = Number.isFinite(contexto?.totalEnElHilo) ? contexto.totalEnElHilo : vistos;
+      cuerpo.append(
+        h('p', {
+          clase: 't-meta',
+          datos: { campo: 'resumen-del-hilo' },
+          texto: resumenDelHilo(total, vistos),
+        }),
+        h('ol', {
+          clase: 'contexto-hilo',
+          datos: { zona: 'contexto-hilo' },
+          hijos: [
+            ...anteriores.map((item) => itemDelContexto(item, false)),
+            itemDelContexto(comentario, true),
+            ...posteriores.map((item) => itemDelContexto(item, false)),
+          ],
+        }),
+      );
+    } catch (error) {
+      vaciar(estado);
+      const estadoHttp = error?.estado;
+      const sinCambio = [401, 403, 404].includes(estadoHttp);
+      pintarAviso(aviso, {
+        tono: sinCambio ? 'advertencia' : 'error',
+        titulo: 'No se pudo cargar la conversación',
+        detalle: error?.detalle ?? respaldoPorEstado(estadoHttp),
+        accion: sinCambio
+          ? null
+          : { texto: 'Reintentar', nombre: 'reintentar', alPulsar: () => void pedir() },
+      });
+    }
+  }
+
+  if (cargarContexto && comentario.id) {
+    void pedir();
+  }
+  return h('div', {
+    clase: 'pila pila--compacta',
+    datos: { zona: 'contexto' },
+    hijos: [h('h3', { texto: 'En su contexto' }), cabecera, estado, aviso, cuerpo],
+  });
+}
+
 /** La pista del motivo: a quien le llega depende de la accion. */
 function pistaDelMotivo(accion) {
   return ACCIONES_INTERNAS.includes(accion)
@@ -533,8 +857,8 @@ function pistaDelMotivo(accion) {
 }
 
 /**
- * El detalle: el comentario, sus imagenes, sus reportes, su historial y la
- * decision.
+ * El detalle: el comentario, sus imagenes, por que lo retuvo el filtro si fue
+ * el (HU-COM-007), sus reportes, su historial y la decision.
  *
  * @param {object} detalle `DetalleDeModeracionResponse` del contrato
  * @param {(decision: {accion: string, motivo: string, textoNuevo?: string}) => void} alDecidir
@@ -554,6 +878,10 @@ export function panelDeDetalle(
     crearUrl = (blob) => globalThis.URL?.createObjectURL?.(blob) ?? '',
     prioridadElevada = false,
     cargarHistorialDelAutor = null,
+    hrefDeSancion = null,
+    cargarContexto = null,
+    nombreDeProducto = null,
+    hrefDelProducto = null,
   } = {},
 ) {
   const comentario = detalle.comentario ?? {};
@@ -570,9 +898,45 @@ export function panelDeDetalle(
     }),
     h('p', { clase: 't-cuerpo', datos: { campo: 'texto' }, texto: comentario.texto ?? '' }),
   );
+  // SA-4 — de la decisión sobre el comentario a la sanción de su autor, sin
+  // copiar su identificador: la consola abre con la cuenta y el comentario.
+  if (hrefDeSancion) {
+    panel.append(
+      h('p', {
+        clase: 'fila fila--envuelta',
+        hijos: [
+          h('a', {
+            clase: 'boton boton--contorno boton--pequeno',
+            texto: 'Sancionar al autor',
+            atributos: { href: hrefDeSancion },
+            datos: { accion: 'sancionar-autor' },
+          }),
+        ],
+      }),
+    );
+  }
   const imagenes = imagenesDelComentario(comentario, { cargarImagen, crearUrl });
   if (imagenes) {
     panel.append(h('h3', { texto: 'Imágenes' }), imagenes);
+  }
+
+  // -------------------------------------------- en su contexto (SA-16, 7.3.8)
+  if (cargarContexto || nombreDeProducto || hrefDelProducto) {
+    panel.append(
+      seccionDelContexto(comentario, { cargarContexto, nombreDeProducto, hrefDelProducto }),
+    );
+  }
+
+  // ------------------------------------------- deteccion automatica (HU-COM-007)
+  if (detalle.deteccion) {
+    panel.append(
+      h('h3', { texto: 'Detección automática' }),
+      h('div', {
+        clase: 'pila pila--compacta',
+        datos: { zona: 'deteccion' },
+        hijos: lineasDeDeteccion(detalle.deteccion),
+      }),
+    );
   }
 
   // --------------------------------------------------------------- reportes
@@ -585,7 +949,8 @@ export function panelDeDetalle(
       hijos: reportes.map((r) =>
         h('li', {
           clase: 't-meta',
-          texto: `${String(r.categoria ?? '').replaceAll('_', ' ')} · ${fechaHora(r.fecha)}${
+          // SA-4 — la categoría con su nombre de §7.3.3, no la constante.
+          texto: `${nombreDeCategoria(r.categoria)} · ${fechaHora(r.fecha)}${
             r.descripcion ? ` · ${r.descripcion}` : ''
           }`,
         }),
@@ -612,7 +977,7 @@ export function panelDeDetalle(
 
   // ---------------------------------------------------- historial del autor
   if (cargarHistorialDelAutor && typeof comentario.autorId === 'string' && comentario.autorId) {
-    panel.append(seccionHistorialDelAutor(comentario, cargarHistorialDelAutor));
+    panel.append(seccionHistorialDelAutor(comentario, cargarHistorialDelAutor, nombreDeProducto));
   }
 
   // --------------------------------------------------------------- decision
@@ -1125,6 +1490,7 @@ export function montarModeracion(
   { api = null, productoId = null, crearUrl, rol = null } = {},
 ) {
   const hrefDeFicha = enlazadorDeFicha(rol);
+  const sancionDe = enlazadorDeSancion(rol);
   const cliente = {
     consultarCola,
     consultarDetalle,
@@ -1132,8 +1498,12 @@ export function montarModeracion(
     imagenParaModeracion,
     historialDelAutor,
     resolverEnLote,
+    contextoDelComentario,
+    productoDelCatalogo,
     ...(api ?? {}),
   };
+  // SA-16: un nombre por producto en toda la sesión de moderación.
+  const nombreDeProducto = nombresDeProductos((id) => cliente.productoDelCatalogo(id));
   const zonaCola = raiz.querySelector('[data-zona="cola"]');
   const zonaDetalle = raiz.querySelector('[data-zona="detalle-contenedor"]');
   const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
@@ -1508,7 +1878,14 @@ export function montarModeracion(
           cargarImagen: (id) => cliente.imagenParaModeracion(id),
           cargarHistorialDelAutor: (autorId, paginacion) =>
             cliente.historialDelAutor(autorId, paginacion),
+          cargarContexto: (id) => cliente.contextoDelComentario(id, { alrededor: ALREDEDOR }),
+          nombreDeProducto,
+          hrefDelProducto: enlaceDelProducto,
           prioridadElevada: prioridadPorComentario.get(comentarioId) === true,
+          hrefDeSancion:
+            sancionDe && detalle.comentario?.autorId
+              ? sancionDe(detalle.comentario.autorId, comentarioId)
+              : null,
           ...(crearUrl ? { crearUrl } : {}),
         }),
       );
@@ -1582,5 +1959,7 @@ export function montarModeracion(
   filtroCategoria?.addEventListener('change', alCambiarFiltro);
   filtroPrioridad?.addEventListener('change', alCambiarFiltro);
   recargar();
-  return { recargar };
+  // SA-4 — `abrir` lo usa el historial de moderación: «Abrir» lleva el
+  // comentario al panel de revisión de esta misma pantalla.
+  return { recargar, abrir };
 }

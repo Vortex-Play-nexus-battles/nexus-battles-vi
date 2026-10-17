@@ -28,6 +28,8 @@
  * @module tienda-adaptador
  */
 
+import { imagenDeProducto } from '../comun/ui/juego/arte.js';
+
 /**
  * Un importe del DTO, que llega como `BigDecimal` serializado (numero o
  * cadena), convertido a numero — o null si no vino.
@@ -116,6 +118,8 @@ export function textoDePrecio(importe, moneda) {
  *   precioCreditos: number|null,
  *   precioCreditosTexto: string|null,
  *   soloEnCreditos: boolean,
+ *   premium: boolean,
+ *   unico: boolean,
  * }}
  */
 export function aProductoDeVitrina(dto = {}) {
@@ -125,6 +129,15 @@ export function aProductoDeVitrina(dto = {}) {
   // D-44 (1.6.0): lo que cuesta pagado con créditos, ya calculado por el
   // servidor con la promoción vigente; null si no se puede pagar así.
   const precioCreditos = enteroPositivo(dto.precioCreditos);
+  // HU-PRD-005 (#878) y SA-13 (§7.2.2): premium si el servicio lo marca
+  // (vitrina 1.8.0 siempre lo dice); si no lo dice, el que solo se vende en
+  // moneda real, que es lo que define a un premium.
+  const premium =
+    dto.premium === true ||
+    (dto.premium !== false &&
+      Object.hasOwn(dto, 'precioCreditos') &&
+      precio !== null &&
+      precioCreditos === null);
 
   // Solo hay precio anterior que tachar si el actual es realmente menor.
   const hayRebaja = precio !== null && original !== null && original > precio;
@@ -137,7 +150,9 @@ export function aProductoDeVitrina(dto = {}) {
     habilidades:
       typeof dto.habilidades === 'string' && dto.habilidades.trim() ? dto.habilidades : null,
     tipo: typeof dto.tipo === 'string' ? dto.tipo : '',
-    imagenUrl: typeof dto.imagenUrl === 'string' && dto.imagenUrl.trim() ? dto.imagenUrl : null,
+    // Fase 2 de arte: la figura provisional de la semilla se cambia por el arte
+    // aprobado del producto; sin arte, null y la vitrina pone el símbolo del tipo.
+    imagenUrl: imagenDeProducto({ id: dto.id, nombre: dto.nombre, imagen: dto.imagenUrl }),
     precio,
     precioAnterior: hayRebaja ? original : null,
     moneda,
@@ -148,11 +163,15 @@ export function aProductoDeVitrina(dto = {}) {
     descuento: hayRebaja && porcentaje && porcentaje > 0 ? porcentaje : null,
     esPropio: dto.esPropio === true,
     enListaDeseos: dto.enListaDeseos === true,
+    premium,
     precioCreditos,
     precioCreditosTexto: textoDeCreditos(precioCreditos),
     // G3 (1.7.0): se vende, pero solo con créditos del juego. Su precio es el
     // de créditos; el de dinero real no existe (null, nunca «0 COP»).
     soloEnCreditos: precio === null && precioCreditos !== null,
+    // SA-13 (1.8.0): la pieza única del catálogo (§7.2.1), solo si el
+    // servicio lo dice.
+    unico: dto.unico === true,
   };
 }
 
@@ -206,10 +225,7 @@ export function aFilaDeCarrito(item = {}, moneda = null) {
       ? Math.min(item.maximo, MAXIMO_POR_LINEA)
       : MAXIMO_POR_LINEA;
   const disponible = item.disponible !== false;
-  const imagen =
-    typeof item.producto?.imagen === 'string' && item.producto.imagen.trim()
-      ? item.producto.imagen
-      : null;
+  const imagen = item.producto ? imagenDeProducto(item.producto) : null;
   // G3 (1.7.0): una línea que solo se vende en créditos no tiene importe en
   // dinero real; enseña el de créditos que calculó el servidor (unidad y
   // `subtotalCreditos`), nunca «Sin precio» ni «0 COP».

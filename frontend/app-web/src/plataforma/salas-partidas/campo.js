@@ -144,6 +144,8 @@ export function pintarCampo(contenedor, participantes, yo, { caidos } = {}) {
               nombre: participante.heroe?.nombre,
               nivel: participante.heroe?.nivel ?? undefined,
               imagen: participante.heroe?.retratoUrl ?? undefined,
+              // Fase 2 de arte: sin retratoUrl, el retrato aprobado de su prototipo.
+              prototipo: participante.heroe?.prototipo ?? undefined,
             },
             { conNombre: false },
           ),

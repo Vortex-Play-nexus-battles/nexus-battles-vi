@@ -38,7 +38,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * </ul>
  *
  * <p>El heroe juega como un jugador con rotaciones (su ataque mas fuerte al
- * alcance). Los seis prototipos que atacan entran en las cuentas; los
+ * alcance). Los enemigos juegan las estrategias predefinidas de HU-SIM-004
+ * ({@code estrategias-de-enemigos.json}), que son las que juega el servicio de
+ * misiones: medir el equilibrio con otra politica seria medirlo sobre otro
+ * juego. Los seis prototipos que atacan entran en las cuentas; los
  * sanadores no, porque «a un sanador le esta vedado infligir dano» (§6.1.1) y
  * solo no puede ganar ningun combate. El Guerrero Tanque si entra: casi todos
  * sus golpes caen en «sin efecto» (su fila de la Tabla 21), y aun asi progresa
@@ -154,6 +157,38 @@ class BalanceDeMisionesTest {
     }
 
     @Test
+    @DisplayName("el equilibrio se mide con las estrategias predefinidas de los enemigos, las que juega el servicio de misiones")
+    void seMideConLasEstrategiasReales() {
+        for (String prototipo : ATACANTES) {
+            for (int nivel : new int[] {1, 4, 8}) {
+                assertTrue(sim.estrategiaPara(prototipo, nivel).isPresent(),
+                        "sin estrategia predefinida para " + prototipo + " en el nivel " + nivel
+                                + ": el equilibrio se estaria midiendo con otra politica");
+            }
+        }
+    }
+
+    /** Informativa: la tasa de cada mision con la politica de antes de HU-SIM-004 y con las estrategias predefinidas. */
+    @Test
+    @DisplayName("tasa de cada misión con la política anterior y con las estrategias predefinidas (informe)")
+    void comparacionConLaPoliticaAnterior() {
+        SimuladorDeMisiones anterior = SimuladorDeMisiones.conPoliticaAnterior();
+        List<String> informe = new ArrayList<>();
+        for (Mision m : catalogo) {
+            int total = ATACANTES.size() * EJECUCIONES_POR_PROTOTIPO;
+            int conAnterior = 0;
+            int conEstrategias = 0;
+            for (String prototipo : ATACANTES) {
+                conAnterior += ganadas(anterior, m, prototipo, m.nivelRecomendado(), EJECUCIONES_POR_PROTOTIPO);
+                conEstrategias += ganadas(sim, m, prototipo, m.nivelRecomendado(), EJECUCIONES_POR_PROTOTIPO);
+            }
+            informe.add(String.format(Locale.ROOT, "%s (nivel %d): politica anterior %.0f %%, estrategias %.0f %%",
+                    m.id(), m.nivelRecomendado(), 100.0 * conAnterior / total, 100.0 * conEstrategias / total));
+        }
+        System.out.println("Politica anterior contra estrategias predefinidas: " + informe);
+    }
+
+    @Test
     @DisplayName("un jugador nuevo llega al nivel 8 jugando la misión que le toca, sin quedarse sin misión")
     void deUnoAOcho() {
         List<String> informe = new ArrayList<>();
@@ -170,9 +205,13 @@ class BalanceDeMisionesTest {
     }
 
     private int ganadas(Mision m, String prototipo, int nivel, int veces) {
+        return ganadas(sim, m, prototipo, nivel, veces);
+    }
+
+    private int ganadas(SimuladorDeMisiones simulador, Mision m, String prototipo, int nivel, int veces) {
         int ganadas = 0;
         for (int i = 0; i < veces; i++) {
-            if (sim.jugar(m, prototipo, nivel, Juego.ROTACION, 7919L * i + 31L * nivel + prototipo.hashCode())
+            if (simulador.jugar(m, prototipo, nivel, Juego.ROTACION, 7919L * i + 31L * nivel + prototipo.hashCode())
                     .exito()) {
                 ganadas++;
             }

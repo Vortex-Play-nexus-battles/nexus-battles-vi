@@ -44,6 +44,13 @@ public class LiquidarEjecucion {
     /** Largo maximo del titulo de un aviso (notificaciones.yaml 1.2.0). */
     static final int TITULO_MAXIMO = 200;
 
+    /**
+     * La nota del paso EPICA cuando el inventario dijo que el jugador ya la
+     * tenia (una epica no se tiene dos veces): la entrega cuenta como hecha y
+     * los avisos dicen que no se le dio otra copia.
+     */
+    static final String YA_LA_TENIA = "ya-la-tenia";
+
     private final RepositorioDeEjecuciones ejecuciones;
     private final CatalogoDeMisiones catalogo;
     private final InventarioDeHeroes inventario;
@@ -73,8 +80,12 @@ public class LiquidarEjecucion {
         Instant ahora = reloj.instant();
         for (PasoDeLiquidacion paso : ejecucion.pasosPendientes()) {
             try {
-                hacer(paso, ejecucion);
-                ejecucion.pasoHecho(paso);
+                String nota = hacer(paso, ejecucion);
+                if (nota == null) {
+                    ejecucion.pasoHecho(paso);
+                } else {
+                    ejecucion.pasoHecho(paso, nota);
+                }
             } catch (RechazoDelServicio rechazo) {
                 BITACORA.warn("Ejecucion {}: el paso {} fue rechazado y no se reintenta: {}",
                         ejecucion.id(), paso, rechazo.getMessage());
@@ -87,7 +98,12 @@ public class LiquidarEjecucion {
             }
         }
         try {
-            return ejecuciones.guardar(ejecucion);
+            Ejecucion guardada = ejecuciones.guardar(ejecucion);
+            if (!guardada.liquidacionPendiente() && guardada.intentosDeLiquidacion() > 0) {
+                BITACORA.info("Ejecucion {} liquidada tras {} reintentos: se recupero del fallo anterior ({})",
+                        guardada.id(), guardada.intentosDeLiquidacion(), guardada.ultimoError());
+            }
+            return guardada;
         } catch (EjecucionModificadaConcurrentemente otraVuelta) {
             // Otra vuelta del trabajo la liquido a la vez. Lo que se hizo aqui
             // fue idempotente; la siguiente lectura trae el estado bueno.
@@ -96,7 +112,8 @@ public class LiquidarEjecucion {
         }
     }
 
-    private void hacer(PasoDeLiquidacion paso, Ejecucion ejecucion) {
+    /** @return una nota para el paso hecho (ver {@link #YA_LA_TENIA}), o nulo si no hay nada que contar */
+    private String hacer(PasoDeLiquidacion paso, Ejecucion ejecucion) {
         RecompensasDeEjecucion recompensas = ejecucion.recompensas();
         String referencia = "mision-" + ejecucion.id();
         switch (paso) {
@@ -113,18 +130,24 @@ public class LiquidarEjecucion {
                             .map(p -> new InventarioDeHeroes.ProductoAEntregar(p.productoId(), p.cantidad()))
                             .toList(),
                     referencia + "-botin");
-            case EPICA -> inventario.entregar(ejecucion.jugadorUid(), ejecucion.id(),
-                    recompensas.epicas().stream()
-                            .filter(RecompensasDeEjecucion.EpicaGanada::entregable)
-                            .map(e -> new InventarioDeHeroes.ProductoAEntregar(e.productoId(), 1))
-                            .toList(),
-                    referencia + "-epica");
+            case EPICA -> {
+                List<InventarioDeHeroes.ProductoAEntregar> epicas = recompensas.epicas().stream()
+                        .filter(RecompensasDeEjecucion.EpicaGanada::entregable)
+                        .map(e -> new InventarioDeHeroes.ProductoAEntregar(e.productoId(), 1))
+                        .toList();
+                List<String> yaTenia = inventario.entregar(ejecucion.jugadorUid(), ejecucion.id(), epicas,
+                        referencia + "-epica");
+                // Ya la tenia: el inventario no crea otra copia y lo dice. No es un fallo ni algo que reintentar.
+                if (!epicas.isEmpty() && epicas.stream().allMatch(e -> yaTenia.contains(e.productoId()))) {
+                    return YA_LA_TENIA;
+                }
+            }
             case CORREO -> escribir(ejecucion, asuntoDeFin(ejecucion), mensajeDeFin(ejecucion),
                     referencia + "-correo");
-            case CORREO_EPICA -> escribir(ejecucion, asuntoDeEpica(recompensas), mensajeDeEpica(ejecucion),
+            case CORREO_EPICA -> escribir(ejecucion, asuntoDeEpica(ejecucion), mensajeDeEpica(ejecucion),
                     referencia + "-correo-epica");
             case AVISO -> avisar(ejecucion, referencia + "-aviso", asuntoDeFin(ejecucion), mensajeDeFin(ejecucion));
-            case AVISO_EPICA -> avisar(ejecucion, referencia + "-aviso-epica", asuntoDeEpica(recompensas),
+            case AVISO_EPICA -> avisar(ejecucion, referencia + "-aviso-epica", asuntoDeEpica(ejecucion),
                     mensajeDeEpica(ejecucion));
             case AVISO_DESBLOQUEO -> {
                 // Un aviso por mision desbloqueada, cada uno con su id: si la
@@ -138,6 +161,7 @@ public class LiquidarEjecucion {
                 }
             }
         }
+        return null;
     }
 
     private void escribir(Ejecucion ejecucion, String asunto, String mensaje, String clave) {
@@ -215,7 +239,10 @@ public class LiquidarEjecucion {
                     .collect(Collectors.joining(", "))).append(".");
         }
         if (!r.epicas().isEmpty()) {
-            texto.append(" Aprendió la épica «").append(r.epicas().getFirst().nombre()).append("».");
+            String epica = r.epicas().getFirst().nombre();
+            texto.append(yaTeniaLaEpica(ejecucion)
+                    ? " Venció a un Máster, pero la épica «" + epica + "» ya la tenías."
+                    : " Aprendió la épica «" + epica + "».");
         }
         List<RecompensasDeEjecucion.SinEntregar> sinEntregar = r.sinEntregar();
         if (!sinEntregar.isEmpty()) {
@@ -225,14 +252,26 @@ public class LiquidarEjecucion {
         return texto.toString();
     }
 
-    private static String asuntoDeEpica(RecompensasDeEjecucion recompensas) {
-        return "Obtuviste la épica «" + recompensas.epicas().getFirst().nombre() + "»";
+    /** El inventario dijo, al entregar la epica, que el jugador ya la tenia: no se le dio otra copia. */
+    private static boolean yaTeniaLaEpica(Ejecucion ejecucion) {
+        return YA_LA_TENIA.equals(ejecucion.notaDe(PasoDeLiquidacion.EPICA));
+    }
+
+    private static String asuntoDeEpica(Ejecucion ejecucion) {
+        String nombre = ejecucion.recompensas().epicas().getFirst().nombre();
+        return yaTeniaLaEpica(ejecucion)
+                ? "Ya tenías la épica «" + nombre + "»"
+                : "Obtuviste la épica «" + nombre + "»";
     }
 
     private String mensajeDeEpica(Ejecucion ejecucion) {
         RecompensasDeEjecucion.EpicaGanada epica = ejecucion.recompensas().epicas().getFirst();
-        return ejecucion.heroe().nombre() + " derrotó a " + epica.master() + " en «" + nombreDeMision(ejecucion)
-                + "» y aprendió su épica «" + epica.nombre() + "». "
+        String derrota = ejecucion.heroe().nombre() + " derrotó a " + epica.master() + " en «"
+                + nombreDeMision(ejecucion) + "»";
+        if (yaTeniaLaEpica(ejecucion)) {
+            return derrota + ", pero la épica «" + epica.nombre() + "» ya la tenías. No se te dio otra copia.";
+        }
+        return derrota + " y aprendió su épica «" + epica.nombre() + "». "
                 + (epica.entregable()
                         ? "Ya está en tu inventario."
                         : "Queda en tu colección de épicas de Máster.");

@@ -104,8 +104,9 @@ public class RepositorioEjecucionesMongo implements RepositorioDeEjecuciones {
 
     @Override
     public long iniciadasDesde(String jugadorUid, String misionId, Instant desde) {
+        // La cancelada sin penalizacion (la simulacion fallaba por un error del sistema) no gasta el intento.
         Query consulta = new Query(Criteria.where("jugadorUid").is(jugadorUid).and("misionId").is(misionId)
-                .and("iniciadaEn").gte(desde));
+                .and("iniciadaEn").gte(desde).and("sinPenalizacion").ne(true));
         return mongo.count(consulta, EjecucionDocumento.class);
     }
 

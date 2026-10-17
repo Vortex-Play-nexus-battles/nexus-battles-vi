@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import java.lang.reflect.Method;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -36,7 +36,7 @@ class AdminFichaControllerTest {
 
     private static final FichaAdministrativa FICHA = new FichaAdministrativa(15L,
             UUID.fromString("11111111-2222-3333-4444-555555555555"), "Ana", "ana@nexus.test", "Ana María", "Rueda",
-            null, "JUGADOR", "ACTIVO", null, false, LocalDateTime.of(2026, 9, 1, 10, 30), null, true);
+            null, "JUGADOR", "ACTIVO", null, false, OffsetDateTime.parse("2026-09-01T10:30:00-05:00"), null, true);
 
     @Mock
     private FichaAdministrativaService fichas;

@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -25,6 +27,16 @@ public interface ReporteRepository extends JpaRepository<RegistroDeReporte, Stri
 
     long countByComentarioId(String comentarioId);
 
+    /** Los reportes que ha hecho una cuenta (contrato 1.11.0, ficha administrativa). */
+    Page<RegistroDeReporte> findByReportanteId(String reportanteId, Pageable pagina);
+
+    long countByReportanteId(String reportanteId);
+
+    /** Los reportes de esos comentarios: los que ha recibido su autor (1.11.0). */
+    Page<RegistroDeReporte> findByComentarioIdIn(Collection<String> comentarioIds, Pageable pagina);
+
+    long countByComentarioIdIn(Collection<String> comentarioIds);
+
     /**
      * Cuantos reportes lleva ese usuario desde un instante.
      *
@@ -34,6 +46,21 @@ public interface ReporteRepository extends JpaRepository<RegistroDeReporte, Stri
      * invitacion a esperar en vez de una moderacion del comportamiento.
      */
     long countByReportanteIdAndFechaAfter(String reportanteId, Instant desde);
+
+    /**
+     * Los reportes de un periodo, con lo justo para contarlos (§7.3.8,
+     * comentarios.yaml 1.15.0): ni la descripcion ni la entidad entera. El
+     * periodo es [desde, hasta), el mismo corte que el resto de periodos de
+     * la moderacion. El indice de V8 sobre la fecha la sirve sin recorrer la
+     * tabla.
+     */
+    @Query("""
+            select new com.nexusbattles.plataforma.comentarios.moderacion.ReporteContado(
+                r.fecha, r.categoria, r.comentarioId, r.reportanteId)
+            from RegistroDeReporte r
+            where r.fecha >= :desde and r.fecha < :hasta
+            """)
+    List<ReporteContado> contablesEntre(@Param("desde") Instant desde, @Param("hasta") Instant hasta);
 
     /**
      * Los comentarios con algun reporte PENDIENTE: posterior a la ultima

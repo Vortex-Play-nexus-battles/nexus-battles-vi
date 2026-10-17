@@ -45,6 +45,13 @@ public enum TipoDeEfecto {
     INMUNE_TOTAL(Familia.PROTECCION),
     /** Recibe la mitad y retorna el resto (Toma y lleva). */
     REFLEJA_MITAD(Familia.PROTECCION),
+    /**
+     * Quien lo golpea queda envenenado (Velo de Sombras, 7.8.14): {@code valor} de
+     * dano por turno durante {@code turnos} turnos. Es una proteccion, asi que
+     * acaba cuando empieza el siguiente turno del portador; los {@code turnos}
+     * son los del veneno que deja, no los de esta proteccion.
+     */
+    ENVENENA_AL_ATACANTE(Familia.PROTECCION),
 
     /** Pierde vida al empezar su turno (Cierra sangrienta, Daga purulenta...). */
     DANO_POR_TURNO(Familia.POR_TURNO),

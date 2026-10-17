@@ -1,13 +1,18 @@
 package com.nexusbattles.ms_identidad.rbac.controller;
 
+import com.nexusbattles.ms_identidad.admin.service.UsuarioNoEncontradoException;
+import com.nexusbattles.ms_identidad.auth.codigos.Problemas;
 import com.nexusbattles.ms_identidad.auth.service.JwtService;
 import com.nexusbattles.ms_identidad.rbac.dto.AsignarRolRequest;
 import com.nexusbattles.ms_identidad.rbac.model.Action;
 import com.nexusbattles.ms_identidad.rbac.security.RequirePermission;
 import com.nexusbattles.ms_identidad.rbac.service.RoleAssignmentService;
+import com.nexusbattles.ms_identidad.rbac.service.UltimoSuperAdministradorException;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -41,11 +46,14 @@ public class RoleAssignmentController {
         String ipOrigen =
             obtenerIpCliente(request);
 
+        Object uidActor = request.getAttribute("uidActual");
         roleAssignmentService.asignarRol(
             usuarioId,
             datos.getNuevoRol(),
             administradorId,
-            ipOrigen
+            ipOrigen,
+            datos.getMotivo(),
+            uidActor == null ? null : uidActor.toString()
         );
 
         return ResponseEntity.ok(
@@ -54,6 +62,20 @@ public class RoleAssignmentController {
                 "Rol actualizado correctamente"
             )
         );
+    }
+
+    /** rbac.yaml: 404 si la cuenta no existe (antes salia un 500 sin cuerpo). */
+    @ExceptionHandler(UsuarioNoEncontradoException.class)
+    public ResponseEntity<ProblemDetail> noEncontrada(RuntimeException error, HttpServletRequest request) {
+        return Problemas.de(HttpStatus.NOT_FOUND, "cuenta-no-encontrada", "Cuenta no encontrada",
+            error.getMessage(), request.getRequestURI());
+    }
+
+    /** 409: quedaria el sistema sin Super Administrador. */
+    @ExceptionHandler(UltimoSuperAdministradorException.class)
+    public ResponseEntity<ProblemDetail> ultimoSuper(RuntimeException error, HttpServletRequest request) {
+        return Problemas.de(HttpStatus.CONFLICT, "ultimo-super-administrador", "Último Super Administrador",
+            error.getMessage(), request.getRequestURI());
     }
 
     private String obtenerAdministrador(

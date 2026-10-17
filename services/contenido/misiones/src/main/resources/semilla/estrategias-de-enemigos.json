@@ -1,0 +1,141 @@
+{
+  "version": "2026-10-01",
+  "notas": [
+    "HU-SIM-004, RF-MIS-20 (7.8.6): «la IA controla a los enemigos con estrategias predefinidas». Una estrategia por prototipo de la Tabla 7 y por tramo de nivel, hasta tres rotaciones por prioridad (7.8.5) y el ataque básico de respaldo que ya trae el decisor de héroes.",
+    "Fuente de todo nombre: Tabla 7 (6.1.2), Boveda/02-producto/reglas/habilidades-y-mejoras.md. Los tramos son los desbloqueos de RC-01: una estrategia 'desdeNivel' 1 vale en los niveles 1 a 3, la de 4 en 4 a 7 y la de 8 de ahí en adelante. El costo en poder, la recarga y el turno de cada jugada los aplica el servicio de héroes (HU-SIM-002) y el motor de combate: aquí solo se escribe el orden de preferencia.",
+    "CRITERIO 1 (decisión de diseño): las habilidades de ataque (las que dan bono al ataque o al daño) van en las primeras rotaciones; las de defensa y sanación, en la de menor prioridad. La regla de héroes no condiciona una rotación a la vida del enemigo (solo exige que tenga vida, pendiente P-E de HU-SIM-002), así que una rotación de defensa o sanación se usa en cuanto las de ataque no son viables ese turno (sin poder o en recarga), no porque esté herido.",
+    "CRITERIO 2 (decisión de diseño): dentro de la misma familia, primero la habilidad de mayor valor esperado, sumando los bonos al ataque y al daño que escribe la Tabla 7 (los dados cuentan por su media, nDm = n x (m+1)/2; los efectos sobre el rival y los bonos sin cifra no suman); a igual valor, el orden de la tabla. Valores: Golpe con escudo 2; Embate sangriento 3, Lanza de los dioses 2, Golpe de tormenta 12,5; Misiles de magma 3, Vulcano 18, Pare de fuego 1; Lluvia de hielo 4, Cono de hielo 2, Bola de hielo 2; Flor de loto 18, Agonía 10, Piquete 3; Cortada 2, Machetazo 10, Planazo 10. En defensa y sanación el mismo criterio da: Defensa feroz antes que Mano de piedra; Canto del Bosque (2d6 durante dos turnos a todo el grupo), Vínculo Natural (+2 por dos turnos), Toque de la Vida (+2); Neutralización de Efectos (+2 y 2d4) y Curación Directa (+2).",
+    "PROVISIONAL (decisión del PO pendiente): el documento no escribe la estrategia de ningún enemigo. Estas son el criterio de los dos puntos anteriores aplicado a la Tabla 7; el PO puede cambiar el orden de cualquier rotación editando este archivo, sin tocar código. Las bonificaciones sin valor numérico (el retorno de daño de Pare de fuego, '(0dx)'; el daño que resta Bola de hielo, '(0d4)') no se estiman: por eso Pare de fuego va último.",
+    "PROVISIONAL: Reanimación no entra en ninguna estrategia. La Tabla 7 la define como 'sana el 100% de la vida del compañero' y el motor de combate solo admite como objetivo a un compañero; en una misión el enemigo pelea solo, así que el motor la rechazaría (409) en cada turno. Si algún día un enemigo pelea acompañado, se agrega aquí.",
+    "PROVISIONAL: Chamán y Médico como enemigos. El Chamán 'tiene vedado infligir daño' (Tabla 6): su estrategia solo sana y su 'ataque básico de respaldo' es la sanación básica. Ninguna misión publicada los usa como enemigos; se escriben para que los ocho prototipos de la Tabla 7 estén cubiertos."
+  ],
+  "estrategias": [
+    {
+      "id": "guerrero-tanque-n1", "prototipo": "Guerrero Tanque", "desdeNivel": 1,
+      "rotaciones": [["Golpe con escudo"]],
+      "justificacion": "Solo tiene Golpe con escudo (+2 al ataque, 2 de poder): es su única jugada de ataque; los turnos en que se recarga, ataque básico."
+    },
+    {
+      "id": "guerrero-tanque-n4", "prototipo": "Guerrero Tanque", "desdeNivel": 4,
+      "rotaciones": [["Golpe con escudo"], ["Mano de piedra"]],
+      "justificacion": "Golpe con escudo es su único ataque. Mano de piedra (+12 a la defensa, 4 de poder) va sola en la de menor prioridad: se juega cuando el golpe está en recarga y le alcanza el poder."
+    },
+    {
+      "id": "guerrero-tanque-n8", "prototipo": "Guerrero Tanque", "desdeNivel": 8,
+      "rotaciones": [["Golpe con escudo"], ["Defensa feroz"], ["Mano de piedra"]],
+      "justificacion": "Golpe con escudo primero (su único ataque). Después las dos defensas, la de más efecto antes: Defensa feroz (6 de poder, inmune al daño físico) y Mano de piedra (4 de poder, +12 a la defensa)."
+    },
+
+    {
+      "id": "guerrero-armas-n1", "prototipo": "Guerrero Armas", "desdeNivel": 1,
+      "rotaciones": [["Embate sangriento"]],
+      "justificacion": "Su única habilidad es de ataque: Embate sangriento (+2 al ataque, +1 de daño, 4 de poder)."
+    },
+    {
+      "id": "guerrero-armas-n4", "prototipo": "Guerrero Armas", "desdeNivel": 4,
+      "rotaciones": [["Embate sangriento"], ["Lanza de los dioses"]],
+      "justificacion": "Las dos son de ataque y cuestan 4: Embate sangriento (+2 al ataque, +1 al daño; valor 3) antes que Lanza de los dioses (+2 al daño; valor 2)."
+    },
+    {
+      "id": "guerrero-armas-n8", "prototipo": "Guerrero Armas", "desdeNivel": 8,
+      "rotaciones": [["Golpe de tormenta"], ["Embate sangriento"], ["Lanza de los dioses"]],
+      "justificacion": "Las tres son de ataque. Golpe de tormenta (+(3d6) al ataque, +2 al daño; valor 12,5; 6 de poder) abre; Embate sangriento (3) y Lanza de los dioses (2) rellenan los turnos en que no alcanza el poder o está en recarga."
+    },
+
+    {
+      "id": "mago-fuego-n1", "prototipo": "Mago Fuego", "desdeNivel": 1,
+      "rotaciones": [["Misiles de magma"]],
+      "justificacion": "Su única habilidad es de ataque: Misiles de magma (+1 al ataque, +2 de daño, 2 de poder)."
+    },
+    {
+      "id": "mago-fuego-n4", "prototipo": "Mago Fuego", "desdeNivel": 4,
+      "rotaciones": [["Vulcano"], ["Misiles de magma"]],
+      "justificacion": "Vulcano (+3 al ataque, +(3d9) al daño; valor 18; 6 de poder) abre y Misiles de magma (valor 3; 2 de poder) rellena los turnos de recarga o de poco poder."
+    },
+    {
+      "id": "mago-fuego-n8", "prototipo": "Mago Fuego", "desdeNivel": 8,
+      "rotaciones": [["Vulcano"], ["Misiles de magma"], ["Pare de fuego"]],
+      "justificacion": "Vulcano (18) y Misiles de magma (3) como en el nivel 4. Pare de fuego (+1 al ataque y devuelve el daño del turno anterior; 4 de poder) va último: su retorno de daño tiene un dado '(0dx)' sin cifra, no se puede estimar y solo suma +1 comprobable."
+    },
+
+    {
+      "id": "mago-hielo-n1", "prototipo": "Mago Hielo", "desdeNivel": 1,
+      "rotaciones": [["Lluvia de hielo"]],
+      "justificacion": "Su única habilidad es de ataque: Lluvia de hielo (+2 al ataque, +2 de daño, 2 de poder)."
+    },
+    {
+      "id": "mago-hielo-n4", "prototipo": "Mago Hielo", "desdeNivel": 4,
+      "rotaciones": [["Lluvia de hielo"], ["Cono de hielo"]],
+      "justificacion": "Lluvia de hielo (valor 4; 2 de poder) antes que Cono de hielo (+2 al daño, y le quita (1d3) al ataque del rival dos turnos; valor 2 propio; 6 de poder): la barata es la que se puede repetir."
+    },
+    {
+      "id": "mago-hielo-n8", "prototipo": "Mago Hielo", "desdeNivel": 8,
+      "rotaciones": [["Lluvia de hielo"], ["Cono de hielo"], ["Bola de hielo"]],
+      "justificacion": "Las tres son de ataque. Con el mismo valor propio (+2), Cono de hielo y Bola de hielo van en el orden de la tabla; el efecto de Bola de hielo sobre el daño del rival, '(0d4)', no tiene cifra firme."
+    },
+
+    {
+      "id": "picaro-veneno-n1", "prototipo": "Pícaro Veneno", "desdeNivel": 1,
+      "rotaciones": [["Flor de loto"]],
+      "justificacion": "Su única habilidad es de ataque: Flor de loto (+(4d8) al daño; valor 18; 2 de poder)."
+    },
+    {
+      "id": "picaro-veneno-n4", "prototipo": "Pícaro Veneno", "desdeNivel": 4,
+      "rotaciones": [["Flor de loto"], ["Agonía"]],
+      "justificacion": "Flor de loto (18; 2 de poder) antes que Agonía (+(2d9) de daño; valor 10; 4 de poder)."
+    },
+    {
+      "id": "picaro-veneno-n8", "prototipo": "Pícaro Veneno", "desdeNivel": 8,
+      "rotaciones": [["Flor de loto"], ["Agonía"], ["Piquete"]],
+      "justificacion": "Flor de loto (18), Agonía (10) y Piquete (+1 al ataque por dos turnos, +2 al daño por uno; valor 3; 4 de poder)."
+    },
+
+    {
+      "id": "picaro-machete-n1", "prototipo": "Pícaro Machete", "desdeNivel": 1,
+      "rotaciones": [["Cortada"]],
+      "justificacion": "Su única habilidad es de ataque: Cortada (+2 al daño por dos turnos, 2 de poder)."
+    },
+    {
+      "id": "picaro-machete-n4", "prototipo": "Pícaro Machete", "desdeNivel": 4,
+      "rotaciones": [["Machetazo"], ["Cortada"]],
+      "justificacion": "Machetazo (+(2d8) al daño, +1 al ataque; valor 10; 4 de poder) antes que Cortada (valor 2; 2 de poder)."
+    },
+    {
+      "id": "picaro-machete-n8", "prototipo": "Pícaro Machete", "desdeNivel": 8,
+      "rotaciones": [["Machetazo"], ["Planazo"], ["Cortada"]],
+      "justificacion": "Machetazo y Planazo (+(2d8) al ataque, +1 al daño) valen 10 y cuestan 4: van en el orden de la tabla. Cortada (2) rellena."
+    },
+
+    {
+      "id": "chaman-n1", "prototipo": "Chamán", "desdeNivel": 1,
+      "rotaciones": [["Toque de la Vida"]],
+      "justificacion": "Sanador: no ataca. Su única habilidad es Toque de la Vida (+2 de sanación, 2 de poder); su respaldo es la sanación básica."
+    },
+    {
+      "id": "chaman-n4", "prototipo": "Chamán", "desdeNivel": 4,
+      "rotaciones": [["Vínculo Natural"], ["Toque de la Vida"]],
+      "justificacion": "Sin ataque que priorizar, primero la de más sanación: Vínculo Natural (+2 de sanación por dos turnos; 4 de poder) y Toque de la Vida (+2; 2 de poder)."
+    },
+    {
+      "id": "chaman-n8", "prototipo": "Chamán", "desdeNivel": 8,
+      "rotaciones": [["Canto del Bosque"], ["Vínculo Natural"], ["Toque de la Vida"]],
+      "justificacion": "Canto del Bosque (sana +(2d6) durante dos turnos; 6 de poder) abre, luego Vínculo Natural y Toque de la Vida."
+    },
+
+    {
+      "id": "medico-n1", "prototipo": "Médico", "desdeNivel": 1,
+      "rotaciones": [["Curación Directa"]],
+      "justificacion": "Sanador: no ataca. Su única habilidad es Curación Directa (+2 de sanación, 2 de poder); su respaldo es la sanación básica."
+    },
+    {
+      "id": "medico-n4", "prototipo": "Médico", "desdeNivel": 4,
+      "rotaciones": [["Neutralización de Efectos"], ["Curación Directa"]],
+      "justificacion": "Neutralización de Efectos (+2 y +(2d4) de sanación; 4 de poder) antes que Curación Directa (+2; 2 de poder)."
+    },
+    {
+      "id": "medico-n8", "prototipo": "Médico", "desdeNivel": 8,
+      "rotaciones": [["Neutralización de Efectos"], ["Curación Directa"]],
+      "justificacion": "Igual que en el nivel 4: Reanimación (sana al compañero, cuesta todo el poder) no se puede jugar en un duelo sin compañero y el motor la rechazaría."
+    }
+  ]
+}

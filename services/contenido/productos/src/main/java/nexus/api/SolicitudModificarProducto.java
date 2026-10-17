@@ -59,6 +59,14 @@ public record SolicitudModificarProducto(
         public SolicitudModificarProducto {
         }
 
+        /** Campos portables de una plantilla de diseño (HU-PRD-011). */
+        public static SolicitudModificarProducto soloDiseno(String imagen, String descripcion) {
+                return new SolicitudModificarProducto(
+                                null, imagen, descripcion, null, null, null, null, null, null,
+                                null, null, null, null, null, null, null, null, null, null, null,
+                                null);
+        }
+
         /** La forma anterior a B4, sin promocion (pruebas previas). */
         public SolicitudModificarProducto(
                         String nombre,

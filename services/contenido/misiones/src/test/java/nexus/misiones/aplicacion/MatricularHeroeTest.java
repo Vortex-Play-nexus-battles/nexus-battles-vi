@@ -160,6 +160,24 @@ class MatricularHeroeTest {
     }
 
     @Test
+    @DisplayName("al completar el mazo se valida otra vez y la mision puede iniciar")
+    void revalidaDespuesDeCorregirElEquipo() {
+        inventario.conHeroe("h-3", JUGADOR, "p-armas", false);
+
+        assertThatThrownBy(() -> matricular.matricular(JUGADOR, solicitud("templo-olvidado", "h-3")))
+                .isInstanceOf(HeroeNoApto.class)
+                .hasMessageContaining("completar su mazo");
+        assertThat(inventario.bloqueados).isEmpty();
+
+        inventario.equipados.add("h-3");
+
+        Matricula matricula = matricular.matricular(JUGADOR, solicitud("templo-olvidado", "h-3"));
+
+        assertThat(matricula.ejecucion().estado()).isEqualTo(EstadoEjecucion.EN_PROGRESO);
+        assertThat(inventario.bloqueados).containsEntry("h-3", matricula.ejecucion().id());
+    }
+
+    @Test
     @DisplayName("una estrategia que heroes rechaza: 422 con su motivo, y el heroe queda libre")
     void estrategiaRechazada() {
         heroes.motivoDeRechazo = "La rotación 1 usa una habilidad que Guerrero Armas no posee en nivel 1.";

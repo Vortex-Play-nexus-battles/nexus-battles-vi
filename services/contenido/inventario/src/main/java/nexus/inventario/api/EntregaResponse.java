@@ -12,6 +12,7 @@ public record EntregaResponse(
         OrigenDeEntrega origen,
         String referencia,
         List<ElementoInventarioResponse> elementos,
+        List<String> yaTenia,
         Instant entregadaEn) {
 
     static EntregaResponse de(Entrega entrega) {
@@ -21,6 +22,7 @@ public record EntregaResponse(
                 entrega.origen(),
                 entrega.referencia(),
                 entrega.elementos().stream().map(ElementoInventarioResponse::de).toList(),
+                entrega.yaTenia(),
                 entrega.entregadaEn());
     }
 }

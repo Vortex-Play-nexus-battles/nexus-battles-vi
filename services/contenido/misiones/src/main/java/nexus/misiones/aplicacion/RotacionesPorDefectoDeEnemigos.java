@@ -15,9 +15,10 @@ import nexus.misiones.dominio.simulacion.DecisionDeTurno;
  * lo que un jugador sin ideas pondria con el prototipo, y usa lo mismo que el
  * heroe: las habilidades validas las dice heroes, que es su dueno.
  *
- * <p>Provisional: el documento no escribe la estrategia de cada enemigo. Cuando
- * HU-SIM-004 las declare en las misiones, estas ganan y esto solo cubre lo que
- * no se haya escrito.
+ * <p>Es la ultima opcion, el respaldo de {@link EstrategiasPredefinidas}
+ * (HU-SIM-004): se juega solo si la mision no escribe las rotaciones del enemigo y
+ * su prototipo y nivel no tienen una estrategia predefinida que heroes acepte.
+ * No distingue ataque de defensa ni de sanacion: por eso ya no es la norma.
  *
  * <p>Las habilidades de un prototipo en un nivel son datos fijos del catalogo:
  * se preguntan una sola vez por prototipo y nivel y se recuerdan, igual que

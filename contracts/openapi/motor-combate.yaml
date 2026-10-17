@@ -55,14 +55,15 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Motor de combate
-  version: 1.2.1
+  version: 1.3.0
   description: |
     Reglas del combate de THE NEXUS BATTLES VI (seccion 6 del documento del
     curso): tirada de ataque contra la defensa, tabla de efectos de 8.000
     filas con indice de distribucion normal, criticos, las 24 acciones de la
     Tabla 7 con su coste de poder y su turno de carga, las 8 epicas de la
-    Tabla 20 con sus dos turnos de recarga, el multiplicador de nivel, los
-    efectos de combate del equipamiento (Tablas 8 a 19) y la sanacion.
+    Tabla 20 y «Velo de Sombras», la epica del Master del Templo (7.8.14),
+    con sus dos turnos de recarga, el multiplicador de nivel, los efectos de
+    combate del equipamiento (Tablas 8 a 19) y la sanacion.
 
     **Sin estado.** Cada peticion se resuelve entera y no deja rastro. Quien
     lleva el combate es `salas-partidas`.
@@ -187,7 +188,8 @@ paths:
       description: |
         Lo que ocurre al empezar el turno de `combatiente`, en este orden:
           1. terminan sus protecciones «hasta su proximo turno» (Mano de
-             piedra, Defensa feroz, Frio concentrado, Toma y lleva);
+             piedra, Defensa feroz, Frio concentrado, Toma y lleva, Velo de
+             Sombras);
           2. se aplican sus efectos por turno (sangrado de Cierra sangrienta
              o Daga purulenta, sanacion de Canto del Bosque, Yerbabuena o
              Benditas) y se descuentan;
@@ -353,7 +355,8 @@ components:
           description: |
             `ATAQUE_BASICO`, `SANACION_BASICA`, el nombre de una accion de la
             Tabla 7 tal como lo publica el catalogo («Golpe con escudo»), el
-            nombre de una epica de la Tabla 20 («Golpe de defensa») o
+            nombre de una epica («Golpe de defensa», de la Tabla 20, o
+            «Velo de Sombras», de 7.8.14) o
             `DECISION_DE_LA_MAQUINA`.
           example: Golpe con escudo
         ejecutor:
@@ -457,9 +460,12 @@ components:
             (+1 al ataque, +2 de vida...) ya vienen en `estadisticas`.
         epicas:
           type: array
-          maxItems: 8
+          maxItems: 9
           items: { type: string }
-          description: Epicas de la Tabla 20 que el heroe puede usar en este combate.
+          description: |
+            Epicas que el heroe puede usar en este combate: las 8 de la Tabla
+            20 y «Velo de Sombras» (7.8.14), la del Master del Templo. Sin
+            repetidas: nueve es todo lo que existe.
         ultimoDanoRecibido:
           type: [object, 'null']
           description: El ultimo golpe que recibio y de quien («Pare de fuego» lo retorna).
@@ -540,6 +546,7 @@ components:
         - REDUCE_MAGICO        # resta al dano magico que recibe (Defensa feroz)
         - INMUNE_TOTAL         # no recibe dano (Frio concentrado)
         - REFLEJA_MITAD        # recibe la mitad y retorna el resto (Toma y lleva)
+        - ENVENENA_AL_ATACANTE # quien lo golpea pierde `valor` de vida por turno durante `turnosRestantes` turnos (Velo de Sombras, 1.3.0)
         - DANO_POR_TURNO       # pierde vida al empezar su turno
         - SANACION_POR_TURNO   # recupera vida al empezar su turno
         - VINCULO_REANIMACION  # si cae, se reanima con el 20 % (Reanimador 3000)

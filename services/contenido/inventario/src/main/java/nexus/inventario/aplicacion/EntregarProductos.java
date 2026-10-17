@@ -3,9 +3,11 @@ package nexus.inventario.aplicacion;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import nexus.inventario.dominio.ClaveDeEntregaOcupadaException;
 import nexus.inventario.dominio.ConflictoDeEscrituraException;
@@ -54,6 +56,18 @@ import org.springframework.stereotype.Service;
  *
  * <p>No consume tiraje: lo reserva quien vende, con
  * {@code POST /api/v1/productos/{id}/adquisiciones}.
+ *
+ * <h2>Una epica no se tiene dos veces</h2>
+ *
+ * Una epica es una habilidad que el jugador aprende (Tabla 20): tenerla dos
+ * veces no le da nada. Si el jugador ya tiene un elemento EPICA de ese
+ * producto, la entrega no crea otro: lo anota en {@code yaTenia} y el resto de
+ * la entrega sigue su curso. Vale para quien la pida (la mision que derrota a
+ * un Master otra vez, el premio de un torneo): la regla vive aqui porque el
+ * inventario es la fuente unica de lo que el jugador tiene. Se decide al
+ * planear, antes de registrar la entrega; con dos entregas distintas del mismo
+ * jugador que llegan a la vez, ambas pueden ver que no la tiene (la lectura no
+ * bloquea la escritura de la otra).
  */
 @Service
 public class EntregarProductos {
@@ -105,10 +119,12 @@ public class EntregarProductos {
             return retomar(previa.get(), huella);
         }
 
-        List<ElementoInventario> planeados = planear(solicitud);
+        Set<String> yaTenia = new LinkedHashSet<>();
+        List<ElementoInventario> planeados = planear(solicitud, yaTenia);
         Entrega pendiente = Entrega.pendiente(
                 UUID.randomUUID().toString(), clave, huella, solicitud.uid().toString(), solicitud.origen(),
-                solicitud.referencia(), solicitud.productos(), planeados, solicitante, reloj.instant());
+                solicitud.referencia(), solicitud.productos(), planeados, List.copyOf(yaTenia), solicitante,
+                reloj.instant());
         try {
             entregas.registrar(pendiente);
         } catch (ClaveDeEntregaOcupadaException otraPeticionConLaMismaClave) {
@@ -163,10 +179,15 @@ public class EntregarProductos {
         }
     }
 
-    /** Valida cada producto una vez y planea sus elementos: tipo, nombre y parte los decide el catalogo. */
-    private List<ElementoInventario> planear(SolicitudDeEntrega solicitud) {
+    /**
+     * Valida cada producto una vez y planea sus elementos: tipo, nombre y parte los decide el catalogo.
+     *
+     * @param yaTenia recibe los productos EPICA que el jugador ya tenia (o que la propia entrega ya da)
+     */
+    private List<ElementoInventario> planear(SolicitudDeEntrega solicitud, Set<String> yaTenia) {
         Map<String, ResolutorDeProducto.DetalleProducto> vistos = new LinkedHashMap<>();
         List<ElementoInventario> planeados = new ArrayList<>();
+        Set<String> epicasPropias = null;
         for (LineaDeEntrega linea : solicitud.productos()) {
             ResolutorDeProducto.DetalleProducto producto =
                     vistos.computeIfAbsent(linea.productoId(), this::productoEntregable);
@@ -178,13 +199,29 @@ public class EntregarProductos {
             String nombre = producto.nombre() == null || producto.nombre().isBlank()
                     ? linea.productoId()
                     : producto.nombre();
+            if (tipo == TipoElementoInventario.EPICA && epicasPropias == null) {
+                epicasPropias = epicasQueTiene(solicitud.uid().toString());
+            }
             for (int unidad = 0; unidad < linea.cantidad(); unidad++) {
+                if (tipo == TipoElementoInventario.EPICA && !epicasPropias.add(linea.productoId())) {
+                    yaTenia.add(linea.productoId());
+                    continue;
+                }
                 planeados.add(ElementoInventario.entregado(
                         UUID.randomUUID().toString(), linea.productoId(), tipo, nombre, parte,
                         solicitud.origen(), solicitud.referencia()));
             }
         }
         return planeados;
+    }
+
+    /** Los productos EPICA que el jugador tiene ahora, en un conjunto al que la entrega va sumando lo que da. */
+    private Set<String> epicasQueTiene(String uid) {
+        Set<String> epicas = new LinkedHashSet<>();
+        inventarios.buscarPorPropietario(uid).ifPresent(inventario -> inventario.elementos().stream()
+                .filter(elemento -> elemento.tipo() == TipoElementoInventario.EPICA)
+                .forEach(elemento -> epicas.add(elemento.productoId())));
+        return epicas;
     }
 
     private ResolutorDeProducto.DetalleProducto productoEntregable(String productoId) {

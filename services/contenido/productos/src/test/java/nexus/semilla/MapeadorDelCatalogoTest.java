@@ -86,7 +86,7 @@ class MapeadorDelCatalogoTest {
     private static final EntradaCatalogo EPICA = new EntradaCatalogo(
             "epica-guerrero-tanque-golpe-de-defensa", "EPICA", "Golpe de defensa", null,
             "Guerrero Tanque", null, null, null, null,
-            "+1 al ataque", "+4 al daño, +2% de crítico", "0.04%", null,
+            "+1 al ataque", "+4 al daño, +2% de crítico", "4%", null,
             "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes");
 
     private static final PreciosDemostracion PRECIOS = new PreciosDemostracion(
@@ -221,7 +221,7 @@ class MapeadorDelCatalogoTest {
         assertEquals("+4 al daño, +2% de crítico", s.efectoPotenciado());
         assertEquals(2, s.turnosRecarga());
         assertEquals(MapeadorDelCatalogo.identificador("heroe-guerrero-tanque"), s.heroe());
-        assertTrue(s.descripcion().contains("0.04%"), s.descripcion());
+        assertTrue(s.descripcion().contains("Máster en una misión: 4%."), s.descripcion());
     }
 
     @Test
@@ -291,7 +291,7 @@ class MapeadorDelCatalogoTest {
     // --------------------------------------------------- el archivo real
 
     @Test
-    @DisplayName("los 56 productos del JSON real pasan las validaciones del alta")
+    @DisplayName("los 57 productos del JSON real pasan las validaciones del alta")
     void catalogoRealCompleto() throws Exception {
         CatalogoInicial real;
         try (InputStream json = getClass().getResourceAsStream("/semilla/catalogo-inicial.json")) {
@@ -299,8 +299,8 @@ class MapeadorDelCatalogoTest {
         }
 
         List<EntradaCatalogo> todas = real.todas();
-        assertEquals(56, todas.size());
-        assertEquals(56, todas.stream().map(EntradaCatalogo::id).distinct().count(),
+        assertEquals(57, todas.size());
+        assertEquals(57, todas.stream().map(EntradaCatalogo::id).distinct().count(),
                 "los slugs deben ser unicos");
 
         Map<TipoProducto, Long> porTipo = todas.stream()
@@ -322,7 +322,7 @@ class MapeadorDelCatalogoTest {
                 TipoProducto.ARMA, 16L,
                 TipoProducto.ARMADURA, 16L,
                 TipoProducto.ITEM, 8L,
-                TipoProducto.EPICA, 8L), porTipo);
+                TipoProducto.EPICA, 9L), porTipo);
     }
 
     @Test
@@ -339,5 +339,36 @@ class MapeadorDelCatalogoTest {
 
         assertEquals(3, conAtaque);
         assertEquals(13, real.armas().size() - conAtaque);
+    }
+
+    @Test
+    @DisplayName("fase 2 de arte: los 57 productos del JSON real traen su WebP de shared/ui-kit/arte, sin repetir archivo")
+    void cadaProductoTraeSuArte() throws Exception {
+        CatalogoInicial real;
+        try (InputStream json = getClass().getResourceAsStream("/semilla/catalogo-inicial.json")) {
+            real = SemillaDelCatalogo.leer(json);
+        }
+
+        java.util.Set<String> vistas = new java.util.HashSet<>();
+        for (CatalogoInicial.EntradaCatalogo e : real.todas()) {
+            SolicitudCrearProducto s = mapeador.aSolicitud(e, real);
+            assertTrue(s.imagen().startsWith("/shared/ui-kit/arte/productos/")
+                    || s.imagen().startsWith("/shared/ui-kit/arte/heroes/"), e.id() + " -> " + s.imagen());
+            assertTrue(s.imagen().endsWith(".webp"), s.imagen());
+            assertTrue(vistas.add(s.imagen()), "imagen repetida: " + s.imagen());
+        }
+        assertEquals(57, vistas.size());
+    }
+
+    @Test
+    @DisplayName("al poner al dia, la semilla cambia la figura provisional o su propio arte, pero respeta la imagen que puso un administrador")
+    void imagenAlPonerAlDia() {
+        String arte = "/shared/ui-kit/arte/heroes/chaman.webp";
+        assertEquals(arte, MapeadorDelCatalogo.imagenAlPonerAlDia("data:image/svg+xml,%3Csvg", arte));
+        assertEquals(arte, MapeadorDelCatalogo.imagenAlPonerAlDia(null, arte));
+        assertEquals(arte, MapeadorDelCatalogo.imagenAlPonerAlDia(" ", arte));
+        assertEquals(arte, MapeadorDelCatalogo.imagenAlPonerAlDia("/shared/ui-kit/arte/heroes/viejo.webp", arte));
+        assertEquals("https://cdn.example/mi-chaman.png",
+                MapeadorDelCatalogo.imagenAlPonerAlDia("https://cdn.example/mi-chaman.png", arte));
     }
 }

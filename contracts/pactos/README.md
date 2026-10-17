@@ -16,6 +16,7 @@ No los escribe nadie a mano: salen de correr las pruebas del consumidor.
 | `ms-subastas-notificaciones.json` | ms-subastas (B8, avisos de 7.7.8) | notificaciones | `NotificacionesPactoTest` |
 | `misiones-ms-inventario.json` | misiones (B9, §7.8.6 y §7.8.10) | ms-inventario | `InventarioPactoTest` de misiones |
 | `comentarios-productos.json` | comentarios (B3: comentar y calificar solo productos que existen) | productos | `CatalogoPactoTest` |
+| `ms-cumplimiento-productos.json` | ms-cumplimiento (SA-18: la bitácora importa las operaciones administrativas del catálogo) | productos | `auditoria/catalogo/ProductosPactoTest` |
 
 ## Regenerarlos
 
@@ -25,6 +26,8 @@ No los escribe nadie a mano: salen de correr las pruebas del consumidor.
 ./gradlew :services:plataforma:comentarios:test --tests '*PactoTest'
 # ms-ecommerce es Maven: desde services/cuentas/ms-ecommerce
 ./mvnw -B test -Dtest='*PactoTest'
+# ms-cumplimiento tambien es Maven: desde services/cuentas/ms-cumplimiento
+./mvnw -B test -Dtest='ProductosPactoTest'
 ```
 
 Si un pacto cambia en un commit que no tocaba el cliente, eso **es** la señal:
@@ -84,10 +87,15 @@ Los estados que hay que poder montar hoy:
 - el héroe está en esa misión
 - el héroe ya volvió de esa misión
 - el jugador puede recibir productos del catálogo
+- el jugador ya tiene la épica (inventario 1.9.0: la entrega no crea otra copia y la nombra en `yaTenia`)
 
 **productos** (B3; lo consume comentarios)
 - el producto existe en el catalogo
 - el producto no existe en el catalogo
+
+**productos** (SA-18; lo consume ms-cumplimiento)
+- hay operaciones administrativas del catalogo
+- no hay operaciones administrativas del catalogo
 
 Los pactos se verifican:
 
@@ -100,6 +108,7 @@ Los pactos se verifican:
 | inventario (ms-ecommerce) | `inventario/.../contratos/VerificacionDelPactoDeEcommerceTest` | servicio arrancado, `EntregarProductos` **real** sobre inventarios, entregas y catálogo en memoria, sin Mongo |
 | notificaciones | `notificaciones/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado con su cadena de seguridad real, `ServicioDeNotificaciones` simulado, PostgreSQL de Testcontainers. La credencial de ejemplo del pacto se sustituye por un token de servicio real del emisor de prueba |
 | productos (comentarios) | `productos/.../contratos/VerificacionDelPactoDeComentariosTest` | servicio arrancado, caso de uso real (`ConsultarProductoServicio`) sobre `ProductoRepository` simulado, sin Mongo |
+| productos (ms-cumplimiento) | `productos/.../contratos/VerificacionDelPactoDeCumplimientoTest` | servicio arrancado con su cadena de seguridad real (solo servicios, y de ellos solo la bitácora), `RegistroDeOperaciones` **real** sobre el almacén de operaciones simulado, sin Mongo. Cada petición se firma con un token de servicio de ms-cumplimiento del emisor de prueba |
 
 Un proveedor con varios consumidores tiene una clase de verificación por
 consumidor, cada una con `@Consumer`: sin él, la clase de un consumidor

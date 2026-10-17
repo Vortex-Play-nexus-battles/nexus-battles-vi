@@ -3,23 +3,23 @@
 **HU-ADM-001 (RF-ADM-001) · catálogo en `services/plataforma/admin-parametros`, migración
 `V1__catalogo_de_parametros.sql`.**
 
-El catálogo tiene **27 claves** (migraciones V1 a V4). Este documento dice, una por una, quién las consume hoy y por
+El catálogo tiene **28 claves** (migraciones V1 a V6). Este documento dice, una por una, quién las consume hoy y por
 qué. No es un inventario decorativo: existe porque «está en el catálogo» y «el sistema lo aplica»
 son dos cosas distintas, y confundirlas es exactamente cómo se llega a un parámetro configurable
 que ningún código lee.
 
 | Grupo | Claves |
 |---|---|
-| A · PRODUCTO — consumida por API | **10** |
-| B · PRODUCTO — sin consumidor todavía | **3** |
+| A · PRODUCTO — consumida por API | **12** |
+| B · PRODUCTO — sin consumidor todavía | **2** |
 | C · TÉCNICA — variable de entorno, y está bien así | **2** |
 | D · INALTERABLE DEL CHARTER — quemada a propósito | **8** |
 | E · DE OTRO EQUIPO | **4** |
-| **Total** | **27** |
+| **Total** | **28** |
 
 ---
 
-## A · PRODUCTO — consumida por API (10)
+## A · PRODUCTO — consumida por API (12)
 
 El servicio pregunta al catálogo por HTTP en cada uso, con caché corta y el valor de su variable
 de entorno como **respaldo**. Cambiar el valor desde el panel de Parámetros cambia el
@@ -37,10 +37,14 @@ comportamiento sin reiniciar nada.
 | `salas.partidas.segundos-por-turno` | `salas-partidas` · `configuracion/ConfiguracionDelCombate.java` (se lee en cada turno; `V4__tiempo_por_turno.sql`, B7) | `SALAS_PARTIDAS_SEGUNDOS_POR_TURNO` (0 = sin límite). Nace **sin valor**: sin límite, como hasta B7 | D-B7-14 / §6.1.3 |
 | `tienda.tasa-cop-usd` | `ms-ecommerce` · `precios/TasasDeCambio.java` (copia de 60 s y 15 min de gracia; `V3__tasas_de_la_tienda.sql`, B5) | Sin respaldo a propósito: sin valor, la tienda solo ofrece COP | D-32 / §7.5 |
 | `tienda.tasa-cop-eur` | `ms-ecommerce` · `precios/TasasDeCambio.java` (copia de 60 s y 15 min de gracia; `V3__tasas_de_la_tienda.sql`, B5) | Sin respaldo a propósito: sin valor, la tienda solo ofrece COP | D-32 / §7.5 |
+| `metricas.umbral-sanciones-por-dia` | `metricas-plataforma` · `moderacion/UmbralesDeModeracion.java` (tablero de moderación, caché de 30 s; SA-4) | `METRICAS_UMBRAL_SANCIONES_POR_DIA` (3 en el despliegue) | D-25 (PO, 3 desde el 2026-10-05; `V6`) / RF-MET-001 |
+| `metricas.umbral-reportes-por-dia` | `metricas-plataforma` · `moderacion/UmbralesDeModeracion.java` (tablero de moderación, caché de 30 s; SA-4) | `METRICAS_UMBRAL_REPORTES_POR_DIA` (vacía). Nace **sin valor**: se publican los conteos y no se evalúa la alerta de reportes | D-25 (mitad de reportes, sin cifra del PO; `V6`) / §7.3.8 |
 
 Las tres de sanciones se consumen desde el Sprint 3 (#580). Las dos de `salas-partidas` se
 añadieron en R12: hasta entonces estaban en el catálogo **y** en una variable de entorno, con el
-resultado de que cambiarlas desde el panel no hacía nada.
+resultado de que cambiarlas desde el panel no hacía nada. Las dos de `metricas-plataforma` pasaron
+al grupo A en SA-4 por el mismo defecto: el panel decía «sin definir» el umbral de sanciones
+mientras la alerta se evaluaba con 3 desde la variable del despliegue, y cambiarlo no hacía nada.
 
 La política de degradación es una sola y vive en un solo sitio:
 `shared/libs/plataforma-resiliencia` · `parametros/LectorDeParametros.java`. El orden, siempre:
@@ -63,7 +67,7 @@ leer, habla del plazo **sin número** en vez de inventar uno.
 
 ---
 
-## B · PRODUCTO — sin consumidor todavía (3)
+## B · PRODUCTO — sin consumidor todavía (2)
 
 Están en el catálogo porque hay una decisión del PO detrás, pero hoy **ningún código las aplica**.
 Se declaran aquí para que nadie las dé por vigentes.
@@ -72,7 +76,6 @@ Se declaran aquí para que nadie las dé por vigentes.
 |---|---|---|
 | `chat.mensajes-por-minuto` | D-16 / HU-JUE-015 | **El límite de ritmo no está implementado.** No hay ningún código que lo aplique: ni en `EnviarMensaje`, ni en `ChatController`, ni en el borde. El catálogo lo deja sin valor (`NULL` = sin límite), que es honesto respecto a lo que hace el sistema, pero el canal sigue expuesto a inundación, como advierte la propia HU. Ponerle un valor no cambiaría nada hasta que exista el contador por jugador y ventana. |
 | `torneos.costo-inscripcion-por-defecto` | D-23 / HU-TOR-002 | Hoy el costo lo teclea quien crea el torneo (`TorneosService.crear`). Este parámetro sería el valor que **propone** el formulario; falta que la vista de creación de torneo lo lea y lo use como valor inicial del campo. Nada más: el servicio ya acepta cualquier costo válido. |
-| `metricas.umbral-sanciones-por-dia` | D-25 / HU-MET-001 | `metricas-plataforma` **sí** lo aplica, pero leyéndolo de `METRICAS_UMBRAL_SANCIONES_POR_DIA` al arrancar (`ModeracionController`), no del catálogo. Sin valor no evalúa ninguna alerta y lo dice (`alertasConfiguradas: false`). Falta que el PO fije la cifra; el día que lo haga, conviene moverlo al grupo A, porque es una decisión de producto que va a querer ajustar. |
 
 ---
 

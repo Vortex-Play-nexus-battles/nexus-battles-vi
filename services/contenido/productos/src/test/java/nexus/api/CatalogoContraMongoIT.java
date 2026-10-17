@@ -126,13 +126,13 @@ class CatalogoContraMongoIT {
         class Semilla {
 
                 @Test
-                @DisplayName("base vacia: el arranque deja el catalogo completo, 56 productos marcados SEMILLA")
+                @DisplayName("base vacia: el arranque deja el catalogo completo, 57 productos marcados SEMILLA")
                 void elArranqueSiembraElCatalogoCompleto() {
                         List<Producto> sembrados = productos.findAll().stream()
                                 .filter(p -> p.origen() == OrigenProducto.SEMILLA)
                                 .toList();
 
-                        assertEquals(56, sembrados.size());
+                        assertEquals(57, sembrados.size());
                         assertTrue(productos.existsById(id("heroe-guerrero-tanque")));
                         assertTrue(productos.existsById(id("epica-medico-reanimador-3000")));
                         // Las pruebas comparten la base: otra puede haber aplicado la v2.
@@ -141,13 +141,13 @@ class CatalogoContraMongoIT {
                 }
 
                 @Test
-                @DisplayName("RG-085: las 8 epicas existen y no tienen precio de venta, para que la tienda no las ofrezca")
+                @DisplayName("RG-085: las 9 epicas existen y no tienen precio de venta, para que la tienda no las ofrezca")
                 void lasEpicasNoSeVenden() {
                         List<Producto> epicas = productos.findAll().stream()
                                 .filter(p -> p.tipo() == TipoProducto.EPICA)
                                 .toList();
 
-                        assertEquals(8, epicas.size());
+                        assertEquals(9, epicas.size());
                         assertTrue(epicas.stream().allMatch(p -> p.precioCreditos() != null && p.precioCreditos() == 0),
                                 "precios en creditos: " + epicas.stream().map(Producto::precioCreditos).toList());
                         assertTrue(epicas.stream().allMatch(p -> p.precioMonedaReal() != null && p.precioMonedaReal().signum() == 0),
@@ -161,7 +161,7 @@ class CatalogoContraMongoIT {
 
                         assertEquals(List.of(), otra.insertados());
                         assertEquals(List.of(), otra.actualizados());
-                        assertEquals(56, otra.existentes().size() + otra.respetados().size());
+                        assertEquals(57, otra.existentes().size() + otra.respetados().size());
                 }
 
                 @Test
@@ -175,15 +175,15 @@ class CatalogoContraMongoIT {
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$.modificadoPor").value(UID_ADMIN.toString()));
 
-                        // El arranque ya aplico la version del archivo (2); la 3 pone al dia lo no tocado.
-                        ResultadoSemilla v2 = semillaConOtraVersion(3).sembrar();
+                        // El arranque ya aplico la version del archivo (3); la 4 pone al dia lo no tocado.
+                        ResultadoSemilla v2 = semillaConOtraVersion(4).sembrar();
 
                         assertTrue(v2.respetados().contains(editado), v2.respetados().toString());
                         assertTrue(v2.actualizados().size() >= 50, "actualizados: " + v2.actualizados().size());
                         Producto respetado = productos.findById(editado).orElseThrow();
                         assertEquals("Descripcion reescrita por el administrador", respetado.descripcion());
-                        assertEquals(2, respetado.semillaVersion());
-                        assertEquals(3, productoDeLaSemilla("item-mago-fuego-anillo-para-piro-explosion").semillaVersion());
+                        assertEquals(3, respetado.semillaVersion());
+                        assertEquals(4, productoDeLaSemilla("item-mago-fuego-anillo-para-piro-explosion").semillaVersion());
                 }
 
                 private SemillaDelCatalogo semillaConOtraVersion(int version) throws IOException {

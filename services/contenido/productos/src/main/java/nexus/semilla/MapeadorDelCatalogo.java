@@ -111,12 +111,12 @@ public class MapeadorDelCatalogo {
 
         return switch (tipo) {
             case HEROE -> new SolicitudCrearProducto(
-                    entrada.nombre(), imagen(tipo), descripcionHeroe(entrada), tipo,
+                    entrada.nombre(), imagenDe(entrada, tipo), descripcionHeroe(entrada), tipo,
                     tiraje, precio, pesos, premium,
                     entrada.prototipo(), null, null, null, null, null, null, null,
                     null, null, null, null, null);
             case ARMA -> new SolicitudCrearProducto(
-                    entrada.nombre(), imagen(tipo), descripcionEquipo(entrada, tipo), tipo,
+                    entrada.nombre(), imagenDe(entrada, tipo), descripcionEquipo(entrada, tipo), tipo,
                     tiraje, precio, pesos, premium,
                     null, null, null, null, null, null, null, null,
                     null, null, null,
@@ -124,20 +124,20 @@ public class MapeadorDelCatalogo {
                             .orElse(PODER_DE_ATAQUE_NEUTRO),
                     NumerosDeLaRegla.porcentaje(entrada.probabilidadCaida()));
             case ARMADURA -> new SolicitudCrearProducto(
-                    entrada.nombre(), imagen(tipo), descripcionEquipo(entrada, tipo), tipo,
+                    entrada.nombre(), imagenDe(entrada, tipo), descripcionEquipo(entrada, tipo), tipo,
                     tiraje, precio, pesos, premium,
                     null, null, null, null, null, null, null, null,
                     NumerosDeLaRegla.bonificacionALaDefensa(entrada.efectos()).orElse(null),
                     parteDe(entrada.parte()), null, null,
                     NumerosDeLaRegla.porcentaje(entrada.probabilidadCaida()));
             case ITEM -> new SolicitudCrearProducto(
-                    entrada.nombre(), imagen(tipo), descripcionEquipo(entrada, tipo), tipo,
+                    entrada.nombre(), imagenDe(entrada, tipo), descripcionEquipo(entrada, tipo), tipo,
                     tiraje, precio, pesos, premium,
                     null, null, null, null, null, null, null, null,
                     null, null, entrada.efectos(), null,
                     NumerosDeLaRegla.porcentaje(entrada.probabilidadCaida()));
             case EPICA -> new SolicitudCrearProducto(
-                    entrada.nombre(), imagen(tipo), descripcionEpica(entrada), tipo,
+                    entrada.nombre(), imagenDe(entrada, tipo), descripcionEpica(entrada), tipo,
                     tiraje, precio, pesos, premium,
                     null, heroeDeLaEpica(entrada, catalogo), null, null, null,
                     TURNOS_RECARGA_EPICA, entrada.efectoGeneral(), entrada.efectoPotenciado(),
@@ -173,7 +173,8 @@ public class MapeadorDelCatalogo {
      */
     public Producto ponerAlDia(Producto existente, SolicitudCrearProducto s, Instant ahora, int semillaVersion) {
         return new Producto(
-                existente.id(), s.nombre(), s.imagen(), s.descripcion(), s.tipo(),
+                existente.id(), s.nombre(), imagenAlPonerAlDia(existente.imagen(), s.imagen()),
+                s.descripcion(), s.tipo(),
                 s.tiraje(), s.precioCreditos(), s.precioMonedaReal(), s.premium(),
                 s.prototipo(), s.heroe(), s.costoPoder(), s.multiplicadorNivel(),
                 s.turnosCarga(), s.turnosRecarga(), s.efectoGeneral(), s.efectoPotenciado(),
@@ -262,6 +263,27 @@ public class MapeadorDelCatalogo {
         }
         Matcher tabla = TABLA.matcher(entrada.fuente());
         return tabla.find() ? " Reglas del juego, " + tabla.group() + "." : "";
+    }
+
+    /** Raiz de los WebP del arte del juego (docs/arte/manifest-assets.json). */
+    static final String RAIZ_DEL_ARTE = "/shared/ui-kit/arte/";
+
+    /** La imagen que declara la entrada; sin ella, la figura provisional del tipo. */
+    private static String imagenDe(EntradaCatalogo entrada, TipoProducto tipo) {
+        return entrada.imagen() == null || entrada.imagen().isBlank() ? imagen(tipo) : entrada.imagen();
+    }
+
+    /**
+     * La imagen al poner al dia un producto sembrado: la semilla solo
+     * reemplaza lo que es suyo — la figura provisional, una imagen vacia o una
+     * ruta del arte del juego —. Cualquier otra imagen la puso un
+     * administrador y se respeta, aunque el producto no conste como editado.
+     */
+    static String imagenAlPonerAlDia(String actual, String deLaSemilla) {
+        boolean esDeLaSemilla = actual == null || actual.isBlank()
+                || actual.startsWith("data:image/svg+xml")
+                || actual.startsWith(RAIZ_DEL_ARTE);
+        return esDeLaSemilla ? deLaSemilla : actual;
     }
 
     /**

@@ -1,5 +1,5 @@
 """Eventos de combate armados a mano, en el formato del documento de SIM-003
-(`EventoDeCombateDocumento`, mas `oponente` y la trazabilidad de SIM-008)."""
+(`EventoDeCombateDocumento`, mas `oponente` y la trazabilidad de SIM-008 y de SIM-004)."""
 
 EJECUCION = "0c7a2d9e-4f8b-4a55-9b65-6f1d3b2f0a11"
 
@@ -14,7 +14,7 @@ def evento(secuencia=1, encuentro=1, turno=1, lado="HEROE", prototipo="Guerrero 
            oponente_lado="ENEMIGO", oponente_prototipo="Mago Fuego", oponente_nivel=4,
            antes=None, despues=None, ejecutada="Embate sangriento", decidida=None, costo=4,
            dano=12, en_valor_base=False, candidatas=None, decidida_por="REGLA", ejecucion=EJECUCION,
-           sin_jugada=False):
+           sin_jugada=False, estrategia=None, estrategia_id=None):
     antes = antes or {"actor": estado(), "oponente": estado(vida=40, vida_maxima=40, poder=10, poder_maximo=10)}
     despues = despues or {"actor": estado(poder=4), "oponente": estado(vida=28, vida_maxima=40, poder=10,
                                                                          poder_maximo=10)}
@@ -35,5 +35,10 @@ def evento(secuencia=1, encuentro=1, turno=1, lado="HEROE", prototipo="Guerrero 
                                 "danoAplicado": dano, "critico": False, "sucesos": []}}
         if candidatas is not None:
             jugada["candidatas"] = [{"accion": a, "costoDePoder": c} for a, c in candidatas]
+        if estrategia is not None:
+            # HU-SIM-004: solo las jugadas de un enemigo con rotaciones traen de donde salieron.
+            jugada["estrategia"] = estrategia
+            if estrategia_id is not None:
+                jugada["estrategiaId"] = estrategia_id
         doc["jugada"] = jugada
     return doc

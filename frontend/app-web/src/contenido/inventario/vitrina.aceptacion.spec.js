@@ -9,7 +9,7 @@
  * legibilidad dependen del motor de maquetacion.
  */
 import { test, expect } from '@playwright/test';
-import { prepararPagina } from './entorno-de-prueba.js';
+import { colorDelToken, prepararPagina } from './entorno-de-prueba.js';
 
 const JUGADOR = 'jugador-de-prueba';
 
@@ -69,6 +69,22 @@ function hayDesplazamientoHorizontal(page) {
 }
 
 test.describe('Vitrina del inventario', () => {
+  /*
+   * Tarea #802 — decision del PO tras la revision del producto del 24-sep: la
+   * seccion se llama "Mi inventario" en los tres sitios donde el jugador la
+   * ve. La barra ya lo decia; la pestana del navegador seguia diciendo
+   * "Vitrina del inventario", que es como se llamaba el modulo por dentro, no
+   * como lo llama el jugador.
+   */
+  test('La pestana del navegador dice Mi inventario', async ({ page }) => {
+    await conInventarioDe(page, 16);
+    await abrirVitrina(page);
+
+    // La convencion del repo es "<Nombre> · The Nexus Battles VI"; lo que
+    // fija esta tarea es el nombre: antes decia "Vitrina del inventario".
+    await expect(page).toHaveTitle('Mi inventario · The Nexus Battles VI');
+  });
+
   test('La vitrina muestra dieciseis productos en la resolucion de referencia', async ({
     page,
   }) => {
@@ -161,7 +177,10 @@ test.describe('Vitrina del inventario', () => {
     await expect(vacio).toContainText(/todav[ií]a no tienes objetos/i);
 
     // "no se muestra ningun mensaje de error"
-    await expect(page.locator('.estado-error')).toHaveCount(0);
+    // `:visible` y no a secas: la pestana de heroes deja un `.estado-error`
+    // **oculto** cuando su catalogo no esta simulado, y aqui no lo esta. Lo
+    // que el criterio pide es que al jugador no se le **muestre** un error.
+    await expect(page.locator('.estado-error:visible')).toHaveCount(0);
     const texto = await page.locator('body').innerText();
     expect(texto).not.toMatch(/error/i);
 
@@ -321,36 +340,47 @@ async function conEquipamiento(page, { rechazar = false } = {}) {
 test.describe('Equipamiento del héroe con limites', () => {
   /*
    * El PR #605 reescribio esta pantalla sobre las ranuras del kit. Ya no hay
-   * un boton «Equipar» ni un contador «Armas 0/2»: **las diez ranuras son el
-   * limite**, y se lee mirando cuales estan ocupadas. Equipar es elegir en una
-   * ranura vacia; desequipar es pulsar la que esta ocupada.
+   * un boton «Equipar»: equipar es elegir en una ranura vacia y desequipar es
+   * pulsar la que esta ocupada.
    */
 
   /** Abre el equipamiento de Ayla desde la pestana de heroes. */
   async function abrirEquipoDeAyla(page) {
     await page.locator('#pestana-heroes').click();
-    await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();
+    await page.getByRole('button', { name: /^(Equipamiento de|Equiparlo:) Ayla$/ }).click();
   }
 
   test('El equipamiento usa la paleta oficial del sistema de diseno', async ({ page }) => {
     await conEquipamiento(page);
-    // Comprueba también el color de «Agregar elemento», que solo ve la administración.
+    // Comprueba tambien el color de «Agregar elemento», que solo ve la administracion.
     await abrirVitrina(page, { rol: 'ADMINISTRADOR' });
     await abrirEquipoDeAyla(page);
 
-    // El fondo claro `--fondo` dejo de ser el de la pagina con las escenas
-    // ilustradas de HU-UX-002 (#932, #935): ahora la vista va sobre el cromo.
-    // Se comprueba el cromo, que si es token de la paleta, y se deja anotado
-    // el cambio para su dueno.
-    // El cromo de la cabecera: `.barra` paso a ser `.cabecera` con el shell.
-    await expect(page.locator('.cabecera')).toHaveCSS('background-color', 'rgb(28, 35, 64)');
+    const [cromo, superficie, borde, primaria, textoSobreColor] = await Promise.all([
+      colorDelToken(page, '--cromo'),
+      colorDelToken(page, '--superficie'),
+      colorDelToken(page, '--borde'),
+      colorDelToken(page, '--primaria-relleno'),
+      colorDelToken(page, '--texto-sobre-color'),
+    ]);
+
+    await expect(page.locator('.cabecera')).toHaveCSS('background-color', cromo);
     await expect(page.locator('.vitrina__producto').first()).toHaveCSS(
       'background-color',
-      'rgb(255, 255, 255)',
+      superficie,
     );
+    await expect(page.locator('.ranura__caja').first()).toHaveCSS('border-color', borde);
     await expect(page.getByRole('button', { name: 'Agregar elemento' })).toHaveCSS(
       'background-color',
-      'rgb(30, 63, 184)',
+      primaria,
+    );
+    await expect(page.locator('.inventario-equipo__opcion[aria-pressed="true"]')).toHaveCSS(
+      'background-color',
+      primaria,
+    );
+    await expect(page.locator('.inventario-equipo__opcion[aria-pressed="true"]')).toHaveCSS(
+      'color',
+      textoSobreColor,
     );
   });
 

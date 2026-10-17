@@ -36,6 +36,7 @@ import { numero } from '../../comun/ui/formato.js';
 import { ESCALONES, categoriaDe, textoDeDuracion, textoDeProbabilidad } from './modelo-misiones.js';
 import { chipDeCategoria, indicadorDeDificultad, selloDeMision } from './tablon-misiones.js';
 import { asistenteDeMision } from './asistente-mision.js';
+import { imagenDeMision } from '../../comun/ui/juego/arte.js';
 
 /** Los dos modos del detalle. */
 export const MODOS_DEL_DETALLE = Object.freeze({ DETALLES: 'detalles', PREPARAR: 'preparar' });
@@ -531,10 +532,10 @@ export function detalleDeMision(
         clase: 'mision-detalle__arte',
         atributos: { 'aria-hidden': 'true' },
         hijos: [
-          mision.imagen
+          imagenDeMision(mision)
             ? h('img', {
                 clase: 'mision-detalle__imagen',
-                atributos: { src: mision.imagen, alt: '' },
+                atributos: { src: imagenDeMision(mision), alt: '' },
               })
             : icono(categoria?.icono ?? 'mapa', {
                 clase: 'icono mision-detalle__emblema',

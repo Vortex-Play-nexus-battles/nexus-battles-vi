@@ -94,7 +94,8 @@ public class ConsultarMisiones {
 
     /**
      * Intentos que le quedan al jugador en el periodo vigente (7.8.2, «limite
-     * de intentos diarios o semanales»). Un intento se consume al matricular.
+     * de intentos diarios o semanales»). Un intento se consume al matricular,
+     * salvo que la ejecucion se cancele sin penalizacion porque su simulacion fallaba por un error del sistema.
      *
      * @return nulo si la mision no limita intentos (no es un desafio)
      */

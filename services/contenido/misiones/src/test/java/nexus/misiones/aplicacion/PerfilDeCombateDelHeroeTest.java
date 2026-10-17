@@ -98,7 +98,7 @@ class PerfilDeCombateDelHeroeTest {
     }
 
     @Test
-    @DisplayName("una epica repetida cuenta una vez y se mandan hasta ocho, como admite el motor")
+    @DisplayName("una epica repetida cuenta una vez y se mandan hasta nueve, como admite el motor (las ocho de la Tabla 20 y Velo de Sombras)")
     void epicasSinRepetirYConTope() {
         List<String> ids = new java.util.ArrayList<>(List.of("p-e0", "p-e0"));
         for (int i = 1; i <= 9; i++) {
@@ -109,7 +109,7 @@ class PerfilDeCombateDelHeroeTest {
             productos.nombres.put("p-e" + i, "Epica " + i);
         }
 
-        assertThat(perfil().epicas()).hasSize(8).doesNotHaveDuplicates().startsWith("Epica 0", "Epica 1");
+        assertThat(perfil().epicas()).hasSize(9).doesNotHaveDuplicates().startsWith("Epica 0", "Epica 1");
     }
 
     @Test

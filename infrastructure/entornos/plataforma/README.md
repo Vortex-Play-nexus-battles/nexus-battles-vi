@@ -43,11 +43,12 @@ Nada más se crea a mano. Todo lo demás sale de esta carpeta por `infra-dev.yml
 | parámetro SecureString `/nexus/dev/plataforma/llave-ssh-despliegue` | llave privada del par de despliegue | 0 |
 | 2 `aws_budgets_budget` | crédito total (10/25/50/75/90 %) y tope mensual (50/80/100 % + pronóstico) | 0 (dos primeros presupuestos gratis) |
 | SNS + EventBridge Scheduler | recordatorios de salida 2026-10-30, 2027-01-14, 2027-02-12 | 0 |
-| EventBridge Scheduler (`horario.tf`) | apaga el host todos los días a las 23:23 y lo enciende de lunes a viernes a las 06:47, **hora de Colombia** (`America/Bogota`), a la hora exacta; el rol del planificador solo puede encender y apagar esta instancia. `horario_activo = false` lo suspende (p. ej. la semana de la demo) | 0 (14 M invocaciones/mes gratis) |
+| EventBridge Scheduler (`horario.tf`) | **desactivado desde el 14-oct-2026** (`horario_activo = false`): el host queda encendido las 24 h. Los dos horarios siguen creados en `DISABLED` (apagar a las 23:23 todos los días, encender a las 06:47 de lunes a viernes, hora de Colombia); `true` los reactiva | 0 (14 M invocaciones/mes gratis) |
 
 Total 24×7 ≈ **67 USD/mes**; con el apagado programado (noches y fines de
 semana, hora de Colombia) ≈ **36 USD/mes**, contra el crédito del Free Plan
-(USD 113,75 el 29-sep; `diagnostico-dev.yml` lo muestra). Con `t3.small` eran
+(USD 113,75 el 29-sep; `diagnostico-dev.yml` lo muestra). **Desde el 14-oct-2026
+el host corre 24×7** por decisión del responsable del bloque. Con `t3.small` eran
 ≈20,2 y ≈11,5.
 
 **Opción E (29-sep): de `t3.small` a `c7i-flex.large`.** Con 2 GiB el host no
@@ -159,16 +160,13 @@ Si la IP elástica de contenido cambia algún día, se cambian a la vez
 |---|---|---|
 | `plan` | muestra cambios y los comenta en el PR | sola, en cada PR que toque esta carpeta |
 | `apply` | crea o actualiza | **sola, al fusionar en `develop`** (el plan aprobado en el PR es la confirmación); a mano, escribiendo `apply` |
-| `start` / `stop` | enciende / apaga la instancia | cron (23:00 Colombia apaga; 07:00 lun-vie enciende) o a mano |
+| `start` / `stop` | enciende / apaga la instancia | solo a mano (desde el 14-oct-2026 no hay horario: el host queda encendido las 24 h) |
 | `destroy` | borra todo, incluida la IP | solo a mano, escribiendo `destroy` |
 
-> Límite de GitHub: el botón *Run workflow* y los `cron` solo funcionan cuando el
-> archivo del workflow está en la rama por defecto (`main`). Hasta que `develop`
-> se promueva a `main`, el apagado nocturno no corre y `start`/`stop`/`destroy`
-> los pide un administrador (o se promueve `develop` → `main`). El `apply` por
-> fusión en `develop` no tiene esa limitación.
+> Límite de GitHub: el botón *Run workflow* solo existe en la rama por defecto,
+> que desde septiembre es `develop`.
 
-Para una demo fuera de horario: `start` manual; el `stop` nocturno la apaga después.
+Sin horario, una demo no necesita encender nada: el host está encendido siempre.
 
 ### Después del primer `apply` (administrador del repo)
 

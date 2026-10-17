@@ -63,6 +63,19 @@ class ClientesBotinHttpTest {
     }
 
     @Test
+    @DisplayName("una epica del inventario enemigo nunca es botin: solo se obtiene derrotando a un Master en una mision (HU-SIM-006)")
+    void lasEpicasNoSonBotin() {
+        List<ElementoCandidatoBotin> candidatos = clienteInventario().listarCandidatos(
+                "jugador-enemigo",
+                "heroe-enemigo");
+
+        assertEquals(List.of("producto-arma", "producto-armadura", "producto-item"),
+                candidatos.stream().map(ElementoCandidatoBotin::productoId).toList());
+        assertEquals(List.of(TipoBotin.ARMA, TipoBotin.ARMADURA, TipoBotin.ITEM),
+                candidatos.stream().map(ElementoCandidatoBotin::tipo).toList());
+    }
+
+    @Test
     @DisplayName("inventario registra el objeto obtenido para el jugador ganador")
     void registraElBotinEnElInventarioGanador() {
         ElementoCandidatoBotin elemento = new ElementoCandidatoBotin(
@@ -147,11 +160,12 @@ class ClientesBotinHttpTest {
                         {"id":"elemento-arma","productoId":"producto-arma","tipo":"ARMA","nombrePropio":"Espada"},
                         {"id":"elemento-armadura","productoId":"producto-armadura","tipo":"ARMADURA","nombrePropio":"Casco","parteArmadura":"CASCO"},
                         {"id":"elemento-item","productoId":"producto-item","tipo":"ITEM","nombrePropio":"Pocion"},
-                        {"id":"heroe-enemigo","productoId":"producto-heroe","tipo":"HEROE","nombrePropio":"Guerrero"}
+                        {"id":"heroe-enemigo","productoId":"producto-heroe","tipo":"HEROE","nombrePropio":"Guerrero"},
+                        {"id":"elemento-epica","productoId":"producto-epica","tipo":"EPICA","nombrePropio":"Frío concentrado"}
                       ],
                       "numero": 0,
                       "tamanio": 16,
-                      "totalElementos": 4,
+                      "totalElementos": 5,
                       "totalPaginas": 1,
                       "ultima": true
                     }

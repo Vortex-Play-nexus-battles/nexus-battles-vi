@@ -27,7 +27,7 @@ Cada escena existe en dos tamaños: `<nombre>.webp` (1536 × 1024, calidad 80) y
 | `misiones` | Misiones | `contenido/misiones/misiones.html` | juego |
 | `inventario` | Inventario | `contenido/inventario/inventario.html` (velo ancho), `cuentas/mis-cofres.html` | juego |
 | `mercado` | Mercado | `cuentas/tienda.html`, `cuentas/subastas.html` (velo ancho), `cuentas/pujas.html`, `cuentas/publicar-subasta.html`, `cuentas/historial-transacciones.html` | juego |
-| `cuenta` | Mi cuenta y comunidad | `cuentas/perfil.html`, `plataforma/notificaciones/notificaciones.html`, `plataforma/comentarios/publicar-comentario.html`, `plataforma/moderacion-sanciones/mis-sanciones.html` | juego |
+| `cuenta` | Mi cuenta y comunidad | `cuentas/perfil.html`, `plataforma/notificaciones/notificaciones.html`, `plataforma/comentarios/publicar-comentario.html`, `plataforma/moderacion-sanciones/mis-sanciones.html`, `cuentas/ayuda.html` (centro de ayuda) | juego |
 
 Composición *portal*: tarjeta del formulario a la derecha y logotipo y lema a la izquierda.
 *Juego*: contenido a todo lo ancho (máximo ≈ 1320 px), así que la escena se luce en los márgenes y

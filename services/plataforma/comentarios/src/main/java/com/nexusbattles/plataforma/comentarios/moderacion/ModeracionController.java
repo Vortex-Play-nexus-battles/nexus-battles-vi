@@ -6,6 +6,7 @@ import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.nexusbattles.comun.seguridad.IdentidadDelToken;
+import com.nexusbattles.plataforma.comentarios.DeteccionAutomatica;
 import com.nexusbattles.plataforma.comentarios.publicacion.ComentariosController.ComentarioResponse;
 import com.nexusbattles.plataforma.comentarios.publicacion.ResumenDeComentario;
 
@@ -89,6 +90,17 @@ public class ModeracionController {
      * (1.7.0). Solo lectura. La pagina fuera de rango no es un error: el
      * servicio la corrige.
      */
+    /**
+     * El comentario en su contexto (1.17.0, SA-16, §7.3.8): los que lo rodean
+     * en el hilo de su producto, en cualquier estado, del mas antiguo al mas
+     * reciente. {@code alrededor} es cuantos a cada lado (1..10).
+     */
+    @GetMapping("/{commentId}/contexto")
+    public ContextoResponse contexto(@PathVariable String commentId,
+            @RequestParam(defaultValue = "3") int alrededor) {
+        return ContextoResponse.desde(servicio.contexto(commentId, alrededor));
+    }
+
     @GetMapping("/autores/{autorId}/comentarios")
     public HistorialDelAutorResponse historialDelAutor(
             @PathVariable String autorId,
@@ -178,8 +190,26 @@ public class ModeracionController {
         }
     }
 
+    /**
+     * {@code DeteccionAutomatica} del contrato 1.10.0 (HU-COM-007 CA-01): por
+     * que el filtro retuvo el comentario. {@code categoria} y {@code motivo}
+     * no salen si no los hay. Nunca el texto ni los terminos coincidentes.
+     */
+    public record DeteccionResponse(String fecha, List<Long> reglas,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String categoria,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String motivo,
+            boolean servicioNoDisponible) {
+
+        static DeteccionResponse desde(DeteccionAutomatica d) {
+            return d == null ? null : new DeteccionResponse(d.fecha().toString(), d.reglas(),
+                    d.categoria(), d.motivo(), d.servicioNoDisponible());
+        }
+    }
+
+    /** {@code deteccion} (1.10.0) no sale si el comentario llego por reportes. */
     public record EntradaResponse(ComentarioResponse comentario, int reportes,
-            Map<String, Long> porCategoria, String primerReporte, boolean prioridadElevada) {
+            Map<String, Long> porCategoria, String primerReporte, boolean prioridadElevada,
+            @JsonInclude(JsonInclude.Include.NON_NULL) DeteccionResponse deteccion) {
 
         static EntradaResponse desde(ServicioDeModeracion.Entrada e) {
             return new EntradaResponse(
@@ -188,7 +218,8 @@ public class ModeracionController {
                     e.porCategoria().entrySet().stream()
                             .collect(Collectors.toMap(x -> x.getKey().name(), Map.Entry::getValue)),
                     e.primerReporte().toString(),
-                    e.prioridadElevada());
+                    e.prioridadElevada(),
+                    DeteccionResponse.desde(e.deteccion()));
         }
     }
 
@@ -201,14 +232,17 @@ public class ModeracionController {
         }
     }
 
+    /** {@code deteccion} (1.10.0) no sale si el filtro no retuvo el comentario. */
     public record DetalleResponse(ComentarioResponse comentario, List<ReporteResponse> reportes,
-            List<AsientoResponse> historial) {
+            List<AsientoResponse> historial,
+            @JsonInclude(JsonInclude.Include.NON_NULL) DeteccionResponse deteccion) {
 
         static DetalleResponse desde(ServicioDeModeracion.Detalle d) {
             return new DetalleResponse(
                     ComentarioResponse.paraModeracion(d.comentario()),
                     d.reportes().stream().map(ReporteResponse::desde).toList(),
-                    d.historial().stream().map(AsientoResponse::desde).toList());
+                    d.historial().stream().map(AsientoResponse::desde).toList(),
+                    DeteccionResponse.desde(d.deteccion()));
         }
     }
 
@@ -226,12 +260,38 @@ public class ModeracionController {
         }
     }
 
+    /**
+     * {@code ItemDelContexto} (1.17.0): un comentario del hilo alrededor del que
+     * se mira, con su autor (aqui no es siempre el mismo) y su estado.
+     */
+    public record ItemDelContextoResponse(String id, String apodoAutor, String texto,
+            String fechaPublicacion, String estado, boolean editado) {
+
+        static ItemDelContextoResponse desde(ResumenDeComentario r) {
+            return new ItemDelContextoResponse(r.id(), r.apodoAutor(), r.texto(),
+                    r.fechaPublicacion().toString(), r.estado().name(), r.editado());
+        }
+    }
+
+    /** {@code ContextoDelComentario} (1.17.0). */
+    public record ContextoResponse(String comentarioId, String productoId,
+            List<ItemDelContextoResponse> anteriores, List<ItemDelContextoResponse> posteriores,
+            long totalEnElHilo) {
+
+        static ContextoResponse desde(ServicioDeModeracion.Contexto c) {
+            return new ContextoResponse(c.comentarioId(), c.productoId(),
+                    c.anteriores().stream().map(ItemDelContextoResponse::desde).toList(),
+                    c.posteriores().stream().map(ItemDelContextoResponse::desde).toList(),
+                    c.totalEnElHilo());
+        }
+    }
+
     /** {@code apodoAutor} no sale si el autor no tiene comentarios. */
     public record HistorialDelAutorResponse(String autorId,
             @JsonInclude(JsonInclude.Include.NON_NULL) String apodoAutor,
             List<ItemDelHistorialResponse> comentarios, long total, int pagina, int tamano) {
 
-        static HistorialDelAutorResponse desde(ServicioDeModeracion.Historial h) {
+        public static HistorialDelAutorResponse desde(ServicioDeModeracion.Historial h) {
             return new HistorialDelAutorResponse(h.autorId(), h.apodoAutor(),
                     h.comentarios().stream().map(ItemDelHistorialResponse::desde).toList(),
                     h.total(), h.pagina(), h.tamano());

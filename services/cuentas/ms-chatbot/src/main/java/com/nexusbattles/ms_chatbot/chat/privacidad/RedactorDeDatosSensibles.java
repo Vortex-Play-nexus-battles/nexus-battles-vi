@@ -32,11 +32,13 @@ import java.util.regex.Pattern;
 // Una contrasena se reconoce por la palabra que la anuncia:
 //   * con ":" o "=" ("contrasena: x", "token=x"), siempre;
 //   * con "es"/"is" ("mi contrasena es x"), salvo que siga una palabra
-//     corriente ("es incorrecta", "is wrong"). Solo para las palabras
-//     inequivocas (contrasena, password, pin, clave de acceso): "la clave es
-//     practicar" o "el token es valido" no traen ningun secreto;
-//   * sin separador ("mi contrasena Hunter2"), si parece una contrasena:
-//     lleva cifras, simbolos o mayusculas por dentro.
+//     corriente ("es incorrecta", "is wrong"), si la palabra es inequivoca
+//     (contrasena, password, pin, clave de acceso);
+//   * con una palabra ambigua (clave, token, secret...) y "es"/"is", o sin
+//     separador ("mi contrasena Hunter2", "mi clave es Hunter2024!"), solo si
+//     el valor parece una contrasena: lleva cifras, simbolos o mayusculas por
+//     dentro. "la clave es practicar" o "el token es valido" no traen ningun
+//     secreto.
 // Entre la palabra y el separador caben hasta tres palabras ("la contrasena
 // de mi cuenta es x").
 @Component
@@ -46,6 +48,19 @@ public class RedactorDeDatosSensibles implements RedaccionDeDatosSensibles {
     static final String TARJETA = "[tarjeta]";
     static final String TOKEN = "[token]";
     static final String CLAVE_PRIVADA = "[clave privada]";
+
+    private static final Pattern MARCAS = Pattern.compile(
+        Pattern.quote(TAPADO) + "|" + Pattern.quote(TARJETA) + "|" + Pattern.quote(TOKEN) + "|"
+            + Pattern.quote(CLAVE_PRIVADA));
+
+    /**
+     * 1.4.0 — el texto ya redactado sin las marcas que dejó la redacción. Sirve
+     * para saber si, quitando el secreto, queda alguna pregunta: una brecha de
+     * conocimiento que solo era una contraseña o un token no se registra.
+     */
+    public static String sinMarcas(String redactado) {
+        return redactado == null ? null : MARCAS.matcher(redactado).replaceAll(" ");
+    }
 
     private static final int SIN_MAYUSCULAS = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE;
     private static final String ANTES = "(?<![\\p{L}\\p{N}_])";
@@ -96,8 +111,6 @@ public class RedactorDeDatosSensibles implements RedaccionDeDatosSensibles {
             + "|\u201c[^\u201d\\n]{1,200}\u201d|\\S+)",
         SIN_MAYUSCULAS);
 
-    // Sin "]": las marcas ([tarjeta], [token]) acaban asi y se tapan enteras.
-    private static final Pattern PUNTUACION_FINAL = Pattern.compile("[.,;:!?)\u00bb\u201d]+$");
     private static final Pattern BORDES =
         Pattern.compile("^[\u00bf\u00a1(\\[{\u00ab\u201c\"']+|[.,;:!?)\\]}\u00bb\u201d\"']+$");
 
@@ -267,22 +280,29 @@ public class RedactorDeDatosSensibles implements RedaccionDeDatosSensibles {
         if (m.group("asigna") != null) {
             return true;
         }
-        if (m.group("inequivoca") == null) {
-            return false;
+        if (m.group("inequivoca") != null) {
+            return m.group("verbo") != null ? !esPalabraCorriente(valor) : pareceContrasena(valor);
         }
-        return m.group("verbo") != null ? !esPalabraCorriente(valor) : pareceContrasena(valor);
+        // Una palabra ambigua ("clave", "token", "secret") con "es"/"is" o sin
+        // separador solo anuncia un secreto si lo que sigue lo parece: "mi
+        // clave es Hunter2024!" se tapa; "la clave es practicar", no. Hasta la
+        // 1.11.0 nunca se tapaba y "mi clave es Hunter2024!" se guardaba tal
+        // cual (segunda auditoria del 7.4).
+        return pareceContrasena(valor);
     }
 
-    // Entre comillas se tapa lo de dentro; si no, el valor sin la puntuacion
-    // que lo cierra ("contrasena: abc." -> "contrasena: ***.").
+    // Entre comillas se tapa lo de dentro; si no, el valor ENTERO, tambien la
+    // puntuacion en que termina. Hasta 1.11.0 esa puntuacion se dejaba
+    // ("contrasena: abc." -> "contrasena: ***."), y la de una contrasena es
+    // parte de ella: la politica de claves exige un simbolo y suele ir al
+    // final, asi que "mi contrasena es Hunter2024!" se guardaba "***!". Se
+    // pierde, a lo sumo, el punto de la frase.
     private static String taparValor(String valor) {
         if (estaEntreComillas(valor)) {
             return valor.charAt(0) + tapar(valor.substring(1, valor.length() - 1), TAPADO)
                 + valor.charAt(valor.length() - 1);
         }
-        Matcher puntuacion = PUNTUACION_FINAL.matcher(valor);
-        int corte = puntuacion.find() && puntuacion.start() > 0 ? puntuacion.start() : valor.length();
-        return tapar(valor.substring(0, corte), TAPADO) + valor.substring(corte);
+        return tapar(valor, TAPADO);
     }
 
     private static boolean estaEntreComillas(String valor) {

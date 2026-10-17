@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -74,18 +75,30 @@ public class AuthAdminServiceImpl implements AuthAdminService {
     public Usuario crearCuentaConRol(String nombres, String apellidos, String email,
                                      String apodo, String avatar, Role rol) {
 
-        if (usuarioRepository.findByEmail(email).isPresent()) {
+        // Igual que el registro publico (R17): el correo se guarda sin espacios
+        // y en minusculas, y la unicidad no distingue mayusculas. Antes aqui se
+        // comparaba exacto: «Ana@x.com» y «ana@x.com» eran dos cuentas, pero el
+        // login (que busca en minusculas) solo encontraba una de las dos.
+        String correo = email == null ? null : email.strip().toLowerCase(Locale.ROOT);
+        String apodoLimpio = apodo == null ? null : apodo.strip();
+        if (correo == null || correo.isEmpty()) {
+            throw new IllegalArgumentException("El correo electrónico es obligatorio.");
+        }
+        if (usuarioRepository.existsByEmailIgnoreCase(correo)) {
             throw new IllegalArgumentException("El correo electrónico ya está registrado.");
         }
+        if (apodoLimpio == null || apodoLimpio.isEmpty()) {
+            throw new IllegalArgumentException("El apodo es obligatorio.");
+        }
         // Igual que en el registro (B13): la lista negra antes que la unicidad.
-        apodoBlacklistValidator.validar(apodo);
-        if (usuarioRepository.findByApodo(apodo).isPresent()) {
+        apodoBlacklistValidator.validar(apodoLimpio);
+        if (usuarioRepository.existsByApodoIgnoreCase(apodoLimpio)) {
             throw new IllegalArgumentException("El apodo ya está en uso.");
         }
 
         Usuario nuevoUsuario = new Usuario();
-        nuevoUsuario.setApodo(apodo);
-        nuevoUsuario.setEmail(email);
+        nuevoUsuario.setApodo(apodoLimpio);
+        nuevoUsuario.setEmail(correo);
         nuevoUsuario.setEstado(EstadoCuenta.INACTIVO);
         nuevoUsuario.setRol(rolService.obtenerRolPorNombre(rol.name()));
 
@@ -160,7 +173,7 @@ public class AuthAdminServiceImpl implements AuthAdminService {
 
     private Usuario buscarOFallar(Long usuarioId) {
         return usuarioRepository.findById(usuarioId)
-            .orElseThrow(() -> new IllegalStateException("No existe el usuario " + usuarioId));
+            .orElseThrow(() -> new com.nexusbattles.ms_identidad.admin.service.UsuarioNoEncontradoException(usuarioId));
     }
 
     private String generarValorAleatorio() {

@@ -3,13 +3,18 @@ package com.nexusbattles.plataforma.metricasplataforma.tecnicas;
 import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.ConfiguracionDeDisponibilidad;
 import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.MonitorDeDisponibilidad;
 import com.nexusbattles.plataforma.metricasplataforma.moderacion.ClienteDeModeracion;
+import com.nexusbattles.plataforma.metricasplataforma.moderacion.ClienteDeReportes;
 import com.nexusbattles.plataforma.metricasplataforma.moderacion.ClienteDeUsuarios;
 import com.nexusbattles.plataforma.metricasplataforma.moderacion.FuenteDeModeracion;
+import com.nexusbattles.plataforma.metricasplataforma.moderacion.FuenteDeReportes;
 import com.nexusbattles.plataforma.metricasplataforma.moderacion.FuenteDeUsuarios;
+import com.nexusbattles.plataforma.metricasplataforma.moderacion.UmbralesDeModeracion;
 import com.nexusbattles.plataforma.metricasplataforma.sondeo.ConfiguracionDelSondeo;
 import com.nexusbattles.plataforma.metricasplataforma.sondeo.ResultadoReciente;
 import com.nexusbattles.plataforma.metricasplataforma.sondeo.RondaEnParalelo;
+import com.nexusbattles.plataforma.observabilidad.InterceptorDeTraza;
 import com.nexusbattles.plataforma.observabilidad.PropiedadesDeLatencia;
+import com.nexusbattles.plataforma.resiliencia.parametros.LectorDeParametros;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,15 +24,22 @@ import org.springframework.web.client.RestClient;
 import java.time.Clock;
 import java.time.Duration;
 
-/** Recolector de Actuator, tablero en vivo y fuente de moderacion, con tiempos cortos: un tablero no espera a nadie. */
+/**
+ * Recolector de Actuator, tablero en vivo y fuentes del tablero de moderacion (sanciones, cuentas, reportes y sus
+ * umbrales), con tiempos cortos: un tablero no espera a nadie.
+ */
 @Configuration
 public class ConfiguracionDeMetricasTecnicas {
 
+    /**
+     * Cliente con plazos y con la traza de la peticion (regla 5): este servicio se arma sus clientes con
+     * {@code RestClient.builder()}, asi que el interceptor no se engancha solo y se pone aqui, una vez para todos.
+     */
     private static RestClient conTiempos(Duration conexion, Duration respuesta) {
         SimpleClientHttpRequestFactory fabrica = new SimpleClientHttpRequestFactory();
         fabrica.setConnectTimeout(conexion);
         fabrica.setReadTimeout(respuesta);
-        return RestClient.builder().requestFactory(fabrica).build();
+        return RestClient.builder().requestFactory(fabrica).requestInterceptor(new InterceptorDeTraza()).build();
     }
 
     /**
@@ -57,5 +69,32 @@ public class ConfiguracionDeMetricasTecnicas {
     @Bean
     FuenteDeUsuarios fuenteDeUsuarios(@Value("${metricas.usuarios.url}") String url) {
         return new ClienteDeUsuarios(conTiempos(Duration.ofMillis(2000), Duration.ofMillis(3000)), url);
+    }
+
+    /**
+     * Frecuencia de reportes (§7.3.8, comentarios 1.15.0): una sola llamada a comentarios, con el token de quien mira
+     * el tablero y los mismos plazos que la de identidad.
+     */
+    @Bean
+    FuenteDeReportes fuenteDeReportes(@Value("${metricas.reportes.url}") String url) {
+        return new ClienteDeReportes(conTiempos(Duration.ofMillis(2000), Duration.ofMillis(3000)), url);
+    }
+
+    /**
+     * Umbrales de alta frecuencia (D-25): del catalogo de admin-parametros, con la variable de entorno de respaldo.
+     * Sin {@code PARAMETROS_URL} (local, pruebas) no se hace ni una peticion y todo sale del respaldo. La cache corta
+     * hace que un cambio desde el panel se note en el tablero en menos de un minuto sin preguntar en cada apertura.
+     */
+    @Bean
+    UmbralesDeModeracion umbralesDeModeracion(
+            @Value("${metricas.parametros.url:}") String catalogo,
+            @Value("${metricas.parametros.vigencia-segundos:30}") long vigencia,
+            @Value("${metricas.moderacion.umbral-sanciones-por-dia:#{null}}") Integer respaldoSanciones,
+            @Value("${metricas.moderacion.umbral-reportes-por-dia:#{null}}") Integer respaldoReportes,
+            Clock reloj) {
+        LectorDeParametros lector = LectorDeParametros.desde(
+                conTiempos(Duration.ofMillis(1000), Duration.ofMillis(2000)), catalogo, reloj,
+                Duration.ofSeconds(vigencia));
+        return new UmbralesDeModeracion(lector, respaldoSanciones, respaldoReportes);
     }
 }

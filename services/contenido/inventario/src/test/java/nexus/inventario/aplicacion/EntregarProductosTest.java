@@ -56,7 +56,11 @@ class EntregarProductosTest {
                         "Pocion", "ITEM", null, "UNICO"))
                 .registrarArmadura("peto", ParteArmadura.PECHO)
                 .registrar("retirado", new ResolutorDeProducto.DetalleProducto(
-                        "Retirado", "ITEM", null, "SUSPENDIDO"));
+                        "Retirado", "ITEM", null, "SUSPENDIDO"))
+                .registrar("epica-defensa", new ResolutorDeProducto.DetalleProducto(
+                        "Golpe de defensa", "EPICA", "Guerrero Tanque", "ACTIVO"))
+                .registrar("epica-impulso", new ResolutorDeProducto.DetalleProducto(
+                        "Segundo impulso", "EPICA", "Guerrero Armas", "ACTIVO"));
         servicio = new EntregarProductos(entregas, inventarios, catalogo, Clock.fixed(AHORA, ZoneOffset.UTC));
     }
 
@@ -141,6 +145,136 @@ class EntregarProductosTest {
 
             assertEquals(1, catalogo.consultas());
             assertEquals(4, inventario().elementos().size());
+        }
+    }
+
+    private static SolicitudDeEntrega deMision(LineaDeEntrega... lineas) {
+        return new SolicitudDeEntrega(JUGADOR, OrigenDeEntrega.MISION, "mision-9", List.of(lineas));
+    }
+
+    @Nested
+    @DisplayName("una epica que el jugador ya tiene")
+    class EpicaQueYaSeTiene {
+
+        private ElementoInventario epicaDelJugador(String id, String productoId) {
+            return new ElementoInventario(id, productoId, TipoElementoInventario.EPICA, "Golpe de defensa");
+        }
+
+        @Test
+        @DisplayName("la primera vez se crea, y la entrega no dice que ya la tuviera")
+        void laPrimeraVezSeCrea() {
+            ResultadoEntrega resultado = servicio.entregar(deMision(linea("epica-defensa", 1)), CLAVE, "misiones");
+
+            assertEquals(1, resultado.entrega().elementos().size());
+            assertEquals(TipoElementoInventario.EPICA, resultado.entrega().elementos().getFirst().tipo());
+            assertTrue(resultado.entrega().yaTenia().isEmpty());
+            assertEquals(1, inventario().elementos().size());
+        }
+
+        @Test
+        @DisplayName("si ya la tiene no se crea otra copia: la entrega se completa y dice que ya la tenia")
+        void siYaLaTieneNoSeCreaOtra() {
+            inventarios.guardar(Inventario.vacio(JUGADOR.toString())
+                    .agregar(epicaDelJugador("la-que-ya-tenia", "epica-defensa")));
+
+            ResultadoEntrega resultado = servicio.entregar(deMision(linea("epica-defensa", 1)), CLAVE, "misiones");
+
+            assertTrue(resultado.realizadaAhora());
+            assertEquals(EstadoEntrega.COMPLETADA, resultado.entrega().estado());
+            assertTrue(resultado.entrega().elementos().isEmpty());
+            assertEquals(List.of("epica-defensa"), resultado.entrega().yaTenia());
+            assertEquals(List.of("la-que-ya-tenia"),
+                    inventario().elementos().stream().map(ElementoInventario::id).toList());
+            assertTrue(inventario().recibio(resultado.entrega().id()), "la entrega queda anotada igual");
+        }
+
+        @Test
+        @DisplayName("derrotar al mismo Master en otra ejecucion no da otra copia")
+        void otraEjecucionNoDaOtraCopia() {
+            servicio.entregar(deMision(linea("epica-defensa", 1)), "mision-1-epica", "misiones");
+
+            ResultadoEntrega segunda = servicio.entregar(
+                    new SolicitudDeEntrega(JUGADOR, OrigenDeEntrega.MISION, "mision-2",
+                            List.of(linea("epica-defensa", 1))), "mision-2-epica", "misiones");
+
+            assertTrue(segunda.entrega().elementos().isEmpty());
+            assertEquals(List.of("epica-defensa"), segunda.entrega().yaTenia());
+            assertEquals(1, inventario().elementos().size());
+        }
+
+        @Test
+        @DisplayName("pedir dos copias de una epica que no tiene da una sola")
+        void dosCopiasDanUna() {
+            ResultadoEntrega resultado = servicio.entregar(deMision(linea("epica-defensa", 2)), CLAVE, "misiones");
+
+            assertEquals(1, resultado.entrega().elementos().size());
+            assertEquals(List.of("epica-defensa"), resultado.entrega().yaTenia(),
+                    "la segunda copia ya no se da: se dice que sobra");
+        }
+
+        @Test
+        @DisplayName("una epica repetida en dos lineas de la misma entrega tampoco se duplica")
+        void dosLineasDeLaMismaEpica() {
+            ResultadoEntrega resultado = servicio.entregar(
+                    deMision(linea("epica-defensa", 1), linea("epica-defensa", 1)), CLAVE, "misiones");
+
+            assertEquals(1, resultado.entrega().elementos().size());
+            assertEquals(1, inventario().elementos().size());
+        }
+
+        @Test
+        @DisplayName("lo demas de la misma entrega se entrega, y solo la epica repetida se omite")
+        void loDemasSeEntrega() {
+            inventarios.guardar(Inventario.vacio(JUGADOR.toString())
+                    .agregar(epicaDelJugador("la-que-ya-tenia", "epica-defensa")));
+
+            ResultadoEntrega resultado = servicio.entregar(
+                    deMision(linea("epica-defensa", 1), linea("epica-impulso", 1), linea("espada", 1)),
+                    CLAVE, "misiones");
+
+            assertEquals(List.of("epica-impulso", "espada"),
+                    resultado.entrega().elementos().stream().map(ElementoInventario::productoId).toList());
+            assertEquals(List.of("epica-defensa"), resultado.entrega().yaTenia());
+        }
+
+        @Test
+        @DisplayName("la epica de otro jugador no cuenta: cada uno tiene la suya")
+        void laDeOtroJugadorNoCuenta() {
+            String otro = UUID.randomUUID().toString();
+            inventarios.guardar(Inventario.vacio(otro).agregar(epicaDelJugador("la-del-otro", "epica-defensa")));
+
+            ResultadoEntrega resultado = servicio.entregar(deMision(linea("epica-defensa", 1)), CLAVE, "misiones");
+
+            assertEquals(1, resultado.entrega().elementos().size());
+            assertTrue(resultado.entrega().yaTenia().isEmpty());
+        }
+
+        @Test
+        @DisplayName("solo las epicas: un objeto o un heroe repetido se entrega otra vez")
+        void soloLasEpicas() {
+            servicio.entregar(compra(linea("pocion", 1), linea("guerrero", 1)), "orden-1", "ms-ecommerce");
+
+            ResultadoEntrega otraVez = servicio.entregar(
+                    compra(linea("pocion", 1), linea("guerrero", 1)), "orden-2", "ms-ecommerce");
+
+            assertEquals(2, otraVez.entrega().elementos().size());
+            assertTrue(otraVez.entrega().yaTenia().isEmpty());
+            assertEquals(4, inventario().elementos().size());
+        }
+
+        @Test
+        @DisplayName("repetir la clave devuelve la misma respuesta, tambien lo que ya tenia")
+        void repetirLaClaveDevuelveLoMismo() {
+            inventarios.guardar(Inventario.vacio(JUGADOR.toString())
+                    .agregar(epicaDelJugador("la-que-ya-tenia", "epica-defensa")));
+            ResultadoEntrega primera = servicio.entregar(deMision(linea("epica-defensa", 1)), CLAVE, "misiones");
+
+            ResultadoEntrega repetida = servicio.entregar(deMision(linea("epica-defensa", 1)), CLAVE, "misiones");
+
+            assertFalse(repetida.realizadaAhora());
+            assertEquals(primera.entrega(), repetida.entrega());
+            assertEquals(List.of("epica-defensa"), repetida.entrega().yaTenia());
+            assertEquals(1, inventario().elementos().size());
         }
     }
 

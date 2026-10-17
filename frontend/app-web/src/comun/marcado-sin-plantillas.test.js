@@ -47,7 +47,8 @@ const raizRepo = new URL('../../../../', import.meta.url);
  */
 const PENDIENTES = Object.freeze({
   // Grupo 4 — Cuentas, comercio y subastas. No se tocan sin su dueño.
-  'cuentas/auditoria.js': 'grupo-4',
+  // SA-5 — `auditoria.js` sale de la lista: el registro de auditoría se
+  // reescribió con el kit de la consola y se construye con nodos (`h()`).
   // UX-R3.11 — `historial-transacciones.js` y `mis-cofres.js` salen de la lista:
   // sus dos `innerHTML = ''` pasaron a `replaceChildren()` al reescribir sus
   // estados de vacio y de fallo. El trinquete lo exigio en cuanto se arreglaron,

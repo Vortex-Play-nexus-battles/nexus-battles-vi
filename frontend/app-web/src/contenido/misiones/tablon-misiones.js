@@ -37,6 +37,7 @@ import {
   estadoDe,
   textoDeDuracion,
 } from './modelo-misiones.js';
+import { imagenDeMision } from '../../comun/ui/juego/arte.js';
 
 /**
  * Las marcas de dificultad y su nombre. Las marcas son adorno (`aria-hidden`):
@@ -213,10 +214,10 @@ export function tarjetaDeMision(mision, rutas) {
       h('div', {
         clase: 'mision-card__arte',
         hijos: [
-          mision.imagen
+          imagenDeMision(mision)
             ? h('img', {
                 clase: 'mision-card__imagen',
-                atributos: { src: mision.imagen, alt: '', loading: 'lazy' },
+                atributos: { src: imagenDeMision(mision), alt: '', loading: 'lazy' },
               })
             : icono(categoria?.icono ?? 'mapa', {
                 clase: 'icono mision-card__emblema',

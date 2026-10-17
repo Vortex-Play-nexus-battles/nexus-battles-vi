@@ -8,7 +8,7 @@ cinco estrellas, incluyendo el hilo de comentarios... Los usuarios solo pueden
 calificar un producto una vez, pero podrán agregar o retirar tantos
 comentarios como sea de su agrado».
 
-El contrato vive en `contracts/openapi/comentarios.yaml` (1.8.0).
+El contrato vive en `contracts/openapi/comentarios.yaml` (1.17.0).
 
 ## Qué hace
 
@@ -46,6 +46,13 @@ El contrato vive en `contracts/openapi/comentarios.yaml` (1.8.0).
 - **Filtro automático** con la lista negra (`contexto: COMENTARIO`): lo que la
   política manda a `REVISION` —o todo, si la lista negra no responde— queda
   EN_REVISION (202).
+- **El comentario en su contexto** (1.17.0, SA-16, §7.3.8):
+  `GET /comentarios/moderacion/{id}/contexto` devuelve los comentarios del
+  mismo producto publicados justo antes y justo después, en cualquier estado y
+  con su autor; la moderación los lee junto al comentario reportado.
+- **Los comentarios propios** (1.16.0, SA-14, §7.3.6): `GET /comentarios/mios`,
+  todos los de quien llama en cualquier estado, para la exportación de datos
+  del portal de privacidad.
 
 ### Por qué las imágenes van en PostgreSQL
 
@@ -78,10 +85,17 @@ imagen, 3 por comentario, limpieza de pendientes a las 24 h).
 | `NOTIFICACIONES_URL`, `AUDITORIA_URL` | Aviso al autor y auditoría de las decisiones de moderación (fail-open) |
 | `COMENTARIOS_FORMATOS_IMAGEN` | Subconjunto de `jpg,png,webp` admitido (los tres por omisión) |
 
+## Largo del texto
+
+Un comentario tiene como mucho **2000 caracteres** (comentarios.yaml 1.11.0;
+decisión del Product Owner del 13-oct sobre el issue 34, el mismo máximo que ya
+tenía EDITAR). Se cuentan caracteres —puntos de código—, no bytes: un emoji
+cuenta uno. Pasarse responde 400 `texto-demasiado-largo`
+(`SolicitudDePublicacion.TextoDemasiadoLargo`). El redactor del frontend no deja
+escribir más (`maxlength`) y enseña la cuenta.
+
 ## Pendientes declarados
 
-- El largo máximo del texto de un comentario sigue pendiente del Product Owner
-  (issue 34); EDITAR lo acota a 2000 caracteres porque así lo fija el contrato.
 - La IP del asiento es el primer valor de `X-Forwarded-For`; el borde de dev
   añade la IP que ve a la cabecera del cliente en vez de sustituirla, así que
   ese valor lo puede declarar el cliente (ver el resumen de B3).

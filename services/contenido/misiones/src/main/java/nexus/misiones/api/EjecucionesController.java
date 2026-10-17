@@ -66,13 +66,13 @@ class EjecucionesController {
         Mision mision = catalogo.buscar(matricula.ejecucion().misionId())
                 .orElseThrow(() -> new MisionNoEncontrada(matricula.ejecucion().misionId()));
         return ResponseEntity.status(matricula.repetida() ? HttpStatus.OK : HttpStatus.CREATED)
-                .body(vistas.activa(matricula.ejecucion(), mision, CancelarEjecucion.PENALIZACION));
+                .body(vistas.activa(matricula.ejecucion(), mision, CancelarEjecucion.penalizacionDe(matricula.ejecucion())));
     }
 
     @GetMapping("/en-curso")
     List<Respuestas.MisionActiva> enCurso(@AuthenticationPrincipal Jwt token) {
         return consultar.enCurso(MisionesController.jugador(token)).stream()
-                .map(t -> vistas.activa(t.ejecucion(), t.mision(), CancelarEjecucion.PENALIZACION))
+                .map(t -> vistas.activa(t.ejecucion(), t.mision(), CancelarEjecucion.penalizacionDe(t.ejecucion())))
                 .toList();
     }
 

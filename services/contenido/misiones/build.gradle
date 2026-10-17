@@ -63,6 +63,11 @@ tasks.named('check') {
 tasks.named('test') {
     systemProperty 'pact.rootDir', rootProject.file('contracts/pactos').absolutePath
     systemProperty 'misiones.contrato', rootProject.file('contracts/openapi/misiones.yaml').absolutePath
+    // El modelo entrenado que viaja en la imagen (ia/modelos/<version>/) y lo que lo lleva (Dockerfile): las pruebas
+    // los leen del repositorio, no de copias.
+    systemProperty 'misiones.modulo', projectDir.absolutePath
+    inputs.files(fileTree('ia/modelos')).withPropertyName('modelosDeIa').withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file(file('Dockerfile')).withPropertyName('dockerfile').withPathSensitivity(PathSensitivity.RELATIVE)
     // Los casos dorados de las caracteristicas los genera Python (ia/): si cambian, Java debe volver a verificarlos.
     inputs.dir(file('ia/pruebas')).withPropertyName('pruebasDeIa').withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.file(rootProject.file('contracts/openapi/misiones.yaml'))

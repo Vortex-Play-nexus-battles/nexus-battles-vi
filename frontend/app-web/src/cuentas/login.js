@@ -17,6 +17,9 @@
 //   - `cuenta-suspendida`: dice hasta cuándo, con el tiempo restante contando
 //     en vivo (7.3.2, «contador visible del tiempo restante de suspensión»);
 //   - `cuenta-baneada`: un aviso formal, sin salidas que no existen.
+//   - SA-4 (identidad 2.4.0): las dos últimas traen, con la contraseña
+//     correcta, el código para apelar sin sesión (§7.3.2): «Apelar esta
+//     sanción» abre la apelación ahí mismo (apelacion-sin-sesion.js).
 // Y tras verificar el correo (`?motivo=verificada`) la primera entrada pasa
 // por «Preparando tu cuenta»: el alta del jugador empieza al verificar.
 //
@@ -54,6 +57,7 @@ import { formularioListo, sinCredencialesEnLaDireccion } from '../comun/ui/formu
 import { anotarEnvio, reenviarCodigo } from '../comun/verificacion.js';
 import { VEREDICTOS, comprobarCredencial } from '../comun/vigilante-sesion.js';
 import { mostrarAlertasCatalogoAlIniciarSesion } from '../contenido/productos/alertas-catalogo.js';
+import { codigoDeApelacion, montarApelacionSinSesion } from './apelacion-sin-sesion.js';
 import { setCurrentRole } from './directives/has-permission.directive.js';
 import { desafioDelRechazo, montarSegundoPaso } from './login-segundo-paso.js';
 import { PROBLEMAS_DEL_SEGUNDO_FACTOR } from './segundo-factor.js';
@@ -199,6 +203,13 @@ export function avisoDelMotivo(motivo) {
       };
     case MOTIVOS.CERRADA:
       return { tipo: 'info', texto: 'Cerraste sesión. ¡Hasta la próxima batalla!' };
+    case MOTIVOS.INACTIVIDAD:
+      return {
+        tipo: 'advertencia',
+        texto:
+          'Cerramos tu sesión porque no hubo actividad durante un rato: así nadie puede usar ' +
+          'la consola en tu lugar. Vuelve a entrar y te llevamos a donde estabas.',
+      };
     case MOTIVOS.REGISTRADA:
       return {
         tipo: 'exito',
@@ -410,6 +421,24 @@ function iniciarVista(formulario) {
       setEstado(rechazo.titulo, 'error');
       return;
     }
+    // SA-4 — una cuenta suspendida o baneada puede apelar desde aquí.
+    const codigo = codigoDeApelacion(estado, cuerpo);
+    if (codigo && apelacion && (rechazo.caso === 'suspendida' || rechazo.caso === 'baneada')) {
+      olvidarContrasena();
+      const apelar = h('button', {
+        clase: 'boton boton--primario',
+        texto: 'Apelar esta sanción',
+        atributos: { type: 'button' },
+        datos: { accion: 'apelar-sancion' },
+      });
+      apelar.addEventListener('click', () => {
+        limpiarRechazo();
+        apelacion.abrir(codigo);
+      });
+      detenerRechazo = pintarRechazo(zonaRechazo, rechazo, { acciones: apelar, anunciar: false });
+      zonaRechazo.focus();
+      return;
+    }
     if (rechazo.caso === 'no-verificada') {
       recordar(CLAVES_DEL_CORREO.porVerificar, email);
       const { acciones, enfocar } = salidasDeVerificacion(email);
@@ -439,7 +468,7 @@ function iniciarVista(formulario) {
   // Ya hay sesión en esta pestaña: el login no tiene nada que hacer aquí.
   const actual = leerSesion();
   if (actual.autenticado) {
-    globalThis.location.replace(destinoTrasEntrar(null, volver));
+    globalThis.location.replace(destinoTrasEntrar({ rol: actual.rol }, volver));
     return;
   }
   if (actual.caducada) {
@@ -469,7 +498,7 @@ function iniciarVista(formulario) {
       .then((compartida) => adoptarSesionCompartida(compartida))
       .then((adoptada) => {
         if (adoptada) {
-          globalThis.location.replace(destinoTrasEntrar(null, volver));
+          globalThis.location.replace(destinoTrasEntrar({ rol: leerSesion().rol }, volver));
         }
       });
   }
@@ -538,6 +567,15 @@ function iniciarVista(formulario) {
         zonaRechazo.focus();
         return;
       }
+      formulario.password.focus();
+    },
+  });
+
+  // SA-4 — la apelación sin sesión. Al volver, la contraseña se escribe otra
+  // vez: el código ya no está y la persona decide qué hacer.
+  const apelacion = montarApelacionSinSesion(document, {
+    alVolver: () => {
+      liberarEnvio();
       formulario.password.focus();
     },
   });

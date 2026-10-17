@@ -53,11 +53,19 @@ public final class Dobles {
 
         private final Map<UUID, Ejecucion.Estado> guardadas = new LinkedHashMap<>();
         public RuntimeException fallarAlGuardar;
+        /** Un fallo de una sola vez, solo para las ejecuciones que cumplan la condicion (un corte de luz a mitad). */
+        public java.util.function.Predicate<Ejecucion> fallarUnaVezSi;
+        /** Mongo no contesta la consulta de las vencidas (la de las pendientes de entrega, si). */
+        public RuntimeException fallarAlConsultarVencidas;
 
         @Override
-        public Ejecucion guardar(Ejecucion ejecucion) {
+        public synchronized Ejecucion guardar(Ejecucion ejecucion) {
             if (fallarAlGuardar != null) {
                 throw fallarAlGuardar;
+            }
+            if (fallarUnaVezSi != null && fallarUnaVezSi.test(ejecucion)) {
+                fallarUnaVezSi = null;
+                throw new IllegalStateException("se cayo Mongo al guardar");
             }
             Ejecucion.Estado anterior = guardadas.get(ejecucion.id());
             long versionActual = anterior == null ? -1 : anterior.version;
@@ -80,7 +88,7 @@ public final class Dobles {
         }
 
         @Override
-        public Optional<Ejecucion> buscar(UUID id) {
+        public synchronized Optional<Ejecucion> buscar(UUID id) {
             return Optional.ofNullable(guardadas.get(id)).map(e -> Ejecucion.reconstruir(copiar(e)));
         }
 
@@ -111,12 +119,16 @@ public final class Dobles {
         @Override
         public long iniciadasDesde(String jugadorUid, String misionId, Instant desde) {
             return delJugadorEnMision(jugadorUid, misionId).stream()
-                    .filter(e -> !e.iniciadaEn().isBefore(desde)).count();
+                    .filter(e -> !e.iniciadaEn().isBefore(desde))
+                    .filter(e -> !e.canceladaSinPenalizacion()).count();
         }
 
         /** Como Mongo: las listas para simular, la de plazo mas antiguo primero. */
         @Override
         public List<Ejecucion> vencidas(Instant ahora, int limite) {
+            if (fallarAlConsultarVencidas != null) {
+                throw fallarAlConsultarVencidas;
+            }
             return todas().stream().filter(e -> e.listaParaSimular(ahora))
                     .sorted(Comparator.comparing(Ejecucion::terminaEn))
                     .limit(limite).toList();
@@ -157,6 +169,8 @@ public final class Dobles {
             s.ultimoError = e.ultimoError();
             s.nivelAlcanzado = e.nivelAlcanzado();
             s.experienciaAcumulada = e.experienciaAcumulada();
+            s.intentosDeSimulacion = e.intentosDeSimulacion();
+            s.sinPenalizacion = e.canceladaSinPenalizacion() ? Boolean.TRUE : null;
             s.version = e.version();
             return s;
         }
@@ -242,9 +256,19 @@ public final class Dobles {
         public RuntimeException fallarAlLiberar;
         public RuntimeException fallarAlBloquear;
         public RuntimeException fallarAlEntregar;
+        /** Falla solo las entregas cuya clave cumpla la condicion (el botin sin la epica, o al reves). */
+        public java.util.function.Predicate<String> fallarEntregaSi;
+        /** Productos (epicas) que el jugador ya tiene: el inventario no los entrega y los devuelve en yaTenia. */
+        public final Set<String> yaTiene = new HashSet<>();
 
         public Inventario conHeroe(String id, String duenoUid, String productoId, boolean equipado) {
-            heroes.put(id, new HeroeDelInventario(id, productoId, duenoUid, "HEROE", "Vorn", true, null, null, 1, 0.0));
+            return conHeroeEnNivel(id, duenoUid, productoId, equipado, 1);
+        }
+
+        public Inventario conHeroeEnNivel(String id, String duenoUid, String productoId, boolean equipado,
+                                          int nivel) {
+            heroes.put(id, new HeroeDelInventario(id, productoId, duenoUid, "HEROE", "Vorn", true, null, null, nivel,
+                    0.0));
             if (equipado) {
                 equipados.add(id);
             }
@@ -314,15 +338,20 @@ public final class Dobles {
         }
 
         @Override
-        public void entregar(String jugadorUid, UUID ejecucionId, List<ProductoAEntregar> productos, String clave) {
+        public List<String> entregar(String jugadorUid, UUID ejecucionId, List<ProductoAEntregar> productos,
+                                     String clave) {
             llamadas.add("entregar " + clave);
             if (fallarAlEntregar != null) {
                 throw fallarAlEntregar;
+            }
+            if (fallarEntregaSi != null && fallarEntregaSi.test(clave)) {
+                throw caido("inventario");
             }
             if (!clavesDeEntrega.contains(clave)) {
                 clavesDeEntrega.add(clave);
                 entregas.add(productos);
             }
+            return productos.stream().map(ProductoAEntregar::productoId).filter(yaTiene::contains).toList();
         }
     }
 
@@ -354,6 +383,10 @@ public final class Dobles {
     /** Heroes: valida todo salvo lo que se le diga; decide ataque basico; 10 x 1,2^dado; estadisticas fijas. */
     public static final class Heroes implements ServicioDeHeroes {
         public String motivoDeRechazo;
+        /** Con un motivo de rechazo, rechaza solo las estrategias con rotaciones escritas; la vacia (la heuristica) pasa. */
+        public boolean rechazarSoloLasEscritas;
+        /** Si no es nulo, lo que heroes devuelve como rotaciones con el nombre exacto de la Tabla 7. */
+        public List<List<String>> rotacionesCanonicas;
         public final Set<String> sanadores = Set.of("Chamán", "Médico");
         public final List<String> validaciones = new ArrayList<>();
         public int vidaDeLosEnemigos = 5;
@@ -371,10 +404,11 @@ public final class Dobles {
             if (fallarAlValidar != null) {
                 throw fallarAlValidar;
             }
-            if (motivoDeRechazo != null) {
+            if (motivoDeRechazo != null && !(rechazarSoloLasEscritas && rotaciones.isEmpty())) {
                 return new VeredictoDeEstrategia(false, motivoDeRechazo, null, habilidadesValidas);
             }
-            return new VeredictoDeEstrategia(true, null, rotaciones, habilidadesValidas);
+            return new VeredictoDeEstrategia(true, null, rotacionesCanonicas != null ? rotacionesCanonicas : rotaciones,
+                    habilidadesValidas);
         }
 
         @Override
@@ -423,6 +457,8 @@ public final class Dobles {
     public static final class Motor implements MotorDeCombate {
         public static final String HEROE = SimuladorDeMision.ID_DEL_HEROE;
         public static final String RIVAL = SimuladorDeMision.ID_DEL_RIVAL;
+        /** 6.1.2: «tienen dos turnos de recarga»: tras jugarla no se puede otra vez hasta pasados dos turnos propios. */
+        static final int TURNOS_DE_RECARGA_DE_UNA_EPICA = 2;
 
         public int danoDelHeroe = 50;
         public int danoDeLosEnemigos = 1;
@@ -466,6 +502,7 @@ public final class Dobles {
                         }
                         c = con(c, c.vidaActual(), poder, c.turnosJugados());
                     }
+                    c = conRecargas(c, unTurnoMenos(c.recargas()));
                 }
                 nuevos.add(c);
             }
@@ -504,6 +541,11 @@ public final class Dobles {
                     blanco.turnosJugados());
             Combatiente actorDespues = con(actor, actor.vidaActual(), actor.poderActual() - gasto,
                     actor.turnosJugados() + 1);
+            if (actor.epicas().contains(accion)) {
+                Map<String, Integer> recargasNuevas = new HashMap<>(actorDespues.recargas());
+                recargasNuevas.put(accion, TURNOS_DE_RECARGA_DE_UNA_EPICA);
+                actorDespues = conRecargas(actorDespues, recargasNuevas);
+            }
             List<Combatiente> nuevos = new ArrayList<>();
             for (Combatiente c : combatientes) {
                 nuevos.add(c.id().equals(ejecutor) ? actorDespues : blancoDespues);
@@ -529,6 +571,22 @@ public final class Dobles {
             return new Combatiente(c.id(), c.prototipo(), c.nivel(), e, Math.min(c.vidaActual(), e.vida()), poder,
                     c.turnosJugados(), c.cargas(), c.efectos(), c.equipamiento(), c.epicas(), c.ultimoDanoRecibido(),
                     c.recargas(), acciones);
+        }
+
+        private static Map<String, Integer> unTurnoMenos(Map<String, Integer> recargas) {
+            Map<String, Integer> nuevas = new HashMap<>();
+            recargas.forEach((accion, faltan) -> {
+                if (faltan > 1) {
+                    nuevas.put(accion, faltan - 1);
+                }
+            });
+            return nuevas;
+        }
+
+        private static Combatiente conRecargas(Combatiente c, Map<String, Integer> recargas) {
+            return new Combatiente(c.id(), c.prototipo(), c.nivel(), c.estadisticas(), c.vidaActual(), c.poderActual(),
+                    c.turnosJugados(), c.cargas(), c.efectos(), c.equipamiento(), c.epicas(), c.ultimoDanoRecibido(),
+                    recargas, c.acciones());
         }
 
         private static Combatiente con(Combatiente c, int vida, Integer poder, int turnos) {
@@ -561,10 +619,13 @@ public final class Dobles {
 
     public static final class Libro implements LibroDeCreditos {
         public final Map<String, Integer> acreditado = new LinkedHashMap<>();
+        /** Cada vez que se le pidio acreditar, con o sin exito: la referencia que se uso. */
+        public final List<String> intentos = new ArrayList<>();
         public RuntimeException fallar;
 
         @Override
         public void acreditar(String jugadorUid, int monto, String refId, String concepto) {
+            intentos.add(refId);
             if (fallar != null) {
                 throw fallar;
             }
@@ -583,12 +644,20 @@ public final class Dobles {
 
     public static final class Correo implements CorreoDeMisiones {
         public final Map<String, String> enviados = new LinkedHashMap<>();
+        /** Cada vez que se le pidio enviar, con o sin exito: la clave de idempotencia que se uso. */
+        public final List<String> intentos = new ArrayList<>();
         public final AtomicReference<RuntimeException> fallar = new AtomicReference<>();
+        /** Falla solo los correos cuya clave cumpla la condicion (el de la epica sin el de fin, o al reves). */
+        public java.util.function.Predicate<String> fallarClaveSi;
 
         @Override
         public void enviar(DirectorioDeJugadores.Contacto contacto, String asunto, String mensaje, String clave) {
+            intentos.add(clave);
             if (fallar.get() != null) {
                 throw fallar.get();
+            }
+            if (fallarClaveSi != null && fallarClaveSi.test(clave)) {
+                throw caido("correo");
             }
             enviados.putIfAbsent(clave, asunto + " | " + mensaje);
         }
@@ -607,10 +676,15 @@ public final class Dobles {
         public final AtomicReference<RuntimeException> fallar = new AtomicReference<>();
         /** Si no es nulo, falla solo a partir de este numero de avisos ya dados en la vuelta. */
         public Integer fallarDespuesDe;
+        /** Falla solo los avisos cuyo id cumpla la condicion (el de la epica sin el de fin, o al reves). */
+        public java.util.function.Predicate<String> fallarIdSi;
 
         @Override
         public void avisar(String jugadorUid, String id, String titulo, String cuerpo, Instant creadaEn) {
             intentos.add(id);
+            if (fallarIdSi != null && fallarIdSi.test(id)) {
+                throw caido("notificaciones");
+            }
             if (fallar.get() != null && (fallarDespuesDe == null || enBandeja.size() >= fallarDespuesDe)) {
                 throw fallar.get();
             }

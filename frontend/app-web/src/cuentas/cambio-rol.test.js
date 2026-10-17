@@ -109,4 +109,21 @@ describe('HU-RBAC-003 - cambio de rol desde frontend', () => {
       'SUPER_ADMINISTRADOR',
     ]);
   });
+
+  test('rbac.yaml 2.0.0 — el motivo del cambio viaja para la auditoría', async () => {
+    sessionStorage.setItem('nexus.token', 'jwt-super-admin');
+    const llamadas = [];
+    await cambiarRol(25, 'MODERADOR', {
+      motivo: 'Refuerzo del equipo de moderación',
+      fetchImpl: async (url, opciones) => {
+        llamadas.push({ url, opciones });
+        return respuesta({ mensaje: 'Rol actualizado correctamente' });
+      },
+    });
+
+    expect(JSON.parse(llamadas[0].opciones.body)).toEqual({
+      nuevoRol: 'MODERADOR',
+      motivo: 'Refuerzo del equipo de moderación',
+    });
+  });
 });

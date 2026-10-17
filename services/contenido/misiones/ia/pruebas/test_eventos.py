@@ -189,3 +189,15 @@ def test_el_peso_de_un_enemigo_cuenta_cuando_el_enemigo_gana():
     e = evento(1, lado="ENEMIGO", prototipo="Mago Fuego", oponente_lado="HEROE", dano=0, despues=cae_el_heroe,
                ejecutada="Misiles de magma", costo=2)
     assert una([e]).peso == pytest.approx(1.0)
+
+def test_la_traza_de_estrategia_de_un_enemigo_no_cambia_lo_que_aprende_el_modelo():
+    """HU-SIM-004 agrega `estrategia` y `estrategiaId` a la jugada de un enemigo. Son para auditar, no para aprender:
+    la muestra (situacion, candidatas, elegida, peso) es la misma con y sin ellas."""
+    sin = evento(1, lado="ENEMIGO", prototipo="Mago Fuego", oponente_lado="HEROE", oponente_prototipo="Guerrero Armas",
+                 ejecutada="Misiles de magma", costo=2)
+    con = evento(1, lado="ENEMIGO", prototipo="Mago Fuego", oponente_lado="HEROE", oponente_prototipo="Guerrero Armas",
+                 ejecutada="Misiles de magma", costo=2, estrategia="PREDEFINIDA", estrategia_id="mago-fuego-n4")
+    assert con["jugada"]["estrategia"] == "PREDEFINIDA" and con["jugada"]["estrategiaId"] == "mago-fuego-n4"
+    assert "estrategia" not in sin["jugada"]
+    assert eventos.muestras([con]) == eventos.muestras([sin])
+    assert una([con]).elegida == una([sin]).elegida

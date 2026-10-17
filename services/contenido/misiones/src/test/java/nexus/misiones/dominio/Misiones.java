@@ -10,15 +10,25 @@ import java.util.List;
  */
 public final class Misiones {
 
+    /** El producto EPICA «Velo de Sombras» del catalogo: UUID v3 de «epica-picaro-veneno-velo-de-sombras». */
+    public static final String ID_DE_VELO_DE_SOMBRAS = "9c1ea3fd-2f97-33ae-bb4f-2777cea501a5";
+
     public static final Epica VELO_DE_SOMBRAS = new Epica("Velo de Sombras",
             "+2 a la defensa para todos los héroes.",
             "El héroe se vuelve intangible durante 1 turno, evitando todo el daño recibido y causando "
                     + "envenenamiento al atacante (+3 de daño por veneno durante 2 turnos).",
-            null);
+            ID_DE_VELO_DE_SOMBRAS);
 
     /** Un heroe de nivel 1 con las estadisticas de la Tabla 6 (Guerrero Armas). */
     public static final HeroeEnMision HEROE =
             new HeroeEnMision("h-1", "Vorn", "Guerrero Armas", "p-1", 1, 0, 8, 44, 11);
+
+    /**
+     * Una epica que el catalogo oficial NO tiene (sin productoId): lo que antes era «Velo de Sombras». Sirve para
+     * probar que una epica sin producto queda en la coleccion y se informa como no entregada.
+     */
+    public static final Epica EPICA_SIN_PRODUCTO = new Epica("Eco de Cenizas",
+            "+1 a la defensa para todos los héroes.", "El héroe se vuelve intangible durante 1 turno.", null);
 
     public static final MasterDeMision SOMBRA_DEL_OLVIDO =
             new MasterDeMision("Sombra del Olvido", "Pícaro Veneno", 0.15, VELO_DE_SOMBRAS);
@@ -81,6 +91,42 @@ public final class Misiones {
 
     public static Mision desafio(String id, Intentos intentos) {
         return minima(id, Categoria.DESAFIO, 2, List.of(), List.of(), intentos);
+    }
+
+    /** Una mision minima con los enemigos y el jefe que la prueba necesita (para ver con que estrategia pelea cada uno). */
+    public static Mision conEnemigos(String id, List<GrupoDeEnemigos> enemigos, Jefe jefe) {
+        return conEnemigosEnNivel(id, null, enemigos, jefe);
+    }
+
+    /** Igual, con el nivel recomendado de la mision (D-42: en ese nivel pelean los enemigos). */
+    public static Mision conEnemigosEnNivel(String id, Integer nivelRecomendado, List<GrupoDeEnemigos> enemigos,
+                                            Jefe jefe) {
+        return new Mision(id, Origen.PROVISIONAL_DEV, "Misión " + id, Categoria.HISTORIA, "Descripción de " + id, null,
+                Dificultad.FACIL, 1, nivelRecomendado, List.of(), "Narrativa de " + id, null,
+                List.of(new Objetivo("Derrotar al jefe.", true, TipoDeObjetivo.DERROTAR_JEFE, null, null)),
+                enemigos, jefe, List.of(),
+                new RecompensasDeMision(5, List.of(), List.of(), List.of(),
+                        new RecompensasDeMision.PrimeraVez(2, List.of())),
+                false, null, null);
+    }
+
+    /** Una mision minima con los enemigos, el jefe y los Master que la prueba necesita (para ver contra quien pelea). */
+    public static Mision conEnemigosYMasters(String id, List<GrupoDeEnemigos> enemigos, Jefe jefe,
+                                             List<MasterDeMision> masters) {
+        return conEnemigosYMastersEnNivel(id, null, enemigos, jefe, masters);
+    }
+
+    /** Igual, con el nivel recomendado de la mision (D-42: en ese nivel pelean los enemigos regulares y el jefe). */
+    public static Mision conEnemigosYMastersEnNivel(String id, Integer nivelRecomendado,
+                                                    List<GrupoDeEnemigos> enemigos, Jefe jefe,
+                                                    List<MasterDeMision> masters) {
+        return new Mision(id, Origen.PROVISIONAL_DEV, "Misión " + id, Categoria.HISTORIA, "Descripción de " + id, null,
+                Dificultad.FACIL, 1, nivelRecomendado, List.of(), "Narrativa de " + id, null,
+                List.of(new Objetivo("Derrotar al jefe.", true, TipoDeObjetivo.DERROTAR_JEFE, null, null)),
+                enemigos, jefe, masters,
+                new RecompensasDeMision(5, List.of(), List.of(), List.of(),
+                        new RecompensasDeMision.PrimeraVez(2, List.of())),
+                false, null, null);
     }
 
     public static Mision minima(String id, Categoria categoria, double horas, List<String> previas,
