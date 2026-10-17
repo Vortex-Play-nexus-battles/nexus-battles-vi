@@ -2940,6 +2940,89 @@ button.tarjeta--partida:disabled {
   color: var(--texto-2);
 }
 
+/* ms-chatbot.yaml 1.13.0 (§7.4.3) — la tarjeta de un producto con su imagen
+   del catálogo, a la izquierda del nombre. La imagen no cambia de tamaño al
+   cargar (ancho y alto fijos) y no se deforma. */
+.chatbot-enriquecido__tarjeta--con-imagen {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  column-gap: var(--e-2);
+  align-items: start;
+}
+
+.chatbot-enriquecido__tarjeta--con-imagen > :not(.chatbot-enriquecido__tarjeta-imagen) {
+  grid-column: 2;
+}
+
+.chatbot-enriquecido__tarjeta-imagen {
+  grid-column: 1;
+  grid-row: 1 / span 3;
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: var(--radio);
+  background: var(--cromo);
+}
+
+/* Con dos o más productos, en fila: se desliza con los botones, la rueda o
+   las flechas (la lista se puede enfocar). Cada tarjeta ocupa casi todo el
+   ancho, para que se vea que hay más. */
+.chatbot-enriquecido__carrusel {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--e-1);
+}
+
+.chatbot-enriquecido__carrusel-lista {
+  display: flex;
+  gap: var(--e-2);
+  margin: 0;
+  padding: var(--e-1) 0;
+  list-style: none;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+}
+
+.chatbot-enriquecido__carrusel-lista:focus-visible {
+  outline: 2px solid var(--primaria);
+  outline-offset: 2px;
+}
+
+.chatbot-enriquecido__carrusel-elemento {
+  flex: 0 0 85%;
+  scroll-snap-align: start;
+}
+
+.chatbot-enriquecido__carrusel-elemento > .chatbot-enriquecido__tarjeta {
+  height: 100%;
+}
+
+.chatbot-enriquecido__carrusel-boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--borde-int);
+  border-radius: 50%;
+  background: var(--superficie);
+  color: var(--primaria);
+  cursor: pointer;
+}
+
+.chatbot-enriquecido__carrusel-boton:focus-visible {
+  outline: 2px solid var(--primaria);
+  outline-offset: 2px;
+}
+
+/* El chevron apunta a la derecha: «anterior» es el mismo, girado. */
+.chatbot-enriquecido__carrusel-boton--anterior .icono {
+  transform: rotate(180deg);
+}
+
 .chatbot-enriquecido__enlaces {
   display: flex;
   flex-wrap: wrap;

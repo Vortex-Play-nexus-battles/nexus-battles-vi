@@ -4,7 +4,15 @@
  * El servidor manda, junto al texto de una respuesta, pasos numerados,
  * enlaces a secciones del sitio, tarjetas de texto, botones de respuesta
  * rápida y, cuando no entendió, la oferta de hablar con soporte. Aquí se
- * pintan. Sin imágenes (decisión del cliente).
+ * pintan.
+ *
+ * ms-chatbot.yaml 1.13.0 (§7.4.3 «respuestas enriquecidas: incluyendo
+ * imágenes») — la tarjeta de un producto del catálogo puede traer su imagen.
+ * Se pinta solo si es un recurso del propio catálogo o una imagen incrustada
+ * pequeña (`imagenSegura`, la misma regla que el servidor), en un `<img>` sin
+ * texto alternativo (el nombre va al lado), y se quita si no carga. Con dos o
+ * más tarjetas de productos, van en un carrusel que se recorre con sus
+ * botones, con la rueda o con el teclado.
  *
  * Los enlaces llegan como el id de una vista de la matriz de acceso, nunca
  * como una URL: se convierten con `urlDeVista`, y uno que no existe no se
@@ -28,11 +36,17 @@ import { destinoVisible, urlDeVista } from '../acceso.js';
 import { vistaDeRuta } from '../matriz-acceso.js';
 import { leerSesion } from '../sesion.js';
 import { h } from './dom.js';
+import { icono } from './icono.js';
+import { permitido } from './motion.js';
 
 export const TEXTOS_ENRIQUECIDO = Object.freeze({
   pasos: 'Pasos',
   soporte: 'Hablar con soporte',
   otrasPreguntas: 'También puedes preguntar',
+  // ms-chatbot.yaml 1.13.0 — el carrusel de productos.
+  productos: 'Productos',
+  anterior: 'Productos anteriores',
+  siguiente: 'Más productos',
   // ms-chatbot.yaml 1.12.0 — la solicitud que se abrió sola.
   solicitudAbierta: 'Abrí una solicitud de soporte',
   solicitudSumada: 'Sumé tu pregunta a tu solicitud abierta',
@@ -141,16 +155,12 @@ export function pintarEnriquecido(
     );
   }
 
-  for (const tarjeta of enriquecido.tarjetas ?? []) {
-    const cuerpo = [
-      h('p', { clase: 'chatbot-enriquecido__tarjeta-titulo', texto: tarjeta.titulo }),
-      h('p', { clase: 'chatbot-enriquecido__tarjeta-texto', texto: tarjeta.texto }),
-    ];
-    const enlace = enlaceA(tarjeta.enlace);
-    if (enlace) {
-      cuerpo.push(enlace);
-    }
-    caja.append(h('div', { clase: 'chatbot-enriquecido__tarjeta', hijos: cuerpo }));
+  const tarjetas = enriquecido.tarjetas ?? [];
+  const pintadas = tarjetas.map((tarjeta) => pintarTarjeta(tarjeta, enlaceA));
+  if (pintadas.length >= 2 && tarjetas.some((tarjeta) => imagenSegura(tarjeta.imagen))) {
+    caja.append(carrusel(pintadas));
+  } else {
+    caja.append(...pintadas);
   }
 
   const enlaces = (enriquecido.enlaces ?? []).map(enlaceA).filter(Boolean);
@@ -222,6 +232,103 @@ function avisoDeSolicitud(solicitud, alVerSolicitud) {
       ver,
     ],
   });
+}
+
+// Una tarjeta: su imagen si es segura, su título, su texto y su enlace.
+function pintarTarjeta(tarjeta, enlaceA) {
+  const src = imagenSegura(tarjeta.imagen);
+  const cuerpo = [];
+  if (src) {
+    const imagen = h('img', {
+      clase: 'chatbot-enriquecido__tarjeta-imagen',
+      atributos: { src, alt: '', loading: 'lazy', decoding: 'async', width: '56', height: '56' },
+    });
+    // Una imagen que no carga no se enseña rota: la tarjeta se lee igual.
+    imagen.addEventListener('error', () => imagen.remove(), { once: true });
+    cuerpo.push(imagen);
+  }
+  cuerpo.push(
+    h('p', { clase: 'chatbot-enriquecido__tarjeta-titulo', texto: tarjeta.titulo }),
+    h('p', { clase: 'chatbot-enriquecido__tarjeta-texto', texto: tarjeta.texto }),
+  );
+  const enlace = enlaceA(tarjeta.enlace);
+  if (enlace) {
+    cuerpo.push(enlace);
+  }
+  return h('div', {
+    clase: src
+      ? 'chatbot-enriquecido__tarjeta chatbot-enriquecido__tarjeta--con-imagen'
+      : 'chatbot-enriquecido__tarjeta',
+    hijos: cuerpo,
+  });
+}
+
+// 1.13.0 — las tarjetas de productos en fila, con «‹» y «›». La lista se
+// puede enfocar y desplazar con las flechas; los botones avanzan una
+// tarjeta. Sin animación si la persona pidió movimiento reducido.
+function carrusel(tarjetas) {
+  const lista = h('ul', {
+    clase: 'chatbot-enriquecido__carrusel-lista',
+    atributos: { tabindex: '0', 'aria-label': TEXTOS_ENRIQUECIDO.productos },
+    hijos: tarjetas.map((tarjeta) =>
+      h('li', { clase: 'chatbot-enriquecido__carrusel-elemento', hijos: [tarjeta] }),
+    ),
+  });
+  const boton = (sentido, etiqueta, accion) => {
+    const elemento = h('button', {
+      clase: `chatbot-enriquecido__carrusel-boton chatbot-enriquecido__carrusel-boton--${accion}`,
+      atributos: { type: 'button', 'aria-label': etiqueta },
+      datos: { accion: `carrusel-${accion}` },
+      hijos: [icono('chevron', { etiqueta: null })],
+    });
+    elemento.addEventListener('click', () => {
+      // Una tarjeta; sin medidas (aún sin pintar), al menos se mueve.
+      const paso = lista.firstElementChild?.getBoundingClientRect().width || lista.clientWidth || 1;
+      lista.scrollBy({ left: sentido * paso, behavior: permitido() ? 'smooth' : 'auto' });
+    });
+    return elemento;
+  };
+  return h('div', {
+    clase: 'chatbot-enriquecido__carrusel',
+    atributos: {
+      role: 'group',
+      'aria-roledescription': 'carrusel',
+      'aria-label': TEXTOS_ENRIQUECIDO.productos,
+    },
+    hijos: [
+      boton(-1, TEXTOS_ENRIQUECIDO.anterior, 'anterior'),
+      lista,
+      boton(1, TEXTOS_ENRIQUECIDO.siguiente, 'siguiente'),
+    ],
+  });
+}
+
+const RECURSO_DEL_CATALOGO =
+  /^\/api\/v1\/productos\/recursos\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const INCRUSTADA = /^data:image\/(png|jpeg|webp|gif|svg\+xml)(;base64)?,[^\s"'<>\\]+$/i;
+
+/** Lo que ocupa como mucho una imagen incrustada (`ImagenDeProducto.LARGO_MAXIMO`). */
+export const LARGO_MAXIMO_DE_IMAGEN = 8192;
+
+/**
+ * ms-chatbot.yaml 1.13.0 — la imagen de una tarjeta, si es de las que se
+ * pintan: un recurso gráfico del catálogo (`/api/v1/productos/recursos/<id>`)
+ * o una imagen incrustada pequeña (`data:image/png|jpeg|webp|gif|svg+xml`).
+ * Es la misma regla que aplica el servidor; aquí se repite porque lo que
+ * llega del historial se pinta igual (defensa en profundidad).
+ *
+ * @param {unknown} referencia
+ * @returns {string|null}
+ */
+export function imagenSegura(referencia) {
+  if (typeof referencia !== 'string') {
+    return null;
+  }
+  const limpia = referencia.trim();
+  if (!limpia || limpia.length > LARGO_MAXIMO_DE_IMAGEN) {
+    return null;
+  }
+  return RECURSO_DEL_CATALOGO.test(limpia) || INCRUSTADA.test(limpia) ? limpia : null;
 }
 
 function enlaceInterno(enlace, url, visible) {

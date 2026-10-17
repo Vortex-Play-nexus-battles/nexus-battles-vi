@@ -53,6 +53,8 @@ openapi: 3.1.0
 #               (RF-CHA-007), tambien para un visitante; la redaccion tapa
 #               las claves anunciadas con «es» (V17) y la base entiende mas
 #               formas de preguntar y errores de escritura (V18)
+#   7.4.3 (1.13.0) respuestas enriquecidas con imagenes: las tarjetas de los
+#               productos del catalogo llevan la imagen del propio catalogo
 #   7.4 (1.3.0) lo que faltaba del modulo 7.4: tickets y soporte humano
 #               (RF-CHA-007, RF-ADM-004), sugerencias y autocompletado,
 #               respuestas enriquecidas sin imagenes, vista del jugador y
@@ -147,7 +149,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.12.0
+  version: 1.13.0
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -157,6 +159,29 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.13.0 — 7.4.3: respuestas enriquecidas con imagenes
+
+    Compatible: un campo opcional nuevo en `TarjetaInformativa`.
+
+    * **El §7.4.3 dice que el chatbot «debe» dar respuestas enriquecidas
+      «incluyendo imagenes, enlaces y tarjetas informativas».** Desde 1.3.0
+      no habia imagenes, por una decision del cliente de la que no hay
+      registro escrito (D-CHA-02): solo el mensaje de un commit, sin cuerpo,
+      ni acta ni issue. Sin esa evidencia, el requisito vuelve a aplicar.
+    * **Las respuestas del catalogo** (precio, ficha y listado, desde 1.10.0)
+      llevan una `TarjetaInformativa` por producto nombrado, con su nombre,
+      su tipo y su precio y, en `imagen`, la imagen del producto. El texto
+      sigue siendo completo: quien no pinte las tarjetas no pierde nada.
+    * **Que imagen pasa**: la que ensena la tienda, y solo en dos formas: un
+      recurso grafico del catalogo (`/api/v1/productos/recursos/{id}`,
+      `productos.yaml` 1.10.0, comprobado al subirlo y servido con `nosniff`)
+      o una imagen incrustada pequena (`data:image/png|jpeg|webp|gif|svg+xml`,
+      como mucho 8192 caracteres; asi son las de la semilla). Nunca una URL
+      de otro sitio ni un nombre suelto que nadie sirve: entonces la tarjeta
+      va sin imagen.
+    * El asistente sigue sin **recibir** imagenes: `adjuntoUrl` sigue
+      obsoleto. Las capturas para soporte tecnico (§7.4.6) se tratan aparte.
 
     ### 1.12.0 — 7.4.2, 7.4.3 y 7.4.8: segunda auditoria
 
@@ -2505,8 +2530,9 @@ components:
       type: object
       description: |
         1.3.0. Partes de la respuesta que la ventana pinta como elementos
-        interactivos (7.4.3, 7.4.6). Sin imagenes (decision del cliente).
-        Todas las listas pueden venir vacias.
+        interactivos (7.4.3, 7.4.6). Hasta 1.12.0, sin imagenes; desde
+        1.13.0 las tarjetas de productos llevan la del catalogo
+        (`TarjetaInformativa.imagen`). Todas las listas pueden venir vacias.
       required: [pasos, enlaces, tarjetas, respuestasRapidas, ofrecerSoporteHumano]
       properties:
         pasos:
@@ -2599,7 +2625,9 @@ components:
 
     TarjetaInformativa:
       type: object
-      description: 1.3.0. Bloque de texto con titulo y, opcionalmente, un enlace interno.
+      description: |
+        1.3.0. Bloque de texto con titulo y, opcionalmente, un enlace interno.
+        Desde 1.13.0, la de un producto del catalogo puede traer su imagen.
       required: [titulo, texto]
       properties:
         titulo:
@@ -2612,6 +2640,16 @@ components:
           oneOf:
             - $ref: '#/components/schemas/EnlaceInterno'
             - type: 'null'
+        imagen:
+          type: string
+          maxLength: 8192
+          pattern: '^(/api/v1/productos/recursos/[0-9a-fA-F-]{36}|data:image/(png|jpeg|webp|gif|svg\+xml)(;base64)?,.+)$'
+          description: |
+            1.13.0 (7.4.3). La imagen del producto, tal como la guarda el
+            catalogo, solo si es un recurso grafico del propio catalogo o una
+            imagen incrustada pequena; si no, no viene. La ventana la pinta en
+            un `<img>` (texto alternativo vacio: el nombre del producto ya esta
+            al lado) y la quita si no carga.
 
     SugerenciaDePregunta:
       type: object
