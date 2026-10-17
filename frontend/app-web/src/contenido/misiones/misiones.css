@@ -248,6 +248,7 @@
   display: grid;
   place-items: center;
   height: 120px;
+  overflow: hidden;
   background: var(--cromo-elevado);
   background-image: linear-gradient(135deg, var(--cromo), var(--cromo-elevado));
 }
@@ -274,7 +275,13 @@
   );
 }
 
+/* Fase 2 de arte: la escena llena la franja de 120 px y no se sale de ella.
+   Dentro de la rejilla de centrado el `height: 100%` no se resolvia: la
+   imagen tomaba su alto natural (16:9) y tapaba el titulo de la tarjeta. Los
+   chips tambien son absolutos y van despues, asi que quedan encima. */
 .mision-card__imagen {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;

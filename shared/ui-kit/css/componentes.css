@@ -4762,7 +4762,10 @@ button.tarjeta--partida:disabled {
   background: var(--fondo);
 }
 
-.tarjeta__medios img {
+/* Solo la imagen que va directa en los medios. Con el descendiente la regla
+   tambien estiraba el retrato del heroe que va dentro de su marco en la
+   tarjeta de Inicio: 107 x 92, un ovalo en vez de un circulo. */
+.tarjeta__medios > img {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 10;

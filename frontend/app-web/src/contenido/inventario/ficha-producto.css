@@ -60,21 +60,16 @@
   outline-offset: 2px;
 }
 
+/* Fase 2 de arte (ART-5): la imagen entera sobre la misma ranura oscura que
+   el hueco sin imagen. Con `cover` en una caja de unos 500 x 220 solo se veia
+   el 44 % del alto del arte cuadrado (al retrato del heroe se le iba la cara). */
 .ficha__imagen {
   display: block;
   width: 100%;
-  max-height: 220px;
+  height: 220px;
   margin-bottom: 16px;
   border-radius: 8px;
-  object-fit: cover;
-}
-
-/* Sin imagen: el hueco es una ranura oscura con el icono del tipo, del
-   mismo tono que el escenario del heroe en la home (UX-GAME-3). */
-.ficha__imagen--ausente {
-  display: grid;
-  place-items: center;
-  height: 140px;
+  object-fit: contain;
   background:
     radial-gradient(
       60% 80% at 50% 45%,
@@ -82,6 +77,15 @@
       transparent 72%
     ),
     var(--cromo);
+}
+
+/* Sin imagen: el hueco es una ranura oscura con el icono del tipo, del
+   mismo tono que el escenario del heroe en la home (UX-GAME-3). La ranura la
+   pone `.ficha__imagen`, que este hueco tambien lleva. */
+.ficha__imagen--ausente {
+  display: grid;
+  place-items: center;
+  height: 140px;
 }
 
 .ficha__icono-tipo {

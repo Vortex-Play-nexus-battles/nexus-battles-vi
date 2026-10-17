@@ -169,10 +169,14 @@
   background-color: var(--cromo);
 }
 
+/* Fase 2 de arte (ART-5): el objeto entero sobre la ranura oscura, como en la
+   vitrina de subastas. El arte es cuadrado y la caja es apaisada: con `cover`
+   solo se veia la mitad del alto (al casco se le iban los cuernos y a las
+   espadas la punta y la empunadura). */
 .product-image img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: var(--radio-chico);
   display: block;
 }

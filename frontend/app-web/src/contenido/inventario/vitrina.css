@@ -388,6 +388,14 @@
   box-shadow: var(--brillo-primaria);
 }
 
+/* Fase 2 de arte: si el marco baja a 80 px, la imagen baja con el; si no, se
+   queda en los 92 px del kit y tapa el borde de rareza. 12 px menos que el
+   marco, como en la vitrina y en la carta del heroe. */
+.inventario-equipo__heroe .marco-heroe__imagen {
+  width: 68px;
+  height: 68px;
+}
+
 .inventario-equipo__identidad {
   display: grid;
   gap: 2px;
@@ -831,6 +839,22 @@
 .vitrina__marco .marco-heroe__imagen {
   width: 60px;
   height: 60px;
+}
+
+/* Fase 2 de arte: la imagen sustituye al icono del tipo. `retratos.js` la
+   cuelga al lado del icono y, si no carga, la quita, y entonces el icono
+   vuelve solo. Sin esto salian los dos y la imagen se salia del circulo. */
+.vitrina__marco .marco-heroe__retrato:has(> .marco-heroe__imagen) > .vitrina__icono {
+  display: none;
+}
+
+/* Los objetos se ven enteros dentro del circulo (ART-5: `contain`): su arte es
+   cuadrado y muchas armas van en diagonal, y el recorte redondo se comia la
+   punta y la empunadura. El relleno del 15 % deja el cuadrado del arte dentro
+   del circulo en los dos tamanos del marco. Los heroes siguen llenando el suyo. */
+.vitrina__producto:not([data-tipo='HEROE']) .vitrina__marco .marco-heroe__imagen {
+  padding: 15%;
+  object-fit: contain;
 }
 
 .vitrina__icono {
