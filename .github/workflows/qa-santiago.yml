@@ -1,0 +1,71 @@
+name: QA · Grupo de Santiago (aceptación por criterio)
+
+# Corre la suite de aceptación de las HU del Grupo de Santiago contra el banco E2E
+# (servicios reales + ms-cumplimiento + ms-chatbot) en cada PR a develop y a diario.
+# Publica el reporte HTML de Playwright y las evidencias (capturas por caso) como artefactos.
+
+on:
+  pull_request:
+    branches: [develop]
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+jobs:
+  aceptacion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      QA_RAIZ: ${{ github.workspace }}
+      QA_SALIDA: ${{ github.workspace }}/qa
+      QA_JSON: ${{ github.workspace }}/qa/resultados.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21', cache: gradle }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: npm, cache-dependency-path: frontend/app-web/package-lock.json }
+
+      - name: Construir los jars del banco
+        run: |
+          ./gradlew --no-daemon -x test $(cat tests/qa-santiago/tareas-bootjar.txt)
+          (cd services/cuentas/ms-identidad && ./mvnw -B -DskipTests package)
+          (cd services/cuentas/ms-ecommerce && chmod +x mvnw && ./mvnw -B -DskipTests package)
+          (cd services/cuentas/ms-cumplimiento && chmod +x mvnw && ./mvnw -B -DskipTests package)
+          mkdir -p services/cuentas/ms-chatbot/target && cp services/cuentas/ms-chatbot/build.nosync/libs/*.jar services/cuentas/ms-chatbot/target/
+
+      # Clave de firma efimera del banco: la fase 2FA reinicia ms-identidad y debe
+      # conservar la misma clave, por eso va a GITHUB_ENV (enmascarada) y no a un export.
+      - name: Generar la clave de firma del banco QA
+        run: |
+          clave=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 -w0)
+          echo "::add-mask::$clave"
+          echo "QA_JWT_CLAVE_PRIVADA=$clave" >> "$GITHUB_ENV"
+
+      - name: Levantar el banco E2E + servicios de Cuentas
+        run: docker compose -f tests/e2e/compose.yml -f tests/qa-santiago/compose.qa.yml up -d --build --wait
+
+      - name: Sembrar
+        run: |
+          ./tests/e2e/sembrar.sh
+          ln -sfn frontend/app-web/node_modules node_modules
+          (cd frontend/app-web && npm ci && npx playwright install --with-deps chromium)
+          node tests/qa-santiago/semilla-qa.mjs
+
+      - name: Suite de aceptación
+        working-directory: frontend/app-web
+        run: npx playwright test --config=../../tests/qa-santiago/playwright.qa.config.js
+
+      - name: Evidencias y reporte
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-santiago-evidencias
+          path: |
+            qa/
+            frontend/app-web/playwright-report/
+          retention-days: 30
+
+      - name: Bajar el banco
+        if: always()
+        run: docker compose -f tests/e2e/compose.yml -f tests/qa-santiago/compose.qa.yml down -v

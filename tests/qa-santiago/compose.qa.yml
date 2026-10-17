@@ -1,0 +1,110 @@
+# Override del banco E2E para la campana de QA de las 31 HU del Grupo de Santiago.
+# Agrega ms-cumplimiento (auditoria) y ms-chatbot, que el banco base no levanta,
+# y conecta ms-identidad con la auditoria real. No modifica el repositorio.
+#
+#   docker compose -f repo/tests/e2e/compose.yml -f compose.qa.yml up -d --build --wait
+
+services:
+  e2e-cumplimiento-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: cumplimientodb
+      POSTGRES_USER: cumplimiento
+      POSTGRES_PASSWORD: cumplimiento
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cumplimiento -d cumplimientodb"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  e2e-chatbot-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: chatbot_db
+      POSTGRES_USER: chatbot_user
+      POSTGRES_PASSWORD: chatbot
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatbot_user -d chatbot_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  srv-ms-cumplimiento:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/cuentas/ms-cumplimiento/target/*.jar
+        PUERTO: "8091"
+    ports:
+      - "8091:8091"
+    environment:
+      DB_HOST: e2e-cumplimiento-db
+      DB_PORT: "5432"
+      DB_NAME: cumplimientodb
+      DB_USER: cumplimiento
+      DB_PASSWORD: cumplimiento
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # Solo banco QA: maximo de registros por exportacion bajo (10000 en el codigo) para probar la segmentacion.
+      CUMPLIMIENTO_AUDITORIA_EXPORTACION_MAXIMOREGISTROS: "50"
+    depends_on:
+      e2e-cumplimiento-db: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8091/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  srv-ms-chatbot:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/cuentas/ms-chatbot/target/*.jar
+        PUERTO: "8094"
+    environment:
+      DB_HOST: e2e-chatbot-db
+      DB_PORT: "5432"
+      DB_NAME: chatbot_db
+      DB_USER: chatbot_user
+      DB_PASSWORD: chatbot
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      CORS_ORIGENES: http://localhost:8099
+      INVENTARIO_BASE_URL: http://srv-inventario:8080
+      SUBASTAS_BASE_URL: http://srv-ms-subastas:8092/api/v1
+      NOTIFICACIONES_BASE_URL: http://srv-notificaciones:8085/api/v1
+      FINANZAS_BASE_URL: http://srv-ms-finanzas:8093/api/v1
+      TORNEOS_BASE_URL: http://srv-torneos:8083/api/v1
+      MISIONES_BASE_URL: http://srv-misiones:8080
+      LISTA_NEGRA_VERIFICAR_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
+    depends_on:
+      e2e-chatbot-db: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8094/api/v1/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  srv-ms-identidad:
+    environment:
+      AUDITORIA_URL: http://srv-ms-cumplimiento:8091/api/v1/admin/auditoria/eventos
+      # Clave de firma FIJA del banco QA (la genera el CI o el que corre la suite: openssl genpkey | pkcs8 | base64): reiniciar ms-identidad
+      # no invalida las credenciales de servicio que los demas guardan en cache.
+      JWT_CLAVE_PRIVADA: "${QA_JWT_CLAVE_PRIVADA:-}"
+      # Igual que docker-compose.cuentas.yml (despliegue de Cuentas): avisos al usuario afectado.
+      NOTIFICACIONES_URL: http://srv-notificaciones:8085/api/v1/internal/notifications
+      # Reloj acelerado SOLO en el banco: el ejecutor de cierres (30 dias) pasa cada 10 s.
+      IDENTIDAD_PRIVACIDAD_INTERVALO_MS: "10000"
+      IDENTIDAD_PRIVACIDAD_RETRASO_INICIAL_MS: "5000"
+
+  srv-borde:
+    depends_on:
+      srv-ms-cumplimiento: { condition: service_healthy }
+      srv-ms-chatbot: { condition: service_healthy }
+
+  srv-ms-ecommerce:
+    environment:
+      # Igual que docker-compose.ms-ecommerce.yml: el correo de confirmacion de compra (7.5) va encendido.
+      TIENDA_CORREO_HABILITADO: "true"
