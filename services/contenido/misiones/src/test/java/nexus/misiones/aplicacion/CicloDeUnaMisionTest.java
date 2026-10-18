@@ -179,6 +179,35 @@ class CicloDeUnaMisionTest {
     }
 
     @Test
+    @DisplayName("HU-MIS-005: una exploracion resuelve cada encuentro en su intervalo y liquida solo al final")
+    void exploracionProgresiva() {
+        prepararCon(List.of(), 20, List.of(Misiones.exploracion("expedicion-larga", 24)));
+        Ejecucion enviada = enviar("expedicion-larga");
+
+        assertThat(enviada.encuentrosTotales()).isEqualTo(2);
+        assertThat(enviada.siguienteEncuentroEn()).isEqualTo(INICIO.plus(Duration.ofHours(12)));
+
+        ahora.set(INICIO.plus(Duration.ofHours(12)));
+        trabajo.ejecutar();
+
+        Ejecucion parcial = ejecuciones.buscar(enviada.id()).orElseThrow();
+        assertThat(parcial.estado()).isEqualTo(EstadoEjecucion.EN_PROGRESO);
+        assertThat(parcial.encuentrosCompletados()).isEqualTo(1);
+        assertThat(parcial.recompensasAcumuladas().experiencia()).isPositive();
+        assertThat(libro.acreditado).isEmpty();
+        assertThat(inventario.bloqueados).containsKey("h-1");
+
+        ahora.set(INICIO.plus(Duration.ofHours(24)));
+        trabajo.ejecutar();
+
+        Ejecucion terminada = ejecuciones.buscar(enviada.id()).orElseThrow();
+        assertThat(terminada.estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
+        assertThat(terminada.encuentrosCompletados()).isEqualTo(2);
+        assertThat(libro.acreditado).containsValue(7);
+        assertThat(inventario.bloqueados).isEmpty();
+    }
+
+    @Test
     @DisplayName("al vencer: completada, heroe liberado con su experiencia, creditos, correo y todo hecho")
     void cicloCompleto() {
         Ejecucion ejecucion = enviar("prueba-corta");

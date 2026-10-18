@@ -63,6 +63,18 @@ class CatalogoDeMisionesDesdeSemillaTest {
     }
 
     @Test
+    @DisplayName("HU-MIS-005: el catalogo publica una exploracion oficial de 24 a 72 horas")
+    void exploracionProlongada() {
+        Mision exploracion = CatalogoDeMisionesDesdeSemilla.cargar(false)
+                .buscar("expedicion-frontera-umbria").orElseThrow();
+
+        assertThat(exploracion.origen()).isEqualTo(Origen.EQUIPO);
+        assertThat(exploracion.categoria()).isEqualTo(Categoria.EXPLORACION);
+        assertThat(exploracion.duracionHoras()).isBetween(24.0, 72.0);
+        assertThat(exploracion.encuentros()).isEqualTo(3);
+    }
+
+    @Test
     @DisplayName("D-42: una misión que recomienda un nivel fuera de 1..8 no se publica (el Templo decía 15)")
     void nivelFueraDeRango() throws java.io.IOException {
         String templo15 = new String(Objects.requireNonNull(getClass().getClassLoader()

@@ -13,6 +13,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import nexus.misiones.dominio.Categoria;
 import nexus.misiones.dominio.CatalogoDeMisiones;
 import nexus.misiones.dominio.EpicaDeTabla20;
 import nexus.misiones.dominio.MasterDeMision;
@@ -64,6 +65,7 @@ public final class CatalogoDeMisionesDesdeSemilla implements CatalogoDeMisiones 
     public static final String DEL_DOCUMENTO = "semilla/misiones-del-documento.json";
     /** D-42: las misiones de historia de nivel 1 a 7 que llevan hasta el Templo. */
     public static final String DE_PROGRESION = "semilla/misiones-de-progresion.json";
+    public static final String DE_EXPLORACION = "semilla/misiones-de-exploracion.json";
     public static final String PROVISIONAL_DE_DEV = "semilla/misiones-provisionales-dev.json";
     public static final String PREFIJO_PROVISIONAL = "[PROVISIONAL DE DEV]";
 
@@ -101,9 +103,10 @@ public final class CatalogoDeMisionesDesdeSemilla implements CatalogoDeMisiones 
     public static CatalogoDeMisionesDesdeSemilla cargar(boolean conProvisional, Path semillaExtra) {
         SemillaDeMisiones documento = leer(DEL_DOCUMENTO);
         SemillaDeMisiones progresion = leer(DE_PROGRESION);
+        SemillaDeMisiones exploracion = leer(DE_EXPLORACION);
         SemillaDeMisiones provisional = conProvisional ? leer(PROVISIONAL_DE_DEV) : null;
         SemillaDeMisiones extra = semillaExtra == null ? null : leer(semillaExtra);
-        return desde(documento, progresion, provisional, extra);
+        return desde(documento, progresion, exploracion, provisional, extra);
     }
 
     /** El catalogo sin la semilla de progresion, como era antes de D-42. */
@@ -132,6 +135,14 @@ public final class CatalogoDeMisionesDesdeSemilla implements CatalogoDeMisiones 
      */
     static CatalogoDeMisionesDesdeSemilla desde(SemillaDeMisiones documento, SemillaDeMisiones progresion,
                                                 SemillaDeMisiones provisional, SemillaDeMisiones extra) {
+        return desde(documento, progresion, null, provisional, extra);
+    }
+
+    private static CatalogoDeMisionesDesdeSemilla desde(SemillaDeMisiones documento,
+                                                         SemillaDeMisiones progresion,
+                                                         SemillaDeMisiones exploracion,
+                                                         SemillaDeMisiones provisional,
+                                                         SemillaDeMisiones extra) {
         List<Mision> todas = new ArrayList<>();
         for (Mision mision : documento.misiones()) {
             if (mision.origen() != Origen.DOCUMENTO) {
@@ -152,6 +163,20 @@ public final class CatalogoDeMisionesDesdeSemilla implements CatalogoDeMisiones 
                 if (mision.nivelRecomendado() == null) {
                     throw new IllegalStateException("La mision de progresion «" + mision.id()
                             + "» necesita su nivel recomendado: es lo que ordena la progresion.");
+                }
+                todas.add(mision);
+            }
+        }
+        if (exploracion != null) {
+            if (!exploracion.tabla20().isEmpty()) {
+                throw new IllegalStateException(
+                        "La Tabla 20 es del documento: la semilla de exploraciones no la toca.");
+            }
+            for (Mision mision : exploracion.misiones()) {
+                if (mision.origen() != Origen.EQUIPO || mision.categoria() != Categoria.EXPLORACION) {
+                    throw new IllegalStateException(
+                            "La semilla de exploraciones solo publica exploraciones del equipo: «"
+                                    + mision.id() + "».");
                 }
                 todas.add(mision);
             }

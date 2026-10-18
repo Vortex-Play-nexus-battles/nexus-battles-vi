@@ -118,9 +118,15 @@ public class RepositorioEjecucionesMongo implements RepositorioDeEjecuciones {
      */
     @Override
     public List<Ejecucion> vencidas(Instant ahora, int limite) {
-        Query consulta = new Query(Criteria.where("estado").is(EstadoEjecucion.EN_PROGRESO).and("terminaEn").lte(ahora)
-                .orOperator(Criteria.where("proximoIntento").is(null), Criteria.where("proximoIntento").lte(ahora)))
-                .with(Sort.by(Sort.Direction.ASC, "terminaEn"))
+        Criteria turno = new Criteria().orOperator(
+                Criteria.where("siguienteEncuentroEn").lte(ahora),
+                new Criteria().andOperator(Criteria.where("siguienteEncuentroEn").exists(false),
+                        Criteria.where("terminaEn").lte(ahora)));
+        Criteria sinEspera = new Criteria().orOperator(
+                Criteria.where("proximoIntento").is(null), Criteria.where("proximoIntento").lte(ahora));
+        Query consulta = new Query(new Criteria().andOperator(
+                Criteria.where("estado").is(EstadoEjecucion.EN_PROGRESO), turno, sinEspera))
+                .with(Sort.by(Sort.Direction.ASC, "siguienteEncuentroEn"))
                 .limit(limite);
         return leer(consulta);
     }

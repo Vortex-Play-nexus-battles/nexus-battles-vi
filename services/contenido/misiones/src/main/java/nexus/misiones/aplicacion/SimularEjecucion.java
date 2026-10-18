@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.Optional;
 import nexus.misiones.dominio.CalculadoraDeRecompensas;
 import nexus.misiones.dominio.CatalogoDeMisiones;
+import nexus.misiones.dominio.Categoria;
 import nexus.misiones.dominio.Ejecucion;
 import nexus.misiones.dominio.EjecucionModificadaConcurrentemente;
 import nexus.misiones.dominio.EstadoEjecucion;
@@ -218,16 +219,30 @@ public class SimularEjecucion {
                         jefe.defensa(), jefe.rotaciones(), null, multiplicador, vistas, heroe.nivel());
 
         List<Rival> plan = PlanDeCombate.armar(regulares, masters, rivalFinal, azar);
+        boolean exploracion = mision.get().categoria() == Categoria.EXPLORACION;
+        int objetivo = exploracion
+                ? Math.min(plan.size(), ejecucion.encuentrosQueDebenEstarResueltos(ahora))
+                : plan.size();
+        if (objetivo <= ejecucion.encuentrosCompletados()) {
+            return Optional.empty();
+        }
+        List<Rival> planHastaAhora = exploracion ? plan.subList(0, objetivo) : plan;
         PerfilDeCombate perfil = perfiles.de(ejecucion.jugadorUid(), heroe);
         Long semillaDeGolpes = parametros.semillaDePruebas() == null ? null : ejecucion.semilla();
         Simulacion simulacion = new SimuladorDeMision(decisor, motor, heroes).simular(ejecucion.id(),
-                mision.get().id(), heroe, perfil, ejecucion.estrategia(), plan, azar, semillaDeGolpes);
+                mision.get().id(), heroe, perfil, ejecucion.estrategia(), planHastaAhora, azar, semillaDeGolpes);
         ResultadoDeMision resultado = simulacion.resultado();
 
         boolean primeraVez = ejecuciones.delJugadorEnMision(ejecucion.jugadorUid(), ejecucion.misionId()).stream()
                 .noneMatch(e -> e.estado() == EstadoEjecucion.COMPLETADA && !e.id().equals(ejecucion.id()));
         RecompensasDeEjecucion recompensas = CalculadoraDeRecompensas.calcular(mision.get(), ejecucion.escalon(),
                 resultado, primeraVez, parametros.recompensas(), azar);
+
+        boolean corteParcialSuperado = exploracion && resultado.exito() && objetivo < plan.size();
+        if (corteParcialSuperado) {
+            recompensas = CalculadoraDeRecompensas.calcular(mision.get(), ejecucion.escalon(),
+                    comoResultadoParcial(resultado), primeraVez, parametros.recompensas(), azar);
+        }
 
         if (!ejecucion.reservaVigente(reloj.instant())) {
             // Tardo mas que el arriendo: otra instancia pudo tomarla y escribir sus turnos, y los de este intento
@@ -237,6 +252,13 @@ public class SimularEjecucion {
             return Optional.empty();
         }
         eventos.reemplazar(ejecucion.id(), simulacion.eventos());
+        if (corteParcialSuperado) {
+            ejecucion.registrarProgresoDeExploracion(resultado, recompensas);
+            Ejecucion guardada = ejecuciones.guardar(ejecucion);
+            BITACORA.info("Exploracion {}: {}/{} encuentros resueltos; recompensas acumuladas sin entregar",
+                    guardada.id(), guardada.encuentrosCompletados(), guardada.encuentrosTotales());
+            return Optional.of(guardada);
+        }
         // Terminar borra los intentos fallidos y su error (empieza la liquidacion): se anotan antes para la bitacora.
         int fallosPrevios = ejecucion.intentosDeLiquidacion();
         String falloAnterior = ejecucion.ultimoError();
@@ -250,6 +272,14 @@ public class SimularEjecucion {
                     guardada.id(), fallosPrevios, falloAnterior);
         }
         return Optional.of(guardada);
+    }
+
+    private static ResultadoDeMision comoResultadoParcial(ResultadoDeMision resultado) {
+        return new ResultadoDeMision(false, resultado.jefeDerrotado(), resultado.encuentrosCompletados(),
+                resultado.encuentrosRegularesCompletos(), resultado.danoInfligido(), resultado.danoRecibido(),
+                resultado.turnos(), resultado.criticos(), resultado.habilidadesMasUsadas(),
+                resultado.enemigosDerrotados(), resultado.masters(), resultado.vidaMinimaPorcentaje(),
+                resultado.experiencia(), resultado.dados());
     }
 
     /**

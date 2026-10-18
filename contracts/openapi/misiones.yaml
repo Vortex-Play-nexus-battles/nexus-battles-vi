@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Servicio de misiones
-  version: 1.2.0
+  version: 1.4.0
   description: >
     Módulo de misiones (sección 7.8 del documento del curso, M11, RF-MIS-001 a
     RF-MIS-017): tablón, detalle, matrícula de un héroe con su estrategia,
@@ -567,7 +567,7 @@ components:
         con `MISIONES_SEMILLA_PROVISIONAL=true`; no es contenido del juego.
         PROGRESION (1.1.0, D-42): misión de historia del catálogo de progresión
         de nivel 1 a 7, diseñada por el equipo 6; contenido del juego.
-      enum: [DOCUMENTO, PROVISIONAL_DEV, PROGRESION]
+      enum: [DOCUMENTO, PROVISIONAL_DEV, PROGRESION, EQUIPO]
     PaginaDeMisiones:
       type: object
       required: [misiones, total, pagina, totalPaginas, tamanio]
@@ -951,7 +951,9 @@ components:
     MisionActiva:
       type: object
       description: Una misión en curso (§7.8.9, «Panel de misiones activas»).
-      required: [ejecucionId, misionId, nombre, categoria, heroe, iniciadaEn, terminaEn, estado]
+      required:
+        [ejecucionId, misionId, nombre, categoria, heroe, iniciadaEn, terminaEn, estado,
+         encuentrosCompletados, encuentrosTotales, tiempoRestanteSegundos, recompensasAcumuladas]
       properties:
         ejecucionId:
           type: string
@@ -992,6 +994,41 @@ components:
         estado:
           type: string
           enum: [EN_PROGRESO]
+        encuentrosCompletados:
+          type: integer
+          minimum: 0
+          description: Encuentros resueltos hasta el último intervalo procesado.
+        encuentrosTotales:
+          type: integer
+          minimum: 1
+          description: Encuentros de la ejecución, incluidos los Máster que aparecieron.
+        tiempoRestanteSegundos:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Segundos restantes hasta el final programado de la misión.
+        recompensasAcumuladas:
+          type: object
+          description: Recompensas visibles pero aún no entregadas; se liquidan juntas al terminar.
+          required: [creditos, experiencia, objetos]
+          properties:
+            creditos:
+              type: integer
+              minimum: 0
+            experiencia:
+              type: number
+              minimum: 0
+            objetos:
+              type: array
+              items:
+                type: object
+                required: [nombre, cantidad]
+                properties:
+                  nombre:
+                    type: string
+                  cantidad:
+                    type: integer
+                    minimum: 1
     Cancelacion:
       type: object
       required: [ejecucionId, estado, heroeLiberado, penalizacion]
