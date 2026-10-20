@@ -142,6 +142,33 @@ class CicloDeUnaMisionTest {
         cancelar = new CancelarEjecucion(ejecuciones, liquidar, reloj);
     }
 
+    /** El catalogo publicado, manteniendo todos los puertos en memoria. */
+    private void prepararConCatalogoPublicado() {
+        prepararCon(List.of());
+        CatalogoDeMisionesDesdeSemilla publicado = CatalogoDeMisionesDesdeSemilla.cargar(false);
+        catalogo = new Dobles.Catalogo(publicado.todas(), publicado.tabla20());
+        matricular = new MatricularHeroe(catalogo, ejecuciones, new Dobles.Estrategias(), inventario, productos,
+                heroes, parametros, reloj, () -> 7L);
+        liquidar = new LiquidarEjecucion(ejecuciones, catalogo, inventario, libro, directorio,
+                correo, avisos, parametros, reloj);
+        trabajo = new TrabajoDeMisiones(ejecuciones, simulador(Set.of()), liquidar, parametros, reloj);
+        cancelar = new CancelarEjecucion(ejecuciones, liquidar, reloj);
+    }
+
+    private Ejecucion completar(String mision, Duration duracion) {
+        Ejecucion ejecucion = enviar(mision);
+        ahora.set(ahora.get().plus(duracion));
+        trabajo.ejecutar();
+        Ejecucion terminada = ejecuciones.buscar(ejecucion.id()).orElseThrow();
+        assertThat(terminada.estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
+        return terminada;
+    }
+
+    private void desbloquearCripta() {
+        completar("templo-olvidado", Duration.ofHours(12));
+        completar("la-forja-sumergida", Duration.ofHours(18));
+    }
+
     /** La simulacion de verdad, salvo para las ejecuciones «envenenadas», que heroes rechaza siempre. */
     private SimularEjecucion simulador(Set<UUID> envenenadas) {
         return new SimularEjecucion(catalogo, ejecuciones, eventos, heroes, motor,
@@ -955,5 +982,47 @@ class CicloDeUnaMisionTest {
         // Todo lo que se le pregunta al decisor lleva el contexto del duelo (lo que necesita el modelo).
         assertThat(vistos).isNotEmpty();
         assertThat(vistos).allSatisfy(t -> assertThat(t.contexto()).isNotNull());
+    }
+
+    // ------------------------------------------------------------- HU-MIS-013
+
+    @Test
+    @DisplayName("HU-MIS-013: un heroe elegible recorre la segunda mision hasta el jefe y queda Completada")
+    void segundaMisionCompleta() {
+        prepararConCatalogoPublicado();
+        desbloquearCripta();
+        Ejecucion ejecucion = enviar("la-cripta-del-eclipse");
+        ahora.set(ahora.get().plus(Duration.ofHours(24)));
+
+        trabajo.ejecutar();
+
+        Ejecucion terminada = ejecuciones.buscar(ejecucion.id()).orElseThrow();
+        assertThat(terminada.estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
+        assertThat(terminada.resultado().encuentrosCompletados()).isEqualTo(13);
+        assertThat(eventos.de(ejecucion.id())).isNotEmpty()
+                .extracting(EventoDeCombate::encuentro).contains(1, 13);
+        assertThat(heroes.nivelesPedidos)
+                .contains("Guerrero Tanque@8", "Mago Fuego@8", "Pícaro Veneno@8", "Pícaro Machete@8");
+        assertThat(terminada.recompensas().creditos()).isEqualTo(120);
+        assertThat(inventario.bloqueados).isEmpty();
+    }
+
+    @Test
+    @DisplayName("HU-MIS-013: si el heroe cae antes del jefe, la segunda mision queda Fallida")
+    void segundaMisionFallida() {
+        prepararConCatalogoPublicado();
+        desbloquearCripta();
+        motor.danoDeLosEnemigos = 1000;
+        motor.danoDelHeroe = 0;
+        Ejecucion ejecucion = enviar("la-cripta-del-eclipse");
+        ahora.set(ahora.get().plus(Duration.ofHours(24)));
+
+        trabajo.ejecutar();
+
+        Ejecucion terminada = ejecuciones.buscar(ejecucion.id()).orElseThrow();
+        assertThat(terminada.estado()).isEqualTo(EstadoEjecucion.FALLIDA);
+        assertThat(terminada.resultado().encuentrosCompletados()).isLessThan(13);
+        assertThat(terminada.recompensas().creditos()).isZero();
+        assertThat(inventario.bloqueados).isEmpty();
     }
 }
