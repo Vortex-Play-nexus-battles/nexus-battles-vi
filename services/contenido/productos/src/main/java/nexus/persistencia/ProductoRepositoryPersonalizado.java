@@ -1,9 +1,11 @@
 package nexus.persistencia;
 
+import java.util.List;
+
 import nexus.dominio.Producto;
 
 /**
- * Las dos escrituras del catalogo que Spring Data no sabe derivar — B4.
+ * Las tres escrituras del catalogo que Spring Data no sabe derivar — B4.
  */
 public interface ProductoRepositoryPersonalizado {
 
@@ -27,4 +29,18 @@ public interface ProductoRepositoryPersonalizado {
          * version, no hace nada.
          */
         void normalizarVersion(String id);
+
+        /**
+         * Suspende los productos cuya imagen es una ruta suelta — un nombre de
+         * archivo sin carpeta ni esquema, como {@code espada.png}— y que, por
+         * tanto, no tienen ninguna imagen que el sitio sirva. Es la misma
+         * suspension de la administracion: el producto sale de la tienda y de
+         * la vitrina, se conserva en los inventarios y puede reactivarse;
+         * {@code estadoAnteriorSuspension} guarda el estado al que vuelve. Sube
+         * la version en uno y no toca los que ya estan suspendidos ni los que
+         * alguien escribio entre la lectura y la escritura.
+         *
+         * @return los nombres de los productos suspendidos
+         */
+        List<String> suspenderConImagenSuelta();
 }
