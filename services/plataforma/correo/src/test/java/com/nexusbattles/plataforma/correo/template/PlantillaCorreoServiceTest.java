@@ -15,7 +15,7 @@ class PlantillaCorreoServiceTest {
     void incluyeElEncabezadoCorporativo() {
         String html = service.renderizar("email/plantilla-prueba", Map.of("mensaje", "Hola Mundo"));
 
-        assertThat(html).contains("THE NEXUS BATTLES VI");
+        assertThat(html).contains("alt=\"The Nexus Battles VI\"");
     }
 
     @Test
@@ -50,15 +50,33 @@ class PlantillaCorreoServiceTest {
     }
 
     @Test
-    void conservaElTextoDeMarcaAunqueElClienteBloqueeImagenes() {
+    void elEncabezadoLlevaElLogoDelJuegoSinTituloGenerico() {
         String html = service.renderizar("email/plantilla-prueba", Map.of("mensaje", "Hola Mundo"));
 
         assertThat(html)
-                .as("muchos clientes bloquean imágenes; sin el texto el encabezado queda vacío")
-                .contains("THE NEXUS BATTLES VI");
+                .as("el logo ya lleva el nombre dentro: no queda el título de texto de antes")
+                .doesNotContain("THE NEXUS BATTLES VI");
         assertThat(html)
-                .as("el texto alternativo es lo único que se ve si la imagen no carga")
+                .as("el texto alternativo es lo único que se ve si el cliente bloquea la imagen")
                 .contains("alt=\"The Nexus Battles VI\"");
+        assertThat(html)
+                .as("el logo se muestra a 320 px (el archivo es de 640 px, para pantallas retina)")
+                .contains("<td style=\"width:320px;\">");
+    }
+
+    @Test
+    void elLogoDelClasspathEsElDelJuegoYEsLigero() throws Exception {
+        byte[] png;
+        try (var in = getClass().getResourceAsStream("/imagenes/logo-nexus.png")) {
+            png = in.readAllBytes();
+        }
+        var imagen = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(png));
+
+        assertThat(imagen.getWidth()).as("el doble de los 320 px que se muestran").isEqualTo(640);
+        assertThat(imagen.getColorModel().hasAlpha()).as("fondo transparente sobre el encabezado Cromo").isTrue();
+        assertThat(png.length)
+                .as("viaja incrustado en cada correo: un logo pesado frena la entrega")
+                .isLessThan(150_000);
     }
 
     @Test
@@ -105,7 +123,7 @@ class PlantillaCorreoServiceTest {
                 Map.of("apodo", "ElGuerrero", "codigo", "734201", "minutosVigencia", 15));
 
         assertThat(html)
-                .contains("THE NEXUS BATTLES VI")
+                .contains("alt=\"The Nexus Battles VI\"")
                 .contains("src=\"cid:logo-nexus\"")
                 .contains("instagram.com/thenexusbattles");
     }
@@ -152,7 +170,7 @@ class PlantillaCorreoServiceTest {
                 Map.of("apodo", "ElGuerrero", "asunto", "Nueva misión disponible", "mensaje", "Derrota al dragón"));
 
         assertThat(html)
-                .contains("THE NEXUS BATTLES VI")
+                .contains("alt=\"The Nexus Battles VI\"")
                 .contains("ElGuerrero")
                 .contains("Nueva misión disponible")
                 .contains("Derrota al dragón");
@@ -166,7 +184,7 @@ class PlantillaCorreoServiceTest {
                 Map.of("apodo", "ElGuerrero", "ip", "190.85.12.44", "fechaHora", "21/09/2026 a las 15:00 (GMT-05:00)"));
 
         assertThat(html)
-                .contains("THE NEXUS BATTLES VI")
+                .contains("alt=\"The Nexus Battles VI\"")
                 .contains("Tu contraseña cambió")
                 .contains("ElGuerrero")
                 .contains("190.85.12.44")
@@ -181,7 +199,7 @@ class PlantillaCorreoServiceTest {
                 Map.of("apodo", "ElGuerrero", "asunto", "Ganaste la subasta", "mensaje", "Espada Legendaria"));
 
         assertThat(html)
-                .contains("THE NEXUS BATTLES VI")
+                .contains("alt=\"The Nexus Battles VI\"")
                 .contains("ElGuerrero")
                 .contains("Ganaste la subasta")
                 .contains("Espada Legendaria");
@@ -200,7 +218,7 @@ class PlantillaCorreoServiceTest {
                 "torneoId", TORNEO_ID));
 
         assertThat(html)
-                .contains("THE NEXUS BATTLES VI")
+                .contains("alt=\"The Nexus Battles VI\"")
                 .contains("src=\"cid:logo-nexus\"")
                 .contains("instagram.com/thenexusbattles")
                 .contains("ElGuerrero")
@@ -334,7 +352,7 @@ class PlantillaCorreoServiceTest {
                 "apelableHasta", "25/10/2026 a las 23:59 (GMT-05:00)"));
 
         assertThat(html)
-                .contains("THE NEXUS BATTLES VI")
+                .contains("alt=\"The Nexus Battles VI\"")
                 .contains("Tu cuenta está suspendida")
                 .contains("no podrás acceder al sistema")
                 .contains("tu inventario")
@@ -485,7 +503,7 @@ class PlantillaCorreoServiceTest {
                         "fechaHora", "23/09/2026 a las 10:15 (GMT-05:00)"));
 
         assertThat(html)
-                .contains("THE NEXUS BATTLES VI")
+                .contains("alt=\"The Nexus Battles VI\"")
                 .contains("src=\"cid:logo-nexus\"")
                 .contains("ElGuerrero")
                 .contains("50000.00 COP")

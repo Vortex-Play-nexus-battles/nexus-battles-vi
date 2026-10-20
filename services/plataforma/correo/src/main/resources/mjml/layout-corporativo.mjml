@@ -11,21 +11,21 @@
   </mj-head>
   <mj-body background-color="#D7DEED">
 
-    <!-- Encabezado: logo sobre fondo Cromo.
+    <!-- Encabezado: logo del juego sobre fondo Cromo.
 
-         El logo va incrustado en el propio mensaje (cid:), no como URL: el
-         proyecto todavía no tiene alojamiento público, y las imágenes en base64
-         las bloquean Gmail y Outlook. EnviadorCorreoService adjunta el archivo
-         imagenes/logo-nexus.png con ese Content-ID.
+         El logo va incrustado en el propio mensaje (cid:), no como URL: así se
+         ve sin depender de que el cliente cargue imágenes remotas ni de que el
+         dominio público esté disponible, y las imágenes en base64 las bloquean
+         Gmail y Outlook. EnviadorCorreoService adjunta el archivo
+         imagenes/logo-nexus.png (640 px de ancho, el doble de lo que se
+         muestra, para pantallas retina) con ese Content-ID.
 
-         El texto se conserva a propósito: muchos clientes bloquean las imágenes
-         por defecto, y sin él el encabezado quedaría vacío. -->
-    <mj-section background-color="#1C2340" padding="24px 0">
+         El logo ya lleva el nombre del juego dentro, así que no hay título de
+         texto aparte; si el cliente bloquea las imágenes se ve el texto
+         alternativo (alt), que lleva el nombre. -->
+    <mj-section background-color="#1C2340" padding="28px 0">
       <mj-column>
-        <mj-image src="cid:logo-nexus" alt="The Nexus Battles VI" width="80px" padding="0 0 12px 0" />
-        <mj-text align="center" color="#FFFFFF" font-size="22px" font-weight="700">
-          THE NEXUS BATTLES VI
-        </mj-text>
+        <mj-image src="cid:logo-nexus" alt="The Nexus Battles VI" width="320px" padding="0" />
       </mj-column>
     </mj-section>
 
