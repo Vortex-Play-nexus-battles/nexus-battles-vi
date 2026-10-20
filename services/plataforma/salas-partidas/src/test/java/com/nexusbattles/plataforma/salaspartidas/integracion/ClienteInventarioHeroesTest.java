@@ -90,6 +90,13 @@ class ClienteInventarioHeroesTest {
                 + (subastaId == null ? "null" : "\"" + subastaId + "\"") + "}";
     }
 
+    /** Un heroe que la mision reserva: inventario 1.6.0 lo marca con la ejecucion y `disponible: false`. */
+    private static String heroeEnMision(String id, String nombre, String ejecucionMisionId) {
+        return "{\"id\":\"" + id + "\",\"productoId\":\"p-1\",\"tipo\":\"HEROE\",\"nombrePropio\":\""
+                + nombre + "\",\"disponible\":false,\"subastaId\":null,\"ejecucionMisionId\":\""
+                + ejecucionMisionId + "\"}";
+    }
+
     /**
      * La ficha del producto, de donde sale el prototipo del catalogo.
      *
@@ -488,6 +495,28 @@ class ClienteInventarioHeroesTest {
         assertAll(
                 () -> assertEquals(ResultadoVerificacion.HEROE_OCUPADO, estado.resultado()),
                 () -> assertEquals("una subasta en curso", estado.ocupadoPor()),
+                () -> assertEquals("Sombra de Vael", estado.heroe().nombre()));
+    }
+
+    @Test
+    @DisplayName("un heroe reservado por una mision sale ocupado por la mision, no por una subasta (HU-MIS-009 C3)")
+    void heroeEnMisionSaleOcupadoPorLaMision() {
+        esperarVitrina(vitrinaCon(heroeEnMision("h-1", "Sombra de Vael",
+                "33333333-3333-3333-3333-333333333333")));
+        servidor.expect(requestTo(EQUIPAMIENTO)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"armas\":[],\"armaduras\":{\"CASCO\":\"c-1\"},\"items\":[]}",
+                MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":90,\"defensa\":4}",
+                MediaType.APPLICATION_JSON));
+        esperarProducto("Guerrero Tanque");
+        esperarFichaDePrototipo(11);
+
+        EstadoDelHeroe estado = cliente.consultar(JUGADOR);
+
+        assertAll(
+                () -> assertEquals(ResultadoVerificacion.HEROE_OCUPADO, estado.resultado()),
+                () -> assertEquals("una misión en curso", estado.ocupadoPor()),
                 () -> assertEquals("Sombra de Vael", estado.heroe().nombre()));
     }
 

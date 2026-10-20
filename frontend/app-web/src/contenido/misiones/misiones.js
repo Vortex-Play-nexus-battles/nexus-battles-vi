@@ -395,6 +395,8 @@ export async function montarMisiones(
     }
 
     documento.title = `${mision.nombre} · ${TITULO_BASE}`;
+    const heroeAsignado =
+      mision.estado === 'EN_PROGRESO' ? await heroeDeLaEjecucion(mision.id) : null;
     const configurador = nuevoConfigurador({
       modo: 'matricula',
       titulo: 'Tu héroe y su estrategia',
@@ -413,6 +415,7 @@ export async function montarMisiones(
       hrefEnCurso: rutas.hrefEnCurso,
       hrefEquipamiento: rutas.hrefEquipamiento,
       configurador,
+      heroeAsignado,
       urlParaCompartir: new URL(rutas.hrefDe(mision), ubicacion.href).href,
       alMarcarFavorita: (favorita) => fuente.marcarFavorita(mision.id, favorita),
       alIniciar: () => iniciar(mision, configurador, detalle),
@@ -442,6 +445,22 @@ export async function montarMisiones(
       globalThis.history?.replaceState?.(globalThis.history.state, '', destino);
     } catch {
       // Sin historial (una prueba, un marco): el modo cambia igual.
+    }
+  }
+
+  /**
+   * El héroe que tiene esta misión en curso (HU-MIS-009 C6). Viaja en
+   * `GET /misiones/en-curso`; si esa lectura falla el detalle sale igual, sin
+   * nombrar al héroe: es un dato de apoyo, no la razón de la vista.
+   */
+  async function heroeDeLaEjecucion(misionId) {
+    try {
+      const activas = await fuente.activas();
+      const activa = Array.isArray(activas) ? activas.find((a) => a.misionId === misionId) : null;
+      return activa?.heroe ?? null;
+    } catch (fallo) {
+      console.error('No se pudieron leer las misiones en curso', fallo);
+      return null;
     }
   }
 
