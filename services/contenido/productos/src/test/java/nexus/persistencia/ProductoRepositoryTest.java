@@ -211,4 +211,58 @@ class ProductoRepositoryTest {
                         creadoEn,
                         creadoEn);
         }
+
+        // Productos de prueba con una ruta suelta (espada.png): no tienen
+        // imagen que el sitio sirva, asi que salen de la tienda.
+
+        @Test
+        @DisplayName("suspende solo los de imagen suelta, guarda el estado anterior y no toca el resto")
+        void suspendeLosDeImagenSuelta() {
+                Instant ahora = Instant.parse("2026-10-20T12:00:00Z");
+                repositorio.insert(List.of(
+                        conImagen("suelta", "espada.png", EstadoProducto.ACTIVO, ahora),
+                        conImagen("suelta-unico", "casco.png", EstadoProducto.UNICO, ahora),
+                        conImagen("ya-suspendida", "vieja.png", EstadoProducto.SUSPENDIDO, ahora),
+                        conImagen("de-arte", "/shared/ui-kit/arte/productos/armas/espada-de-una-mano.webp",
+                                EstadoProducto.ACTIVO, ahora),
+                        conImagen("de-url", "https://cdn.example/mi-espada.png", EstadoProducto.ACTIVO, ahora),
+                        conImagen("provisional", "data:image/svg+xml,%3Csvg", EstadoProducto.ACTIVO, ahora),
+                        conImagen("de-carpeta", "productos/espada.webp", EstadoProducto.ACTIVO, ahora)));
+
+                List<String> retirados = repositorio.suspenderConImagenSuelta();
+
+                assertEquals(2, retirados.size());
+                Producto suelta = repositorio.findById("suelta").orElseThrow();
+                assertEquals(EstadoProducto.SUSPENDIDO, suelta.estado());
+                assertEquals(EstadoProducto.ACTIVO, suelta.estadoAnteriorSuspension());
+                assertEquals(2, suelta.version());
+                Producto unico = repositorio.findById("suelta-unico").orElseThrow();
+                assertEquals(EstadoProducto.SUSPENDIDO, unico.estado());
+                assertEquals(EstadoProducto.UNICO, unico.estadoAnteriorSuspension());
+                Producto yaSuspendida = repositorio.findById("ya-suspendida").orElseThrow();
+                assertEquals(1, yaSuspendida.version(), "un producto ya suspendido no se vuelve a tocar");
+                for (String id : List.of("de-arte", "de-url", "provisional", "de-carpeta")) {
+                        Producto intacto = repositorio.findById(id).orElseThrow();
+                        assertEquals(EstadoProducto.ACTIVO, intacto.estado(), id);
+                        assertEquals(1, intacto.version(), id);
+                }
+        }
+
+        @Test
+        @DisplayName("es idempotente: la segunda pasada no encuentra nada")
+        void suspenderDosVecesNoRepiteNada() {
+                Instant ahora = Instant.parse("2026-10-20T12:00:00Z");
+                repositorio.insert(conImagen("suelta", "espada.png", EstadoProducto.ACTIVO, ahora));
+
+                assertEquals(1, repositorio.suspenderConImagenSuelta().size());
+                assertTrue(repositorio.suspenderConImagenSuelta().isEmpty());
+                assertEquals(2, repositorio.findById("suelta").orElseThrow().version());
+        }
+
+        private static Producto conImagen(String id, String imagen, EstadoProducto estado, Instant creadoEn) {
+                return new Producto(
+                        id, "Producto " + id, imagen, "Producto de prueba", TipoProducto.ARMA,
+                        100, 500, null, false, null, null, null, null, null, null, null, null, null,
+                        null, null, 40, new BigDecimal("12.5"), estado, 1, creadoEn, creadoEn);
+        }
 }

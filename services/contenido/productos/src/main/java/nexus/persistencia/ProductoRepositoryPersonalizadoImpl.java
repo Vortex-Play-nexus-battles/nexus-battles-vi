@@ -1,5 +1,9 @@
 package nexus.persistencia;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import nexus.dominio.EstadoProducto;
 import nexus.dominio.Producto;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -47,5 +51,29 @@ class ProductoRepositoryPersonalizadoImpl implements ProductoRepositoryPersonali
                 return new Criteria().orOperator(
                         Criteria.where("version").is(0),
                         Criteria.where("version").is(null));
+        }
+
+        @Override
+        public List<String> suspenderConImagenSuelta() {
+                Query sueltas = Query.query(new Criteria().andOperator(
+                        // Ni "/" ni ":" : ni ruta del sitio, ni URL, ni data:.
+                        Criteria.where("imagen").regex("^[^/:]+$"),
+                        Criteria.where("estado").ne(EstadoProducto.SUSPENDIDO.name())));
+                List<String> suspendidos = new ArrayList<>();
+                for (Producto producto : mongo.find(sueltas, Producto.class)) {
+                        Query igual = Query.query(new Criteria().andOperator(
+                                Criteria.where("_id").is(producto.id()),
+                                conVersion(producto.version()),
+                                Criteria.where("estado").ne(EstadoProducto.SUSPENDIDO.name())));
+                        Update suspension = new Update()
+                                .set("estado", EstadoProducto.SUSPENDIDO.name())
+                                .set("estadoAnteriorSuspension", producto.estado().name())
+                                .inc("version", 1);
+                        if (mongo.updateFirst(igual, suspension, mongo.getCollectionName(Producto.class))
+                                .getModifiedCount() == 1) {
+                                suspendidos.add(producto.nombre());
+                        }
+                }
+                return suspendidos;
         }
 }
