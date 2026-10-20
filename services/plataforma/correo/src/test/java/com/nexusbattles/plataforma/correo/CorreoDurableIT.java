@@ -402,7 +402,7 @@ class CorreoDurableIT {
         Map<String, Object> sancion = mensajePara("sancionado@nexusbattles.test");
         assertThat(sancion.get("Subject")).isEqualTo("Tu cuenta de The Nexus Battles VI está suspendida");
         assertThat((String) sancion.get("HTML"))
-                .contains("THE NEXUS BATTLES VI")
+                .contains("alt=\"The Nexus Battles VI\"")
                 .contains("Acoso a otros jugadores")
                 .contains("01/10/2026 a las 18:00 (GMT-05:00)")
                 .contains("25/10/2026 a las 23:59 (GMT-05:00)");
@@ -454,7 +454,7 @@ class CorreoDurableIT {
         Map<String, Object> mensaje = mensajePara("lyra@nexusbattles.test");
         assertThat(mensaje.get("Subject")).as("el asunto lo decide torneos").isEqualTo("Inscripción confirmada: Copa de Otoño");
         assertThat((String) mensaje.get("HTML"))
-                .contains("THE NEXUS BATTLES VI")
+                .contains("alt=\"The Nexus Battles VI\"")
                 .contains("cid:logo-nexus")
                 .contains("Lyra")
                 .contains("Tu equipo «Los Invictos» quedó inscrito en el torneo «Copa de Otoño»")
@@ -483,7 +483,7 @@ class CorreoDurableIT {
         assertThat(remitente.get("Address"))
                 .as("el From es el configurado (MAIL_FROM), no el que decida el servidor")
                 .isEqualTo("no-reply@nexusbattles.test");
-        assertThat((String) mensaje.get("HTML")).contains("THE NEXUS BATTLES VI").contains("cid:logo-nexus");
+        assertThat((String) mensaje.get("HTML")).contains("alt=\"The Nexus Battles VI\"").contains("cid:logo-nexus");
         assertThat(mensaje.get("Attachments").toString()).as("el logo no va como adjunto suelto").isEqualTo("[]");
         assertThat(mensaje.get("Inline").toString()).contains("logo-nexus");
         assertThat((String) mensaje.get("Text")).contains("Texto que tiene que estar tambien en plano");

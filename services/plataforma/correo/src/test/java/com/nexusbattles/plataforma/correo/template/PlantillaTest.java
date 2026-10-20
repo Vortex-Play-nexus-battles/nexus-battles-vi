@@ -62,7 +62,7 @@ class PlantillaTest {
         for (Plantilla plantilla : Plantilla.values()) {
             assertThat(plantillas.renderizar(plantilla.ruta(), Map.of("apodo", "Ana", "tipo", "ADVERTENCIA",
                             "motivo", "m", "saludo", "Ana")))
-                    .contains("THE NEXUS BATTLES VI");
+                    .contains("alt=\"The Nexus Battles VI\"");
         }
     }
 }
